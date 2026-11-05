@@ -73,8 +73,28 @@ enum CodeStatsRepositorySort: String, CaseIterable, Sendable {
 }
 
 enum CodeStatsTrendGranularity: Sendable {
+    case hourly
+    case daily
     case weekly
     case monthly
+
+    var unit: Calendar.Component {
+        switch self {
+        case .hourly: .hour
+        case .daily: .day
+        case .weekly: .weekOfYear
+        case .monthly: .month
+        }
+    }
+
+    var barsTitle: String {
+        switch self {
+        case .hourly: "Hourly"
+        case .daily: "Daily"
+        case .weekly: "Weekly"
+        case .monthly: "Monthly"
+        }
+    }
 }
 
 struct CodeStatsProjection: Equatable, Sendable {
@@ -82,12 +102,17 @@ struct CodeStatsProjection: Equatable, Sendable {
     static let repositoryBarCount = 10
     static let languageShareCount = 8
     static let monthlyTrendThreshold = 104
+    static let dailyTrendDays = 31
+    static let dailyRollingWindow = 7
+    static let contributionWeeks = 5
 
     var heatWeeks: [CodeStatsHeatWeek] = []
+    var dayCount = 0
     var trendGranularity = CodeStatsTrendGranularity.weekly
     var trend: [CodeStatsTrendPoint] = []
     var repositoryBars: [CodeStatsRepositorySummary] = []
     var repositoryRows: [CodeStatsRepositorySort: [CodeStatsRepositorySummary]] = [:]
+    var stackGranularity = CodeStatsTrendGranularity.monthly
     var repositoryMonthly: [CodeStatsStackPoint] = []
     var repositorySeries: [String] = []
     var languageShares: [CodeStatsShare] = []
@@ -101,22 +126,19 @@ struct CodeStatsProjection: Equatable, Sendable {
 
     init(report: CodeStatsReport, calendar: Calendar = .current) {
         let dates = DateResolver(calendar: calendar)
+        dayCount = report.daily.count
         heatWeeks = Self.heatWeeks(report.daily, calendar: calendar, dates: dates)
-        let useMonthly = report.weekly.count > Self.monthlyTrendThreshold
-        trendGranularity = useMonthly ? .monthly : .weekly
+        let trendSource = Self.trendSource(report, dates: dates, calendar: calendar)
+        trendGranularity = trendSource.granularity
         var runningCommits = 0
         var runningLines = 0
         var points: [CodeStatsTrendPoint] = []
-        for point in useMonthly ? report.monthly : report.weekly {
+        for var point in trendSource.points {
             runningCommits += point.commits
             runningLines += point.lines
-            guard let date = dates.date(point.start) else { continue }
-            var trendPoint = CodeStatsTrendPoint(
-                date: date, commits: point.commits, lines: point.lines,
-                rollingCommits: point.rollingCommits, rollingLines: point.rollingLines)
-            trendPoint.totalCommits = runningCommits
-            trendPoint.totalLines = runningLines
-            points.append(trendPoint)
+            point.totalCommits = runningCommits
+            point.totalLines = runningLines
+            points.append(point)
         }
         trend = points
         repositoryBars = Array(report.repositories.prefix(Self.repositoryBarCount))
@@ -129,6 +151,7 @@ struct CodeStatsProjection: Equatable, Sendable {
         languageShares = Self.shares(report.languages)
         languageSeries = report.languageMonthly.map(\.name)
         languageMonthly = Self.stack(report.languageMonthly, dates: dates)
+        stackGranularity = Self.stackGranularity(report)
         punchcardRows = Self.weekdayOrder(calendar: calendar).map {
             calendar.shortWeekdaySymbols[$0]
         }
@@ -138,6 +161,68 @@ struct CodeStatsProjection: Equatable, Sendable {
                 day: $0.day, date: dates.date($0.day), commits: $0.commits,
                 lines: $0.counts.authored)
         }
+    }
+
+    var isSingleDay: Bool { dayCount == 1 }
+
+    var showsContributions: Bool { heatWeeks.count >= Self.contributionWeeks }
+
+    var showsStackedTrend: Bool {
+        Set((repositoryMonthly + languageMonthly).map(\.date)).count > 1
+    }
+
+    private static func trendSource(
+        _ report: CodeStatsReport, dates: DateResolver, calendar: Calendar
+    ) -> (granularity: CodeStatsTrendGranularity, points: [CodeStatsTrendPoint]) {
+        if let hourly = report.hourly, let day = dates.date(report.startDay) {
+            return (
+                .hourly,
+                hourly.compactMap { hour in
+                    calendar.date(byAdding: .hour, value: hour.hour, to: day).map {
+                        CodeStatsTrendPoint(
+                            date: $0, commits: hour.commits, lines: hour.lines,
+                            rollingCommits: 0, rollingLines: 0)
+                    }
+                }
+            )
+        }
+        if report.daily.count <= dailyTrendDays {
+            return (.daily, dailyPoints(report.daily, dates: dates))
+        }
+        let useMonthly = report.weekly.count > monthlyTrendThreshold
+        return (
+            useMonthly ? .monthly : .weekly,
+            (useMonthly ? report.monthly : report.weekly).compactMap { point in
+                dates.date(point.start).map {
+                    CodeStatsTrendPoint(
+                        date: $0, commits: point.commits, lines: point.lines,
+                        rollingCommits: point.rollingCommits, rollingLines: point.rollingLines)
+                }
+            }
+        )
+    }
+
+    private static func dailyPoints(
+        _ daily: [CodeStatsDayPoint], dates: DateResolver
+    ) -> [CodeStatsTrendPoint] {
+        daily.indices.compactMap { index in
+            let trailing = daily[max(0, index - dailyRollingWindow + 1)...index]
+            let size = Double(trailing.count)
+            return dates.date(daily[index].day).map {
+                CodeStatsTrendPoint(
+                    date: $0, commits: daily[index].commits, lines: daily[index].counts.authored,
+                    rollingCommits: Double(trailing.reduce(0) { $0 + $1.commits }) / size,
+                    rollingLines: Double(trailing.reduce(0) { $0 + $1.counts.authored }) / size)
+            }
+        }
+    }
+
+    private static func stackGranularity(_ report: CodeStatsReport) -> CodeStatsTrendGranularity {
+        let values = (report.repositoryMonthly + report.languageMonthly).first?.values ?? []
+        guard values.count > 1, let first = CodeStatsDay(values[0].start),
+            let second = CodeStatsDay(values[1].start)
+        else { return .monthly }
+        return first.distance(to: second) == 1 ? .daily : .monthly
     }
 
     static func sorted(

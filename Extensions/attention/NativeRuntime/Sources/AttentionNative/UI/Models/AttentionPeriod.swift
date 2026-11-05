@@ -2,95 +2,20 @@ internal import EdithExtensionSupport_attention_native
 internal import EdithExtensionUI
 import Foundation
 
-enum AttentionRangePreset: String, CaseIterable, Identifiable {
-    case today
-    case yesterday
-    case thisWeek
-    case lastWeek
-    case last7
-    case last14
-    case thisMonth
-    case lastMonth
-    case last30
-    case last90
-    case allTime
-    case custom
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .today: "Today"
-        case .yesterday: "Yesterday"
-        case .thisWeek: "This week"
-        case .lastWeek: "Last week"
-        case .last7: "Last 7 days"
-        case .last14: "Last 14 days"
-        case .thisMonth: "This month"
-        case .lastMonth: "Last month"
-        case .last30: "Last 30 days"
-        case .last90: "Last 90 days"
-        case .allTime: "All time"
-        case .custom: "Custom range"
-        }
-    }
-
-    static let groups: [[AttentionRangePreset]] = [
-        [.today, .yesterday], [.thisWeek, .lastWeek, .last7, .last14],
-        [.thisMonth, .lastMonth, .last30, .last90],
-        [.allTime],
-    ]
-
-    var stepsByMonth: Bool { self == .thisMonth || self == .lastMonth }
-}
-
 struct AttentionPeriod: Equatable {
+    var selection: DateFilterSelection
     var start: Date
     var end: Date
-    var preset: AttentionRangePreset
 
-    init(start: Date, end: Date, preset: AttentionRangePreset) {
-        self.start = start
-        self.end = max(end, start.addingTimeInterval(3_600))
-        self.preset = preset
-    }
-
-    init(_ preset: AttentionRangePreset = .today, now: Date = Date(), calendar: Calendar = .current)
-    {
-        let today = calendar.startOfDay(for: now)
-        func day(_ offset: Int) -> Date {
-            calendar.date(byAdding: .day, value: offset, to: today) ?? today
-        }
-        let week = calendar.dateInterval(of: .weekOfYear, for: now)
-        let month = calendar.dateInterval(of: .month, for: now)
-        switch preset {
-        case .today, .custom, .allTime: self.init(start: today, end: day(1), preset: preset)
-        case .yesterday: self.init(start: day(-1), end: today, preset: preset)
-        case .thisWeek:
-            self.init(start: week?.start ?? day(-6), end: week?.end ?? day(1), preset: preset)
-        case .lastWeek:
-            let start = (week?.start).flatMap { calendar.date(byAdding: .day, value: -7, to: $0) }
-            self.init(start: start ?? day(-13), end: week?.start ?? day(-6), preset: preset)
-        case .last7: self.init(start: day(-6), end: day(1), preset: preset)
-        case .last14: self.init(start: day(-13), end: day(1), preset: preset)
-        case .thisMonth:
-            self.init(start: month?.start ?? day(-29), end: month?.end ?? day(1), preset: preset)
-        case .lastMonth:
-            let start = (month?.start).flatMap {
-                calendar.date(byAdding: .month, value: -1, to: $0)
-            }
-            self.init(start: start ?? day(-59), end: month?.start ?? day(-29), preset: preset)
-        case .last30: self.init(start: day(-29), end: day(1), preset: preset)
-        case .last90: self.init(start: day(-89), end: day(1), preset: preset)
-        }
-    }
-
-    static func custom(from: Date, to: Date, calendar: Calendar = .current) -> AttentionPeriod {
-        let first = calendar.startOfDay(for: min(from, to))
-        let last = calendar.startOfDay(for: max(from, to))
-        return AttentionPeriod(
-            start: first, end: calendar.date(byAdding: .day, value: 1, to: last) ?? last,
-            preset: .custom)
+    init(
+        _ selection: DateFilterSelection = .preset(.today), now: Date = Date(),
+        calendar: Calendar = .current
+    ) {
+        let today = DateFilterSelection.preset(.today).interval(now: now, calendar: calendar)
+        let interval = selection.interval(now: now, calendar: calendar) ?? today
+        self.selection = selection
+        start = interval?.start ?? now
+        end = interval?.end ?? now
     }
 
     func days(calendar: Calendar = .current) -> Int {
@@ -99,58 +24,45 @@ struct AttentionPeriod: Equatable {
 
     var isSingleDay: Bool { days() == 1 }
     var showsSpans: Bool { days() <= 8 }
-    var lastDay: Date { end.addingTimeInterval(-1) }
+    var isAllTime: Bool { selection == .preset(.allTime) }
 
     func interval(now: Date = Date()) -> DateInterval {
         DateInterval(start: start, end: max(start, min(end, now)))
     }
 
-    var comparePeriod: TimeInterval? {
-        preset == .allTime ? nil : end.timeIntervalSince(start)
+    func comparePeriod(now: Date = Date(), calendar: Calendar = .current) -> TimeInterval? {
+        guard !isAllTime else { return nil }
+        let shift = comparisonShift(now: now, calendar: calendar)
+        let previousStart = start.addingTimeInterval(-shift)
+        return previousStart >= AttentionRetention.cutoff(now: now) ? shift : nil
+    }
+
+    private func comparisonShift(now: Date, calendar: Calendar) -> TimeInterval {
+        switch selection {
+        case .preset(.thisWeek), .preset(.thisMonth), .preset(.thisYear):
+            let prior = selection.stepped(by: -1, now: now, calendar: calendar)
+            let priorStart = prior.interval(now: now, calendar: calendar)?.start ?? start
+            return start.timeIntervalSince(priorStart)
+        default:
+            return end.timeIntervalSince(start)
+        }
     }
 
     func isCurrent(now: Date = Date()) -> Bool { end > now }
 
-    func shifted(by steps: Int, calendar: Calendar = .current) -> AttentionPeriod {
-        guard preset != .allTime else { return self }
-        let from: Date
-        let to: Date
-        if preset.stepsByMonth {
-            from = calendar.date(byAdding: .month, value: steps, to: start) ?? start
-            to = calendar.date(byAdding: .month, value: 1, to: from) ?? end
-        } else {
-            let length = days(calendar: calendar)
-            from = calendar.date(byAdding: .day, value: steps * length, to: start) ?? start
-            to = calendar.date(byAdding: .day, value: length, to: from) ?? end
-        }
-        return AttentionPeriod(start: from, end: to, preset: named(from, to, calendar: calendar))
+    func title(now: Date = Date(), calendar: Calendar = .current) -> String {
+        selection.periodLabel(now: now, calendar: calendar)
     }
 
-    private func named(_ from: Date, _ to: Date, calendar: Calendar) -> AttentionRangePreset {
-        let candidates: [AttentionRangePreset] =
-            preset.stepsByMonth ? [.thisMonth, .lastMonth] : AttentionRangePreset.allCases
-        return candidates.first {
-            $0 != .custom && $0 != .allTime
-                && AttentionPeriod($0, calendar: calendar).start == from
-                && AttentionPeriod($0, calendar: calendar).end == to
-        } ?? (preset.stepsByMonth ? .lastMonth : .custom)
+    static func earliestDay(now: Date = Date(), calendar: Calendar = .current) -> DateFilterDay {
+        DateFilterDay(date: AttentionRetention.cutoff(now: now), calendar: calendar)
     }
 
-    func title(calendar: Calendar = .current) -> String {
-        if preset == .allTime { return preset.title }
-        if preset != .custom, AttentionPeriod(preset, calendar: calendar) == self {
-            return preset.title
-        }
-        if isSingleDay {
-            return start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-        }
-        let sameYear = calendar.isDate(start, equalTo: lastDay, toGranularity: .year)
-        let from = start.formatted(.dateTime.month(.abbreviated).day())
-        let to =
-            sameYear
-            ? lastDay.formatted(.dateTime.month(.abbreviated).day())
-            : lastDay.formatted(.dateTime.year().month(.abbreviated).day())
-        return "\(from) to \(to)"
+    func retentionNote(now: Date = Date(), calendar: Calendar = .current) -> String? {
+        let earliest = Self.earliestDay(now: now, calendar: calendar)
+        guard DateFilterDay(date: start, calendar: calendar) <= earliest else { return nil }
+        return "Attention keeps \(AttentionRetention.days) days, so this starts "
+            + earliest.title(calendar: calendar)
     }
 }
 

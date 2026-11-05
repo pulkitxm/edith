@@ -36,7 +36,7 @@ import Testing
         let data = try usage()
         let request = DashboardComputeRequest(
             data: data, sortedPeriods: ["2026-09-01"],
-            allSources: [], allModels: [], calendarDays: [], range: .all,
+            allSources: [], allModels: [], calendarDays: [], range: .preset(.allTime),
             selectedSources: ["fixture"], selectedModels: ["sample"], selectedPaths: [],
             sortColumn: .cost, sortAscending: false, projSortKey: .cost,
             projSortAscending: false, calendar: Calendar(identifier: .gregorian))
@@ -109,7 +109,7 @@ import Testing
         defer { preferences.removePersistentDomain(forName: suite) }
         let model = DashboardModel(preferences: preferences)
         model.ingest(try usage())
-        model.range = .all
+        model.range = .preset(.allTime)
         await model.awaitPendingComputation()
         #expect(model.series.reduce(0) { $0 + $1.tokens } == 1)
         let previous = model.revision

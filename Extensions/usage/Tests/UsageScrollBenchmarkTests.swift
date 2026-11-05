@@ -48,7 +48,7 @@ import Testing
                 from: UsageSyntheticYear.document(
                     days: days, projects: projects, sessions: sessions)
             ))
-        model.range = .all
+        model.range = .preset(.allTime)
         await model.awaitPendingComputation()
         model.projListOpen = scenario != .page
         let (window, host) = UsageScrollHarness.host(

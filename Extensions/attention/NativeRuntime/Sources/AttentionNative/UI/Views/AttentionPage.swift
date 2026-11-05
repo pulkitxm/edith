@@ -147,6 +147,8 @@ struct AttentionPage: View {
                             case .overview:
                                 if model.hasActivity {
                                     AttentionOverview(model: model)
+                                } else if model.showsEmptyPeriod {
+                                    AttentionEmptyPeriodView(model: model)
                                 } else {
                                     AttentionCollectingView(model: model)
                                 }
@@ -180,25 +182,23 @@ private struct AttentionPresenterCover: View {
 
 private struct AttentionPeriodControl: View {
     @Bindable var model: AttentionPageModel
-    @State private var customOpen = false
-    @State private var customFrom = Date()
-    @State private var customTo = Date()
-
-    private static let presets: [AttentionRangePreset] = [.today, .last7, .last30, .allTime]
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         PageFilterBar {
             PageFilterRow("Range") {
-                ForEach(Self.presets, id: \.self) { preset in
-                    PageChip(
-                        preset == .last7 ? "7 days" : preset == .last30 ? "30 days" : preset.title,
-                        active: preset == .allTime
-                            ? model.period.preset == .allTime
-                            : model.period == AttentionPeriod(preset)
-                    ) { model.select(preset) }
+                PageDateFilter(
+                    selection: Binding(
+                        get: { model.period.selection }, set: { model.select($0) }),
+                    earliest: AttentionPeriod.earliestDay())
+                if let note = model.period.retentionNote() {
+                    Text(note)
+                        .font(.edithText(.caption))
+                        .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+                        .lineLimit(1)
+                        .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                        .fixedSize()
                 }
-                moreRanges
-                stepper
             }
             PageFilterRow("Show") {
                 AttentionFilterMenu(model: model)
@@ -217,61 +217,6 @@ private struct AttentionPeriodControl: View {
                 }
             }
         }
-    }
-
-    private var moreRanges: some View {
-        PageMenuChip("More", systemImage: "calendar") {
-            ForEach(Array(AttentionRangePreset.groups.enumerated()), id: \.offset) { _, group in
-                Section {
-                    ForEach(group) { preset in
-                        Button(preset.title) { model.select(preset) }
-                    }
-                }
-            }
-            Button("Custom range…") {
-                customFrom = model.period.start
-                customTo = model.period.lastDay
-                customOpen = true
-            }
-        }
-        .popover(isPresented: $customOpen, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                Text("Custom range").font(.edithText(.headline))
-                DatePicker(
-                    "From", selection: $customFrom, in: ...Date(), displayedComponents: .date)
-                DatePicker(
-                    "To", selection: $customTo, in: ...Date(), displayedComponents: .date)
-                HStack {
-                    Spacer()
-                    Button("Show") {
-                        model.selectRange(from: customFrom, to: customTo)
-                        customOpen = false
-                    }
-                    .buttonStyle(.edith(.primary))
-                }
-            }
-            .padding(UIScale.pt(16))
-            .frame(width: UIScale.pt(280))
-        }
-    }
-
-    private var stepper: some View {
-        HStack(spacing: UIScale.pt(4)) {
-            PageIconChip(systemImage: "chevron.left", label: "Previous period") {
-                model.step(-1)
-            }
-            .disabled(!model.canStepBackward)
-            Text(model.period.title())
-                .font(PageMetrics.chipFont)
-                .monospacedDigit()
-                .lineLimit(1)
-                .frame(minWidth: UIScale.pt(88))
-            PageIconChip(systemImage: "chevron.right", label: "Next period") {
-                model.step(1)
-            }
-            .disabled(!model.canStepForward)
-        }
-        .fixedSize()
     }
 }
 
@@ -548,6 +493,23 @@ private struct AttentionNoMatchView: View {
                 + " of other activity is hidden.",
             primary: PageAction("Clear filters", symbolName: "xmark.circle") {
                 model.clearFilters()
+            }
+        )
+        .pageFillViewport()
+    }
+}
+
+private struct AttentionEmptyPeriodView: View {
+    let model: AttentionPageModel
+
+    var body: some View {
+        PageEmptyState(
+            symbolName: "calendar",
+            title: "No activity in \(model.period.title())",
+            message: model.period.retentionNote().map { $0 + "." }
+                ?? "Attention recorded nothing in this period. Pick another range to see it.",
+            primary: PageAction("Show today", symbolName: "arrow.uturn.backward") {
+                model.select(.preset(.today))
             }
         )
         .pageFillViewport()

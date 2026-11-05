@@ -48,7 +48,7 @@ public struct PageDateRangePicker: View {
             footer
         }
         .padding(UIScale.pt(PageMetrics.cardPadding))
-        .frame(width: UIScale.pt(320))
+        .frame(minWidth: 0, idealWidth: UIScale.pt(320), maxWidth: UIScale.pt(320))
         .background(DashSkin.paper2(dark))
         .onAppear { gridFocused = true }
     }
@@ -74,6 +74,7 @@ public struct PageDateRangePicker: View {
                     .font(.edithText(.subheadline).weight(.medium).monospacedDigit())
                     .foregroundStyle(value == nil ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .edithFieldSurface(focused: editing)
@@ -233,7 +234,8 @@ public struct PageDateRangePicker: View {
                     endpoint ? DashSkin.paper2(dark) : accent, lineWidth: UIScale.pt(1.5))
             }
         }
-        .frame(width: markHeight, height: markHeight)
+        .frame(maxWidth: markHeight, maxHeight: markHeight)
+        .aspectRatio(1, contentMode: .fit)
     }
 
     private func accessibilityRole(_ day: DateFilterDay) -> String {

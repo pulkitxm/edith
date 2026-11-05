@@ -172,6 +172,49 @@ import Testing
         }
     }
 
+    private func picker(_ draft: DateFilterDraft) -> PageDateRangePicker {
+        PageDateRangePicker(
+            draft: draft, today: Self.day("2026-11-05"), calendar: Self.calendar,
+            onApply: { _ in }, onCancel: {})
+    }
+
+    @Test func pickerNeverClipsAtAnySupportedZoomOrInASqueezedHost() async throws {
+        let draft = DateFilterDraft(
+            range: Self.range("2026-10-03", "2026-10-12"), earliest: nil,
+            latest: Self.day("2026-11-05"))
+        for zoom in stride(
+            from: WindowZoom.range.lowerBound, through: WindowZoom.range.upperBound,
+            by: WindowZoom.step)
+        {
+            let fitted = RenderCapture.Variant(
+                name: "fit-\(Int((zoom * 100).rounded()))", width: (320 * zoom).rounded(),
+                height: (400 * zoom).rounded(), zoom: (zoom * 100).rounded() / 100, scheme: .dark)
+            let squeezed = RenderCapture.Variant(
+                name: "squeezed-\(Int((zoom * 100).rounded()))", width: 300,
+                height: (400 * zoom).rounded(), zoom: (zoom * 100).rounded() / 100, scheme: .dark)
+            for variant in [fitted, squeezed] {
+                let rendered = try await RenderCapture.render("date-picker", variant: variant) {
+                    picker(draft)
+                }
+                #expect(
+                    DesignSystemGallery.edgeColors(rendered.bitmap) <= 2,
+                    "\(variant.name) draws into the trailing gutter")
+            }
+        }
+    }
+
+    @Test func pickerAsksForItsFullWidthSoAPopoverDoesNotShrinkIt() {
+        let prior = UIScale.current
+        defer { UIScale.apply(prior) }
+        for zoom in [0.8, 1, 1.6] {
+            UIScale.apply(zoom)
+            let draft = DateFilterDraft(
+                range: nil, earliest: nil, latest: Self.day("2026-11-05"))
+            let host = NSHostingView(rootView: picker(draft))
+            #expect(abs(host.fittingSize.width - 320 * zoom) < 1)
+        }
+    }
+
     @Test func filterExposesLabelsAndSelectedTraits() async throws {
         try await RenderCapture.withAccessibility {
             let variant = RenderCapture.variants[0]

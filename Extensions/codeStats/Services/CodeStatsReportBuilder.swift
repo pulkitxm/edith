@@ -6,6 +6,7 @@ public enum CodeStatsReportBuilder {
     public static let topDayCount = 10
     public static let weeklyRollingWindow = 4
     public static let monthlyRollingWindow = 3
+    public static let dailySeriesDays = 62
 
     public struct Entry: Sendable {
         public let day: CodeStatsDay
@@ -79,15 +80,35 @@ public enum CodeStatsReportBuilder {
             repositories: summaries,
             repositoryMonthly: repositoryMonthly(
                 selected, top: summaries.prefix(topSeriesCount).map(\.repository),
-                names: table.repositories, start: start, end: end),
+                names: table.repositories, start: start, end: end,
+                daily: range != .all && length <= dailySeriesDays),
             languages: languageTotals,
             languageMonthly: languageMonthly(
                 selected, top: languageTotals.prefix(topSeriesCount).map(\.language),
-                names: table.languages, start: start, end: end),
+                names: table.languages, start: start, end: end,
+                daily: range != .all && length <= dailySeriesDays),
             punchcard: punchcard(selected),
             topDays: daily.filter { $0.commits > 0 }.sorted {
                 ($0.counts.authored, $0.commits, $0.day) > ($1.counts.authored, $1.commits, $1.day)
-            }.prefix(topDayCount).map { $0 })
+            }.prefix(topDayCount).map { $0 },
+            hourly: length == 1 ? hourly(selected) : nil)
+    }
+
+    private static func hourly(_ selected: [Entry]) -> [CodeStatsHourPoint] {
+        var hours = (0..<24).map { CodeStatsHourPoint(hour: $0, commits: 0, lines: 0) }
+        for entry in selected where hours.indices.contains(entry.hour) {
+            hours[entry.hour].commits += entry.commits
+            hours[entry.hour].lines += entry.counts.authored
+        }
+        return hours
+    }
+
+    private static func seriesBuckets(
+        from start: CodeStatsDay, to end: CodeStatsDay, daily: Bool
+    ) -> (starts: [CodeStatsDay], key: (CodeStatsDay) -> CodeStatsDay) {
+        daily
+            ? (periodStarts(from: start, to: end, next: { $0.advanced(by: 1) }), { $0 })
+            : (periodStarts(from: start.monthStart, to: end, next: \.nextMonthStart), \.monthStart)
     }
 
     public static func entries(
@@ -283,18 +304,18 @@ public enum CodeStatsReportBuilder {
 
     private static func repositoryMonthly(
         _ selected: [Entry], top: [String], names: [String], start: CodeStatsDay,
-        end: CodeStatsDay
+        end: CodeStatsDay, daily: Bool
     ) -> [CodeStatsSeries] {
-        let months = periodStarts(from: start.monthStart, to: end, next: \.nextMonthStart)
+        let buckets = seriesBuckets(from: start, to: end, daily: daily)
         return top.map { repository in
             let index = names.firstIndex(of: repository) ?? -1
             var counts: [CodeStatsDay: Int] = [:]
             for entry in selected where entry.repository == index {
-                counts[entry.day.monthStart, default: 0] += entry.commits
+                counts[buckets.key(entry.day), default: 0] += entry.commits
             }
             return CodeStatsSeries(
                 name: repository,
-                values: months.map {
+                values: buckets.starts.map {
                     CodeStatsSeriesValue(start: $0.string, value: Double(counts[$0] ?? 0))
                 })
         }
@@ -318,14 +339,14 @@ public enum CodeStatsReportBuilder {
 
     private static func languageMonthly(
         _ selected: [Entry], top: [String], names: [String], start: CodeStatsDay,
-        end: CodeStatsDay
+        end: CodeStatsDay, daily: Bool
     ) -> [CodeStatsSeries] {
-        let months = periodStarts(from: start.monthStart, to: end, next: \.nextMonthStart)
+        let buckets = seriesBuckets(from: start, to: end, daily: daily)
         let indices = top.map { names.firstIndex(of: $0) ?? -1 }
         var monthTotals: [CodeStatsDay: Int] = [:]
         var languageTotals: [CodeStatsDay: [Int: Int]] = [:]
         for entry in selected where entry.language >= 0 && entry.counts.authored > 0 {
-            let month = entry.day.monthStart
+            let month = buckets.key(entry.day)
             monthTotals[month, default: 0] += entry.counts.authored
             if indices.contains(entry.language) {
                 languageTotals[month, default: [:]][entry.language, default: 0] +=
@@ -335,7 +356,7 @@ public enum CodeStatsReportBuilder {
         return zip(top, indices).map { language, index in
             CodeStatsSeries(
                 name: language,
-                values: months.map { month in
+                values: buckets.starts.map { month in
                     let total = monthTotals[month] ?? 0
                     let share =
                         total == 0

@@ -55,9 +55,9 @@ public struct CodeStatsExportSnapshot: Codable, Equatable, Sendable {
     public let bestDayLines: Int
     public let bestDayCommits: Int
 
-    public init(report: CodeStatsReport) {
+    public init(report: CodeStatsReport, rangeLabel: String? = nil) {
         let totals = report.totals
-        rangeLabel = Self.label(for: report.range)
+        self.rangeLabel = rangeLabel ?? Self.label(for: report.range)
         startDay = report.startDay
         endDay = report.endDay
         commits = totals.commits
@@ -94,13 +94,27 @@ public struct CodeStatsExportSnapshot: Codable, Equatable, Sendable {
 
     public var hasActivity: Bool { commits > 0 || linesAuthored > 0 }
 
-    static func label(for range: CodeStatsRange) -> String {
-        let argument = range.argument
-        if argument == "all" { return "All time" }
-        if argument.hasSuffix("d"), let days = Int(argument.dropLast()) {
-            return "Last \(days) days"
+    static func label(for range: CodeStatsRange, calendar: Calendar = .current) -> String {
+        switch range {
+        case .all: return "All time"
+        case .days(1): return "Today"
+        case .days(let count): return "Last \(count) days"
+        case .year: return "Last 12 months"
+        case .between(let first, let last):
+            guard let start = DateFilterDay(first), let end = DateFilterDay(last) else {
+                return first + " to " + last
+            }
+            return DateFilterRange(start, end).title(calendar: calendar)
         }
-        return "Last year"
+    }
+
+    public var periodLine: String {
+        Self.names(rangeLabel, first: startDay, last: endDay)
+            ? rangeLabel : "\(rangeLabel)  ·  \(startDay) to \(endDay)"
+    }
+
+    private static func names(_ text: String, first: String, last: String) -> Bool {
+        text == label(for: .between(first, last))
     }
 
     private static func peak(_ values: [Int]) -> (index: Int, value: Int)? {

@@ -69,6 +69,8 @@ struct CodeStatsDominance: Equatable, Sendable {
 }
 
 struct CodeStatsExplorer: Equatable, Sendable {
+    static let stripMinimumMonths = 3
+
     static let stripRepositories = 15
     static let sliceCount = 7
     static let dominantShare = 0.4

@@ -73,7 +73,7 @@ import Testing
     @Test func rangesReadAsPlainLabels() {
         #expect(snapshot(.days(30)).rangeLabel == "Last 30 days")
         #expect(snapshot(.days(90)).rangeLabel == "Last 90 days")
-        #expect(snapshot(.year).rangeLabel == "Last year")
+        #expect(snapshot(.year).rangeLabel == "Last 12 months")
         #expect(snapshot(.all).rangeLabel == "All time")
     }
 

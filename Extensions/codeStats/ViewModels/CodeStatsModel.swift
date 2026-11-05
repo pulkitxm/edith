@@ -41,7 +41,7 @@ final class CodeStatsModel {
     private(set) var isStarting = false
     private(set) var isCancelling = false
     var errorMessage: String?
-    var range = CodeStatsRange.days(90)
+    private(set) var selection = DateFilterSelection.preset(.last90)
     private(set) var table: CodeStatsFactTable?
     private(set) var tableRevision = 0
     private(set) var audit: CodeStatsAudit?
@@ -50,7 +50,7 @@ final class CodeStatsModel {
     private(set) var facets = CodeStatsFacets()
     private(set) var identityPendingRecount = false
     private(set) var explorer = CodeStatsExplorer()
-    private(set) var lastPreset = CodeStatsRange.days(90)
+    private(set) var lastNamedSelection = DateFilterSelection.preset(.last90)
 
     @ObservationIgnored private var reportRevision: UInt64 = 0
     @ObservationIgnored private let memory: CodeStatsModelMemory?
@@ -82,8 +82,8 @@ final class CodeStatsModel {
             let selection = try? JSONDecoder().decode(CodeStatsPageSelection.self, from: data)
         {
             filter = selection.filter
-            range = selection.range
-            lastPreset = selection.lastPreset
+            self.selection = selection.range
+            lastNamedSelection = selection.lastNamed
         }
         seedFromMemory()
     }
@@ -156,6 +156,14 @@ final class CodeStatsModel {
         reportLoad.cancel()
         computation.cancel()
     }
+
+    var range: CodeStatsRange {
+        CodeStatsRange(selection, now: today(), calendar: calendar)
+    }
+
+    var dateFilterNow: Date { today() }
+
+    var dateFilterCalendar: Calendar { calendar }
 
     var showsPreviousRange: Bool {
         guard let report else { return false }
@@ -290,10 +298,17 @@ final class CodeStatsModel {
         }
     }
 
-    func select(_ next: CodeStatsRange) async {
-        guard next != range else { return }
-        if CodeStatsRange.presets.contains(next) { lastPreset = next }
-        range = next
+    func select(_ next: DateFilterSelection) async {
+        if case .custom = next {} else { lastNamedSelection = next }
+        await show(next)
+    }
+
+    private func show(_ next: DateFilterSelection) async {
+        guard next != selection else {
+            saveSelection()
+            return
+        }
+        selection = next
         saveSelection()
         if table != nil {
             await recompute()
@@ -325,19 +340,18 @@ final class CodeStatsModel {
     }
 
     func zoom(from start: Date, to end: Date) async {
-        let lower = CodeStatsDay(date: min(start, end), calendar: calendar)
-        let upper = CodeStatsDay(date: max(start, end), calendar: calendar)
-        await select(.between(lower.string, upper.string))
+        let lower = DateFilterDay(date: min(start, end), calendar: calendar)
+        let upper = DateFilterDay(date: max(start, end), calendar: calendar)
+        await show(
+            DateFilterSelection.custom(DateFilterRange(lower, upper))
+                .canonical(now: today(), calendar: calendar))
     }
 
-    func clearCustomRange() async {
-        await select(lastPreset)
+    func returnToNamedRange() async {
+        await show(lastNamedSelection)
     }
 
-    var isCustomRange: Bool {
-        if case .between = range { return true }
-        return false
-    }
+    var canReturnToNamedRange: Bool { selection != lastNamedSelection }
 
     func toggleLanguage(_ name: String) async {
         await updateFilter { $0.languages.formSymmetricDifference([name]) }
@@ -593,7 +607,8 @@ final class CodeStatsModel {
     }
 
     private func saveSelection() {
-        let selection = CodeStatsPageSelection(filter: filter, range: range, lastPreset: lastPreset)
+        let selection = CodeStatsPageSelection(
+            filter: filter, range: selection, lastNamed: lastNamedSelection)
         if let data = try? JSONEncoder().encode(selection) {
             defaults.set(data, forKey: "codeStatsPageSelection")
         }
@@ -622,6 +637,30 @@ enum CodeStatsAuthorMarking {
 
 private struct CodeStatsPageSelection: Codable {
     var filter: CodeStatsFilter
-    var range: CodeStatsRange
-    var lastPreset: CodeStatsRange
+    var range: DateFilterSelection
+    var lastNamed: DateFilterSelection
+
+    init(filter: CodeStatsFilter, range: DateFilterSelection, lastNamed: DateFilterSelection) {
+        self.filter = filter
+        self.range = range
+        self.lastNamed = lastNamed
+    }
+
+    private enum CodingKeys: String, CodingKey { case filter, range, lastNamed }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        filter = try container.decode(CodeStatsFilter.self, forKey: .filter)
+        let range = try container.decode(String.self, forKey: .range)
+        let lastNamed = try container.decode(String.self, forKey: .lastNamed)
+        self.range = DateFilterSelection(rawValue: range) ?? .preset(.last90)
+        self.lastNamed = DateFilterSelection(rawValue: lastNamed) ?? .preset(.last90)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(filter, forKey: .filter)
+        try container.encode(range.rawValue, forKey: .range)
+        try container.encode(lastNamed.rawValue, forKey: .lastNamed)
+    }
 }

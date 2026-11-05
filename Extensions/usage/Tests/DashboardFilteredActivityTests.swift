@@ -16,7 +16,7 @@ import Testing
         let parsed = try JSONDecoder().decode(DashUsage.self, from: Data(json.utf8))
         let dashboard = DashboardModel(preferences: preferences)
         dashboard.ingest(parsed)
-        dashboard.range = .all
+        dashboard.range = .preset(.allTime)
         return dashboard
     }
 
@@ -348,7 +348,7 @@ import Testing
             #expect(detail.peakHour == 0)
         }
 
-        dashboard.range = .today
+        dashboard.range = .preset(.today)
         try expectActivityUnchanged()
         #expect(dashboard.series.reduce(0) { $0 + $1.tokens } == 400)
 

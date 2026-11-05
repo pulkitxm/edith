@@ -13,6 +13,8 @@ struct CodeStatsFacets: Equatable, Sendable {
     var repositories: [CodeStatsFacet] = []
     var owners: [CodeStatsFacet] = []
     var languages: [CodeStatsFacet] = []
+    var months: [DateFilterMonth] = []
+    var earliestDay: DateFilterDay?
 
     init() {}
 
@@ -21,7 +23,14 @@ struct CodeStatsFacets: Equatable, Sendable {
             repeating: (0, 0), count: table.repositories.count)
         var languageTotals = [(commits: Int, lines: Int)](
             repeating: (0, 0), count: table.languages.count)
+        var activeMonths = Set<DateFilterMonth>()
+        var firstOrdinal: Int?
         for fact in table.commits where fact.exclusion == nil {
+            let parts = CodeStatsDay(ordinal: fact.day).components
+            if let month = DateFilterMonth(year: parts.year, month: parts.month) {
+                activeMonths.insert(month)
+            }
+            firstOrdinal = min(firstOrdinal ?? fact.day, fact.day)
             if repositoryTotals.indices.contains(fact.repository) {
                 repositoryTotals[fact.repository].commits += 1
                 repositoryTotals[fact.repository].lines += fact.authored
@@ -56,5 +65,7 @@ struct CodeStatsFacets: Equatable, Sendable {
             languages.append(CodeStatsFacet(name: name, commits: total.commits, lines: total.lines))
         }
         self.languages = languages.sorted { ($0.lines, $1.name) > ($1.lines, $0.name) }
+        months = activeMonths.sorted(by: >)
+        earliestDay = firstOrdinal.flatMap { DateFilterDay(CodeStatsDay(ordinal: $0).string) }
     }
 }

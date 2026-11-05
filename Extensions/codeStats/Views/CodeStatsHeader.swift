@@ -13,7 +13,10 @@ struct CodeStatsHeader: View {
 
     private var shareSnapshot: CodeStatsExportSnapshot? {
         guard let report = model.report else { return nil }
-        let snapshot = CodeStatsExportSnapshot(report: report)
+        let snapshot = CodeStatsExportSnapshot(
+            report: report,
+            rangeLabel: model.showsPreviousRange
+                ? nil : model.selection.title(calendar: model.dateFilterCalendar))
         return snapshot.hasActivity ? snapshot : nil
     }
 

@@ -47,9 +47,7 @@ struct CodeStatsFilterBar: View {
     var body: some View {
         PageFilterBar {
             PageFilterRow("Range") {
-                CodeStatsRangeChips(range: model.range) { range in
-                    Task { await model.select(range) }
-                }
+                CodeStatsDateFilter(model: model)
             }
             PageFilterRow("Filter") {
                 facetButton(.repositories, selected: model.filter.repositories.count)
@@ -104,7 +102,7 @@ struct CodeStatsFilterBar: View {
         let filter = model.filter
         return !filter.repositories.isEmpty || !filter.owners.isEmpty
             || !filter.languages.isEmpty || !filter.excludedRepositories.isEmpty
-            || model.isCustomRange
+            || model.canReturnToNamedRange
     }
 
     private var fileTypesMenu: some View {
@@ -163,8 +161,13 @@ struct CodeStatsFilterBar: View {
 
     @ViewBuilder private var selectedTokens: some View {
         let filter = model.filter
-        if model.isCustomRange {
-            token(CodeStatsRangeChips.title(model.range)) { await model.clearCustomRange() }
+        if model.canReturnToNamedRange {
+            PageChip(
+                "Back to " + model.lastNamedSelection.title(calendar: model.dateFilterCalendar),
+                systemImage: "arrow.uturn.backward"
+            ) {
+                Task { await model.returnToNamedRange() }
+            }
         }
         ForEach(filter.excludedRepositories.sorted(), id: \.self) { name in
             token("Excluding " + name) { await model.toggleExcludedRepository(name) }

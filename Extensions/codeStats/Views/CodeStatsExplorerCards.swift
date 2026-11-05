@@ -159,7 +159,9 @@ struct CodeStatsYearOverYearCard: View {
     }
 
     var body: some View {
-        PageCard(title: "Year over year", note: "Same month, different years") {
+        PageCard(
+            title: "Year over year", note: "Same month, different years, across your whole history"
+        ) {
             EdithSegmentedPicker(
                 "Metric", selection: $commits, options: [false, true],
                 label: { $0 ? "Commits" : "Lines" }
@@ -438,6 +440,13 @@ struct CodeStatsNewRepositoriesCard: View {
                 Text("You did not start any new repositories in this range.")
                     .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
+            } else if explorer.newRepositories.count == 1,
+                let month = explorer.newRepositories.first
+            {
+                Text(Self.names(month).joined(separator: ", "))
+                    .font(.edithText(.callout))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 chart
             }

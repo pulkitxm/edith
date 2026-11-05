@@ -1,3 +1,4 @@
+import EdithExtensionCore
 import Foundation
 import Testing
 
@@ -67,11 +68,11 @@ import Testing
             await model.waitForReload()
             #expect(model.section == section)
             #expect(model.levelFilter == filter)
-            model.select(.last7)
+            model.select(.preset(.last7))
             await model.waitForReload()
             #expect(model.section == section)
             #expect(model.levelFilter == filter)
-            model.select(.today)
+            model.select(.preset(.today))
             await model.waitForReload()
             #expect(model.section == section)
         }
@@ -91,14 +92,14 @@ import Testing
                     bundleID: "app.writing", windowTitle: title))
         }
         let model = AttentionPageModel(repository: fixture.repository)
-        model.select(.last7)
+        model.select(.preset(.last7))
         await model.waitForReload()
-        model.select(.allTime)
-        model.select(.last90)
-        model.select(.yesterday)
+        model.select(.preset(.allTime))
+        model.select(.preset(.last90))
+        model.select(.preset(.yesterday))
         model.section = .breakdown
         await model.waitForReload()
-        #expect(model.period.preset == .yesterday)
+        #expect(model.period.selection == .preset(.yesterday))
         #expect(model.summary.from == Calendar.current.startOfDay(for: yesterday))
         #expect(model.summary.activeDuration == 60)
         #expect(
@@ -106,7 +107,7 @@ import Testing
                 == ["Recent note"])
         #expect(!model.pending)
         #expect(model.errorMessage == nil)
-        model.select(.today)
+        model.select(.preset(.today))
         await model.waitForReload()
         #expect(model.summary.activeDuration == 0)
         #expect(model.summary.dimensions.isEmpty)
@@ -149,20 +150,16 @@ import Testing
                     appName: "Writing", bundleID: "app.writing"))
         }
         let model = AttentionPageModel(repository: fixture.repository)
-        model.select(.allTime)
+        model.select(.preset(.allTime))
         await model.waitForReload()
         #expect(model.summary.activeDuration == 120)
         #expect(model.summary.from == Calendar.current.startOfDay(for: first))
         #expect(model.summary.previous == nil)
         #expect(model.period.title() == "All time")
-        #expect(model.period.comparePeriod == nil)
-        #expect(!model.canStepBackward)
-        #expect(!model.canStepForward)
+        #expect(model.period.comparePeriod() == nil)
+        #expect(!model.period.selection.isSteppable)
         #expect(model.refreshInterval == .seconds(120))
-        let period = model.period
-        model.step(-1)
-        #expect(model.period == period)
-        model.select(.last90)
+        model.select(.preset(.last90))
         await model.waitForReload()
         #expect(model.summary.activeDuration == 60)
     }
@@ -171,7 +168,7 @@ import Testing
         let fixture = fixture()
         defer { fixture.cleanup() }
         let model = AttentionPageModel(repository: fixture.repository)
-        model.select(.allTime)
+        model.select(.preset(.allTime))
         await model.waitForReload()
         #expect(model.summary.from == Calendar.current.startOfDay(for: Date()))
         #expect(model.summary.activeDuration == 0)
@@ -246,7 +243,7 @@ import Testing
                 startedAt: now.addingTimeInterval(-120), duration: 60,
                 source: .application, appName: "Writing", bundleID: "com.example.Writing"))
         let model = AttentionPageModel(repository: fixture.repository)
-        model.select(.last7)
+        model.select(.preset(.last7))
         await model.waitForReload()
         let entity = try #require(model.summary.entities.first)
         #expect(entity.name == "Writing")
@@ -272,7 +269,7 @@ import Testing
                     source: .application, appName: app.1, bundleID: app.0))
         }
         let model = AttentionPageModel(repository: fixture.repository)
-        model.setPeriod(AttentionPeriod(.today, now: now))
+        model.setPeriod(AttentionPeriod(.preset(.today), now: now))
         model.reload()
         await model.waitForReload()
         #expect(model.timeline.isEmpty)
@@ -313,29 +310,111 @@ import Testing
         #expect(!model.hasActivity)
     }
 
-    @Test func presetsCoverTheirDaysAndStepByTheirLength() {
+    private func utcCalendar() -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.firstWeekday = 2
+        return calendar
+    }
+
+    private func date(_ year: Int, _ month: Int, _ day: Int, hour: Int = 15) -> Date {
+        utcCalendar().date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+    }
+
+    @Test func periodsCoverTheirDaysAndEndAtTheCurrentDay() {
+        let calendar = utcCalendar()
         let now = Date(timeIntervalSince1970: 1_775_000_000)
-        let today = AttentionPeriod(.today, now: now, calendar: calendar)
+        let today = AttentionPeriod(.preset(.today), now: now, calendar: calendar)
         #expect(today.start == calendar.startOfDay(for: now))
         #expect(today.interval(now: now).end == now)
         #expect(today.isSingleDay)
-        let yesterday = today.shifted(by: -1, calendar: calendar)
-        #expect(yesterday.days(calendar: calendar) == 1)
-        #expect(yesterday.end == today.start)
-        let week = AttentionPeriod(.last7, now: now, calendar: calendar)
+        #expect(today.isCurrent(now: now))
+        let week = AttentionPeriod(.preset(.last7), now: now, calendar: calendar)
         #expect(week.days(calendar: calendar) == 7)
-        #expect(week.shifted(by: -1, calendar: calendar).end == week.start)
-        let month = AttentionPeriod(.lastMonth, now: now, calendar: calendar)
-        let earlier = month.shifted(by: -1, calendar: calendar)
-        #expect(calendar.component(.day, from: earlier.start) == 1)
-        #expect(earlier.end == month.start)
-        let custom = AttentionPeriod.custom(
-            from: now, to: now.addingTimeInterval(-2 * 86_400), calendar: calendar)
-        #expect(custom.days(calendar: calendar) == 3)
-        #expect(custom.preset == .custom)
-        #expect(AttentionPeriod(.last90, now: now, calendar: calendar).showsSpans == false)
+        let lastMonth = AttentionPeriod(.preset(.lastMonth), now: now, calendar: calendar)
+        #expect(calendar.component(.day, from: lastMonth.start) == 1)
+        #expect(!lastMonth.isCurrent(now: now))
+        #expect(AttentionPeriod(.preset(.last90), now: now, calendar: calendar).showsSpans == false)
+    }
+
+    private func previous(
+        _ selection: DateFilterSelection, now: Date, calendar: Calendar
+    ) -> DateInterval? {
+        let period = AttentionPeriod(selection, now: now, calendar: calendar)
+        let interval = period.interval(now: now)
+        return AttentionSummaryRequest(
+            from: interval.start, to: interval.end,
+            comparePeriod: period.comparePeriod(now: now, calendar: calendar)
+        ).previousInterval
+    }
+
+    @Test func thisWeekComparesAgainstTheSameElapsedDaysLastWeek() throws {
+        let calendar = utcCalendar()
+        let now = date(2026, 11, 5)
+        let prior = try #require(previous(.preset(.thisWeek), now: now, calendar: calendar))
+        #expect(prior.start == date(2026, 10, 26, hour: 0))
+        #expect(prior.end == date(2026, 10, 29))
+        let period = AttentionPeriod(.preset(.thisWeek), now: now, calendar: calendar)
+        #expect(period.interval(now: now).duration == prior.duration)
+    }
+
+    @Test func thisMonthComparesAgainstTheFirstDaysOfLastMonth() throws {
+        let calendar = utcCalendar()
+        let prior = try #require(
+            previous(.preset(.thisMonth), now: date(2026, 11, 5), calendar: calendar))
+        #expect(prior.start == date(2026, 10, 1, hour: 0))
+        #expect(prior.end == date(2026, 10, 5))
+        let shortMonth = try #require(
+            previous(.preset(.thisMonth), now: date(2026, 3, 5), calendar: calendar))
+        #expect(shortMonth.start == date(2026, 2, 1, hour: 0))
+        #expect(shortMonth.end == date(2026, 2, 5))
+    }
+
+    @Test func wholePeriodsCompareAgainstTheSameNumberOfDaysBefore() throws {
+        let calendar = utcCalendar()
+        let now = date(2026, 11, 5)
+        let today = try #require(previous(.preset(.today), now: now, calendar: calendar))
+        #expect(today.start == date(2026, 11, 4, hour: 0))
+        #expect(today.end == date(2026, 11, 4))
+        let lastWeek = try #require(previous(.preset(.lastWeek), now: now, calendar: calendar))
+        #expect(lastWeek.start == date(2026, 10, 19, hour: 0))
+        #expect(lastWeek.end == date(2026, 10, 26, hour: 0))
+        let days = try #require(previous(.preset(.last7), now: now, calendar: calendar))
+        #expect(days.start == date(2026, 10, 23, hour: 0))
+        let last = AttentionPeriod(.preset(.lastMonth), now: now, calendar: calendar)
+        let month = try #require(previous(.preset(.lastMonth), now: now, calendar: calendar))
+        #expect(month.duration == last.end.timeIntervalSince(last.start))
+    }
+
+    @Test func comparisonIsDroppedWhenThePriorPeriodPassesRetention() {
+        let calendar = utcCalendar()
+        let now = date(2026, 11, 5)
+        for preset in [DateFilterPreset.last12Months, .lastYear, .allTime] {
+            #expect(
+                AttentionPeriod(.preset(preset), now: now, calendar: calendar)
+                    .comparePeriod(now: now, calendar: calendar) == nil, "\(preset)")
+        }
+        #expect(
+            AttentionPeriod(.preset(.last90), now: now, calendar: calendar)
+                .comparePeriod(now: now, calendar: calendar) != nil)
+    }
+
+    @Test func periodsPastRetentionSayWhereTheyActuallyStart() {
+        let calendar = utcCalendar()
+        let now = date(2026, 11, 5)
+        let note = AttentionPeriod(.preset(.lastYear), now: now, calendar: calendar)
+            .retentionNote(now: now, calendar: calendar)
+        #expect(note == "Attention keeps 365 days, so this starts 5 Nov 2025")
+        for preset in [DateFilterPreset.today, .last90, .thisYear, .last12Months] {
+            #expect(
+                AttentionPeriod(.preset(preset), now: now, calendar: calendar)
+                    .retentionNote(now: now, calendar: calendar) == nil, "\(preset)")
+        }
+        var allTime = AttentionPeriod(.preset(.allTime), now: now, calendar: calendar)
+        #expect(allTime.retentionNote(now: now, calendar: calendar) == nil)
+        allTime.start = AttentionRetention.cutoff(now: now)
+        #expect(allTime.retentionNote(now: now, calendar: calendar) != nil)
     }
 
     @Test func dayAndHourWindowsKeepOnlyMatchingTime() {
@@ -427,7 +506,7 @@ import Testing
                     appName: app.1, bundleID: app.0, windowTitle: app.1 + " window"))
         }
         let model = AttentionPageModel(repository: fixture.repository)
-        model.select(.last7)
+        model.select(.preset(.last7))
         await model.waitForReload()
         #expect(model.summary.activeDuration == 900)
         #expect(model.activity == .idle)

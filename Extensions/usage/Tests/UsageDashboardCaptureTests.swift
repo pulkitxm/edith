@@ -45,6 +45,106 @@ struct UsageDashboardCaptureTests {
         .notice: "Cost estimates are incomplete",
     ]
 
+    private static let adoptedVariants = [
+        Variant(name: "regular-light", size: CGSize(width: 1100, height: 760), scheme: .light),
+        Variant(name: "regular-dark", size: CGSize(width: 1100, height: 760), scheme: .dark),
+        Variant(name: "compact-light", size: CGSize(width: 640, height: 700), scheme: .light),
+        Variant(name: "compact-dark", size: CGSize(width: 640, height: 700), scheme: .dark),
+        Variant(name: "wide-light", size: CGSize(width: 1600, height: 900), scheme: .light),
+        Variant(name: "wide-dark", size: CGSize(width: 1600, height: 900), scheme: .dark),
+        Variant(
+            name: "zoom-light", size: CGSize(width: 1100, height: 760), scheme: .light, zoom: 1.6),
+        Variant(
+            name: "zoom-dark", size: CGSize(width: 1100, height: 760), scheme: .dark, zoom: 1.6),
+    ]
+
+    private static let capturing =
+        ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] != nil
+
+    @Test(.enabled(if: capturing)) func adoptedFilterRendersAcrossVariantsAndThemes() async throws {
+        let defaults = ExtensionScope.process.defaults()
+        let prior = defaults.string(forKey: AppStorageKeys.General.theme)
+        defer { defaults.set(prior, forKey: AppStorageKeys.General.theme) }
+        let custom = DateFilterRange(
+            DateFilterDay(date: Date().addingTimeInterval(-20 * 86_400), calendar: .current),
+            DateFilterDay(date: Date().addingTimeInterval(-11 * 86_400), calendar: .current))
+        for theme in ["accent", "teal"] {
+            defaults.set(theme, forKey: AppStorageKeys.General.theme)
+            try await Task.sleep(for: .milliseconds(120))
+            for (name, selection) in [
+                ("default", DateFilterSelection.preset(.allTime)), ("week", .preset(.last7)),
+                ("named", .preset(.lastMonth)), ("custom", .custom(custom)),
+            ] {
+                let scene = try await Self.scene(.populated)
+                scene.model.range = selection
+                await scene.model.awaitPendingComputation()
+                for variant in Self.adoptedVariants {
+                    _ = try await Self.render(
+                        scene, variant: variant, name: "\(theme)-\(name)-\(variant.name)")
+                }
+                let full = Variant(
+                    name: "full-light", size: CGSize(width: 1100, height: 2600), scheme: .light)
+                if theme == "accent" {
+                    _ = try await Self.render(
+                        scene, variant: full, name: "page-\(name)-\(full.name)")
+                }
+            }
+        }
+    }
+
+    @Test(.enabled(if: capturing)) func rateLimitHistoryReadsAsAChartZoom() async throws {
+        let directory = try #require(
+            ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"])
+        let now = Date()
+        let points: [LimitPoint] = (0..<48).map { (step: Int) -> LimitPoint in
+            let offset = TimeInterval(step - 47) * 1_800
+            let session = Double(20 + step)
+            let week = Double(40 + step / 2)
+            return LimitPoint(
+                date: now.addingTimeInterval(offset), s: session, w: week, sessionReset: nil,
+                weekReset: nil)
+        }
+        let snapshot = LimitsHistory.Snapshot(
+            providers: [.claude], provider: .claude, latest: [:], points: points, accounts: [],
+            accountID: nil, hasUnassignedHistory: false)
+        let previous = UIScale.current
+        defer { UIScale.apply(previous) }
+        let cases: [(String, CGFloat, Double, ColorScheme)] = [
+            ("regular-light", 1100, 1, .light), ("regular-dark", 1100, 1, .dark),
+            ("compact-dark", 640, 1, .dark), ("zoom-light", 1100, 1.6, .light),
+        ]
+        for (name, width, zoom, scheme) in cases {
+            UIScale.apply(zoom)
+            let suite = "limits-zoom-" + UUID().uuidString
+            let defaults = try #require(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let height = CGFloat(UIScale.pt(430))
+            let dark = scheme == .dark
+            let card = LimitsCardView(
+                theme: DashSkin.accent(dark), dark: dark, initialSnapshot: snapshot,
+                defaults: defaults)
+            let root = card.environment(\.automaticViewActionsEnabled, false)
+                .environment(\.compactLayout, width < 720)
+                .environment(\.colorScheme, scheme)
+                .padding(CGFloat(UIScale.pt(12)))
+                .frame(width: width, height: height)
+                .background(DashSkin.paper(dark))
+            let host = NSHostingView(rootView: root)
+            host.sizingOptions = []
+            host.frame = CGRect(x: 0, y: 0, width: width, height: height)
+            for _ in 0..<3 {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(30))
+            }
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            try png.write(
+                to: URL(fileURLWithPath: directory).appendingPathComponent(
+                    "usage-limits-zoom-\(name).png"))
+        }
+    }
+
     @Test func headerSummaryOmitsMissingPartsAndPluralizes() {
         #expect(
             DashboardView.metaSummary(updated: "", activeDays: 1, sources: "Codex")
@@ -149,9 +249,12 @@ struct UsageDashboardCaptureTests {
                 (
                     "date-range", nil,
                     AnyView(
-                        DashboardDateRangePicker(
-                            from: from, to: today, bounds: start...today, onApply: { _, _ in },
-                            onCancel: {}))
+                        PageDateRangePicker(
+                            range: DateFilterRange(
+                                DateFilterDay(date: from, calendar: .current),
+                                DateFilterDay(date: today, calendar: .current)),
+                            earliest: DateFilterDay(date: start, calendar: .current),
+                            onApply: { _ in }, onCancel: {}))
                 ),
                 (
                     "project-drilldown", CGSize(width: 980, height: 620),

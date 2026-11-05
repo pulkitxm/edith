@@ -79,7 +79,7 @@ final class UsageSurface {
         try Task.checkCancellation()
         let metrics: [SurfaceMetric] = [
             .init("today", "Today", money(value.today.cost)),
-            .init("week", "Last seven days", money(value.week.cost)),
+            .init("week", "Last 7 days", money(value.week.cost)),
             .init("period", "Selected period", money(value.total.cost)),
             .init("tokens", "Tokens", TokenFormatter.compact(value.total.tokens)),
         ]
@@ -125,7 +125,7 @@ final class UsageSurface {
                     "activity", "Daily activity",
                     days: value.days.map { day in
                         SurfaceCalendarDay(
-                            day.id, date: day.id, level: scale.level(for: day),
+                            day.id, date: day.id, level: scale.surfaceLevel(for: day),
                             value: value.chartUsesTokens
                                 ? TokenFormatter.compact(day.tokens) + " tokens" : money(day.cost),
                             action: .init("day:" + day.id, "Open Usage", "calendar"))

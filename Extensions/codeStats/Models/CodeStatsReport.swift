@@ -55,6 +55,24 @@ public enum CodeStatsRange: Codable, Hashable, Sendable {
     }
 }
 
+extension CodeStatsRange {
+    public init(_ selection: DateFilterSelection, now: Date, calendar: Calendar) {
+        guard let range = selection.range(now: now, calendar: calendar) else {
+            self = .all
+            return
+        }
+        switch selection {
+        case .preset(.today), .preset(.last7), .preset(.last14), .preset(.last30),
+            .preset(.last90):
+            self = .days(range.days)
+        case .preset(.last12Months) where range.days == 365:
+            self = .year
+        default:
+            self = .between(range.firstString, range.lastString)
+        }
+    }
+}
+
 public struct CodeStatsTotals: Codable, Equatable, Sendable {
     public var commits: Int
     public var authored: Int
@@ -126,6 +144,12 @@ public struct CodeStatsRepositorySummary: Codable, Equatable, Identifiable, Send
     public var topLanguage: String?
 }
 
+public struct CodeStatsHourPoint: Codable, Equatable, Sendable {
+    public var hour: Int
+    public var commits: Int
+    public var lines: Int
+}
+
 public struct CodeStatsLanguageTotal: Codable, Equatable, Sendable {
     public var language: String
     public var counts: CodeStatsLanguageCounts
@@ -147,4 +171,5 @@ public struct CodeStatsReport: Codable, Equatable, Sendable {
     public var languageMonthly: [CodeStatsSeries]
     public var punchcard: [[Int]]
     public var topDays: [CodeStatsDayPoint]
+    public var hourly: [CodeStatsHourPoint]?
 }

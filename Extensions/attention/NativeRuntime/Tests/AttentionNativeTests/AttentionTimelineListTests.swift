@@ -100,7 +100,7 @@ import Testing
         let model = AttentionPageModel(
             repository: fixture.repository, uiClient: fixture.client(counter: counter))
         model.section = .timeline
-        model.select(.last7)
+        model.select(.preset(.last7))
         model.reload()
         await model.waitForReload()
         #expect(model.showsTimelineList)

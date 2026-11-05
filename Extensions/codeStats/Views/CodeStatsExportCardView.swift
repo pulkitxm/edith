@@ -109,7 +109,7 @@ public struct CodeStatsExportCardView: View {
             Text(card.title)
                 .font(.system(size: 64, weight: .bold, design: .rounded))
                 .foregroundStyle(ShareColors.cream)
-            Text("\(snapshot.rangeLabel)  ·  \(snapshot.startDay) to \(snapshot.endDay)")
+            Text(snapshot.periodLine)
                 .font(.system(size: 24, weight: .medium, design: .rounded))
                 .foregroundStyle(ShareColors.cream.opacity(0.62))
         }

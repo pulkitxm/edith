@@ -2,23 +2,16 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-struct CodeStatsRangeChips: View {
-    let range: CodeStatsRange
-    let select: (CodeStatsRange) -> Void
+struct CodeStatsDateFilter: View {
+    let model: CodeStatsModel
 
     var body: some View {
-        ForEach(CodeStatsRange.presets, id: \.self) { preset in
-            PageChip(Self.title(preset), active: preset == range) { select(preset) }
-        }
-    }
-
-    static func title(_ range: CodeStatsRange) -> String {
-        switch range {
-        case .days(let count): "\(count) days"
-        case .year: "1 year"
-        case .all: "All time"
-        case .between(let start, let end): start + " to " + end
-        }
+        PageDateFilter(
+            selection: Binding(
+                get: { model.selection },
+                set: { next in Task { await model.select(next) } }),
+            months: model.facets.months, earliest: model.facets.earliestDay,
+            now: model.dateFilterNow, calendar: model.dateFilterCalendar)
     }
 }
 

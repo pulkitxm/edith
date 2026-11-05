@@ -733,10 +733,14 @@ struct LimitsCardView: View {
     }
 
     private var segmented: some View {
-        EdithSegmentedPicker(
-            "Range", selection: $range, options: ranges.map { $0.0 }, label: { $0 }
-        )
-        .fixedSize()
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            PageCapsLabel("Chart zoom")
+            EdithSegmentedPicker(
+                "Chart zoom", selection: $range, options: ranges.map { $0.0 }, label: { $0 }
+            )
+            .fixedSize()
+        }
+        .help("Zooms this chart to a rolling window. The page range above does not change.")
     }
 
     private var readout: some View {

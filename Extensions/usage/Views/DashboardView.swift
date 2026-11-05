@@ -26,10 +26,7 @@ struct DashboardView: View {
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
-    @State private var customRangeOpen = false
     @State private var sharePresentation: ExportCardPresentation<UsageExportDeck>?
-    @State private var customFrom = Date()
-    @State private var customTo = Date()
 
     private var appTheme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
@@ -37,24 +34,6 @@ struct DashboardView: View {
     private var gold: Color { DashSkin.gold }
     private var blurMoney: Bool { presenterState.active && presenterState.money }
     private var blurUsage: Bool { presenterState.active && presenterState.usage }
-
-    private static let shortDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM"
-        return formatter
-    }()
-
-    private static let monthKey: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        return formatter
-    }()
-
-    private static let monthName: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter
-    }()
 
     @MainActor init(
         model: DashboardModel? = nil, client: UsageUIClient? = nil,
@@ -185,7 +164,6 @@ struct DashboardView: View {
         .navigationTitle("Agent Usage")
         .pageTask(id: refresh.updating) {
             await model.load()
-            syncCustomDates()
         }
         .pageTask {
             refresh.requestRefresh()
@@ -195,21 +173,16 @@ struct DashboardView: View {
             {
                 guard !Task.isCancelled else { return }
                 await model.load()
-                syncCustomDates()
             }
         }
         .pageTask(cancel: model.endObserving) {
             model.beginObserving()
-        }
-        .onChange(of: model.loaded) { _, loaded in
-            if automaticActionsEnabled, loaded { syncCustomDates() }
         }
         .onReceive(
             NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
         ) { _ in
             guard automaticActionsEnabled else { return }
             model.reloadPreferences()
-            syncCustomDates()
         }
         .onChange(of: automaticActionsEnabled) { _, enabled in
             if !enabled { refresh.setLogVisible(false) }
@@ -383,19 +356,9 @@ struct DashboardView: View {
     private var filterBar: some View {
         PageFilterBar {
             PageFilterRow("Range") {
-                rangeChip("Today", .today)
-                rangeChip("Yesterday", .yesterday)
-                rangeChip("This week", .thisWeek)
-                rangeChip("Last week", .lastWeek)
-                if let month = currentMonthOption {
-                    rangeChip("This month", .month(month))
-                }
-                if let month = previousMonthOption {
-                    rangeChip("Last month", .month(month))
-                }
-                rangeChip("All time", .all)
-                monthArchiveMenu
-                customRange
+                PageDateFilter(
+                    selection: $model.range, months: model.dateFilterMonths,
+                    earliest: model.earliestDay)
             }
             PageFilterRow("Scope") {
                 if !model.machineGroups.isEmpty { machineMenu }
@@ -408,33 +371,9 @@ struct DashboardView: View {
     }
 
     private var filtersAreDefault: Bool {
-        model.range == .all && model.selectedPaths.isEmpty
+        model.range == .preset(.allTime) && model.selectedPaths.isEmpty
             && model.selectedSources == Set(model.defaultSources)
             && model.selectedModels == Set(model.defaultModels)
-    }
-
-    private func rangeChip(_ title: String, _ range: DashRange) -> some View {
-        PageChip(title, active: isActive(range)) { model.range = range }
-    }
-
-    private var monthArchiveMenu: some View {
-        PageMenuChip(
-            archiveMonthLabel, systemImage: "calendar.badge.clock",
-            active: archiveMonthLabel != "Browse months"
-        ) {
-            ForEach(model.monthOptions, id: \.self) { month in
-                Button(monthDisplayName(month)) { model.range = .month(month) }
-            }
-        }
-        .disabled(model.monthOptions.isEmpty)
-        .help("Show one month from your history")
-    }
-
-    private var archiveMonthLabel: String {
-        guard case .month(let month) = model.range,
-            month != currentMonthOption, month != previousMonthOption
-        else { return "Browse months" }
-        return monthDisplayName(month)
     }
 
     private var resetButton: some View {
@@ -445,85 +384,6 @@ struct DashboardView: View {
             .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
             .fixedSize()
             .help("Show every agent, model and folder for all time")
-    }
-
-    private var customRange: some View {
-        Button {
-            customRangeOpen = true
-        } label: {
-            PageChipLabel(customRangeLabel, systemImage: "calendar")
-        }
-        .buttonStyle(.pageChip(active: isCustomRangeActive))
-        .fixedSize()
-        .help("Pick your own start and end dates")
-        .popover(isPresented: $customRangeOpen, arrowEdge: .bottom) {
-            DashboardDateRangePicker(
-                from: customFrom,
-                to: customTo,
-                bounds: model.dataRange ?? Date()...Date(),
-                onApply: { from, to in
-                    customFrom = from
-                    customTo = to
-                    model.range = .custom(model.ymd(from), model.ymd(to))
-                    customRangeOpen = false
-                },
-                onCancel: { customRangeOpen = false }
-            )
-        }
-    }
-
-    private var customRangeLabel: String {
-        guard isCustomRangeActive else { return "Custom range" }
-        return
-            "\(Self.shortDate.string(from: customFrom)) – \(Self.shortDate.string(from: customTo))"
-    }
-
-    private var isCustomRangeActive: Bool {
-        if case .custom = model.range { return true }
-        return false
-    }
-
-    private var currentMonthOption: String? {
-        guard let upperBound = model.dataRange?.upperBound else { return model.monthOptions.first }
-        return Self.monthKey.string(from: upperBound)
-    }
-
-    private var previousMonthOption: String? {
-        guard let upperBound = model.dataRange?.upperBound,
-            let date = Calendar.current.date(byAdding: .month, value: -1, to: upperBound)
-        else { return model.monthOptions.dropFirst().first }
-        let key = Self.monthKey.string(from: date)
-        return model.monthOptions.contains(key) ? key : nil
-    }
-
-    private func monthDisplayName(_ month: String) -> String {
-        guard let date = DateFormatter.monthParser.date(from: month) else { return month }
-        return Self.monthName.string(from: date)
-    }
-
-    private func syncCustomDates() {
-        guard model.loaded else { return }
-        if case let .custom(from, to) = model.range,
-            let f = DashboardModel.ymd.date(from: from),
-            let t = DashboardModel.ymd.date(from: to)
-        {
-            customFrom = f
-            customTo = t
-        } else if let b = model.dataRange {
-            customFrom = b.lowerBound
-            customTo = b.upperBound
-        }
-    }
-
-    private func isActive(_ r: DashRange) -> Bool {
-        switch (model.range, r) {
-        case (.today, .today), (.yesterday, .yesterday), (.thisWeek, .thisWeek),
-            (.lastWeek, .lastWeek), (.all, .all):
-            return true
-        case (.month(let selected), .month(let target)):
-            return selected == target
-        default: return false
-        }
     }
 
     private var projectMenu: some View {
@@ -927,7 +787,7 @@ struct ActivityHeatmap: View {
     var blurTokens = false
     var body: some View {
         ActivityCalendarGrid(
-            weeks: Self.kitWeeks(scale.weeks(days: days)), dark: dark, fillsWidth: true
+            weeks: scale.weeks(days: days), dark: dark, fillsWidth: true
         ) { day in
             if let detail = model.heatDetail[day.id] {
                 HeatCard(
@@ -937,20 +797,6 @@ struct ActivityHeatmap: View {
                     .font(.edithText(.callout))
                     .padding(UIScale.pt(12))
             }
-        }
-    }
-
-    private static func kitWeeks(
-        _ weeks: [ActivityCalendarWeek]
-    ) -> [EdithExtensionUI.ActivityCalendarWeek] {
-        weeks.map { week in
-            EdithExtensionUI.ActivityCalendarWeek(
-                id: week.id, monthLabel: week.monthLabel,
-                cells: week.cells.map {
-                    EdithExtensionUI.ActivityCalendarDay(
-                        id: $0.id, date: $0.date, value: $0.value,
-                        level: $0.level > 0 ? ($0.level * 3 + 1) / 2 : $0.level)
-                })
         }
     }
 }

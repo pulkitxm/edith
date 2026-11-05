@@ -44,7 +44,7 @@ struct DashboardComputeRequest {
     let allSources: [SourceInfo]
     let allModels: [String]
     let calendarDays: [DayPoint]
-    let range: DashRange
+    let range: DateFilterSelection
     let selectedSources: Set<String>
     let selectedModels: Set<String>
     let selectedPaths: Set<String>
@@ -53,6 +53,7 @@ struct DashboardComputeRequest {
     let projSortKey: ProjSortKey
     let projSortAscending: Bool
     let calendar: Calendar
+    var now = Date()
 }
 
 enum DashboardComputation {
@@ -690,7 +691,8 @@ private struct DashboardFilterComputer {
     let allSources: [SourceInfo]
     let allModels: [String]
     let calendarDays: [DayPoint]
-    let range: DashRange
+    let range: DateFilterSelection
+    let now: Date
     let selectedSources: Set<String>
     let selectedModels: Set<String>
     let selectedPaths: Set<String>
@@ -709,6 +711,7 @@ private struct DashboardFilterComputer {
         allModels = request.allModels
         calendarDays = request.calendarDays
         range = request.range
+        now = request.now
         selectedSources = request.selectedSources
         selectedModels = request.selectedModels
         selectedPaths = request.selectedPaths
@@ -747,35 +750,10 @@ private struct DashboardFilterComputer {
         guard let first = sortedPeriods.first, let last = sortedPeriods.last,
             let earliest = parseYMD(first), let dataLatest = parseYMD(last)
         else { return nil }
-        let today = cal.startOfDay(for: Date())
-        let latest = max(today, dataLatest)
-        switch range {
-        case .all: return (earliest, latest)
-        case .today: return (today, today)
-        case .yesterday:
-            let y = cal.date(byAdding: .day, value: -1, to: today) ?? today
-            return (y, y)
-        case .thisWeek:
-            let dow = (cal.component(.weekday, from: today) + 5) % 7
-            let start = cal.date(byAdding: .day, value: -dow, to: today) ?? today
-            return (start, today)
-        case .lastWeek:
-            let dow = (cal.component(.weekday, from: today) + 5) % 7
-            let thisStart = cal.date(byAdding: .day, value: -dow, to: today) ?? today
-            let lastEnd = cal.date(byAdding: .day, value: -1, to: thisStart) ?? thisStart
-            let lastStart = cal.date(byAdding: .day, value: -6, to: lastEnd) ?? lastEnd
-            return (lastStart, lastEnd)
-        case .month(let ym):
-            guard let d = DateFormatter.monthParser.date(from: ym) else {
-                return (earliest, latest)
-            }
-            let start = cal.date(from: cal.dateComponents([.year, .month], from: d)) ?? d
-            let end = cal.date(byAdding: .month, value: 1, to: start) ?? start
-            return (start, cal.date(byAdding: .day, value: -1, to: end) ?? start)
-        case .custom(let f, let t):
-            guard let fd = parseYMD(f), let td = parseYMD(t) else { return (earliest, latest) }
-            return (min(fd, td), max(fd, td))
+        guard let days = range.range(now: now, calendar: cal) else {
+            return (earliest, max(cal.startOfDay(for: now), dataLatest))
         }
+        return (days.first.date(calendar: cal), days.last.date(calendar: cal))
     }
 
     func run() -> DashboardSnapshot? {

@@ -9,15 +9,19 @@ struct CodeStatsLanguageCards: View {
     @Environment(\.codeStatsActions) private var actions
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                shares.frame(minWidth: UIScale.pt(320))
-                overTime.frame(minWidth: UIScale.pt(420))
+        if projection.showsStackedTrend {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                    shares.frame(minWidth: UIScale.pt(320))
+                    overTime.frame(minWidth: UIScale.pt(420))
+                }
+                VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                    shares
+                    overTime
+                }
             }
-            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                shares
-                overTime
-            }
+        } else {
+            shares
         }
     }
 
@@ -53,8 +57,10 @@ struct CodeStatsLanguageCards: View {
 
     private var overTime: some View {
         CodeStatsStackedCard(
-            title: "Languages over time", note: "Monthly share", points: projection.languageMonthly,
-            series: projection.languageSeries, percent: true, dark: dark)
+            title: "Languages over time",
+            note: projection.stackGranularity == .daily ? "Daily share" : "Monthly share",
+            points: projection.languageMonthly, series: projection.languageSeries, percent: true,
+            granularity: projection.stackGranularity, dark: dark)
     }
 }
 

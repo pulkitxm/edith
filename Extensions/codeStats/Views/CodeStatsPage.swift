@@ -104,9 +104,7 @@ struct CodeStatsPage: View {
                     spacing: UIScale.pt(PageMetrics.controlSpacing),
                     lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
                 ) {
-                    CodeStatsRangeChips(range: model.range) { range in
-                        Task { await model.select(range) }
-                    }
+                    CodeStatsDateFilter(model: model)
                 }
             }
             if model.reportIsEmpty {
@@ -133,7 +131,7 @@ struct CodeStatsPage: View {
                     Task { await model.updateFilter { $0 = .default } }
                 }
                 : PageAction("Show all time", symbolName: "calendar") {
-                    Task { await model.select(.all) }
+                    Task { await model.select(.preset(.allTime)) }
                 }
         )
     }
@@ -154,10 +152,14 @@ struct CodeStatsPage: View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsReportSections(report: report, projection: model.projection, dark: dark)
             if model.table != nil {
-                CodeStatsRepositoryStripCard(explorer: model.explorer, dark: dark)
+                if model.explorer.stripMonths.count >= CodeStatsExplorer.stripMinimumMonths {
+                    CodeStatsRepositoryStripCard(explorer: model.explorer, dark: dark)
+                }
                 CodeStatsShareCard(explorer: model.explorer, dark: dark)
                 CodeStatsYearOverYearCard(explorer: model.explorer, dark: dark)
-                CodeStatsRhythmCard(explorer: model.explorer, dark: dark)
+                if !model.projection.isSingleDay {
+                    CodeStatsRhythmCard(explorer: model.explorer, dark: dark)
+                }
                 CodeStatsNewRepositoriesCard(explorer: model.explorer, dark: dark)
             }
             if let audit = model.audit {
@@ -184,7 +186,11 @@ struct CodeStatsReportSections: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsKPIGrid(report: report, dark: dark)
-            if sharesActivityRow {
+            if !projection.showsContributions {
+                if !projection.isSingleDay {
+                    CodeStatsTopDaysCard(days: projection.topDays, dark: dark)
+                }
+            } else if sharesActivityRow {
                 CodeStatsActivityRow(projection: projection, dark: dark)
             } else {
                 CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
@@ -192,8 +198,11 @@ struct CodeStatsReportSections: View {
             CodeStatsTrendCard(projection: projection, dark: dark)
             CodeStatsRepositoryCards(projection: projection, dark: dark)
             CodeStatsLanguageCards(projection: projection, dark: dark)
-            CodeStatsHabitCards(
-                projection: projection, dark: dark, showsTopDays: !sharesActivityRow)
+            if !projection.isSingleDay {
+                CodeStatsHabitCards(
+                    projection: projection, dark: dark,
+                    showsTopDays: projection.showsContributions && !sharesActivityRow)
+            }
         }
     }
 
