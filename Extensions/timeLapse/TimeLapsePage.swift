@@ -79,7 +79,7 @@ struct TimeLapseControls: View {
 
     var body: some View {
         GeometryReader { geometry in
-            PageScaffold {
+            PageScaffold(width: .readable) {
                 PageHeader(
                     "Screen Recorder",
                     accessory: {
@@ -211,7 +211,8 @@ struct TimeLapseControls: View {
 
     private func previewHeight(in size: CGSize) -> CGFloat {
         let padding = UIScale.pt(narrow ? 16 : 24)
-        let width = max(UIScale.pt(120), size.width - padding * 2)
+        let column = narrow ? size.width : min(size.width, UIScale.pt(PageMetrics.readableWidth))
+        let width = max(UIScale.pt(120), column - padding * 2)
         let ratio = recorder.preview.map { CGFloat($0.height) / CGFloat($0.width) } ?? 9 / 16
         let controls =
             recorder.recording
@@ -349,6 +350,7 @@ struct TimeLapseControls: View {
                     Text("Audio & options")
                     Spacer()
                     Text(audioSummary).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .padding(.trailing, -UIScale.pt(4))
                 }.font(.edithText(.callout))
             }
             Divider()
@@ -509,6 +511,7 @@ struct TimeLapseControls: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.edith(.iconOnly))
+                .padding(.trailing, -UIScale.pt(6))
                 .help("Refresh recordings")
                 .accessibilityLabel("Refresh recordings")
             }
@@ -588,7 +591,7 @@ struct TimeLapseControls: View {
                     Spacer(minLength: UIScale.pt(8))
                     SkeletonBlock(width: 64, height: 12, corner: 4)
                 }
-                .padding(.horizontal, UIScale.pt(12))
+                .padding(.horizontal, UIScale.pt(20))
                 .padding(.vertical, UIScale.pt(10))
             }
         }
@@ -633,7 +636,7 @@ struct TimeLapseControls: View {
                     .font(.edithText(.callout)).foregroundStyle(.orange)
             }
         }
-        .padding(UIScale.pt(16))
+        .padding(UIScale.pt(20))
         .edithSurface(cornerRadius: 12)
     }
 

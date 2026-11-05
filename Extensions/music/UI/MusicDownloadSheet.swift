@@ -153,8 +153,9 @@ struct EmbeddedDownloadSheet: View {
                 .buttonStyle(.edith(.toolbar))
             }
         }
-        .padding(.horizontal, UIScale.pt(22))
+        .pageGutter(compact)
         .padding(.vertical, UIScale.pt(14))
+        .pageColumn(compact ? nil : UIScale.pt(PageMetrics.readableWidth))
     }
 
     private func unavailableView(_ reason: String) -> some View {
@@ -239,7 +240,8 @@ struct EmbeddedDownloadSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .pageContent(compact)
+            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+            .pageContent(compact, width: .readable)
         }
         .edithSheet(item: $logItem) { item in
             logSheet(item)
@@ -807,7 +809,7 @@ struct EmbeddedDownloadSheet: View {
             .help("Remove from download history")
         }
         .padding(.vertical, UIScale.pt(5))
-        .padding(.horizontal, UIScale.pt(8))
+        .padding(.horizontal, UIScale.pt(10))
         .background(Color.clear, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
     }
 
@@ -923,7 +925,7 @@ struct EmbeddedDownloadSheet: View {
                 .font(.edithText(.subheadline))
             }
         }
-        .padding(.horizontal, UIScale.pt(22))
+        .padding(.horizontal, -UIScale.pt(6))
         .padding(.vertical, UIScale.pt(10))
     }
 

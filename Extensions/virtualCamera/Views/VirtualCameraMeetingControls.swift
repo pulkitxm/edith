@@ -9,10 +9,13 @@ struct VirtualCameraMeetingControls: View {
     @State private var choosingScreen = false
     @Environment(\.compactLayout) private var compact
 
+    private static let menuInset = 5.0
+
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(12)) {
                 sourceMenu.frame(maxWidth: UIScale.pt(280), alignment: .leading)
+                    .padding(.leading, -UIScale.pt(Self.menuInset))
                 Spacer(minLength: 0)
                 Menu {
                     if model.state.media.kind != .camera {
@@ -35,6 +38,7 @@ struct VirtualCameraMeetingControls: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .padding(.trailing, -UIScale.pt(Self.menuInset))
                 .help("Preview, playback and pause options")
                 .accessibilityLabel("Meeting options")
             }

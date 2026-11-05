@@ -16,6 +16,7 @@ struct DownloadListRow: Identifiable, Equatable {
 enum DownloadRowMetrics {
     static let rowHeight = 56.0
     static let groupInset = 6.0
+    static let toolbarInset = 6.0
 
     static func height(of row: DownloadListRow) -> CGFloat {
         let insets =
@@ -95,6 +96,7 @@ struct DownloadSheet: View {
 
     private var theme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
+    private var column: CGFloat? { compact ? nil : UIScale.pt(PageMetrics.readableWidth) }
     private var parsedCount: Int {
         guard downloader.unavailableReason == nil else { return 0 }
         return YoutubeDownloader.parseURLs(from: urlText).count
@@ -211,44 +213,41 @@ struct DownloadSheet: View {
             },
             accessory: {
                 PageSubtitle("Save videos, photos, posts and audio from the web to your Mac.")
-            })
+            }
+        )
+        .environment(\.pageColumnWidth, column)
     }
 
     private func unavailableView(_ reason: String) -> some View {
         let missingTool = reason.contains("yt-dlp")
-        return ScrollView {
-            PageEmptyState(
-                symbolName: missingTool ? "arrow.down.circle" : "exclamationmark.triangle",
-                title: missingTool
-                    ? "Set up Downloads once to get started" : "Downloads can't start yet",
-                message: missingTool
-                    ? "Downloads uses yt-dlp, a free open source tool, to save media from YouTube, Instagram, TikTok, X and more. Install it once and you are ready."
-                    : reason,
-                steps: missingTool
-                    ? [
-                        PageGuideStep(
-                            symbolName: "wrench.and.screwdriver", title: "Install yt-dlp",
-                            detail: "Open setup and press Install. It takes under a minute."),
-                        PageGuideStep(
-                            symbolName: "link", title: "Paste a link",
-                            detail: "Copy any video or post link and paste it here."),
-                        PageGuideStep(
-                            symbolName: "arrow.down.circle", title: "Download",
-                            detail: "Files are saved to a folder you choose."),
-                    ] : [],
-                primary: PageAction(
-                    missingTool ? "Set up Downloads" : "Open settings",
-                    symbolName: "gearshape", identifier: "downloads.setup"
-                ) { settingsPresented = true },
-                secondary: PageAction("Check again", symbolName: "arrow.clockwise") {
-                    downloader.checkAvailability()
-                },
-                footnote: "Nothing is downloaded until you paste a link and press Download."
-            )
-            .frame(maxWidth: .infinity)
-            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
-        }
-        .scrollIndicators(.automatic)
+        return PageEmptyState(
+            symbolName: missingTool ? "arrow.down.circle" : "exclamationmark.triangle",
+            title: missingTool
+                ? "Set up Downloads once to get started" : "Downloads can't start yet",
+            message: missingTool
+                ? "Downloads uses yt-dlp, a free open source tool, to save media from YouTube, Instagram, TikTok, X and more. Install it once and you are ready."
+                : reason,
+            steps: missingTool
+                ? [
+                    PageGuideStep(
+                        symbolName: "wrench.and.screwdriver", title: "Install yt-dlp",
+                        detail: "Open setup and press Install. It takes under a minute."),
+                    PageGuideStep(
+                        symbolName: "link", title: "Paste a link",
+                        detail: "Copy any video or post link and paste it here."),
+                    PageGuideStep(
+                        symbolName: "arrow.down.circle", title: "Download",
+                        detail: "Files are saved to a folder you choose."),
+                ] : [],
+            primary: PageAction(
+                missingTool ? "Set up Downloads" : "Open settings",
+                symbolName: "gearshape", identifier: "downloads.setup"
+            ) { settingsPresented = true },
+            secondary: PageAction("Check again", symbolName: "arrow.clockwise") {
+                downloader.checkAvailability()
+            },
+            footnote: "Nothing is downloaded until you paste a link and press Download."
+        )
         .edithSheet(isPresented: $settingsPresented) {
             DownloadsSettings(downloader: downloader) { settingsPresented = false }
         }
@@ -340,6 +339,7 @@ struct DownloadSheet: View {
         .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
         .frame(maxWidth: .infinity, alignment: .leading)
         .pageGutter(compact)
+        .pageColumn(column)
     }
 
     @ViewBuilder
@@ -359,6 +359,7 @@ struct DownloadSheet: View {
             }
             .buttonStyle(.edith(.toolbar))
             .font(.edithText(.callout))
+            .padding(.trailing, -UIScale.pt(DownloadRowMetrics.toolbarInset))
         }
     }
 
@@ -371,6 +372,7 @@ struct DownloadSheet: View {
             .background(DownloadRowBackground(first: row.first, last: row.last, dark: dark))
             .padding(.bottom, row.last ? UIScale.pt(PageMetrics.bottom) : 0)
             .pageGutter(compact)
+            .pageColumn(column)
     }
 
     private var urlInput: some View {
@@ -385,6 +387,7 @@ struct DownloadSheet: View {
                 }
                 .buttonStyle(.edith(.toolbar))
                 .font(.edithText(.callout))
+                .padding(.trailing, -UIScale.pt(DownloadRowMetrics.toolbarInset))
                 .help("Paste links from the clipboard")
             }
             ZStack(alignment: .topLeading) {
@@ -660,15 +663,40 @@ struct DownloadSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 PageCapsLabel("Login cookies")
-                Picker("Login cookies", selection: $browser) {
-                    Text("None (public media)").tag("")
-                    ForEach(DownloadBrowser.allCases, id: \.rawValue) { source in
-                        Text(source.rawValue.capitalized).tag(source.rawValue)
+                Menu {
+                    Picker("Login cookies", selection: $browser) {
+                        Text("None (public media)").tag("")
+                        ForEach(DownloadBrowser.allCases, id: \.rawValue) { source in
+                            Text(source.rawValue.capitalized).tag(source.rawValue)
+                        }
                     }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                } label: {
+                    HStack(spacing: UIScale.pt(8)) {
+                        Text(browser.isEmpty ? "None (public media)" : browser.capitalized)
+                            .lineLimit(1)
+                        Spacer(minLength: UIScale.pt(8))
+                        Image(systemName: "chevron.up.chevron.down")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.edithText(.callout))
+                    .padding(.horizontal, UIScale.pt(10))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: UIScale.pt(PageMetrics.controlHeight))
+                    .background(
+                        DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: UIScale.pt(8))
+                            .strokeBorder(DashSkin.line(dark))
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
                 }
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: UIScale.pt(PageMetrics.controlHeight))
+                .menuStyle(.button)
+                .buttonStyle(.edith(.borderless))
+                .menuIndicator(.hidden)
+                .accessibilityLabel("Login cookies")
                 Text("Only for private posts that need you to be signed in.")
                     .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
@@ -843,6 +871,7 @@ struct DownloadSheet: View {
         }
         .buttonStyle(.edith(.iconOnly))
         .font(.edithText(.callout))
+        .padding(.trailing, -UIScale.pt(DownloadRowMetrics.toolbarInset))
     }
 
     private func removeButton(_ item: YoutubeDownloader.DownloadItem) -> some View {

@@ -34,6 +34,7 @@ struct VirtualCameraInspector: View {
             }
             .padding(UIScale.pt(2))
         }
+        .padding(-UIScale.pt(2))
     }
 
     @ViewBuilder private func panel(_ section: VirtualCameraInspectorTab) -> some View {

@@ -8,13 +8,25 @@ import SwiftUI
 struct StudioPDFOrganizeGrid: View {
     let editor: StudioPDFEditorModel
     @State private var targeted: Int?
+    @State private var width: CGFloat = 0
+
+    private static let tileWidth = 150.0
+    private static let spacing = 16.0
+    private static let inset = 20.0
+
+    private var columns: [GridItem] {
+        let tile = UIScale.pt(Self.tileWidth)
+        let gap = UIScale.pt(Self.spacing)
+        let available = width - UIScale.pt(Self.inset) * 2
+        let fit = max(1, Int((available + gap) / (tile + gap)))
+        return Array(
+            repeating: GridItem(.fixed(tile), spacing: gap),
+            count: max(1, min(fit, editor.pageCount)))
+    }
 
     var body: some View {
         ScrollView {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(150)), spacing: UIScale.pt(16))],
-                spacing: UIScale.pt(18)
-            ) {
+            LazyVGrid(columns: columns, spacing: UIScale.pt(18)) {
                 ForEach(0..<editor.pageCount, id: \.self) { index in
                     StudioPDFPageTile(editor: editor, index: index, targeted: targeted == index)
                         .draggable(String(index))
@@ -30,7 +42,13 @@ struct StudioPDFOrganizeGrid: View {
                         }
                 }
             }
-            .padding(UIScale.pt(20))
+            .padding(UIScale.pt(Self.inset))
+            .frame(maxWidth: .infinity)
+        }
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            width = $0
         }
     }
 }

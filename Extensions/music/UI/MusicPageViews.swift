@@ -65,6 +65,7 @@ struct EmbeddedMusicPage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search = ""
+    @State private var gridWidth: CGFloat = 0
     @State private var showDownloader = false
     @State private var deleteTarget: EmbeddedTrack?
     @State private var showNewFolder = false
@@ -237,9 +238,19 @@ struct EmbeddedMusicPage: View {
         EmbeddedMusicDetailPresenter.shared.show(track, renaming: renaming)
     }
 
+    private var providerConnectVisible: Bool {
+        switch accounts.selected {
+        case .local: false
+        case .spotify: !accounts.spotify.connected
+        case .youtubeMusic: !accounts.youtubeConnected
+        }
+    }
+
     private var pageHeader: some View {
         PageHeader("Music") {
-            if accounts.selected == .local { headerActions }
+            if accounts.selected == .local {
+                headerActions.padding(.trailing, -UIScale.pt(6))
+            }
         } accessory: {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 EdithSegmentedPicker(
@@ -270,6 +281,9 @@ struct EmbeddedMusicPage: View {
                 }
             }
         }
+        .environment(
+            \.pageColumnWidth,
+            providerConnectVisible && !compact ? UIScale.pt(PageMetrics.readableWidth) : nil)
     }
 
     private var viewIsEmpty: Bool {
@@ -380,6 +394,7 @@ struct EmbeddedMusicPage: View {
                     .fixedSize(horizontal: true, vertical: false)
                 }
                 .scrollIndicators(.hidden)
+                .padding(.leading, -UIScale.pt(7))
             }
             Spacer(minLength: UIScale.pt(8))
             Button {
@@ -516,14 +531,9 @@ struct EmbeddedMusicPage: View {
     }
 
     private var gridContent: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(
-                    .adaptive(minimum: EmbeddedMusicTile.width, maximum: EmbeddedMusicTile.width),
-                    spacing: UIScale.pt(14))
-            ],
-            alignment: .leading, spacing: UIScale.pt(16)
-        ) {
+        let layout = EmbeddedMusicTile.layout(
+            count: filteredFolders.count + filteredTracks.count, available: gridWidth)
+        return LazyVGrid(columns: layout.columns, spacing: UIScale.pt(16)) {
             ForEach(filteredFolders) { folder in
                 EmbeddedMusicFolderTile(
                     folder: folder, theme: theme, location: location(of: folder.relativePath),
@@ -552,6 +562,13 @@ struct EmbeddedMusicPage: View {
                     onOpenFolder: { remote.reveal(track) }
                 )
             }
+        }
+        .environment(\.musicTileArt, layout.art)
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            gridWidth = $0
         }
     }
 
@@ -716,10 +733,12 @@ private struct EmbeddedMusicFolderRow: View {
             .buttonStyle(.edith(.borderless))
             .help("Play this folder")
             .opacity(hovering || trackCount == 0 ? 1 : 0.55)
+            .frame(width: EmbeddedMusicRowColumn.value, alignment: .trailing)
 
             Image(systemName: "chevron.right")
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .foregroundStyle(.tertiary)
+                .frame(width: EmbeddedMusicRowColumn.trailing)
         }
         .padding(.vertical, UIScale.pt(6))
         .padding(.horizontal, UIScale.pt(8))
@@ -813,6 +832,8 @@ private struct EmbeddedMusicPageRow: View {
                         .font(.edithText(.subheadline))
                         .monospacedDigit()
                         .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .frame(width: EmbeddedMusicRowColumn.value, alignment: .trailing)
                 }
                 .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
@@ -823,6 +844,7 @@ private struct EmbeddedMusicPageRow: View {
                 Image(systemName: isFavourite ? "heart.fill" : "heart")
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(isFavourite ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
+                    .frame(width: EmbeddedMusicRowColumn.trailing)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
@@ -895,26 +917,27 @@ private func trackMenu(
 
 struct EmbeddedMusicLibrarySkeleton: View {
     let grid: Bool
+    @State private var width: CGFloat = 0
 
     var body: some View {
         SkeletonGroup {
             if grid {
-                LazyVGrid(
-                    columns: [
-                        GridItem(.adaptive(minimum: EmbeddedMusicTile.width), alignment: .top)
-                    ],
-                    alignment: .leading, spacing: UIScale.pt(16)
-                ) {
+                let layout = EmbeddedMusicTile.layout(count: 12, available: width)
+                LazyVGrid(columns: layout.columns, spacing: UIScale.pt(16)) {
                     ForEach(0..<12, id: \.self) { index in
-                        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-                            SkeletonBlock(
-                                width: EmbeddedMusicTile.art, height: EmbeddedMusicTile.art,
-                                corner: 8)
+                        VStack(alignment: .center, spacing: UIScale.pt(7)) {
+                            SkeletonBlock(width: layout.art, height: layout.art, corner: 8)
                             SkeletonBlock(width: index.isMultiple(of: 2) ? 96 : 78, height: 12)
                             SkeletonBlock(width: 64, height: 10)
                         }
                         .padding(UIScale.pt(EmbeddedMusicTile.inset))
                     }
+                }
+                .frame(maxWidth: .infinity)
+                .onGeometryChange(for: CGFloat.self) {
+                    $0.size.width
+                } action: {
+                    width = $0
                 }
             } else {
                 LazyVStack(spacing: UIScale.pt(2)) {
@@ -928,7 +951,9 @@ struct EmbeddedMusicLibrarySkeleton: View {
                             }
                             Spacer()
                             SkeletonBlock(width: 32, height: 10)
-                            SkeletonBlock(width: 22, height: 22, corner: 11)
+                                .frame(width: EmbeddedMusicRowColumn.value, alignment: .trailing)
+                            SkeletonBlock(width: 16, height: 16, corner: 8)
+                                .frame(width: EmbeddedMusicRowColumn.trailing)
                         }
                         .padding(.vertical, UIScale.pt(6))
                         .padding(.horizontal, UIScale.pt(8))
@@ -941,11 +966,49 @@ struct EmbeddedMusicLibrarySkeleton: View {
     }
 }
 
-private enum EmbeddedMusicTile {
+private enum EmbeddedMusicRowColumn {
+    static var value: CGFloat { UIScale.pt(56) }
+    static var trailing: CGFloat { UIScale.pt(16) }
+}
+
+enum EmbeddedMusicTile {
+    struct Layout {
+        let columns: [GridItem]
+        let art: Double
+    }
+
     static let art = 118.0
+    static let maximumArt = 200.0
     static let inset = 6.0
-    static var artSize: CGFloat { UIScale.pt(art) }
-    static var width: CGFloat { UIScale.pt(art + inset * 2) }
+    static let spacing = 14.0
+
+    static func columnCount(count: Int, fit: Int) -> Int {
+        let fit = max(1, fit)
+        guard count > fit else { return max(1, count) }
+        let smallest = max(1, (fit + 1) * 2 / 3)
+        let candidates = Array(stride(from: fit, through: smallest, by: -1))
+        if let even = candidates.first(where: { count.isMultiple(of: $0) }) { return even }
+        return candidates.max {
+            Double(count % $0) / Double($0) < Double(count % $1) / Double($1)
+        } ?? fit
+    }
+
+    static func layout(count: Int, available: CGFloat) -> Layout {
+        let gap = UIScale.pt(spacing)
+        let minimum = UIScale.pt(art + inset * 2)
+        let fit = available > 0 ? Int((available + gap) / (minimum + gap)) : 1
+        let columns = columnCount(count: count, fit: fit)
+        let cell = (available - gap * CGFloat(columns - 1)) / CGFloat(columns)
+        let fitted = Double(cell / UIScale.pt(1)) - inset * 2
+        return Layout(
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: gap, alignment: .top), count: columns),
+            art: min(maximumArt, max(art, fitted)))
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var musicTileArt = EmbeddedMusicTile.art
 }
 
 private struct EmbeddedMusicFolderTile: View {
@@ -958,6 +1021,7 @@ private struct EmbeddedMusicFolderTile: View {
     let onRename: () -> Void
     let onDelete: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.musicTileArt) private var art
     @State private var hovering = false
     @State private var dropTargeted = false
     @State private var trackCount: Int?
@@ -973,7 +1037,7 @@ private struct EmbeddedMusicFolderTile: View {
                             .font(.system(size: UIScale.pt(34)))
                             .foregroundStyle(theme)
                     }
-                    .frame(width: EmbeddedMusicTile.artSize, height: EmbeddedMusicTile.artSize)
+                    .frame(width: UIScale.pt(art), height: UIScale.pt(art))
                 }
                 .buttonStyle(.edith(.borderless))
                 .accessibilityLabel(
@@ -1004,7 +1068,7 @@ private struct EmbeddedMusicFolderTile: View {
                     .presenterBlur(
                         location != nil && EmbeddedMusicPrivacyState.shared.hides(.music))
             }
-            .frame(width: EmbeddedMusicTile.artSize)
+            .frame(width: UIScale.pt(art))
         }
         .padding(UIScale.pt(6))
         .background(
@@ -1054,6 +1118,7 @@ private struct EmbeddedMusicTrackTile: View {
     let onToggleFavourite: () -> Void
     let onOpenFolder: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.musicTileArt) private var art
     @State private var duration: String?
     @State private var hovering = false
 
@@ -1061,7 +1126,7 @@ private struct EmbeddedMusicTrackTile: View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             ZStack(alignment: .topTrailing) {
                 Button(action: onToggle) {
-                    EmbeddedPageArtworkThumb(track: track, size: EmbeddedMusicTile.art)
+                    EmbeddedPageArtworkThumb(track: track, size: art)
                         .overlay(alignment: .bottomTrailing) {
                             Image(
                                 systemName: isCurrent && isPlaying
@@ -1104,7 +1169,7 @@ private struct EmbeddedMusicTrackTile: View {
                         .presenterBlur(
                             location != nil && EmbeddedMusicPrivacyState.shared.hides(.music))
                 }
-                .frame(width: EmbeddedMusicTile.artSize)
+                .frame(width: UIScale.pt(art))
             }
             .buttonStyle(.edith(.borderless))
             .help("Show details")
@@ -1229,6 +1294,7 @@ struct EmbeddedMusicDetailSheet: View {
     @State private var namedTrack: URL?
     @FocusState private var nameFocused: Bool
     @State private var sourceURL: URL?
+    @State private var contentHeight: CGFloat?
 
     private var dark: Bool { scheme == .dark }
     private var isCurrent: Bool { remote.currentFile == track.relativePath }
@@ -1237,15 +1303,19 @@ struct EmbeddedMusicDetailSheet: View {
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             header
-            ScrollView { content }
+            ScrollView {
+                content.onGeometryChange(for: CGFloat.self) {
+                    $0.size.height
+                } action: {
+                    contentHeight = $0
+                }
+            }
         }
         .frame(
             width: min(
                 PresentationMetrics.width(track.isVideo ? 760 : 400),
                 max(0, availableSize.width - UIScale.pt(48))),
-            height: min(
-                PresentationMetrics.height(track.isVideo ? 650 : 560),
-                max(0, availableSize.height - UIScale.pt(48)))
+            height: sheetHeight
         )
         .background(sheetBackground)
         .onChange(of: track.id, initial: true) {
@@ -1261,6 +1331,14 @@ struct EmbeddedMusicDetailSheet: View {
             }
             if beginRename { nameFocused = true }
         }
+    }
+
+    private var sheetHeight: CGFloat {
+        let limit = min(
+            PresentationMetrics.height(track.isVideo ? 650 : 560),
+            max(0, availableSize.height - UIScale.pt(48)))
+        guard let contentHeight else { return limit }
+        return min(limit, contentHeight + UIScale.pt(Self.headerHeight))
     }
 
     private var sheetBackground: some View {
@@ -1406,17 +1484,20 @@ struct EmbeddedMusicDetailSheet: View {
     private var playerBlock: some View {
         VStack(spacing: UIScale.pt(8)) {
             EmbeddedSeekBar(theme: theme, height: UIScale.pt(5))
-            HStack {
-                ticker { Text(EmbeddedTrackMeta.timeLabel(remote.elapsed)) }
-                Spacer()
+            ZStack {
+                HStack {
+                    ticker { Text(EmbeddedTrackMeta.timeLabel(remote.elapsed)) }
+                    Spacer()
+                    ticker {
+                        Text(
+                            "-"
+                                + EmbeddedTrackMeta.timeLabel(
+                                    max(remote.duration - remote.elapsed, 0)))
+                    }
+                }
                 Label(isPlaying ? "Now Playing" : "Paused", systemImage: "waveform")
                     .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(theme)
-                Spacer()
-                ticker {
-                    Text(
-                        "-" + EmbeddedTrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
-                }
             }
             .font(.edithText(.subheadline))
             .monospacedDigit()
@@ -1469,6 +1550,7 @@ struct EmbeddedMusicDetailSheet: View {
         .allowsHitTesting(canRename)
     }
 
+    private static let headerHeight = 40.0
     private static let renameButtonHeight = 40.0
     private static let renameButtonGap = 20.0
     private static var renameRowHeight: Double { renameButtonHeight + renameButtonGap }

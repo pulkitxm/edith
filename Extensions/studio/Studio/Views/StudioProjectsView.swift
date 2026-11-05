@@ -30,15 +30,11 @@ struct StudioProjectsView: View {
                                 "No video projects yet. Choose New video project to import a clip and edit it on a timeline. Projects save automatically."
                         )
                     } else {
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))
-                            ],
-                            alignment: .leading, spacing: UIScale.pt(12)
-                        ) {
-                            ForEach(model.videoProjects) { project in
-                                StudioProjectCard(model: model, project: project)
+                        StudioListSurface {
+                            ForEach(Array(model.videoProjects.enumerated()), id: \.element.id) {
+                                index, project in
+                                if index > 0 { Divider().opacity(0.5) }
+                                StudioProjectRow(model: model, project: project)
                             }
                         }
                     }
@@ -52,20 +48,13 @@ struct StudioProjectsView: View {
                                 "Nothing yet. Open a tool from the Tools tab and run it, and the files it makes will be listed here with Show in Finder."
                         )
                     } else {
-                        VStack(spacing: 0) {
+                        StudioListSurface {
                             ForEach(Array(model.recent.enumerated()), id: \.element.id) {
                                 index, run in
                                 if index > 0 { Divider().opacity(0.5) }
                                 StudioRecentRow(model: model, run: run)
                             }
                         }
-                        .background(
-                            DashSkin.paper2(scheme == .dark),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
-                                DashSkin.line(scheme == .dark)))
                     }
                 }
             }
@@ -133,7 +122,7 @@ struct StudioEmptyNote: View {
     }
 }
 
-struct StudioProjectCard: View {
+struct StudioProjectRow: View {
     let model: StudioModel
     let project: VideoProject.Listing
     @Environment(\.colorScheme) private var scheme
@@ -143,17 +132,17 @@ struct StudioProjectCard: View {
             Button {
                 model.openVideoProject(project.url)
             } label: {
-                HStack(spacing: UIScale.pt(12)) {
+                HStack(spacing: UIScale.pt(10)) {
                     Image(systemName: "film.stack")
                         .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(StudioPalette.tint(for: .video))
-                        .frame(width: UIScale.pt(36), height: UIScale.pt(36))
+                        .frame(width: UIScale.pt(40), height: UIScale.pt(40))
                         .background(
                             StudioPalette.tint(for: .video).opacity(0.12),
                             in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(project.title)
-                            .font(.edithText(.callout).weight(.semibold))
+                            .font(.edithText(.callout).weight(.medium))
                             .foregroundStyle(DashSkin.ink(scheme == .dark))
                             .lineLimit(1)
                         Text(subtitle)
@@ -176,17 +165,8 @@ struct StudioProjectCard: View {
             .help("Move \(project.title) to the Trash. You can restore it from there.")
             .accessibilityLabel("Move \(project.title) to Trash")
         }
-        .padding(.vertical, UIScale.pt(12))
-        .padding(.leading, UIScale.pt(12))
-        .padding(.trailing, UIScale.pt(8))
-        .background(
-            DashSkin.paper2(scheme == .dark),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(12))
-                .strokeBorder(DashSkin.line(scheme == .dark))
-        )
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(8))
         .contextMenu {
             Button("Open") { model.openVideoProject(project.url) }
             Divider()

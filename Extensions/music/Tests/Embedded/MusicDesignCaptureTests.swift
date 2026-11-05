@@ -72,12 +72,19 @@ import Testing
         try #require(remote.entriesLoaded)
     }
 
+    @Test func gridColumnsFillOrAvoidStrandingTiles() {
+        #expect(EmbeddedMusicTile.columnCount(count: 2, fit: 10) == 2)
+        #expect(EmbeddedMusicTile.columnCount(count: 8, fit: 10) == 8)
+        #expect(EmbeddedMusicTile.columnCount(count: 18, fit: 7) == 6)
+        #expect(EmbeddedMusicTile.columnCount(count: 8, fit: 7) == 5)
+    }
+
     @Test func pageFooterAndSidebarRenderEveryStateAtBothWidthsThemesAndZoom() async throws {
         let session = MusicCaptureSession()
         defer { session.restore() }
         for library in [Library.loading, .empty, .populated, .spotify] {
             try await configure(library)
-            for (width, height) in [(1100.0, 760.0), (640.0, 700.0)] {
+            for (width, height) in [(1600.0, 1000.0), (1100.0, 760.0), (640.0, 700.0)] {
                 for scheme in [ColorScheme.light, .dark] {
                     let name = "page-\(library)-\(Int(width))-\(scheme)"
                     let view = try await session.render(
@@ -94,6 +101,8 @@ import Testing
         SharedDefaults.store.set(true, forKey: AppStorageKeys.Music.gridView)
         _ = try await session.render(
             route: .page, width: 1100, height: 760, scheme: .dark, name: "page-grid-1100-dark")
+        _ = try await session.render(
+            route: .page, width: 1600, height: 1000, scheme: .light, name: "page-grid-1600-light")
         SharedDefaults.store.set(false, forKey: AppStorageKeys.Music.gridView)
     }
 
@@ -116,7 +125,7 @@ import Testing
         try downloader.apply(Self.downloadsState)
         let tile = SurfaceTile(.music)
         for (zoom, width, height) in [
-            (1.0, 1100.0, 760.0), (1.0, 640.0, 700.0), (1.6, 1100.0, 760.0),
+            (1.0, 1600.0, 1000.0), (1.0, 1100.0, 760.0), (1.0, 640.0, 700.0), (1.6, 1100.0, 760.0),
         ] {
             session.zoom(zoom)
             for scheme in [ColorScheme.light, .dark] {

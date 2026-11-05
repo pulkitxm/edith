@@ -76,7 +76,7 @@ struct SocialManagerPage: View {
         } content: {
             HStack(spacing: 0) {
                 if railOpen, !compact {
-                    accountRail.frame(width: UIScale.pt(240))
+                    accountRail.frame(width: UIScale.pt(264))
                     Divider()
                 }
                 ZStack {
@@ -320,13 +320,7 @@ struct SocialManagerPage: View {
                                 subtitle:
                                     "Keep the social accounts for each person, brand or client together."
                             )
-                            LazyVGrid(
-                                columns: PageMetrics.cardColumns(
-                                    compact, minimum: 250, spacing: 12, alignment: .topLeading),
-                                spacing: UIScale.pt(12)
-                            ) {
-                                ForEach(model.catalog.profiles) { profile in profileCard(profile) }
-                            }
+                            SocialTileGrid(items: model.catalog.profiles) { profileCard($0) }
                         }
                         Label(
                             "Sign in on each website once. Cookies and website storage stay in that account's own persistent browser session on this Mac.",
@@ -366,6 +360,7 @@ struct SocialManagerPage: View {
                 "Logins stay in each account's own browser session on this Mac. Edith never sees your passwords."
         )
         .frame(minHeight: UIScale.pt(420))
+        .pageFillViewport()
     }
 
     private var firstAccountState: some View {
@@ -391,6 +386,7 @@ struct SocialManagerPage: View {
             }
         )
         .frame(minHeight: UIScale.pt(420))
+        .pageFillViewport()
     }
 
     private func profileCard(_ profile: SocialProfile) -> some View {
@@ -503,17 +499,15 @@ struct SocialManagerPage: View {
                 )
                 .frame(minHeight: UIScale.pt(300)).disabled(model.busy)
             } else {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(
-                        compact, minimum: 250, spacing: 12, alignment: .topLeading),
-                    spacing: UIScale.pt(12)
-                ) {
-                    ForEach(accounts) { account in
-                        if let platform = model.platform(for: account) {
-                            accountCard(account, platform: platform)
-                        }
-                    }
-                }
+                accountTiles(accounts)
+            }
+        }
+    }
+
+    private func accountTiles(_ accounts: [SocialAccount]) -> some View {
+        SocialTileGrid(items: accounts.filter { model.platform(for: $0) != nil }) { account in
+            if let platform = model.platform(for: account) {
+                accountCard(account, platform: platform)
             }
         }
     }
@@ -633,7 +627,9 @@ struct SocialManagerPage: View {
                         model.browse(.profiles); compactRailPresented = false
                     }
                 }
-            }.padding(UIScale.pt(12))
+            }
+            .pageGutter(compact)
+            .padding(.vertical, UIScale.pt(PageMetrics.top))
         }
         .herdrDropFrame(HerdrDropGeometry.sidebarKey)
         .background(DashSkin.paper(dark))
@@ -660,17 +656,7 @@ struct SocialManagerPage: View {
                     }
                 }
             } else {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(
-                        compact, minimum: 250, spacing: 12, alignment: .topLeading),
-                    spacing: UIScale.pt(12)
-                ) {
-                    ForEach(model.filteredAccounts) { account in
-                        if let platform = model.platform(for: account) {
-                            accountCard(account, platform: platform)
-                        }
-                    }
-                }
+                accountTiles(model.filteredAccounts)
             }
         }
     }

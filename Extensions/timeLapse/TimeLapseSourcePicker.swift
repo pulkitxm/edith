@@ -117,6 +117,7 @@ struct ScreenCaptureSourcePicker: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }.buttonStyle(.edith(.iconOnly)).disabled(sources.sourceLoad.isRunning)
+                    .padding(.trailing, -UIScale.pt(6))
                     .help("Refresh sources").accessibilityLabel("Refresh sources")
             }
             EdithSegmentedPicker(
@@ -160,7 +161,9 @@ struct ScreenCaptureSourcePicker: View {
                         }.padding(UIScale.pt(2))
                     }
                 }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).id(selection.mode)
+            }
+            .padding(.horizontal, -UIScale.pt(2))
+            .frame(maxWidth: .infinity, maxHeight: .infinity).id(selection.mode)
             if let error = sources.sourceLoad.errorMessage {
                 PageNotice(
                     error, tone: .error,

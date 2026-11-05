@@ -54,6 +54,11 @@ struct StudioEditorCaptureTests {
             try await StudioCapture.render(
                 "pdf-organize", variant: variant, expecting: ["Synthetic report"],
                 view: StudioPDFEditorView(model: studio, editor: pdf))
+            try await StudioCapture.render(
+                "pdf-organize-thumbnails", variant: variant, expecting: ["Synthetic one"],
+                view: StudioPDFEditorView(model: studio, editor: pdf)
+                    .environment(\.automaticViewActionsEnabled, true)
+                    .environment(\.windowVisible, true))
         }
     }
 

@@ -9,6 +9,12 @@ struct EmbeddedMusicSettings: View {
     @State private var tools = EmbeddedMusicTools.shared
     @State private var model: EmbeddedMusicSettingsModel
     @State private var openError: String?
+    @Environment(\.compactLayout) private var compact
+
+    private var formWidth: CGFloat { UIScale.pt(PageMetrics.formWidth) }
+    private var formEdge: CGFloat {
+        max(0, PageMetrics.gutter(compact) - PageMetrics.groupedFormInset)
+    }
 
     init(
         model: EmbeddedMusicSettingsModel? = nil, done: (() -> Void)? = nil,
@@ -36,7 +42,9 @@ struct EmbeddedMusicSettings: View {
                 accessory: {
                     Text("Library, streaming accounts and playback.").font(.edithText(.caption))
                         .foregroundStyle(.secondary)
-                })
+                }
+            )
+            .environment(\.pageColumnWidth, formWidth)
         } content: {
             Form {
                 Section {
@@ -102,7 +110,11 @@ struct EmbeddedMusicSettings: View {
                         }
                     }
                 }
-            }.settingsForm()
+            }
+            .settingsForm()
+            .padding(.horizontal, formEdge)
+            .frame(maxWidth: formWidth, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .pageTask {
             await model.refresh(); tools.refresh()

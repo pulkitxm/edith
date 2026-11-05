@@ -68,48 +68,63 @@ final class StudioWorkflowDraft: Identifiable {
 }
 
 struct StudioWorkflowSection: View {
+    private enum Tile: Identifiable {
+        case workflow(StudioWorkflow)
+        case new
+
+        var id: String {
+            switch self {
+            case let .workflow(workflow): workflow.id.uuidString
+            case .new: "new"
+            }
+        }
+    }
+
     let model: StudioModel
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             PageCapsLabel("Workflows")
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))],
-                alignment: .leading, spacing: UIScale.pt(12)
-            ) {
-                ForEach(model.workflows) { workflow in
+            StudioTileGrid(items: model.workflows.map(Tile.workflow) + [.new]) { tile in
+                switch tile {
+                case let .workflow(workflow):
                     StudioWorkflowCard(model: model, workflow: workflow)
+                case .new:
+                    newWorkflow
                 }
-                Button {
-                    model.editWorkflow(nil)
-                } label: {
-                    VStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: "plus")
-                            .font(.system(size: UIScale.pt(20), weight: .light))
-                        Text("New workflow")
-                            .font(.edithText(.callout).weight(.semibold))
-                        Text("Chain tools and reuse them on any files.")
-                            .font(.edithText(.caption))
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(UIScale.pt(14))
-                    .frame(
-                        maxWidth: .infinity, minHeight: UIScale.pt(StudioCardMetrics.toolCardHeight)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: UIScale.pt(12))
-                            .strokeBorder(
-                                DashSkin.lineStrong(scheme == .dark),
-                                style: StrokeStyle(lineWidth: 1.2, dash: [6, 4]))
-                    )
-                    .edithButtonTarget(.borderless)
-                }
-                .buttonStyle(.edith(.borderless))
             }
         }
+    }
+
+    private var newWorkflow: some View {
+        Button {
+            model.editWorkflow(nil)
+        } label: {
+            VStack(spacing: UIScale.pt(8)) {
+                Image(systemName: "plus")
+                    .font(.system(size: UIScale.pt(20), weight: .light))
+                Text("New workflow")
+                    .font(.edithText(.callout).weight(.semibold))
+                Text("Chain tools and reuse them on any files.")
+                    .font(.edithText(.caption))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(UIScale.pt(14))
+            .frame(
+                maxWidth: .infinity, minHeight: UIScale.pt(StudioCardMetrics.toolCardHeight),
+                maxHeight: .infinity
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(12))
+                    .strokeBorder(
+                        DashSkin.lineStrong(scheme == .dark),
+                        style: StrokeStyle(lineWidth: 1.2, dash: [6, 4]))
+            )
+            .edithButtonTarget(.borderless)
+        }
+        .buttonStyle(.edith(.borderless))
     }
 }
 
@@ -146,7 +161,7 @@ struct StudioWorkflowCard: View {
             }
         }
         .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12))
         )

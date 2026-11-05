@@ -87,17 +87,9 @@ struct StudioToolsView: View {
                 ForEach(groups, id: \.group) { entry in
                     VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         PageCapsLabel(entry.group.title)
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))
-                            ],
-                            alignment: .leading, spacing: UIScale.pt(12)
-                        ) {
-                            ForEach(entry.tools) { tool in
-                                StudioToolCard(tool: tool, environment: model.environment) {
-                                    model.open(tool, with: model.selectedURLs)
-                                }
+                        StudioTileGrid(items: entry.tools) { tool in
+                            StudioToolCard(tool: tool, environment: model.environment) {
+                                model.open(tool, with: model.selectedURLs)
                             }
                         }
                     }
@@ -144,7 +136,7 @@ struct StudioToolCard: View {
             .padding(UIScale.pt(14))
             .frame(
                 maxWidth: .infinity, minHeight: UIScale.pt(StudioCardMetrics.toolCardHeight),
-                alignment: .topLeading
+                maxHeight: .infinity, alignment: .topLeading
             )
             .background(
                 DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12))
@@ -216,6 +208,7 @@ struct StudioToolRow: View {
                 Spacer(minLength: 0)
             }
             .padding(UIScale.pt(10))
+            .frame(maxHeight: .infinity)
             .background(
                 DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
             )

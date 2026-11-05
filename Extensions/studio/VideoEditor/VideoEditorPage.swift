@@ -351,15 +351,12 @@ struct VideoEditorPage: View {
                         PageCapsLabel("Recent projects")
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, UIScale.pt(8))
-                        LazyVGrid(
-                            columns: PageMetrics.cardColumns(
-                                compact, minimum: 200, maximum: 280, spacing: 16),
-                            alignment: .leading, spacing: UIScale.pt(16)
-                        ) {
-                            ForEach(model.recentProjects) { item in
-                                VideoProjectCard(listing: item) {
-                                    model.openProject(at: item.url)
-                                }
+                        StudioTileGrid(
+                            items: model.recentProjects, minimum: 200, spacing: 16,
+                            maximumColumns: compact ? 1 : .max
+                        ) { item in
+                            VideoProjectCard(listing: item) {
+                                model.openProject(at: item.url)
                             }
                         }
                     }

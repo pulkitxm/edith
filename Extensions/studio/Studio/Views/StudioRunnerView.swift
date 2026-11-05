@@ -83,20 +83,12 @@ struct StudioInputsPanel: View {
                         {
                             StudioPreviewPanel(job: job, environment: model.environment)
                         }
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(150)), spacing: UIScale.pt(12))
-                            ],
-                            alignment: .leading, spacing: UIScale.pt(12)
-                        ) {
-                            ForEach(Array(job.inputs.enumerated()), id: \.element) { index, url in
-                                StudioInputTile(
-                                    job: job, url: url, index: index, ordered: ordered,
-                                    facts: model.facts[url]
-                                )
-                                .pageTask(id: url) { await model.loadFacts(for: url) }
-                            }
+                        StudioTileGrid(items: job.inputs.indexedInputs, minimum: 150) { input in
+                            StudioInputTile(
+                                job: job, url: input.url, index: input.index, ordered: ordered,
+                                facts: model.facts[input.url]
+                            )
+                            .pageTask(id: input.url) { await model.loadFacts(for: input.url) }
                         }
                         if ordered {
                             Text("Files are used in this order. Use the arrows to change it.")
@@ -110,7 +102,7 @@ struct StudioInputsPanel: View {
                         text: "This tool does not need files. Fill in the settings and run it.")
                 }
             }
-            .padding(UIScale.pt(20))
+            .padding(UIScale.pt(StudioLayoutMetrics.workspaceInset))
         }
     }
 
@@ -131,6 +123,19 @@ struct StudioInputsPanel: View {
                 job.add(panel.urls)
             }
         }
+    }
+}
+
+struct StudioIndexedInput: Identifiable {
+    let index: Int
+    let url: URL
+
+    var id: URL { url }
+}
+
+extension Array where Element == URL {
+    var indexedInputs: [StudioIndexedInput] {
+        enumerated().map { StudioIndexedInput(index: $0.offset, url: $0.element) }
     }
 }
 
@@ -253,6 +258,7 @@ struct StudioInputTile: View {
             }
         }
         .padding(UIScale.pt(8))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12))
         )
@@ -279,7 +285,7 @@ struct StudioOptionsPanel: View {
                         StudioOptionsForm(job: job)
                     }
                 }
-                .padding(UIScale.pt(18))
+                .padding(UIScale.pt(StudioLayoutMetrics.workspaceInset))
             }
             Divider()
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -317,7 +323,7 @@ struct StudioOptionsPanel: View {
                 .disabled(!canRun)
                 .help("\(job.tool.actionTitle) (⌘↩)")
             }
-            .padding(UIScale.pt(16))
+            .padding(UIScale.pt(StudioLayoutMetrics.workspaceInset))
         }
         .background(DashSkin.paper2(scheme == .dark).opacity(0.55))
     }
@@ -403,20 +409,13 @@ struct StudioResultView: View {
                     .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.warn)
                 }
-                VStack(spacing: 0) {
+                StudioListSurface {
                     ForEach(Array(result.outputs.prefix(200).enumerated()), id: \.element.id) {
                         index, output in
                         if index > 0 { Divider().opacity(0.5) }
                         StudioOutputRow(model: model, output: output)
                     }
                 }
-                .background(
-                    DashSkin.paper2(scheme == .dark),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
-                        DashSkin.line(scheme == .dark)))
                 if result.outputs.count > 200 {
                     Text("And \(result.outputs.count - 200) more in the folder.")
                         .font(.edithText(.subheadline))
@@ -432,23 +431,15 @@ struct StudioResultView: View {
                 if !next.isEmpty {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                         PageCapsLabel("Continue with")
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(190)), spacing: UIScale.pt(8))
-                            ],
-                            alignment: .leading, spacing: UIScale.pt(8)
-                        ) {
-                            ForEach(next) { tool in
-                                StudioToolRow(tool: tool, environment: model.environment) {
-                                    model.continueWith(tool, outputs: outputs)
-                                }
+                        StudioTileGrid(items: next, minimum: 190, spacing: 8) { tool in
+                            StudioToolRow(tool: tool, environment: model.environment) {
+                                model.continueWith(tool, outputs: outputs)
                             }
                         }
                     }
                 }
             }
-            .padding(UIScale.pt(22))
+            .padding(UIScale.pt(StudioLayoutMetrics.workspaceInset))
         }
     }
 }

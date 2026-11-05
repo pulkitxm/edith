@@ -28,6 +28,8 @@ enum TimeLapseCapture {
                 name: "compact-dark", size: CGSize(width: 640, height: 700), dark: true, scale: 1),
             Variant(
                 name: "zoom-light", size: CGSize(width: 1100, height: 760), dark: false, scale: 1.6),
+            Variant(
+                name: "wide-light", size: CGSize(width: 1600, height: 1000), dark: false, scale: 1),
         ]
 
         static var all: [Variant] {

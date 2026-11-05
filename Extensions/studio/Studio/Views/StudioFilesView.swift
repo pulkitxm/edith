@@ -10,10 +10,6 @@ struct StudioFilesView: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))]
-    }
-
     var body: some View {
         if model.files.isEmpty {
             ScrollView {
@@ -37,12 +33,8 @@ struct StudioFilesView: View {
                                 Button("Show all files") { model.kindFilter = nil }
                             }
                         } else {
-                            LazyVGrid(
-                                columns: columns, alignment: .leading, spacing: UIScale.pt(12)
-                            ) {
-                                ForEach(model.visibleFiles) { item in
-                                    StudioFileCard(model: model, item: item)
-                                }
+                            StudioTileGrid(items: model.visibleFiles) { item in
+                                StudioFileCard(model: model, item: item)
                             }
                         }
                     }
@@ -138,16 +130,12 @@ struct StudioDropHero: View {
                 PageSectionHeader(
                     "Popular tools",
                     subtitle: "Pick one to start, then add the files it should work on.")
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 240, spacing: 12),
-                    spacing: UIScale.pt(12)
-                ) {
-                    ForEach(popular, id: \.self) { id in
-                        if let tool = StudioCatalog.tool(id) {
-                            StudioToolRow(tool: tool, environment: model.environment) {
-                                model.open(tool, with: [])
-                            }
-                        }
+                StudioTileGrid(
+                    items: popular.compactMap(StudioCatalog.tool),
+                    maximumColumns: compact ? 1 : .max
+                ) { tool in
+                    StudioToolRow(tool: tool, environment: model.environment) {
+                        model.open(tool, with: [])
                     }
                 }
             }
@@ -159,29 +147,32 @@ struct StudioFileFilters: View {
     let model: StudioModel
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(8)) {
-                PageChip("All \(model.files.count)", active: model.kindFilter == nil) {
-                    model.kindFilter = nil
-                }
-                .accessibilityAddTraits(model.kindFilter == nil ? .isSelected : [])
-                ForEach(model.kindsPresent, id: \.self) { kind in
-                    PageChip(
-                        "\(kind.pluralTitle) \(StudioLibraryQuery.kindCount(model.files, kind))",
-                        active: model.kindFilter == kind
-                    ) {
-                        model.kindFilter = model.kindFilter == kind ? nil : kind
+        HStack(spacing: UIScale.pt(8)) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UIScale.pt(8)) {
+                    PageChip("All \(model.files.count)", active: model.kindFilter == nil) {
+                        model.kindFilter = nil
                     }
-                    .accessibilityAddTraits(model.kindFilter == kind ? .isSelected : [])
+                    .accessibilityAddTraits(model.kindFilter == nil ? .isSelected : [])
+                    ForEach(model.kindsPresent, id: \.self) { kind in
+                        PageChip(
+                            "\(kind.pluralTitle) \(StudioLibraryQuery.kindCount(model.files, kind))",
+                            active: model.kindFilter == kind
+                        ) {
+                            model.kindFilter = model.kindFilter == kind ? nil : kind
+                        }
+                        .accessibilityAddTraits(model.kindFilter == kind ? .isSelected : [])
+                    }
                 }
-                Spacer(minLength: UIScale.pt(8))
-                Button("Select all") { model.selectAll() }
-                    .buttonStyle(.edith(.toolbar))
-                    .font(.edithText(.callout))
-                    .keyboardShortcut("a", modifiers: .command)
-                    .foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
             }
-            .fixedSize(horizontal: true, vertical: false)
+            Button("Select all") { model.selectAll() }
+                .buttonStyle(.edith(.toolbar))
+                .font(.edithText(.callout))
+                .keyboardShortcut("a", modifiers: .command)
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .padding(.trailing, -UIScale.pt(StudioLayoutMetrics.toolbarInset))
         }
     }
 }
@@ -258,6 +249,7 @@ struct StudioFileCard: View {
             .disabled(missing)
         }
         .padding(UIScale.pt(10))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14))
         )
@@ -347,7 +339,7 @@ struct StudioFileMenuItems: View {
 
 struct StudioSelectionBar: View {
     let model: StudioModel
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         let urls = model.selectedURLs
@@ -358,7 +350,7 @@ struct StudioSelectionBar: View {
             bar(urls: urls, suggestions: suggestions, shown: 1, labelled: false)
             bar(urls: urls, suggestions: suggestions, shown: 0, labelled: false)
         }
-        .padding(.horizontal, UIScale.pt(16))
+        .pageGutter(compact)
         .padding(.vertical, UIScale.pt(10))
         .frame(maxWidth: .infinity)
         .background(.bar)
@@ -430,6 +422,7 @@ struct StudioSelectionBar: View {
             .buttonStyle(.edith(.iconOnly))
             .help("Clear selection")
             .accessibilityLabel("Clear selection")
+            .padding(.trailing, -UIScale.pt(StudioLayoutMetrics.toolbarInset))
         }
         .font(.edithText(.callout))
     }

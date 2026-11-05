@@ -1058,6 +1058,7 @@ enum VirtualCameraSyntheticStudio {
         for dark in [true, false] {
             for (label, size, compact, zoom, controls) in [
                 ("meeting", CGSize(width: 1440, height: 900), false, 1.0, false),
+                ("wide", CGSize(width: 1800, height: 1000), false, 1.0, true),
                 ("controls", CGSize(width: 1440, height: 900), false, 1.0, true),
                 ("compact", CGSize(width: 620, height: 720), true, 1.0, false),
                 ("zoom", CGSize(width: 1440, height: 1000), false, 1.3, true),
@@ -1138,6 +1139,7 @@ enum VirtualCameraSyntheticStudio {
             if loaded { model.refreshSources() }
             for (sizeLabel, size, zoom) in [
                 ("regular", CGSize(width: 1100, height: 760), 1.0),
+                ("wide", CGSize(width: 1600, height: 1000), 1.0),
                 ("compact", CGSize(width: 640, height: 700), 1.0),
                 ("zoom", CGSize(width: 1100, height: 760), 1.6),
             ] {

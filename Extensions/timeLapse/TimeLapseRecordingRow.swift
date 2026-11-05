@@ -27,7 +27,8 @@ struct TimeLapseRecordingRow: View {
                     }
                 }
             }
-            .padding(UIScale.pt(3))
+            .padding(.horizontal, UIScale.pt(11))
+            .padding(.vertical, UIScale.pt(3))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.edith(.row, selected: selected))

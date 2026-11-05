@@ -7,6 +7,11 @@ struct DownloadsSettings: View {
     let downloader: YoutubeDownloader
     var done: (() -> Void)?
     private var tools: DownloadsTools { downloader.tools }
+    private var formWidth: CGFloat { UIScale.pt(PageMetrics.formWidth) }
+    private var formEdge: CGFloat {
+        max(0, PageMetrics.gutter(compact) - PageMetrics.groupedFormInset)
+    }
+    @Environment(\.compactLayout) private var compact
     @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
         var downloadKind = DownloadKind.post.rawValue
 
@@ -23,7 +28,9 @@ struct DownloadsSettings: View {
                 accessory: {
                     Text("Save videos, audio, photos and posts.").font(.edithText(.caption))
                         .foregroundStyle(.secondary)
-                })
+                }
+            )
+            .environment(\.pageColumnWidth, formWidth)
         } content: {
             Form {
                 Section {
@@ -62,7 +69,11 @@ struct DownloadsSettings: View {
                         "Audio saves to Music. Everything else saves to Downloads/Edith. Install gallery-dl for images and carousels."
                     )
                 }
-            }.settingsForm()
+            }
+            .settingsForm()
+            .padding(.horizontal, formEdge)
+            .frame(maxWidth: formWidth, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }.pageTask {
             checkAgain()
         }

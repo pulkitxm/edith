@@ -32,6 +32,9 @@ struct SocialManagerRenderTests {
                 try await capture(
                     model, width: 1440, scheme: scheme,
                     name: "all-\(view.rawValue.lowercased())-\(scheme)")
+                try await capture(
+                    model, width: 1800, scheme: scheme,
+                    name: "wide-\(view.rawValue.lowercased())-\(scheme)")
                 UIScale.apply(1.4)
                 try await capture(
                     model, width: 620, scheme: scheme,
@@ -81,6 +84,7 @@ struct SocialManagerRenderTests {
         defer { UIScale.apply(previousScale) }
         for scheme in [ColorScheme.light, .dark] {
             try await capture(model, width: 1180, scheme: scheme, name: "profiles-\(scheme)")
+            try await capture(model, width: 1600, scheme: scheme, name: "profiles-wide-\(scheme)")
         }
         UIScale.apply(1.4)
         for scheme in [ColorScheme.light, .dark] {
@@ -153,6 +157,9 @@ struct SocialManagerRenderTests {
                 try await capture(
                     model, width: 1100, height: 760, scheme: scheme,
                     name: "state-\(label)-1100-\(scheme)")
+                try await capture(
+                    model, width: 1600, height: 1000, scheme: scheme,
+                    name: "state-\(label)-1600-\(scheme)")
                 try await capture(
                     model, width: 640, height: 700, scheme: scheme,
                     name: "state-\(label)-640-\(scheme)")

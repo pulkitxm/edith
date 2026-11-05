@@ -30,6 +30,8 @@ enum StudioCapture {
                 name: "compact-dark", size: CGSize(width: 640, height: 700), dark: true, scale: 1),
             Variant(
                 name: "zoom-light", size: CGSize(width: 1100, height: 760), dark: false, scale: 1.6),
+            Variant(
+                name: "wide-light", size: CGSize(width: 1600, height: 1000), dark: false, scale: 1),
         ]
 
         static var all: [Variant] {
@@ -219,6 +221,29 @@ struct StudioCaptureTests {
             video.close()
             videoFacade.stop()
         }
+    }
+}
+
+@Suite struct StudioTileRowsTests {
+    private func sizes(_ count: Int, fit: Int) -> [Int] {
+        StudioTileRows.rows(
+            count: count, available: CGFloat(fit) * 100, minimum: 100, spacing: 0
+        ).map(\.count)
+    }
+
+    @Test func tilesFillEveryRowWithoutStrandingOne() {
+        #expect(sizes(2, fit: 6) == [2])
+        #expect(sizes(1, fit: 6) == [1])
+        #expect(sizes(12, fit: 5) == [4, 4, 4])
+        #expect(sizes(7, fit: 6) == [4, 3])
+        #expect(sizes(13, fit: 6) == [5, 4, 4])
+        #expect(sizes(0, fit: 6).isEmpty)
+    }
+
+    @Test func compactLimitStacksTiles() {
+        let rows = StudioTileRows.rows(
+            count: 3, available: 600, minimum: 100, spacing: 0, maximumColumns: 1)
+        #expect(rows.map(\.count) == [1, 1, 1])
     }
 }
 

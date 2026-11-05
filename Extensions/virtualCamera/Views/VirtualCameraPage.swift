@@ -27,6 +27,7 @@ struct VirtualCameraPage: View {
     @StateObject private var model: VirtualCameraPageModel
     @State private var attachment = VirtualCameraPageAttachment()
     @State private var showingInspector = false
+    @State private var stageWidth: CGFloat?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
@@ -36,6 +37,11 @@ struct VirtualCameraPage: View {
     }
 
     private var dark: Bool { scheme == .dark }
+    private var inspectorVisible: Bool { !compact && showingInspector }
+    private var headerColumn: CGFloat? {
+        guard !compact, !showingInspector, let stageWidth else { return nil }
+        return stageWidth + PageMetrics.gutter(compact) * 2
+    }
     private var sceneBinding: Binding<String> {
         Binding(
             get: { model.state.activeSceneID?.uuidString ?? "" },
@@ -69,12 +75,14 @@ struct VirtualCameraPage: View {
                         .buttonStyle(.edith(.secondary))
                         .help("Frame, look, background, overlays and output settings")
                     }
-                })
+                }
+            )
+            .environment(\.pageColumnWidth, headerColumn)
         } content: {
             GeometryReader { geometry in
                 HStack(spacing: UIScale.pt(16)) {
                     meetingStage
-                    if !compact && showingInspector {
+                    if inspectorVisible {
                         VirtualCameraInspector(model: model, dark: dark)
                             .frame(width: min(UIScale.pt(400), geometry.size.width * 0.4))
                     }
@@ -123,14 +131,23 @@ struct VirtualCameraPage: View {
     }
 
     private var meetingStage: some View {
-        VStack(spacing: UIScale.pt(12)) {
+        VStack(alignment: inspectorVisible ? .leading : .center, spacing: UIScale.pt(12)) {
             VirtualCameraStage(model: model, dark: dark)
                 .aspectRatio(16 / 9, contentMode: .fit)
-                .frame(maxWidth: .infinity)
+                .onGeometryChange(for: CGFloat.self) {
+                    $0.size.width
+                } action: {
+                    stageWidth = $0
+                }
+                .frame(
+                    maxWidth: .infinity, alignment: inspectorVisible ? .leading : .center)
             VirtualCameraMeetingControls(model: model, dark: dark)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: stageWidth)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(
+            maxWidth: .infinity, maxHeight: .infinity,
+            alignment: inspectorVisible ? .topLeading : .top)
     }
 }
 
