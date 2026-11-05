@@ -14,16 +14,18 @@ struct CleanerPage: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
+    static let subtitle =
+        "Find build caches, downloads and old worktrees you can safely remove. Nothing is deleted until you confirm."
+
     var body: some View {
         PageWorkspace {
-            PageHeader(
-                title: { Text("Cleaner") },
-                trailing: {
-                    if model.presentation == .scanning || model.presentation == .results {
-                        headerActions
-                    }
-                },
-                accessory: { PageSubtitle(subtitle) })
+            VStack(spacing: 0) {
+                PageHeader(
+                    title: { Text("Cleaner") },
+                    trailing: { headerActions },
+                    accessory: { PageSubtitle(Self.subtitle) })
+                Divider()
+            }
         } content: {
             CleanerCard(
                 dark: scheme == .dark, compact: compact, model: model,
@@ -53,42 +55,28 @@ struct CleanerPage: View {
         }
     }
 
-    private var subtitle: String {
-        switch model.presentation {
-        case .firstRun:
-            "Finds caches and leftovers you can safely remove. Nothing is deleted until you confirm."
-        case .scanning:
-            "Looking for space you can get back. Nothing is changed while it scans."
-        case .nothingToClean:
-            "The last scan found nothing worth removing."
-        case .results:
-            "Tick what you want gone, then clean. Everything goes to the Trash first."
-        }
-    }
-
     @ViewBuilder private var headerActions: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            if model.scanning {
-                Button(model.operationTitle.hasPrefix("Moving") ? "Working…" : "Cancel scan") {
-                    model.cancelScan()
-                }
-                .buttonStyle(.edith(.secondary))
-                .disabled(model.operationTitle.hasPrefix("Moving"))
-                .help(
-                    model.operationTitle.hasPrefix("Moving")
-                        ? "Items are being moved to the Trash and this cannot be cancelled."
-                        : "Stop scanning. Nothing has been changed.")
-            } else {
-                Button("Choose where to search…") { openPicker(.choose) }
-                    .buttonStyle(.edith(.secondary))
-                    .help("Pick the drives and folders that are searched for project leftovers.")
-                Button(
-                    model.scanned ? "Scan again" : "Scan my Mac",
-                    systemImage: model.scanned ? "arrow.clockwise" : "magnifyingglass"
-                ) { openPicker(.scan) }
-                .buttonStyle(.edith(.primary))
-                .help("Choose where to search, then look for space you can reclaim.")
+        switch model.presentation {
+        case .scanning:
+            Button {
+                model.cancelScan()
+            } label: {
+                Text("Cancel scan").font(.edithText(.body))
             }
+            .buttonStyle(.edith(.secondary))
+            .help("Stop scanning. Nothing has been changed.")
+            .accessibilityIdentifier("cleaner.cancel")
+        case .results where !model.scanning:
+            Button {
+                openPicker(.scan)
+            } label: {
+                Label("Scan again", systemImage: "arrow.clockwise").font(.edithText(.body))
+            }
+            .buttonStyle(.edith(.secondary))
+            .help("Choose where to search, then look for space you can reclaim again.")
+            .accessibilityIdentifier("cleaner.rescan")
+        case .firstRun, .nothingToClean, .results:
+            EmptyView()
         }
     }
 

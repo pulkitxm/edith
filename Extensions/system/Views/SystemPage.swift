@@ -16,14 +16,17 @@ struct SystemPage: View {
 
     var body: some View {
         PageScaffold(pinnedHeader: true) {
-            header
+            VStack(spacing: 0) {
+                header
+                Divider()
+            }
         } content: {
             if let status = model.actionStatus {
                 actionStatus(status)
             }
             PageLoading(state: model.loading.state, layout: .list) {
                 summary
-                PageCard(title: "Running apps") {
+                PageCard {
                     appList
                 }
             }
@@ -105,7 +108,7 @@ struct SystemPage: View {
         return HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(9)) {
             Image(systemName: presentation.symbol)
             Text(status.message)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .font(.edithText(.callout)).fontWeight(.medium)
                 .presenterBlur(hidesRunningApps)
                 .privacySensitive(hidesRunningApps)
                 .accessibilityHidden(hidesRunningApps)
@@ -143,23 +146,19 @@ struct SystemPage: View {
     }
 
     private var summary: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            summaryCard("Running apps", "\(model.apps.count)")
-            summaryCard(
-                "Memory used by apps", String(format: "%.1f GB", model.totalMemoryMB / 1024))
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing)),
+                count: 2),
+            spacing: UIScale.pt(PageMetrics.cardSpacing)
+        ) {
+            PageMetric(
+                title: "Running apps", value: "\(model.apps.count)",
+                symbol: "macwindow.on.rectangle")
+            PageMetric(
+                title: "Memory used by apps",
+                value: String(format: "%.1f GB", model.totalMemoryMB / 1024), symbol: "memorychip")
         }
-    }
-
-    private func summaryCard(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            Text(label.uppercased())
-                .font(.system(size: UIScale.pt(10), weight: .semibold)).tracking(UIScale.pt(0.6))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(value).font(.system(size: UIScale.pt(22), weight: .semibold)).monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(UIScale.pt(16))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
     }
 
     private var columnHeaders: some View {
@@ -171,9 +170,10 @@ struct SystemPage: View {
                 .help("Processor use. 100% is one full core. Click to sort.")
             headerButton("Memory", .memory, width: UIScale.pt(72), alignment: .trailing)
                 .help("Memory the app is holding. Click to sort.")
-            Color.clear.frame(width: UIScale.pt(16))
+            Color.clear.frame(width: UIScale.pt(28))
         }
-        .padding(.bottom, UIScale.pt(6))
+        .padding(.horizontal, UIScale.pt(8))
+        .padding(.bottom, UIScale.pt(8))
     }
 
     private func headerButton(
@@ -186,7 +186,7 @@ struct SystemPage: View {
                 if alignment == .trailing { Spacer(minLength: 0) }
                 Text(label.uppercased())
                     .font(.system(size: UIScale.pt(10), weight: .semibold)).tracking(
-                        UIScale.pt(0.5))
+                        UIScale.pt(1.4))
                 if model.sortKey == key {
                     Image(systemName: model.ascending ? "chevron.up" : "chevron.down")
                         .font(.system(size: UIScale.pt(7), weight: .bold))
@@ -316,24 +316,25 @@ struct SystemAppRow: View {
                     Image(nsImage: icon).resizable().frame(
                         width: UIScale.pt(22), height: UIScale.pt(22))
                 } else {
-                    Image(systemName: "app.fill")
-                        .foregroundStyle(DashSkin.inkSoft(dark))
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: UIScale.pt(16)))
+                        .foregroundStyle(.secondary)
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 }
             }
             .presenterCover(hidesName, dark: dark)
             .accessibilityHidden(hidesName)
-            Text(app.name).font(.system(size: UIScale.pt(13))).lineLimit(1)
+            Text(app.name).font(.edithText(.body)).lineLimit(1)
                 .presenterBlur(hidesName)
                 .privacySensitive(hidesName)
                 .accessibilityHidden(hidesName)
             Spacer()
             Text(SystemPage.cpuLabel(app.cpuPercent))
-                .font(.system(size: UIScale.pt(12), design: .monospaced))
+                .font(.edithText(.callout)).monospacedDigit()
                 .foregroundStyle(app.cpuPercent > 25 ? .orange : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(48), alignment: .trailing)
             Text(SystemPage.memoryLabel(app.memoryMB))
-                .font(.system(size: UIScale.pt(12), design: .monospaced))
+                .font(.edithText(.callout)).monospacedDigit()
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(72), alignment: .trailing)
             Button {
@@ -352,11 +353,11 @@ struct SystemAppRow: View {
                         ? "Ask \(app.name) to quit"
                         : "\(app.name) is essential, so Edith keeps it open"))
         }
-        .padding(.horizontal, UIScale.pt(6))
-        .padding(.vertical, UIScale.pt(7))
+        .padding(.horizontal, UIScale.pt(8))
+        .padding(.vertical, UIScale.pt(8))
         .background(
-            RoundedRectangle(cornerRadius: UIScale.pt(7))
-                .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
+            RoundedRectangle(cornerRadius: UIScale.pt(8))
+                .fill(hovering ? Color.primary.opacity(0.05) : .clear)
         )
         .onHover { hovering = $0 }
     }

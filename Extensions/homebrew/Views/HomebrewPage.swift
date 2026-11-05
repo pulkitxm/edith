@@ -33,29 +33,43 @@ struct HomebrewMaintenanceView: View {
 
     var body: some View {
         PageWorkspace {
-            filterBar
-                .pageGutter(compact)
-                .padding(.vertical, 12)
             if model.status?.available != false {
-                summary.pageGutter(compact).padding(.bottom, UIScale.pt(8))
-                operationCard.pageGutter(compact).padding(.bottom, UIScale.pt(8))
-            }
-            Divider()
-        } content: {
-            PageLoading(
-                state: model.loading.state,
-                message: model.errorMessage ?? "Homebrew could not load its packages.",
-                layout: .editor, refreshing: model.loading.isRefreshing,
-                retry: refreshCurrentMode
-            ) {
-                if model.status?.available == false {
-                    unavailableCard
-                } else {
-                    packageCard
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    filterBar
+                    if model.loaded { summary }
                 }
+                .pageGutter(compact)
+                .padding(.top, UIScale.pt(16))
+                .padding(.bottom, UIScale.pt(16))
+                Divider()
             }
-            .pageGutter(compact)
-            .padding(.vertical, UIScale.pt(12))
+        } content: {
+            if model.status?.available == false {
+                ScrollView { unavailableCard.frame(minHeight: UIScale.pt(460)) }
+                    .scrollIndicators(.never)
+            } else {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    operationCard
+                    LoadingContainer(
+                        state: model.loading.state, title: "Packages could not load",
+                        message: model.errorMessage ?? "Homebrew could not load its packages.",
+                        retry: refreshCurrentMode, refreshing: model.loading.isRefreshing
+                    ) {
+                        if listingState == .packages {
+                            packageCard
+                        } else {
+                            ScrollView { listingEmptyState.frame(minHeight: UIScale.pt(360)) }
+                                .scrollIndicators(.never)
+                        }
+                    } placeholder: {
+                        PageSkeleton(layout: .list)
+                    }
+                    .frame(maxHeight: .infinity, alignment: .top)
+                }
+                .pageGutter(compact)
+                .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+                .padding(.bottom, UIScale.pt(20))
+            }
         }
         .navigationRoute("view", selection: $model.mode)
         .pageTask(cancel: { model.cancelDiscovery() }) {
@@ -107,28 +121,28 @@ struct HomebrewMaintenanceView: View {
     @ViewBuilder
     private var filterBar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 20) {
+            HStack(spacing: UIScale.pt(20)) {
                 filters
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(1)
-                Spacer(minLength: 12)
+                Spacer(minLength: UIScale.pt(12))
                 actions
             }
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 compactFilters
                 actions
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
     private var filters: some View {
-        HStack(spacing: 18) {
-            HStack(spacing: 8) {
+        HStack(spacing: UIScale.pt(20)) {
+            HStack(spacing: UIScale.pt(8)) {
                 filterLabel("Package")
                 kindPicker
             }
-            HStack(spacing: 8) {
+            HStack(spacing: UIScale.pt(8)) {
                 filterLabel("View")
                 modePicker
             }
@@ -136,25 +150,22 @@ struct HomebrewMaintenanceView: View {
     }
 
     private var compactFilters: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack(spacing: UIScale.pt(8)) {
                 filterLabel("Package")
-                    .frame(width: UIScale.pt(52), alignment: .leading)
+                    .frame(width: UIScale.pt(64), alignment: .leading)
                 kindPicker
             }
-            HStack(spacing: 8) {
+            HStack(spacing: UIScale.pt(8)) {
                 filterLabel("View")
-                    .frame(width: UIScale.pt(52), alignment: .leading)
+                    .frame(width: UIScale.pt(64), alignment: .leading)
                 modePicker
             }
         }
     }
 
     private func filterLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: UIScale.pt(11), weight: .semibold))
-            .foregroundStyle(.secondary)
-            .fixedSize()
+        eyebrow(title.uppercased()).fixedSize()
     }
 
     private var kindPicker: some View {
@@ -192,29 +203,37 @@ struct HomebrewMaintenanceView: View {
     @ViewBuilder
     private var actions: some View {
         if model.mode == .search {
-            HStack(spacing: 10) {
+            HStack(spacing: UIScale.pt(8)) {
                 SearchField(
                     placeholder: "Search \(kind.pluralTitle.lowercased())", text: $model.query
                 )
-                .frame(maxWidth: compact ? .infinity : 320)
+                .frame(maxWidth: compact ? .infinity : UIScale.pt(320))
                 .onSubmit { runSearch() }
-                Button("Search", action: runSearch)
-                    .buttonStyle(.edith(.primary))
-                    .disabled(
-                        model.isBusy
-                            || model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    )
-                    .help(
-                        model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? "Type a package name first." : "Search Homebrew.")
+                Button(action: runSearch) {
+                    Text("Search").font(.edithText(.body))
+                }
+                .buttonStyle(.edith(.primary))
+                .disabled(
+                    model.isBusy
+                        || model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+                .help(
+                    model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "Type a package name first." : "Search Homebrew.")
             }
         } else {
             HStack(spacing: UIScale.pt(8)) {
                 SearchField(placeholder: "Filter installed packages", text: $model.installedQuery)
                     .frame(maxWidth: compact ? .infinity : UIScale.pt(300))
-                Toggle("Updates only", isOn: $model.updatesOnly)
-                    .toggleStyle(.button)
-                    .help("Show only packages with a newer version available")
+                Button {
+                    model.updatesOnly.toggle()
+                } label: {
+                    Label("Updates only", systemImage: "arrow.up.circle")
+                        .font(.edithText(.body))
+                }
+                .buttonStyle(.edith(.secondary, selected: model.updatesOnly))
+                .accessibilityAddTraits(model.updatesOnly ? .isSelected : [])
+                .help("Show only packages with a newer version available")
                 Button {
                     model.loadInstalled(kind: kind)
                 } label: {
@@ -258,35 +277,43 @@ struct HomebrewMaintenanceView: View {
     }
 
     private var summary: some View {
-        WrapHStack(spacing: UIScale.pt(14), lineSpacing: UIScale.pt(6)) {
+        WrapHStack(spacing: UIScale.pt(16), lineSpacing: UIScale.pt(6)) {
             Label(
                 model.mode == .installed
-                    ? "\(model.packages.count) installed \(kind.pluralTitle.lowercased())"
-                    : "\(model.packages.count) results",
-                systemImage: "shippingbox")
-            Text(
-                kind == .formula
-                    ? "Formulae are command line tools and libraries." : "Casks are Mac apps.")
-            Label(
-                model.updateCount == 0
-                    ? "Everything up to date"
-                    : "\(model.updateCount) \(model.updateCount == 1 ? "update" : "updates") available",
-                systemImage: model.updateCount == 0 ? "checkmark.circle" : "arrow.up.circle")
-            if let version = model.status?.version { Text(version) }
+                    ? "\(model.packages.count) installed \(model.packages.count == 1 ? kind.title.lowercased() : kind.pluralTitle.lowercased())"
+                    : "\(model.packages.count) \(model.packages.count == 1 ? "result" : "results")",
+                systemImage: kind == .formula ? "terminal" : "app.dashed")
+            if model.mode == .installed {
+                Label(
+                    model.updateCount == 0
+                        ? "Everything up to date"
+                        : "\(model.updateCount) \(model.updateCount == 1 ? "update" : "updates") available",
+                    systemImage: model.updateCount == 0
+                        ? "checkmark.circle" : "arrow.up.circle.fill"
+                )
+                .foregroundStyle(
+                    model.updateCount == 0
+                        ? AnyShapeStyle(.secondary) : AnyShapeStyle(DashSkin.warn))
+            }
+            if let version = model.status?.version {
+                Label(version, systemImage: "shippingbox")
+            }
         }
         .font(.edithText(.caption))
+        .monospacedDigit()
         .foregroundStyle(.secondary)
+        .help(
+            kind == .formula
+                ? "Formulae are command line tools and libraries." : "Casks are Mac apps.")
     }
 
     @ViewBuilder
     private var operationCard: some View {
         if model.isBusy || model.errorMessage != nil || model.resultMessage != nil {
             HomebrewCard {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .center, spacing: UIScale.pt(12)) {
                     if model.isBusy {
-                        SkeletonGroup {
-                            SkeletonBlock(width: 16, height: 16, corner: 8)
-                        }
+                        ProgressView().controlSize(.small)
                     } else {
                         Image(
                             systemName: model.errorMessage == nil
@@ -294,21 +321,21 @@ struct HomebrewMaintenanceView: View {
                         )
                         .foregroundStyle(model.errorMessage == nil ? DashSkin.sage : .red)
                     }
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                         Text(
                             model.operationTitle ?? model.resultMessage
                                 ?? "Homebrew could not finish"
                         )
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .font(.edithText(.headline))
                         if let error = model.errorMessage {
                             Text(error)
-                                .font(.system(size: UIScale.pt(12)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                         }
                         if !model.output.isEmpty {
                             Text(model.output)
-                                .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                                .font(.edithText(.caption, design: .monospaced))
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                                 .lineLimit(8)
@@ -316,10 +343,12 @@ struct HomebrewMaintenanceView: View {
                     }
                     Spacer(minLength: 0)
                     if model.isBusy {
-                        Button(model.isCancelling ? "Cancelling" : "Cancel") { model.cancel() }
+                        Button(model.isCancelling ? "Cancelling…" : "Cancel") { model.cancel() }
+                            .buttonStyle(.edith(.secondary))
                             .disabled(model.isCancelling)
                     } else {
                         Button("Dismiss") { model.clearNotice() }
+                            .buttonStyle(.edith(.secondary))
                     }
                 }
             }
@@ -350,9 +379,6 @@ struct HomebrewMaintenanceView: View {
                 }
             }
         )
-        .overlay {
-            if listingState != .packages { listingEmptyState }
-        }
     }
 
     private var listingState: HomebrewListingState {
@@ -433,6 +459,7 @@ struct HomebrewPackageTable: View {
     let accent: Color
     let perform: (HomebrewMutation, HomebrewPackage) -> Void
     @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Table(packages, selection: $selection, columnCustomization: $columns) {
@@ -462,7 +489,7 @@ struct HomebrewPackageTable: View {
                 .foregroundStyle(package.outdated ? DashSkin.warn : .secondary)
             }
             .width(UIScale.pt(80))
-            SwiftUI.TableColumn("Actions") { package in
+            SwiftUI.TableColumn(compact ? "" : "Actions") { package in
                 if compact {
                     Menu {
                         packageActions(package)
@@ -480,6 +507,12 @@ struct HomebrewPackageTable: View {
             .width(UIScale.pt(compact ? 44 : Self.actionsWidth))
         }
         .font(.edithText(.callout))
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous)
+                .strokeBorder(DashSkin.line(scheme == .dark))
+                .allowsHitTesting(false)
+        }
         .accessibilityLabel("Homebrew packages")
         .onChange(of: compact, initial: true) { _, compact in
             columns[visibility: "version"] = compact ? .hidden : .visible
@@ -494,7 +527,8 @@ struct HomebrewPackageTable: View {
                     .buttonStyle(.edith(.secondary, tint: accent))
             }
             Button("Uninstall", role: .destructive) { perform(.uninstall, package) }
-                .buttonStyle(.edith(.borderless, tint: DashSkin.danger))
+                .buttonStyle(.edith(.borderless))
+                .foregroundStyle(DashSkin.danger)
         } else {
             Button("Install") { perform(.install, package) }
                 .buttonStyle(.edith(.primary, tint: accent))
@@ -504,18 +538,11 @@ struct HomebrewPackageTable: View {
 
 private struct HomebrewCard<Content: View>: View {
     @ViewBuilder let content: Content
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         content
-            .padding(16)
-            .background(
-                DashSkin.paper2(scheme == .dark),
-                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .strokeBorder(DashSkin.line(scheme == .dark))
-            }
+            .padding(UIScale.pt(16))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .edithSurface(cornerRadius: 14)
     }
 }

@@ -396,6 +396,14 @@ final class CleanerModel {
         removeExternalConfirmation(path)
     }
 
+    static let cleaningTitle = "Moving items to the Trash…"
+    var cleaningInProgress: Bool { scanning && operationTitle == Self.cleaningTitle }
+    var currentScanLocation: String? {
+        guard scanning, !cleaningInProgress, let line = logs.last, line.hasPrefix("Scanning ")
+        else { return nil }
+        let location = line.dropFirst("Scanning ".count)
+        return String(location.hasSuffix("…") ? location.dropLast() : location)
+    }
     var reclaimableTotal: Int64 { list.reclaimableTotal }
     var visibleCategories: [JunkCategory] { selection.applied(to: list.visibleCategories) }
     var selectedTotal: Int64 { stats.selectedBytes }
@@ -836,7 +844,7 @@ final class CleanerModel {
         cancelScan()
         scanning = true
         cleaning = true
-        operationTitle = "Moving items to the Trash…"
+        operationTitle = Self.cleaningTitle
         let token = CleanerCancellation()
         scanToken = token
         workTask = track { [self, services] in

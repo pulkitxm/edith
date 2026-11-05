@@ -104,11 +104,10 @@ struct AppMaintenanceView: View {
             PageSubtitle(section.summary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .pageGutter(compact)
-                .padding(.vertical, UIScale.pt(10))
-            if section.reviewsSelection {
-                toolbar
-                Divider()
-            }
+                .padding(.top, UIScale.pt(16))
+                .padding(.bottom, UIScale.pt(12))
+            if section.reviewsSelection { toolbar }
+            Divider()
         } content: {
             content
         }
@@ -182,7 +181,7 @@ struct AppMaintenanceView: View {
                     systemImage: "arrow.clockwise")
             }
             .disabled(model.phase != .ready || model.checkingUpdates)
-            .buttonStyle(.edith(.primary))
+            .buttonStyle(.edith(.secondary))
             .help(
                 model.phase != .ready || model.checkingUpdates
                     ? "Wait for the current task to finish."
@@ -246,7 +245,7 @@ struct AppMaintenanceView: View {
             sectionInventory.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if compact {
             VStack(spacing: 0) {
-                sectionInventory.frame(height: UIScale.pt(180))
+                sectionInventory.frame(height: UIScale.pt(240))
                 Divider()
                 detail.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -446,28 +445,51 @@ struct AppMaintenanceView: View {
                         "Each time you run updates, the result is saved here, including anything that failed, so you can see what changed and when.",
                     footnote: "Go to Updates to check for newer versions.")
             } else {
-                List(model.updateHistory, id: \.finishedAt) { result in
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        HStack {
-                            Text(result.name).lineLimit(1)
-                            Spacer()
-                            Label(
-                                result.status == .succeeded ? "Updated" : "Needs attention",
-                                systemImage: result.status == .succeeded
-                                    ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
-                            )
-                            .labelStyle(.titleAndIcon)
-                            .font(.edithText(.caption))
-                            .foregroundStyle(result.status == .succeeded ? .green : .orange)
+                ScrollView {
+                    PageCard {
+                        LazyVStack(spacing: 0) {
+                            ForEach(
+                                Array(model.updateHistory.enumerated()), id: \.element.finishedAt
+                            ) { index, result in
+                                if index > 0 { Divider() }
+                                historyRow(result)
+                            }
                         }
-                        Text("\(result.version) · \(result.source.title)").settingsCaption()
-                        Text(result.finishedAt, style: .relative).settingsCaption()
                     }
-                    .padding(.vertical, UIScale.pt(4))
+                    .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+                    .pageContent(compact)
                 }
-                .listStyle(.sidebar)
             }
         }
+    }
+
+    private func historyRow(_ result: AppUpdateResult) -> some View {
+        HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            Image(
+                systemName: result.status == .succeeded
+                    ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+            )
+            .font(.system(size: UIScale.pt(16)))
+            .foregroundStyle(result.status == .succeeded ? DashSkin.sage : DashSkin.warn)
+            .accessibilityLabel(result.status == .succeeded ? "Updated" : "Needs attention")
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(result.name).font(.edithText(.body)).fontWeight(.medium).lineLimit(1)
+                Text(
+                    result.status == .succeeded
+                        ? "Updated to \(result.version) with \(result.source.title)"
+                        : result.detail.isEmpty ? "The update did not finish." : result.detail
+                )
+                .font(.edithText(.caption))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            }
+            Spacer(minLength: UIScale.pt(8))
+            Text(result.finishedAt, format: .relative(presentation: .named))
+                .font(.edithText(.caption)).monospacedDigit()
+                .foregroundStyle(.secondary)
+                .fixedSize()
+        }
+        .padding(.vertical, UIScale.pt(10))
     }
 
     private var installDestination: AppMaintenanceInstallDestination {
@@ -810,6 +832,7 @@ private struct AppMaintenanceApplicationRow: View {
     let icon: NSImage
     let tint: Color
     let select: () -> Void
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Button(action: select) {
@@ -819,9 +842,12 @@ private struct AppMaintenanceApplicationRow: View {
                     .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(entry.application.name)
+                        .font(.edithText(.body))
+                        .foregroundStyle(DashSkin.ink(scheme == .dark))
                         .lineLimit(1)
                     Text(entry.application.version)
-                        .settingsCaption()
+                        .font(.edithText(.caption)).monospacedDigit()
+                        .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                 }
                 Spacer(minLength: 0)
                 if entry.application.update != nil {
@@ -844,6 +870,7 @@ private struct AppMaintenanceUpdateRow: View {
     let tint: Color
     let setSelected: (Bool) -> Void
     let focus: () -> Void
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: UIScale.pt(9)) {
@@ -864,12 +891,19 @@ private struct AppMaintenanceUpdateRow: View {
                             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(entry.item.name).lineLimit(1)
+                        Text(entry.item.name)
+                            .font(.edithText(.body))
+                            .foregroundStyle(DashSkin.ink(scheme == .dark))
+                            .lineLimit(1)
                         Text("\(entry.item.currentVersion) → \(entry.item.availableVersion)")
-                            .settingsCaption()
+                            .font(.edithText(.caption)).monospacedDigit()
+                            .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                     }
                     Spacer(minLength: 0)
-                    Text(entry.item.source.title).settingsCaption().lineLimit(1)
+                    Text(entry.item.source.title)
+                        .font(.edithText(.caption))
+                        .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+                        .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())

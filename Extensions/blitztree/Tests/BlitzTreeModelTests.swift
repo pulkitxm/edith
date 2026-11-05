@@ -59,7 +59,7 @@ import Testing
     }
 }
 
-private actor ScanGate {
+actor ScanGate {
     private var continuation: CheckedContinuation<Void, Never>?
     var waiting: Bool { continuation != nil }
 

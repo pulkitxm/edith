@@ -35,20 +35,19 @@ struct BlitzTreeMap: View {
                                     if rect.width > UIScale.pt(58), rect.height > UIScale.pt(38) {
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(entry?.name ?? "Other")
-                                                .font(
-                                                    .system(size: UIScale.pt(12), weight: .semibold)
-                                                )
-                                                .lineLimit(2)
+                                                .font(.edithText(.callout)).fontWeight(.semibold)
+                                                .lineLimit(1)
+                                                .truncationMode(.tail)
                                             Text(
                                                 ByteCountFormatter.string(
                                                     fromByteCount: Int64(
                                                         clamping: entry?.allocatedBytes ?? other),
                                                     countStyle: .file)
                                             )
-                                            .font(.system(size: UIScale.pt(10)))
+                                            .font(.edithText(.caption)).monospacedDigit()
                                         }
                                         .foregroundStyle(.white)
-                                        .padding(8)
+                                        .padding(UIScale.pt(8))
                                     }
                                 }
                                 .clipped()
