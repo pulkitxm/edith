@@ -8,31 +8,44 @@ struct MicMuteRows: View {
         var inMenuBar = true
 
     var body: some View {
+        ControlSettingsIssueSection()
         Section {
-            LabeledContent("Microphones") {
-                Label(
-                    presentation.state.muted ? "Muted" : "On",
-                    systemImage: presentation.state.muted ? "mic.slash.fill" : "mic.fill")
+            if presentation.active {
+                LabeledContent("Microphones") {
+                    Label(
+                        presentation.state.muted ? "Muted" : "Live",
+                        systemImage: presentation.state.muted ? "mic.slash.fill" : "mic.fill"
+                    )
+                    .foregroundStyle(presentation.state.muted ? Color.red : Color.secondary)
+                }
             }
-            LabeledContent("Shortcut") {
+            LabeledContent {
                 HotKeyRecorderControl(keyPrefix: "micHotKey", defaultLabel: "⌘⇧M")
+            } label: {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text("Shortcut")
+                    Text(
+                        "Mutes or unmutes every microphone from any app. Click to record a new one."
+                    )
+                    .settingsCaption()
+                }
             }
-            Text(
-                "Press this shortcut in any app to mute or unmute every microphone on this Mac. Click the field to record a new one."
-            )
-                .settingsCaption()
-            Toggle("Show in the menu bar", isOn: $inMenuBar.notifyingSettingsChange())
-            Text("The menu bar icon shows the current mute state and toggles it on click.")
-                .settingsCaption()
+            .disabled(!presentation.active)
+            Toggle(isOn: $inMenuBar.notifyingSettingsChange()) {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text("Show in the menu bar")
+                    Text("The icon shows whether you are muted. Click it to switch.")
+                        .settingsCaption()
+                }
+            }
+            .disabled(!presentation.active)
         } header: {
             Text("Mute all microphones")
         } footer: {
             if !presentation.active {
-                Text("Mic Mute is not running. Turn it on in Extensions to use these controls.")
+                Text("Mic Mute is turned off. Turn it on in Extensions to use these controls.")
                     .settingsCaption()
             }
         }
-        .disabled(!presentation.active)
-        .opacity(presentation.active ? 1 : 0.5)
     }
 }

@@ -26,130 +26,110 @@ struct PresenterRows: View {
     private var jevConfigured: Bool { presentation.state.jevConfigured }
 
     var body: some View {
-        Group {
-            Section {
-                Toggle(
-                    isOn: $presenterMode.notifyingSettingsChange()
-                ) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Manual presenter mode")
-                        InfoDot(
-                            "Blurs the private details you choose, everywhere in Edith, "
-                                + "until you turn it back off."
-                        )
-                    }
-                }
-                ForEach(PresenterPrivacy.listed) { category in
-                    PresenterPrivacySettingToggle(category: category)
-                }
-            } header: {
-                Text("Manual")
-            } footer: {
-                Text(
-                    "Turn manual mode on before you present. Only the kinds of details switched on below are blurred, and only inside Edith."
+        ControlSettingsIssueSection()
+        Section {
+            Toggle(isOn: $presenterMode.notifyingSettingsChange()) {
+                PresenterRowLabel(
+                    "Manual presenter mode",
+                    detail:
+                        "Blurs the details you pick below, everywhere in Edith, until you turn it off."
                 )
             }
-
-            Section {
-                Toggle(
-                    isOn: $autoEnabled.notifyingSettingsChange()
-                ) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Auto presenter mode")
-                        InfoDot(
-                            "Automatically blurs Edith when your screen looks like it's being shared or recorded. Manual presenter mode keeps working independently."
-                        )
-                    }
-                }
-                Group {
-                    Toggle(
-                        isOn: $hideMenuBarNumbers.notifyingSettingsChange()
-                    ) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text("Hide menu bar numbers")
-                            InfoDot(
-                                "Replaces the usage percentages in the menu bar while presenting - they're visible in every screen share otherwise."
-                            )
-                        }
-                    }
-                    Toggle(
-                        isOn: $detectRecording.notifyingSettingsChange()
-                    ) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text("Detect screen recordings")
-                            InfoDot("Also blur during QuickTime or ⇧⌘5 recordings.")
-                        }
-                    }
-                    Toggle(
-                        isOn: $detectScreenSharing.notifyingSettingsChange()
-                    ) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text("Detect macOS Screen Sharing")
-                            InfoDot(
-                                "Also blur when someone views this Mac via Screen Sharing or Remote Management."
-                            )
-                        }
-                    }
-                    Toggle(
-                        isOn: $detectMirroring.notifyingSettingsChange()
-                    ) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text("Mirrored display counts")
-                            InfoDot(
-                                "Blur when your display mirrors to a projector, TV, or AirPlay.")
-                        }
-                    }
-                    Toggle(
-                        isOn: $askJev.notifyingSettingsChange()
-                    ) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Text("Ask Jev about shared screens")
-                            InfoDot(
-                                "When a call app is open and no built-in rule matches, Jev judges whether the on-screen windows show a shared screen. Needs a saved Jev key."
-                            )
-                        }
-                    }
-                    .disabled(!jevConfigured)
-                }
-                .disabled(!autoEnabled)
-                .opacity(autoEnabled ? 1 : 0.5)
-            } header: {
-                Text("Auto detection")
-            } footer: {
-                Text(
-                    "Recognizing a share's window title (e.g. \"Zoom share statusbar window\") needs Screen Recording access for Edith. Without it, detection falls back to coarser app + window position heuristics. Asking Jev also needs window titles: it sends the owner, title and size of up to 25 on-screen windows to TypeSafe, so they leave this Mac."
-                )
-                .font(.system(size: UIScale.pt(10)))
+            LabeledContent {
+                HotKeyRecorderControl(keyPrefix: "presenterHotKey", defaultLabel: "⇧⌥⌘P")
+            } label: {
+                PresenterRowLabel(
+                    "Shortcut", detail: "Turns presenter mode on or off from any app.")
             }
-
-            Section {
-                Button("Open Screen Recording Settings…") {
-                    presentation.perform("screenRecording")
-                }.disabled(!presentation.active)
-                Text(
-                    "Optional. Granting Edith Screen Recording access lets auto detection recognize share windows by title. Nothing is recorded."
-                )
+        } header: {
+            Text("Presenter mode")
+        } footer: {
+            Text("Turn it on before you share your screen. Apps outside Edith are never changed.")
                 .settingsCaption()
-            } header: {
-                Text("Permission")
-            }
-
-            Section {
-                LabeledContent {
-                    HotKeyRecorderControl(keyPrefix: "presenterHotKey", defaultLabel: "⇧⌥⌘P")
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Toggle hotkey")
-                        InfoDot(
-                            "Forces presenter mode on or off from anywhere - a manual escape hatch for when auto-detection guesses wrong."
-                        )
-                    }
-                }
-            } header: {
-                Text("Shortcut")
-            }
         }
 
+        Section {
+            ForEach(PresenterPrivacy.listed) { category in
+                PresenterPrivacySettingToggle(category: category)
+            }
+        } header: {
+            Text("What to blur")
+        }
+
+        Section {
+            Toggle(isOn: $autoEnabled.notifyingSettingsChange()) {
+                PresenterRowLabel(
+                    "Auto presenter mode",
+                    detail:
+                        "Turns presenter mode on by itself when your screen is shared or recorded."
+                )
+            }
+            Group {
+                Toggle(isOn: $hideMenuBarNumbers.notifyingSettingsChange()) {
+                    PresenterRowLabel(
+                        "Hide menu bar numbers",
+                        detail: "Hides usage percentages in the menu bar while presenting.")
+                }
+                Toggle(isOn: $detectRecording.notifyingSettingsChange()) {
+                    PresenterRowLabel(
+                        "Detect screen recordings",
+                        detail: "Includes QuickTime and Shift-Command-5 recordings.")
+                }
+                Toggle(isOn: $detectScreenSharing.notifyingSettingsChange()) {
+                    PresenterRowLabel(
+                        "Detect macOS Screen Sharing",
+                        detail: "Includes Screen Sharing and Remote Management sessions.")
+                }
+                Toggle(isOn: $detectMirroring.notifyingSettingsChange()) {
+                    PresenterRowLabel(
+                        "Count mirrored displays",
+                        detail: "Includes mirroring to a projector, TV or AirPlay.")
+                }
+                Toggle(isOn: $askJev.notifyingSettingsChange()) {
+                    PresenterRowLabel(
+                        "Ask Jev about shared screens",
+                        detail: jevConfigured
+                            ? "When no rule matches during a call, Jev checks the window titles."
+                            : "Save a Jev key in the Jev settings to use this.")
+                }
+                .disabled(!jevConfigured)
+            }
+            .disabled(!autoEnabled)
+            LabeledContent {
+                Button("Open Settings") { presentation.perform("screenRecording") }
+                    .buttonStyle(.edith(.secondary))
+                    .disabled(!presentation.active)
+            } label: {
+                PresenterRowLabel(
+                    "Screen Recording access",
+                    detail:
+                        "Optional. Lets detection read share window titles. Nothing is recorded.")
+            }
+        } header: {
+            Text("Auto detection")
+        } footer: {
+            Text(
+                "Without Screen Recording access, detection uses app and window position instead. Asking Jev sends the owner, title and size of up to 25 on-screen windows to TypeSafe, so they leave this Mac."
+            )
+            .settingsCaption()
+        }
+    }
+}
+
+struct PresenterRowLabel: View {
+    let title: String
+    let detail: String
+
+    init(_ title: String, detail: String) {
+        self.title = title
+        self.detail = detail
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+            Text(title)
+            Text(detail).settingsCaption().fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -164,7 +144,9 @@ struct PresenterPrivacySettingToggle: View {
     }
 
     var body: some View {
-        Toggle(category.title, isOn: $stored.notifyingSettingsChange())
+        Toggle(isOn: $stored.notifyingSettingsChange()) {
+            PresenterRowLabel(category.title, detail: category.summary)
+        }
     }
 }
 

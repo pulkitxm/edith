@@ -338,21 +338,24 @@ import SwiftUI
 struct ControlSettingsHost<Content: View>: View {
     let presentation: ControlPresentation
     @ViewBuilder let content: () -> Content
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        VStack(spacing: 0) {
-            if presentation.ready, let error = presentation.error {
-                HStack {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                    Button("Retry", action: retry)
-                }.padding()
-            }
-            PageLoading(
-                state: presentation.load.state, title: "Settings unavailable",
-                message: presentation.error ?? "The extension engine is unavailable.",
-                layout: .editor, retry: retry
-            ) { content() }
+        PageLoading(
+            state: presentation.load.state, title: "Settings unavailable",
+            message: presentation.error ?? "The extension engine is unavailable.",
+            layout: .editor, retry: retry
+        ) {
+            content()
         }
+        .padding(presentation.load.state == .loading ? PageMetrics.gutter(compact) : 0)
+        .environment(
+            \.controlSettingsIssue,
+            presentation.ready
+                ? presentation.error.map {
+                    ControlSettingsIssue(message: $0, retry: Self.retry(presentation))
+                } : nil
+        )
         .pageRefresh(
             active: presentation.active && presentation.running,
             interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
@@ -361,8 +364,56 @@ struct ControlSettingsHost<Content: View>: View {
         }
     }
 
-    private func retry() {
-        presentation.changed()
-        Task { await presentation.refresh() }
+    private func retry() { Self.retry(presentation)() }
+
+    private static func retry(_ presentation: ControlPresentation)
+        -> @MainActor @Sendable () -> Void
+    {
+        {
+            presentation.changed()
+            Task { await presentation.refresh() }
+        }
+    }
+}
+
+struct ControlSettingsIssue: Sendable {
+    let message: String
+    let retry: @MainActor @Sendable () -> Void
+}
+
+private struct ControlSettingsIssueKey: EnvironmentKey {
+    static let defaultValue: ControlSettingsIssue? = nil
+}
+
+extension EnvironmentValues {
+    var controlSettingsIssue: ControlSettingsIssue? {
+        get { self[ControlSettingsIssueKey.self] }
+        set { self[ControlSettingsIssueKey.self] = newValue }
+    }
+}
+
+struct ControlSettingsIssueSection: View {
+    @Environment(\.controlSettingsIssue) private var issue
+
+    var body: some View {
+        if let issue {
+            Section {
+                HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text("Couldn't sync these settings")
+                        Text("\(issue.message) Your last saved settings are shown.")
+                            .settingsCaption()
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: UIScale.pt(8))
+                    Button("Retry", action: issue.retry)
+                        .buttonStyle(.edith(.secondary))
+                }
+                .accessibilityElement(children: .contain)
+            }
+        }
     }
 }

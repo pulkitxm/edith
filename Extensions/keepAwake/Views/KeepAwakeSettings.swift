@@ -13,23 +13,29 @@ struct KeepAwakeSettings: View {
 
     var body: some View {
         Form {
+            ControlSettingsIssueSection()
             Section {
-                Toggle("Keep awake", isOn: $preventSleep)
-                    .accessibilityLabel("Keep awake")
-                    .accessibilityIdentifier("keepAwake.preventSleep")
-                    .accessibilityAction(.default) { preventSleep.toggle() }
-                Text(
-                    preventSleep
-                        ? "On: your Mac and display will not go to sleep on their own. Turn this off to go back to your normal sleep settings."
-                        : "Off: your Mac sleeps normally. Turn this on before a long download, build or presentation."
-                )
-                .settingsCaption()
-                Text(
-                    "Closing the lid still puts the Mac to sleep. Use Lid Awake if you need it to keep running with the lid closed."
-                )
-                .settingsCaption()
+                Toggle(isOn: $preventSleep) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text("Keep awake")
+                        Text(
+                            preventSleep
+                                ? "On. Your Mac and display stay awake until you turn this off."
+                                : "Off. Your Mac follows its normal sleep settings."
+                        )
+                        .settingsCaption()
+                    }
+                }
+                .accessibilityLabel("Keep awake")
+                .accessibilityIdentifier("keepAwake.preventSleep")
+                .accessibilityAction(.default) { preventSleep.toggle() }
             } header: {
                 Text("Stay awake")
+            } footer: {
+                Text(
+                    "Turn this on before a long download, build or presentation. Closing the lid still puts the Mac to sleep; use Lid Awake to keep it running with the lid closed."
+                )
+                .settingsCaption()
             }
         }
         .edithForm()

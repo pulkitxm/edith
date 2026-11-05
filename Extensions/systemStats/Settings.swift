@@ -56,29 +56,35 @@ struct SystemStatsRows: View {
             set: { presentation.setPreference($0.hex6, for: AppStorageKeys.MenuBar.statsColorHex) })
     }
 
+    private var running: Bool { presentation.active && presentation.running }
+
     var body: some View {
         Section {
-            Picker("Color", selection: modeBinding) {
+            Picker(selection: modeBinding) {
                 Text("Automatic").tag("auto")
                 Text("Custom").tag("custom")
+            } label: {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text("Color")
+                    Text("Automatic matches the other items in your menu bar.")
+                        .settingsCaption()
+                }
             }
+            .disabled(!running)
             if statsColorMode == "custom" {
                 ColorPicker("Custom color", selection: colorBinding, supportsOpacity: false)
+                    .disabled(!running)
             }
-            Text(
-                "Automatic follows your menu bar. The menu bar shows CPU and memory percentages, updated every couple of seconds, and pauses while your Mac sleeps or is locked."
-            )
-            .settingsCaption()
         } header: {
             Text("Menu bar appearance")
         } footer: {
-            if !presentation.active || !presentation.running {
-                Text("Menu Bar Stats is not running. Turn it on in Extensions to change these.")
-                    .settingsCaption()
-            }
+            Text(
+                running
+                    ? "CPU and memory update every couple of seconds and pause while your Mac sleeps or is locked."
+                    : "Menu Bar Stats is turned off. Turn it on in Extensions to change these."
+            )
+            .settingsCaption()
         }
-        .disabled(!presentation.active || !presentation.running)
-        .opacity(presentation.active ? 1 : 0.5)
     }
 }
 
@@ -94,9 +100,73 @@ enum SystemStatsSettingsScene {
         NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    Form { SystemStatsRows(presentation: presentation, defaults: defaults) }
-                        .edithForm()
+                    Form {
+                        ControlSettingsIssueSection()
+                        SystemStatsRows(presentation: presentation, defaults: defaults)
+                    }
+                    .edithForm()
                 }
             })
+    }
+}
+
+struct SystemStatsPage: View {
+    let presentation: ControlPresentation
+    let defaults: UserDefaults
+
+    var body: some View {
+        PageWorkspace {
+            PageHeader(
+                SystemStatsService.title,
+                subtitle: "Live CPU and memory use, shown in your menu bar.", divider: true)
+        } content: {
+            ControlSettingsHost(presentation: presentation) {
+                Form {
+                    ControlSettingsIssueSection()
+                    Section {
+                        if presentation.active && presentation.running {
+                            SystemStatsReadingRow(title: "CPU", percent: presentation.state.cpu)
+                            SystemStatsReadingRow(
+                                title: "Memory", percent: presentation.state.memory)
+                        } else {
+                            Text(
+                                "Turn on \(SystemStatsService.title) in Extensions to see live readings."
+                            )
+                            .foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        Text("Right now")
+                    }
+                    SystemStatsRows(presentation: presentation, defaults: defaults)
+                }
+                .edithForm()
+                .frame(maxWidth: UIScale.pt(760), alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+    }
+}
+
+struct SystemStatsReadingRow: View {
+    let title: String
+    let percent: Double
+
+    private var clamped: Int { Int(max(0, min(100, percent)).rounded()) }
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(12)) {
+            Text(title)
+                .frame(width: UIScale.pt(72), alignment: .leading)
+            LoadingProgress(value: Double(clamped), total: 100)
+                .accessibilityHidden(true)
+            Text("\(clamped)%")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .frame(minWidth: UIScale.pt(40), alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue("\(clamped) percent used")
     }
 }

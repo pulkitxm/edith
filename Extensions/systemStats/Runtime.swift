@@ -133,32 +133,10 @@ final class SystemStatsService: ExtensionService {
             return SystemStatsSettingsScene.controller(
                 presentation: presentation, defaults: uiDefaults)
         }
+        let defaults = uiDefaults
         return NSHostingController(
             rootView: ExtensionPageHost {
-                ControlSettingsHost(presentation: presentation) {
-                    PageWorkspace {
-                        PageHeader(SystemStatsService.title)
-                    } content: {
-                        Form {
-                            Section("Usage") {
-                                if presentation.active {
-                                    SystemMenuReadings(
-                                        cpu: presentation.state.cpu,
-                                        memory: presentation.state.memory)
-                                } else {
-                                    Text("Enable \(SystemStatsService.title) to see live readings.")
-                                        .settingsCaption()
-                                }
-                            }
-                            Section("Menu Bar") {
-                                Text(
-                                    "CPU and memory readings refresh every two seconds while this extension is enabled."
-                                )
-                                .settingsCaption()
-                            }
-                        }.formStyle(.grouped)
-                    }
-                }
+                SystemStatsPage(presentation: presentation, defaults: defaults)
             })
     }
 

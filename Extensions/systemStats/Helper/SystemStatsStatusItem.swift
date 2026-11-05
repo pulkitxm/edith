@@ -228,7 +228,7 @@ struct SystemMenuReadings: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             StatusProgressRow(title: "CPU", percent: snapshot?.cpu ?? cpu)
             StatusProgressRow(title: "Memory", percent: snapshot?.memory ?? memory)
         }
