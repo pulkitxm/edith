@@ -366,18 +366,11 @@ struct DatabaseNativeTableView: NSViewRepresentable {
             rebuildColumns()
         }
 
-        private var appliedPalette: [NSColor]?
-
         func applyPalette(to scrollView: NSScrollView) {
             let background = NSColor(parent.background)
             scrollView.backgroundColor = background
             tableView?.backgroundColor = background
             applyHeaderPalette()
-            let palette = [parent.accent, parent.background, parent.ink, parent.inkFaint].map {
-                NSColor($0).usingColorSpace(.sRGB) ?? .black
-            }
-            if let appliedPalette, appliedPalette != palette { tableView?.reloadData() }
-            appliedPalette = palette
         }
 
         func rebuildColumns() {
