@@ -79,6 +79,11 @@ import Foundation
         return true
     }
 
+    @discardableResult public func cancel(task id: UUID) -> Bool {
+        guard ready, let runtime else { return false }
+        return runtime.cancel(task: id)
+    }
+
     public func stop() async {
         ready = false
         for entry in tasks.values { entry.cancel() }

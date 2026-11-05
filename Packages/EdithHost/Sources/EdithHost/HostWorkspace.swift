@@ -550,11 +550,12 @@ struct HostWorkspace: View {
             let modifiers = event.modifierFlags
             let handled = MainActor.assumeIsolated {
                 let keyWindow = NSApp.keyWindow
-                let owner = keyWindow?.sheetParent ?? keyWindow
-                let main = HostWindowClose.isMain(owner)
-                guard main || sectionWindows?.contains(owner) == true else {
-                    return false
-                }
+                guard
+                    let route = HostWindowClose.route(
+                        keyWindow: keyWindow,
+                        isSection: { sectionWindows?.contains($0) == true })
+                else { return false }
+                let main = route == .main
                 if HostTerminalInput.isWindowCloseKey(characters: characters, modifiers: modifiers)
                 {
                     return HostWindowClose.perform(

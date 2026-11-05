@@ -8,6 +8,11 @@ enum HostWindowCloseTarget: Equatable {
     case nothing
 }
 
+enum HostWindowKeyRoute: Equatable {
+    case main
+    case section
+}
+
 @MainActor enum HostWindowClose {
     static let mainIdentifier = "EdithMainWindow"
 
@@ -15,49 +20,75 @@ enum HostWindowCloseTarget: Equatable {
         window?.identifier?.rawValue == mainIdentifier
     }
 
+    static func isPopover(_ window: NSWindow) -> Bool {
+        String(describing: type(of: window)).localizedCaseInsensitiveContains("popover")
+    }
+
+    static func owner(of window: NSWindow?) -> NSWindow? {
+        var current = window
+        while let window = current {
+            if let parent = window.sheetParent {
+                current = parent
+            } else if isPopover(window), let parent = window.parent {
+                current = parent
+            } else {
+                return window
+            }
+        }
+        return nil
+    }
+
+    static func route(
+        keyWindow: NSWindow?, isSection: (NSWindow) -> Bool
+    ) -> HostWindowKeyRoute? {
+        guard let owner = owner(of: keyWindow) else { return nil }
+        if isMain(owner) { return .main }
+        return isSection(owner) ? .section : nil
+    }
+
     static func target(
         isMain: Bool, sheet: Bool, popover: Bool, closable: Bool, terminalTab: () -> Bool
     ) -> HostWindowCloseTarget {
-        if sheet { return .sheet }
         if popover { return .popover }
+        if sheet { return .sheet }
         if terminalTab() { return .terminalTab }
         if isMain { return .nothing }
         return closable ? .window : .nothing
     }
 
-    static func attachedSheet(of window: NSWindow) -> NSWindow? {
-        window.sheetParent != nil ? window : window.attachedSheet
+    static func innermostSheet(of window: NSWindow) -> NSWindow? {
+        var sheet = window.sheetParent != nil ? window : window.attachedSheet
+        while let next = sheet?.attachedSheet { sheet = next }
+        return sheet
     }
 
     static func popover(of window: NSWindow) -> NSWindow? {
-        (window.childWindows ?? []).first {
-            String(describing: type(of: $0)).localizedCaseInsensitiveContains("popover")
-        }
+        if isPopover(window) { return window }
+        return (window.childWindows ?? []).last { isPopover($0) && $0.isVisible }
     }
 
     @discardableResult
     static func perform(
-        window: NSWindow?, terminalTab: () -> Bool = { false }, dismiss: @MainActor (NSWindow) -> Void = { HostWindowClose.escape($0) }
+        window: NSWindow?, terminalTab: () -> Bool = { false },
+        dismiss: @MainActor (NSWindow) -> Void = { HostWindowClose.escape($0) }
     ) -> Bool {
-        guard let window else { return false }
-        let sheet = attachedSheet(of: window)
-        let popover = popover(of: sheet ?? window)
+        guard let keyWindow = window, let owner = owner(of: keyWindow) else { return false }
+        let sheet = innermostSheet(of: owner)
+        let popover = popover(of: isPopover(keyWindow) ? keyWindow : sheet ?? owner)
         let resolved = target(
-            isMain: isMain(window), sheet: sheet != nil, popover: sheet == nil && popover != nil,
-            closable: window.styleMask.contains(.closable), terminalTab: terminalTab)
+            isMain: isMain(owner), sheet: sheet != nil, popover: popover != nil,
+            closable: owner.styleMask.contains(.closable), terminalTab: terminalTab)
         switch resolved {
         case .sheet:
             if let sheet { dismiss(sheet) }
         case .popover:
             if let popover { dismiss(popover) }
-        case .terminalTab:
-            break
         case .window:
-            window.performClose(nil)
-        case .nothing:
+            owner.performClose(nil)
+        case .terminalTab, .nothing:
             break
         }
-        return resolved != .nothing || isMain(window)
+        return resolved != .nothing || isMain(owner)
     }
 
     static func escape(_ window: NSWindow) {
@@ -68,7 +99,8 @@ enum HostWindowCloseTarget: Equatable {
                 windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
                 charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)
         else { return }
-        window.sendEvent(event)
+        if !window.isKeyWindow, window.canBecomeKey { window.makeKey() }
+        NSApp.postEvent(event, atStart: true)
     }
 }
 

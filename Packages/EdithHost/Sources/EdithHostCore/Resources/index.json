@@ -101,12 +101,12 @@
         {
           "symbolName": "arrow.clockwise",
           "title": "Find your agents",
-          "detail": "Edith looks for Herdr on this Mac and your machines and lists every live session."
+          "detail": "Edith looks for the herdr command on this Mac and your SSH machines and lists every live session."
         },
         {
           "symbolName": "plus",
           "title": "Start an agent",
-          "detail": "Press New Agent, pick a folder and a coding agent, and it opens in its own pane."
+          "detail": "Press New Agent, then choose a coding agent, a machine and a space. It opens in its own pane."
         },
         {
           "symbolName": "rectangle.split.3x1",
@@ -219,7 +219,7 @@
     "notchTabs": [],
     "guide": {
       "tagline": "A private memory of your notes and voice memos that you can ask questions.",
-      "summary": "Memory keeps your notes, recordings and files in a searchable store that runs on a machine you choose. Ask it questions and it answers from what you saved, with sources. Setup takes a few minutes and installs a small background service.",
+      "summary": "Memory keeps your notes, recordings and files in a searchable store that runs on a machine you choose. Ask it questions and it answers from what you saved, with sources. Setup takes a few minutes and runs a small set of containers on that machine.",
       "steps": [
         {
           "symbolName": "server.rack",
@@ -284,7 +284,7 @@
         {
           "symbolName": "doc.text.magnifyingglass",
           "title": "Read a skill",
-          "detail": "Tap any card to preview exactly what the skill tells your agent, and copy the Markdown if you prefer."
+          "detail": "Click Preview to see exactly what the skill tells your agent, and copy the Markdown if you prefer."
         },
         {
           "symbolName": "person.crop.circle.badge.checkmark",
@@ -396,7 +396,7 @@
         {
           "symbolName": "plus",
           "title": "Add tabs",
-          "detail": "Press plus or Command T to open another shell, and Command Shift W to close one."
+          "detail": "Press plus or Command T to open another shell, and Command W to close the current one."
         },
         {
           "symbolName": "dot.radiowaves.left.and.right",
@@ -1184,7 +1184,7 @@
         {
           "symbolName": "doc.on.doc",
           "title": "Copy as usual",
-          "detail": "Edith records each copy in the background. Pause capture any time in settings."
+          "detail": "Edith records each copy in the background. Pause recording any time in settings."
         },
         {
           "symbolName": "keyboard",
@@ -1315,7 +1315,7 @@
         {
           "symbolName": "keyboard",
           "title": "Press the shortcut",
-          "detail": "A magnifier appears. You can also choose Pick now in settings."
+          "detail": "A magnifier appears. You can also choose Pick Color in settings."
         },
         {
           "symbolName": "eyedropper",
@@ -1439,7 +1439,7 @@
         {
           "symbolName": "rectangle.inset.filled",
           "title": "Turn it on",
-          "detail": "Press Option+Command+F or use the Dim now switch."
+          "detail": "Press Option+Command+F or use the Dim background windows switch in settings."
         },
         {
           "symbolName": "lock.shield",
@@ -2020,7 +2020,7 @@
       "steps": [
         {
           "symbolName": "folder",
-          "title": "Choose a mirror folder",
+          "title": "Choose a storage folder",
           "detail": "Pick where repository copies are kept; an external drive works."
         },
         {
@@ -2278,7 +2278,7 @@
         {
           "symbolName": "laptopcomputer",
           "title": "Set your open angle",
-          "detail": "Sit as you normally do and press Set so Hinge knows what open means."
+          "detail": "Open the lid the way you normally work and press Use current angle so Hinge knows what open means."
         },
         {
           "symbolName": "slider.horizontal.3",

@@ -40,31 +40,48 @@ struct HostBackgroundJob: Codable, Equatable, Identifiable, Sendable {
 }
 
 extension HostBackgroundJob {
+    static let builtInOwners: Set<String> = ["backup", "storage"]
+
     var ownerID: String {
-        descriptor.abilityID ?? id.split(separator: ".").first.map(String.init) ?? id
+        if let ability = descriptor.abilityID { return ability }
+        let prefix = id.split(separator: ".").first.map(String.init) ?? id
+        return Self.builtInOwners.contains(prefix) ? "" : prefix
     }
     var isRunning: Bool { phase == "running" }
     var needsAttention: Bool { phase == "failed" }
     var statusTitle: String {
         switch phase {
-        case "running": "Running now"
-        case "idle": interval == nil ? "Ready when asked" : "Waiting for its next run"
+        case "running": "Running"
+        case "idle": interval == nil ? "On demand" : "Scheduled"
         case "paused": "Paused"
         case "disabled": "Off"
-        case "failed": "Needs attention"
+        case "failed": "Failed"
         default: phase.capitalized
         }
     }
     var scheduleSentence: String {
-        guard let interval else { return "Runs when something asks for it" }
-        return "Runs " + cadence.lowercased()
+        guard interval != nil else { return "Runs when needed" }
+        return cadence
     }
     var pauseReason: String? {
         switch descriptor.power {
-        case "pauseOnBattery": "Pauses on battery power"
-        case "pauseOnLock": "Pauses while the Mac is locked"
+        case "pauseOnBattery": "Pauses on battery"
+        case "pauseOnLock": "Pauses when locked"
         default: nil
         }
+    }
+    func lastRunText(now: Date) -> String {
+        guard let lastRun else { return "Not run yet" }
+        return "Last ran \(HostCompactDuration.text(max(0, now.timeIntervalSince(lastRun)))) ago"
+    }
+    func details(now: Date) -> String {
+        var parts = [scheduleSentence]
+        if let pauseReason { parts.append(pauseReason) }
+        if subscribers > 0 {
+            parts.append("\(subscribers) page\(subscribers == 1 ? "" : "s") watching")
+        }
+        parts.append(lastRunText(now: now))
+        return parts.joined(separator: " · ")
     }
     var actionTitle: String? {
         if isRunning { return "Stop" }
@@ -84,13 +101,16 @@ struct HostBackgroundOverview: Equatable, Sendable {
     }
 
     var sentence: String {
-        if total == 0 && running == 0 { return "Nothing is scheduled yet." }
+        if total == 0 && running == 0 { return "No scheduled jobs yet." }
         var parts: [String] = []
-        parts.append(running == 0 ? "Nothing is running right now" : "\(running) running now")
+        if total > 0 { parts.append("\(total) scheduled job\(total == 1 ? "" : "s")") }
+        parts.append(
+            running == 0 ? "none running right now" : "\(running) running now")
         if needingAttention > 0 {
             parts.append("\(needingAttention) need\(needingAttention == 1 ? "s" : "") attention")
         }
-        return parts.joined(separator: ", ") + "."
+        let sentence = parts.joined(separator: ", ")
+        return sentence.prefix(1).uppercased() + sentence.dropFirst() + "."
     }
 }
 
@@ -152,12 +172,13 @@ struct HostBackgroundEnvironment {
                         == .orderedAscending
                 })
         }.sorted {
-            $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            if $0.ownerID.isEmpty != $1.ownerID.isEmpty { return !$0.ownerID.isEmpty }
+            return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
     }
 
     static func fallbackTitle(_ owner: String) -> String {
-        owner.isEmpty ? "Edith" : owner.prefix(1).uppercased() + owner.dropFirst()
+        owner.isEmpty ? "Built into Edith" : owner.prefix(1).uppercased() + owner.dropFirst()
     }
 
     var overview: HostBackgroundOverview { HostBackgroundOverview(jobs: jobs) }

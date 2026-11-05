@@ -19,6 +19,8 @@ import Foundation
     private let settings: HostSettingsArchive
     private var backup: Task<HostSettingsBackupResult, Error>?
     private var backupResult: HostSettingsBackupResult?
+    private var inspectionID: UUID?
+    private var backupID: UUID?
 
     public init(
         identity: HostIdentity, cloudDirectory: URL? = nil,
@@ -129,7 +131,8 @@ import Foundation
                 isCancelled: { cancellation.isCancelled })
         }
         inspection = work
-        defer { inspection = nil; self.cancellation = nil }
+        inspectionID = id
+        defer { inspection = nil; inspectionID = nil; self.cancellation = nil }
         do {
             storage = try await withTaskCancellationHandler {
                 try await work.value
@@ -167,7 +170,8 @@ import Foundation
         let settings = settings
         let work = Task { try await settings.synchronize(restoreOnly: restoreOnly) }
         backup = work
-        defer { backup = nil }
+        backupID = id
+        defer { backup = nil; backupID = nil }
         do {
             backupResult = try await withTaskCancellationHandler {
                 try await work.value
@@ -190,6 +194,18 @@ import Foundation
     public func cancel() {
         cancellation?.cancel(); inspection?.cancel()
         settings.cancel(); backup?.cancel()
+    }
+
+    @discardableResult public func cancel(task id: UUID) -> Bool {
+        if id == inspectionID {
+            cancellation?.cancel(); inspection?.cancel()
+            return true
+        }
+        if id == backupID {
+            settings.cancel(); backup?.cancel()
+            return true
+        }
+        return false
     }
 
     public func shutdown() async {

@@ -134,6 +134,32 @@ import Testing
         await restored.shutdown()
     }
 
+    @Test func cancellingATaskStopsOnlyTheTaskWithThatIdentifier() async throws {
+        let directory = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.core-" + UUID().uuidString,
+            supportDirectory: directory)
+        let runtime = try HostCoreRuntime(identity: identity)
+        let synthetic = identity.extensionDirectory("usage")
+        try FileManager.default.createDirectory(at: synthetic, withIntermediateDirectories: true)
+        for index in 0..<4_000 {
+            try Data([1]).write(to: synthetic.appendingPathComponent("synthetic-\(index)"))
+        }
+        #expect(!runtime.cancel(task: UUID()))
+        let inspection = Task { @MainActor in try await runtime.inspect() }
+        while runtime.snapshot().tasks.last?.phase != .running { await Task.yield() }
+        let running = try #require(runtime.snapshot().tasks.last)
+        #expect(!runtime.cancel(task: UUID()))
+        #expect(runtime.snapshot().tasks.last?.phase == .running)
+        #expect(runtime.cancel(task: running.id))
+        await #expect(throws: CancellationError.self) { try await inspection.value }
+        let finished = try #require(runtime.snapshot().tasks.first { $0.id == running.id })
+        #expect(finished.phase == .cancelled)
+        #expect(!runtime.cancel(task: running.id))
+        await runtime.shutdown()
+    }
+
     @Test func interruptedTasksBecomeCancelledAndForeignJournalIsRejected() async throws {
         let directory = try fixture()
         defer { try? FileManager.default.removeItem(at: directory) }

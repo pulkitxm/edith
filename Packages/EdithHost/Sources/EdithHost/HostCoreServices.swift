@@ -126,10 +126,18 @@ import SwiftUI
         {} catch { failure = "Storage could not be inspected. Reload to try again." }
     }
 
-    func cancelTask(_ id: UUID) {
-        guard snapshot?.tasks.contains(where: { $0.id == id && $0.phase == .running }) == true
-        else { return }
-        process?.cancelCurrentTask()
+    func cancelTask(_ id: UUID) async throws {
+        if snapshot?.tasks.contains(where: { $0.id == id && $0.phase == .running }) == true {
+            guard process?.cancel(task: id) == true else { throw HostWorkerError.rejected }
+            return
+        }
+        guard
+            snapshot?.commandTasks?.contains(where: { $0.id == id && !$0.state.isTerminal })
+                == true
+        else { throw HostWorkerError.rejected }
+        _ = try await cliCommand(
+            .cancel, payload: try JSONEncoder().encode(HostAgentTaskIDRequest(id: id)))
+        await refresh()
     }
 
     func restart() async { await shutdown(); await start() }

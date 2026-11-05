@@ -43,6 +43,26 @@ import Testing
         #expect(usage.ownerID == "usage")
         #expect(herdr.ownerID == "herdr")
         #expect(solo.ownerID == "solo")
+        #expect(try job("backup.sync").ownerID == "")
+        #expect(try job("storage.inspect").ownerID == "")
+        #expect(HostBackgroundModel.fallbackTitle("") == "Built into Edith")
+    }
+
+    @Test func detailsReadAsOneLineOfPlainFacts() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 400)
+        let scheduled = try job("usage.refresh", lastRun: 160)
+        #expect(scheduled.details(now: now) == "Every 15 min · Pauses on battery · Last ran 4m ago")
+        let fresh = try job("usage.refresh", ambient: nil, lastRun: nil)
+        #expect(fresh.details(now: now) == "Runs when needed · Pauses on battery · Not run yet")
+    }
+
+    @Test func builtInJobsAreGroupedLast() async throws {
+        let reads = FixtureReads()
+        let model = model(
+            [[try job("backup.sync"), try job("zeta.run"), try job("alpha.run")]], reads: reads,
+            controls: FixtureReads())
+        await model.refresh()
+        #expect(model.groups { _ in nil }.map(\.title) == ["Alpha", "Zeta", "Built into Edith"])
     }
 
     @Test func statusLabelsAreWrittenForPeople() throws {
@@ -52,12 +72,12 @@ import Testing
         let onDemand = try job("a.b", phase: "idle", ambient: nil)
         let paused = try job("a.b", phase: "paused")
         let off = try job("a.b", phase: "disabled")
-        #expect(running.statusTitle == "Running now")
-        #expect(failed.statusTitle == "Needs attention")
-        #expect(idle.statusTitle == "Waiting for its next run")
-        #expect(onDemand.statusTitle == "Ready when asked")
-        #expect(onDemand.scheduleSentence == "Runs when something asks for it")
-        #expect(idle.pauseReason == "Pauses on battery power")
+        #expect(running.statusTitle == "Running")
+        #expect(failed.statusTitle == "Failed")
+        #expect(idle.statusTitle == "Scheduled")
+        #expect(onDemand.statusTitle == "On demand")
+        #expect(onDemand.scheduleSentence == "Runs when needed")
+        #expect(idle.pauseReason == "Pauses on battery")
         #expect(running.actionTitle == "Stop")
         #expect(paused.actionTitle == "Run now")
         #expect(off.actionTitle == nil)
@@ -69,10 +89,11 @@ import Testing
         ]
         let overview = HostBackgroundOverview(jobs: jobs, activeTasks: 2)
         #expect(overview.running == 3 && overview.needingAttention == 1 && overview.total == 3)
-        #expect(overview.sentence == "3 running now, 1 needs attention.")
-        #expect(HostBackgroundOverview(jobs: []).sentence == "Nothing is scheduled yet.")
+        #expect(overview.sentence == "3 scheduled jobs, 3 running now, 1 needs attention.")
+        #expect(HostBackgroundOverview(jobs: []).sentence == "No scheduled jobs yet.")
+        #expect(HostBackgroundOverview(jobs: [], activeTasks: 2).sentence == "2 running now.")
         let calm = HostBackgroundOverview(jobs: [try job("e.f")])
-        #expect(calm.sentence == "Nothing is running right now.")
+        #expect(calm.sentence == "1 scheduled job, none running right now.")
     }
 
     @Test func groupsAreNamedByOwnerWithRunningAndFailedJobsFirst() async throws {
