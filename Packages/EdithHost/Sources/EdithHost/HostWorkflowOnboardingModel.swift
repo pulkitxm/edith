@@ -243,9 +243,11 @@ struct HostWorkflowPackageReview: Equatable {
     func refreshPermissions() { Task { await permissions.refresh() } }
 
     func watchPermissions(interval: Duration = .seconds(1)) async {
-        await permissions.watch(interval: interval, while: { [weak self] in
-            self?.stage == .permissions
-        })
+        await permissions.watch(
+            interval: interval,
+            while: { [weak self] in
+                self?.stage == .permissions
+            })
     }
 
     func requestPermission(_ permission: HostPermission) async {
@@ -263,7 +265,9 @@ struct HostWorkflowPackageReview: Equatable {
         guard stage == .permissions,
             permissionItems.first(where: { $0.permission == permission })?.canDefer == true
         else { return }
-        if deferred { deferredPermissions.insert(permission) } else {
+        if deferred {
+            deferredPermissions.insert(permission)
+        } else {
             deferredPermissions.remove(permission)
         }
     }
@@ -325,7 +329,8 @@ struct HostWorkflowPackageReview: Equatable {
             guard required.allSatisfy({ reviewed[$0] == current[$0] }) else {
                 model.stage = .tools
                 throw HostWorkflowFailure(
-                    "Extension versions or sizes changed. Review your selection and try again.")
+                    "Some tools changed since you picked them. Review your selection and try again."
+                )
             }
             var installs: [Task<Void, Error>] = []
             for id in chosen {
@@ -345,7 +350,7 @@ struct HostWorkflowPackageReview: Equatable {
                                 model.environment.active().contains(id)
                             else {
                                 throw HostWorkflowFailure(
-                                    "The downloaded extension could not start. Retry to finish setup."
+                                    "The tool downloaded but could not start. Retry to finish setup."
                                 )
                             }
                             model.states[id] = .ready
@@ -371,7 +376,7 @@ struct HostWorkflowPackageReview: Equatable {
                 })
             else {
                 throw HostWorkflowFailure(
-                    "Some extensions could not finish. Your working extensions remain available. Retry the failed extensions."
+                    "Some tools could not finish. The ones that did are ready to use."
                 )
             }
             model.complete()
@@ -379,7 +384,7 @@ struct HostWorkflowPackageReview: Equatable {
     }
 
     var skipTitle: String {
-        environment.active().isEmpty ? "Start without extensions" : "Keep current setup"
+        environment.active().isEmpty ? "Start without tools" : "Keep current setup"
     }
 
     func skip() {
@@ -464,7 +469,7 @@ struct HostWorkflowPackageReview: Equatable {
             defer { busy = false; task = nil }
             do { try await action(self) } catch is CancellationError {
                 if stage == .installing {
-                    failure = "Setup was cancelled. Downloaded extensions remain installed."
+                    failure = "Setup was cancelled. Tools that finished stay installed."
                 }
             } catch { failure = error.localizedDescription }
         }

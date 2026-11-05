@@ -48,10 +48,8 @@ import UserNotifications
                 case .inputMonitoring: _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
                 case .screenRecording: _ = CGRequestScreenCaptureAccess()
                 case .camera: _ = await AVCaptureDevice.requestAccess(for: .video)
-                case .fullDisk: break
-                case .applicationAudio, .bluetooth, .automation: return
+                case .fullDisk, .applicationAudio, .bluetooth, .automation: break
                 }
-                if let settings = permission.settingsURL { NSWorkspace.shared.open(settings) }
             }, openSettings: { NSWorkspace.shared.open($0) })
     }
 }
@@ -93,7 +91,9 @@ import UserNotifications
         granted = status
         let stored = Self.stored(in: defaults)
         let remaining = stored.filter { status[$0] != true }
-        if remaining != stored { setAwaitingRelaunch(remaining) } else if stored != awaitingRelaunch {
+        if remaining != stored {
+            setAwaitingRelaunch(remaining)
+        } else if stored != awaitingRelaunch {
             awaitingRelaunch = stored
         }
     }
@@ -116,6 +116,10 @@ import UserNotifications
         guard !Task.isCancelled else { return }
         markAwaitingRelaunch(permission)
         await refresh()
+        guard !Task.isCancelled, granted[permission] != true,
+            let settings = permission.settingsURL
+        else { return }
+        _ = environment.openSettings(settings)
     }
 
     func openSettings(_ permission: HostPermission) -> Bool {

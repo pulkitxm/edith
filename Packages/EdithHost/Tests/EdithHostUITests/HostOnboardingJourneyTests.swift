@@ -106,9 +106,11 @@ import Testing
     }
 
     @Test func resumeFallsBackWhenNothingIsSelectedOrStageIsUnknown() {
-        #expect(HostWorkflowOnboardingModel.resumed(.permissions, hasSelection: false) == .workflows)
+        #expect(
+            HostWorkflowOnboardingModel.resumed(.permissions, hasSelection: false) == .workflows)
         #expect(HostWorkflowOnboardingModel.resumed(.tools, hasSelection: false) == .workflows)
-        #expect(HostWorkflowOnboardingModel.resumed(.permissions, hasSelection: true) == .permissions)
+        #expect(
+            HostWorkflowOnboardingModel.resumed(.permissions, hasSelection: true) == .permissions)
         #expect(HostWorkflowOnboardingModel.resumed(.installing, hasSelection: true) == .tools)
         #expect(HostWorkflowOnboardingModel.resumed(nil, hasSelection: true) == .tools)
         #expect(HostWorkflowOnboardingModel.resumed(nil, hasSelection: false) == .welcome)
@@ -127,11 +129,13 @@ import Testing
     }
 
     @Test func permissionsAreOrderedSoRelaunchOnesComeTogetherAtTheEnd() {
-        let entries = Fixture.entries.filter { ["hinge", "keystrokeHighlight", "system", "calendar", "usage"].contains($0.id) }
+        let entries = Fixture.entries.filter {
+            ["hinge", "keystrokeHighlight", "system", "calendar", "usage"].contains($0.id)
+        }
         let items = HostOnboardingPermissionPlan.items(selected: entries, granted: [:])
         #expect(
             items.map(\.permission)
-                == [.calendar, .notifications, .inputMonitoring, .screenRecording, .accessibility])
+                == [.calendar, .notifications, .accessibility, .inputMonitoring, .screenRecording])
         let relaunchStart = items.firstIndex { $0.needsRelaunch }!
         let tail = Array(items[relaunchStart...])
         #expect(tail.allSatisfy { $0.needsRelaunch })
@@ -144,10 +148,13 @@ import Testing
     }
 
     @Test func currentPermissionIsTheFirstUngrantedNonDeferredAsk() {
-        let entries = Fixture.entries.filter { ["calendar", "usage", "notchShelf"].contains($0.id) }
+        let entries = Fixture.entries.filter {
+            ["calendar", "usage", "notchShelf"].contains($0.id)
+        }
         var items = HostOnboardingPermissionPlan.items(selected: entries, granted: [:])
         #expect(HostOnboardingPermissionPlan.current(items, deferred: []) == .calendar)
-        #expect(HostOnboardingPermissionPlan.current(items, deferred: [.calendar]) == .notifications)
+        #expect(
+            HostOnboardingPermissionPlan.current(items, deferred: [.calendar]) == .notifications)
         items = HostOnboardingPermissionPlan.items(selected: entries, granted: [.calendar: true])
         #expect(HostOnboardingPermissionPlan.current(items, deferred: []) == .notifications)
         let all = HostOnboardingPermissionPlan.items(
@@ -214,9 +221,52 @@ import Testing
         model.present()
         model.choose(.desk)
         model.continueFromTools()
-        await model.requestPermission(.accessibility)
+        await model.requestPermission(.screenRecording)
         #expect(model.relaunchBatch.isEmpty)
         #expect(model.permissions.awaitingRelaunch.isEmpty)
+        #expect(fixture.system.opened.isEmpty)
+    }
+
+    @Test func onlyScreenInputAndDiskPermissionsWaitForARelaunch() {
+        #expect(
+            Set(HostPermission.allCases.filter(\.needsRelaunch))
+                == [.inputMonitoring, .screenRecording, .fullDisk])
+        #expect(!HostPermission.accessibility.needsRelaunch)
+    }
+
+    @Test func accessibilityGrantedInSettingsIsDetectedLiveWithoutARelaunch() async {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let model = fixture.model()
+        model.present()
+        model.choose(.custom)
+        model.toggle("system")
+        model.continueFromTools()
+        await model.requestPermission(.accessibility)
+        #expect(model.relaunchBatch.isEmpty)
+        #expect(fixture.system.opened.count == 1)
+        fixture.system.granted[.accessibility] = true
+        await model.permissions.refresh()
+        #expect(model.permissionItems.first { $0.permission == .accessibility }?.isGranted == true)
+        #expect(model.relaunchBatch.isEmpty)
+        #expect(fixture.relaunches == 0)
+    }
+
+    @Test func settingsOpenOnlyWhenARequestLeavesThePermissionOff() async {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let model = fixture.model()
+        model.present()
+        model.choose(.custom)
+        model.toggle("calendar")
+        model.continueFromTools()
+        fixture.system.grantOnRequest = true
+        await model.requestPermission(.calendar)
+        #expect(fixture.system.opened.isEmpty)
+        fixture.system.grantOnRequest = false
+        fixture.system.granted = [:]
+        await model.requestPermission(.calendar)
+        #expect(fixture.system.opened == [HostPermission.calendar.settingsURL])
     }
 
     @Test func requestsRunOneAtATime() async {
@@ -245,7 +295,10 @@ import Testing
         try? await Task.sleep(for: .milliseconds(40))
         #expect(model.permissionItems.allSatisfy { !$0.isGranted })
         fixture.system.granted = [.accessibility: true]
-        for _ in 0..<50 where model.permissionItems.first(where: { $0.permission == .accessibility })?.isGranted != true {
+        for _ in 0..<50
+        where model.permissionItems.first(where: { $0.permission == .accessibility })?.isGranted
+            != true
+        {
             try? await Task.sleep(for: .milliseconds(10))
         }
         #expect(model.permissionItems.first { $0.permission == .accessibility }?.isGranted == true)
@@ -261,11 +314,12 @@ import Testing
         model.present()
         model.choose(.desk)
         model.continueFromTools()
-        #expect(model.currentPermission == .inputMonitoring)
+        #expect(model.currentPermission == .accessibility)
         model.deferPermission(.inputMonitoring, true)
-        #expect(model.currentPermission == .inputMonitoring)
+        #expect(model.deferredPermissions.isEmpty)
         model.deferPermission(.accessibility, true)
         #expect(model.deferredPermissions == [.accessibility])
+        #expect(model.currentPermission == .inputMonitoring)
         model.deferPermission(.accessibility, false)
         #expect(model.deferredPermissions.isEmpty)
     }
@@ -321,11 +375,14 @@ import Testing
         let page = model.destinations(for: entry).first!
         model.open(page: page.id)
         #expect(!model.presented)
-        #expect(fixture.defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "plainPage")
+        #expect(
+            fixture.defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "plainPage"
+        )
     }
 
     @Test func relaunchCommandWaitsForTheOldProcessThenOpensTheBundle() {
-        let arguments = HostApplicationRelaunch.arguments(pid: 4242, bundlePath: "/Applications/Edith.app")
+        let arguments = HostApplicationRelaunch.arguments(
+            pid: 4242, bundlePath: "/Applications/Edith.app")
         #expect(arguments.first == "-c")
         #expect(arguments.suffix(2) == ["4242", "/Applications/Edith.app"])
         #expect(arguments[1].contains("kill -0") && arguments[1].contains("/usr/bin/open"))
@@ -333,11 +390,15 @@ import Testing
         var terminated = 0
         HostApplicationRelaunch.perform(
             pid: 7, bundleURL: URL(fileURLWithPath: "/Applications/Edith.app"),
-            spawn: { spawned.append(($0, $1)); return true }, terminate: { terminated += 1 })
+            spawn: {
+                spawned.append(($0, $1)); return true
+            }, terminate: { terminated += 1 })
         #expect(spawned.count == 1 && spawned[0].0 == "/bin/sh" && terminated == 1)
         HostApplicationRelaunch.perform(
             pid: 7, bundleURL: URL(fileURLWithPath: "/tmp/not-an-app"),
-            spawn: { spawned.append(($0, $1)); return true }, terminate: { terminated += 1 })
+            spawn: {
+                spawned.append(($0, $1)); return true
+            }, terminate: { terminated += 1 })
         #expect(spawned.count == 1 && terminated == 1)
         HostApplicationRelaunch.perform(
             pid: 7, bundleURL: URL(fileURLWithPath: "/Applications/Edith.app"),
@@ -350,20 +411,25 @@ import Testing
         var requests: [HostPermission] = []
         var grantOnRequest = false
         var requestDelay = Duration.zero
+        var opened: [URL?] = []
     }
 
     @MainActor final class Fixture {
         static let entries: [HostExtension] = [
             HostExtension(id: "hinge", title: "Hinge", symbolName: "a.circle", category: "desk"),
             HostExtension(
-                id: "keystrokeHighlight", title: "Keystrokes", symbolName: "b.circle", category: "desk"),
+                id: "keystrokeHighlight", title: "Keystrokes", symbolName: "b.circle",
+                category: "desk"),
             HostExtension(id: "system", title: "System", symbolName: "c.circle", category: "desk"),
-            HostExtension(id: "calendar", title: "Calendar", symbolName: "calendar", category: "utilities"),
+            HostExtension(
+                id: "calendar", title: "Calendar", symbolName: "calendar", category: "utilities"),
             HostExtension(id: "usage", title: "Usage", symbolName: "chart.bar", category: "agents"),
-            HostExtension(id: "notchShelf", title: "Notch", symbolName: "d.circle", category: "labs"),
+            HostExtension(
+                id: "notchShelf", title: "Notch", symbolName: "d.circle", category: "labs"),
             HostExtension(
                 id: "plain", title: "Plain", symbolName: "e.circle", category: "media",
-                pages: [HostPage(id: "plainPage", title: "Plain", symbolName: "e.circle", order: 0)]),
+                pages: [HostPage(id: "plainPage", title: "Plain", symbolName: "e.circle", order: 0)]
+            ),
         ]
         let name = "com.pulkit.edith.tests.journey.\(UUID().uuidString)"
         let defaults: UserDefaults
@@ -388,14 +454,22 @@ import Testing
                     read: { system.granted },
                     request: { permission in
                         system.requests.append(permission)
-                        if system.requestDelay > .zero { try? await Task.sleep(for: system.requestDelay) }
+                        if system.requestDelay > .zero {
+                            try? await Task.sleep(for: system.requestDelay)
+                        }
                         if system.grantOnRequest { system.granted[permission] = true }
-                    }, openSettings: { _ in true }),
+                    },
+                    openSettings: {
+                        system.opened.append($0); return true
+                    }),
                 defaults: defaults, recordPrompt: {}, relaunch: { self.relaunches += 1 })
             return HostWorkflowOnboardingModel(
                 entries: Self.entries, defaults: defaults,
                 environment: HostWorkflowEnvironment(
-                    available: { Dictionary(uniqueKeysWithValues: Self.entries.map { ($0.id, self.package($0.id)) }) },
+                    available: {
+                        Dictionary(
+                            uniqueKeysWithValues: Self.entries.map { ($0.id, self.package($0.id)) })
+                    },
                     installed: { self.installed }, active: { self.installed }, refresh: {},
                     install: { id, _ in
                         self.installs.append(id)

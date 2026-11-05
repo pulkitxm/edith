@@ -76,7 +76,7 @@ enum HostPermission: String, CaseIterable, Hashable, Sendable {
     }
 
     var needsRelaunch: Bool {
-        [.accessibility, .inputMonitoring, .screenRecording, .fullDisk].contains(self)
+        [.inputMonitoring, .screenRecording, .fullDisk].contains(self)
     }
 
     var plainWords: String {

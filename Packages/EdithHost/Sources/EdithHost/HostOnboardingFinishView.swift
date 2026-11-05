@@ -5,119 +5,238 @@ import SwiftUI
 struct HostOnboardingInstallView: View {
     @Bindable var model: HostWorkflowOnboardingModel
     let progress: (String) -> Double
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            PageSectionHeader(
-                "Installing your tools",
-                subtitle: "Edith downloads, verifies and starts only the tools you selected.")
-            ForEach(model.selectedEntries) { entry in
+        let entries = model.selectedEntries
+        let ready = entries.filter { model.states[$0.id] == .ready }.count
+        let failed = !model.busy && ready < entries.count
+        VStack(alignment: .leading, spacing: UIScale.pt(20)) {
+            HostOnboardingStepHeader(
+                failed ? "Some tools did not finish" : "Installing your tools",
+                subtitle: failed
+                    ? "The tools that finished are ready to use. Retry the rest, or change your selection."
+                    : "Edith downloads, checks and starts each tool. This usually takes a few seconds."
+            )
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 HStack {
-                    Image(systemName: entry.symbolName).frame(width: UIScale.pt(24))
-                    Text(entry.title)
+                    Text("\(ready) of \(entries.count) ready").font(.edithText(.callout))
+                        .fontWeight(.medium).monospacedDigit()
                     Spacer()
-                    switch model.states[entry.id] ?? .waiting {
-                    case .waiting: Text("Waiting").foregroundStyle(.secondary)
-                    case .installing: Text("Downloading and starting").foregroundStyle(.secondary)
-                    case .ready:
-                        Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                    case .failed:
-                        Label("Needs retry", systemImage: "exclamationmark.circle")
-                            .foregroundStyle(.orange)
-                    }
-                }.font(.edithText(.callout))
-                if case .installing = model.states[entry.id] {
-                    ProgressView(value: min(1, max(0, progress(entry.id))))
                 }
-                if case .failed(let failure) = model.states[entry.id] {
-                    Text(failure).font(.edithText(.caption)).foregroundStyle(.orange)
+                LoadingProgress(
+                    value: Double(ready), total: Double(max(entries.count, 1)),
+                    tint: failed ? DashSkin.warn : nil)
+            }
+            if let failure = model.failure,
+                !entries.contains(where: {
+                    if case .failed = model.states[$0.id] { return true } else { return false }
+                })
+            {
+                PageNotice(failure, tone: .warning)
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    if index > 0 { Divider().padding(.leading, UIScale.pt(56)) }
+                    row(entry)
                 }
             }
-            HStack {
-                if model.busy {
-                    Button("Cancel setup") { model.cancel() }
-                } else {
+            .hostOnboardingTile()
+            if model.busy {
+                HostOnboardingFooter(
+                    primary: PageAction("Cancel setup", identifier: "onboarding.cancel") {
+                        model.cancel()
+                    }, primaryRole: .secondary)
+            } else {
+                HostOnboardingFooter(
+                    primary: PageAction(
+                        "Retry setup", symbolName: "arrow.clockwise", identifier: "onboarding.retry"
+                    ) { model.installSelection() },
+                    primaryEnabled: model.canInstall
+                ) {
                     Button("Change selection") { model.back() }
-                    Spacer()
-                    Button("Retry setup") { model.installSelection() }
-                        .buttonStyle(.edith(.primary)).disabled(!model.canInstall)
+                        .buttonStyle(.edith(.secondary))
+                        .accessibilityIdentifier("onboarding.change-selection")
                 }
             }
         }
+    }
+
+    private func row(_ entry: HostExtension) -> some View {
+        let state = model.states[entry.id] ?? .waiting
+        return HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            HostOnboardingIcon(symbolName: entry.symbolName, size: 32)
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                Text(entry.title).font(.edithText(.callout)).fontWeight(.medium)
+                switch state {
+                case .installing:
+                    LoadingProgress(value: min(1, max(0, progress(entry.id))))
+                        .frame(maxWidth: UIScale.pt(240))
+                case .failed(let message):
+                    Text(message).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .waiting, .ready:
+                    EmptyView()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            status(state, id: entry.id)
+        }
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(12))
+        .frame(minHeight: UIScale.pt(56))
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private func status(_ state: HostWorkflowOnboardingModel.InstallState, id: String)
+        -> some View
+    {
+        Group {
+            switch state {
+            case .waiting:
+                Label("Waiting", systemImage: "clock").foregroundStyle(.secondary)
+            case .installing:
+                Text("\(Int((min(1, max(0, progress(id)))) * 100))%")
+                    .foregroundStyle(.secondary).monospacedDigit()
+            case .ready:
+                Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(DashSkin.ok)
+            case .failed:
+                Label("Needs retry", systemImage: "exclamationmark.circle.fill")
+                    .foregroundStyle(DashSkin.warn)
+            }
+        }
+        .font(.edithText(.caption)).fontWeight(.medium)
+        .fixedSize()
     }
 }
 
 struct HostOnboardingFinishView: View {
     @Bindable var model: HostWorkflowOnboardingModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            if model.selected.isEmpty { empty } else { installed }
-            Text("Agents can drive any tool through the ed command line and MCP.")
-                .font(.edithText(.caption)).foregroundStyle(.secondary)
-            HStack {
-                Button("View Storage") { model.openStorage() }
-                Spacer()
-                Button("Start using Edith") { model.dismiss() }.buttonStyle(.edith(.primary))
-                    .keyboardShortcut(.defaultAction)
-                    .accessibilityIdentifier("onboarding.finish")
-            }
-        }
+        if model.selected.isEmpty { empty } else { installed }
     }
 
     private var empty: some View {
-        PageEmptyState(
-            symbolName: "checkmark.circle", title: "Edith is ready",
-            message:
-                "No tools yet. Open the marketplace from the sidebar whenever you want to add some, or run setup again from Settings.")
-            .frame(minHeight: UIScale.pt(220))
+        VStack(spacing: UIScale.pt(20)) {
+            PageGuideBadge(symbolName: "checkmark", size: compact ? 48 : 56)
+            VStack(spacing: UIScale.pt(8)) {
+                Text("Edith is ready").font(.edithText(.title2)).fontWeight(.bold)
+                    .accessibilityAddTraits(.isHeader)
+                Text(
+                    "You have not added any tools yet. Open Extensions in the sidebar whenever you want some, or run setup again from Settings."
+                )
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: UIScale.pt(440))
+            }
+            finishButton
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, UIScale.pt(compact ? 24 : 32))
     }
 
     private var installed: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Label("You are all set", systemImage: "checkmark.circle.fill")
-                .font(.edithText(.title3)).fontWeight(.semibold).foregroundStyle(.green)
-            Text("Here is where each tool lives and how to open it.")
-                .font(.edithText(.callout)).foregroundStyle(.secondary)
-            ForEach(model.selectedEntries) { entry in row(entry) }
+        VStack(alignment: .leading, spacing: UIScale.pt(20)) {
+            HStack(alignment: .center, spacing: UIScale.pt(16)) {
+                PageGuideBadge(symbolName: "checkmark", size: compact ? 48 : 56)
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text("You are all set").font(.edithText(.title2)).fontWeight(.bold)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(
+                        "\(model.selected.count) \(model.selected.count == 1 ? "tool is" : "tools are") ready. Here is where to find each one."
+                    )
+                    .font(.edithText(.callout)).foregroundStyle(DashSkin.inkSoft(dark))
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            LazyVGrid(
+                columns: [
+                    GridItem(
+                        .adaptive(minimum: UIScale.pt(320)), spacing: UIScale.pt(12),
+                        alignment: .top)
+                ], alignment: .leading, spacing: UIScale.pt(12)
+            ) {
+                ForEach(model.selectedEntries) { entry in card(entry) }
+            }
+            Label(
+                "Agents can use these tools too, through the ed command line and MCP.",
+                systemImage: "terminal"
+            )
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            HostOnboardingFooter(
+                primary: PageAction("Start using Edith", identifier: "onboarding.finish") {
+                    model.dismiss()
+                }
+            ) {
+                Button("View storage") { model.openStorage() }
+                    .buttonStyle(.edith(.borderless))
+                    .foregroundStyle(DashSkin.accentDeep(dark))
+                    .help("See how much disk space your tools use.")
+                    .accessibilityIdentifier("onboarding.storage")
+            }
         }
     }
 
-    private func row(_ entry: HostExtension) -> some View {
+    private var finishButton: some View {
+        Button("Start using Edith") { model.dismiss() }
+            .buttonStyle(.edith(.primary))
+            .keyboardShortcut(.defaultAction)
+            .accessibilityIdentifier("onboarding.finish")
+    }
+
+    private func card(_ entry: HostExtension) -> some View {
         let pages = model.destinations(for: entry)
-        return HStack(alignment: .top, spacing: UIScale.pt(12)) {
-            Image(systemName: entry.symbolName).foregroundStyle(DashSkin.accent(dark))
-                .frame(width: UIScale.pt(24))
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                Text(entry.title).font(.edithText(.body)).fontWeight(.semibold)
-                Text(model.tagline(for: entry)).font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-                Text(location(entry, pages: pages)).font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-                if let example = entry.guide?.examples.first {
-                    Text(example).font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
+        return VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                HostOnboardingIcon(symbolName: entry.symbolName, size: 32)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(entry.title).font(.edithText(.headline))
+                    Text(model.tagline(for: entry)).font(.edithText(.caption))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2, reservesSpace: !compact)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                Label(
+                    location(entry, pages: pages), systemImage: locationSymbol(entry, pages: pages)
+                )
+                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let page = pages.first {
+                    Button("Open") { model.open(page: page.id) }
+                        .buttonStyle(.edith(.secondary))
+                        .fixedSize()
+                        .accessibilityLabel("Open \(page.title)")
+                        .accessibilityIdentifier("onboarding.open.\(entry.id)")
                 }
             }
-            Spacer(minLength: 0)
-            if let page = pages.first {
-                Button("Open \(page.title)") { model.open(page: page.id) }
-                    .buttonStyle(.edith(.secondary))
-                    .accessibilityIdentifier("onboarding.open.\(entry.id)")
-            }
+            .frame(minHeight: pages.isEmpty && compact ? nil : UIScale.pt(32))
         }
-        .padding(UIScale.pt(12))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .padding(UIScale.pt(16))
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .hostOnboardingTile()
     }
 
     private func location(_ entry: HostExtension, pages: [HostPage]) -> String {
         if !pages.isEmpty {
-            return "In the sidebar: " + pages.map(\.title).joined(separator: ", ")
+            return "In the sidebar under " + pages.map(\.title).joined(separator: ", ")
         }
-        if !entry.hotkeys.isEmpty { return "Runs in the background. Use its hotkey from anywhere." }
+        if !entry.hotkeys.isEmpty { return "Runs in the background. Use its hotkey anywhere." }
         return "Runs in the background, from the menu bar or the notch."
+    }
+
+    private func locationSymbol(_ entry: HostExtension, pages: [HostPage]) -> String {
+        if !pages.isEmpty { return "sidebar.left" }
+        if !entry.hotkeys.isEmpty { return "command" }
+        return "menubar.rectangle"
     }
 }

@@ -67,8 +67,10 @@ import HostAccessibilityFixtureSupport
             #expect(text.contains { $0.contains("to download · about") && $0.contains("on disk") })
             #expect(!text.contains { $0.contains("APFS") || $0.contains("unpacked package") })
             #expect(
-                text.contains(
-                    ByteCountFormatter.string(fromByteCount: 2_000_000, countStyle: .file)))
+                text.contains {
+                    $0.contains(
+                        ByteCountFormatter.string(fromByteCount: 2_000_000, countStyle: .file))
+                })
             if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
                 let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
                 host.cacheDisplay(in: host.bounds, to: bitmap)
@@ -441,7 +443,7 @@ import HostAccessibilityFixtureSupport
         defer { fixture.remove() }
         let model = fixture.model()
         model.present()
-        #expect(model.skipTitle == "Start without extensions")
+        #expect(model.skipTitle == "Start without tools")
         model.skip()
         #expect(fixture.active.isEmpty)
         #expect(fixture.installs.isEmpty)
