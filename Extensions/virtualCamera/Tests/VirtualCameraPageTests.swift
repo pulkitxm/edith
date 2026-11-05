@@ -75,7 +75,7 @@ import Testing
                     UIScale.apply(zoom)
                     let host = try auditHost(
                         VirtualCameraOutputPanel(model: model, dark: true),
-                        size: CGSize(width: width, height: 900))
+                        size: CGSize(width: width, height: 1400))
                     let text = try auditText(host).split(whereSeparator: \.isWhitespace).joined(
                         separator: " ")
                     #expect(text.contains("Edith Camera: " + model.cameraExtension.title))
@@ -475,7 +475,7 @@ import Testing
         model.injectForTesting(snapshot: nil, sources: [])
         #expect(model.meetingAppHint.contains("Install Edith Camera"))
         let snapshot = VirtualCameraSnapshot(
-            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
+            enabled: true, helperRunning: true, extensionInstalled: true,
             clients: [], live: false, format: .hd720, state: model.state)
         model.receive(snapshot)
         #expect(

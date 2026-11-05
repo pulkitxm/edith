@@ -259,10 +259,10 @@ extension VirtualCameraPageModel {
         if state.privacy == .stopped {
             return "Capture is stopped. Press Play to start your camera again."
         }
-        guard let route = snapshot?.route else {
+        guard snapshot?.extensionInstalled == true else {
             return
-                "Install Edith Camera from Extensions, or OBS Studio, so Zoom, Meet and FaceTime can show this picture."
+                "Install Edith Camera in Output so Zoom, Meet and FaceTime can show this picture."
         }
-        return "In Zoom, Meet or FaceTime, choose \(route.cameraName) as your camera."
+        return "In Zoom, Meet or FaceTime, choose Edith Camera as your camera."
     }
 }

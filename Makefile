@@ -383,7 +383,7 @@ ci-extension-audio-mixer:
 
 .PHONY: ci-extension-camera
 ci-extension-camera:
-	swift test --package-path Extensions/virtualCamera/Privileged --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel --force-resolved-versions
+	swift test --package-path Extensions/virtualCamera/Privileged --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel --force-resolved-versions -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 	$(call UTILITY_EXTENSION_NATIVE_TEST,virtualCamera)
 	swiftc -typecheck -swift-version 5 -module-name CameraCarrierRole -target arm64-apple-macos14.0 -I Extensions/virtualCamera/.build/arm64-apple-macosx/debug/Modules Extensions/virtualCamera/CameraCarrierRuntime.swift Extensions/virtualCamera/CameraCarrierLease.swift Extensions/virtualCamera/CameraCarrierProtocol.swift Extensions/virtualCamera/CameraCarrierSession.swift Extensions/virtualCamera/CameraSystemExtensionController.swift Extensions/virtualCamera/Carrier/Factory.swift
 	swiftc -typecheck -swift-version 5 -module-name CameraProviderRole -target arm64-apple-macos14.0 -I Extensions/virtualCamera/.build/arm64-apple-macosx/debug/Modules Extensions/virtualCamera/Provider/*.swift Extensions/virtualCamera/ProviderFactory/Factory.swift Extensions/virtualCamera/Support/*.swift
