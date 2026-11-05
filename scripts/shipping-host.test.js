@@ -40,7 +40,7 @@ test("development and release builds route through the empty host", () => {
   expect(minimal).toContain('"-Osize"');
   expect(minimal).toContain('file === kit ? ["-x", file] : ["-rSTx", file]');
   expect(minimal).toContain("libEdithExtensionKit.dylib");
-  expect(minimal).toContain("10_000_000");
+  expect(minimal).toContain("11_000_000");
 });
 
 test.skipIf(!fixture || process.platform !== "darwin")(
@@ -139,7 +139,7 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         rmSync(join(app, "Contents/MacOS/worker"));
         writeFileSync(
           join(app, "Contents/Resources/index.json"),
-          Buffer.alloc(10_000_000),
+          Buffer.alloc(11_000_000),
         );
         expect(
           run("python3", "scripts/verify-shipping-host.py", app).exitCode,

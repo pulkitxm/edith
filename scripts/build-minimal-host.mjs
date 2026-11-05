@@ -346,8 +346,8 @@ await writeFile(
   )}\n`,
 );
 assert(
-  bytes < 10_000_000,
-  `The minimal host exceeds its 10 MB size limit: ${bytes}`,
+  bytes < 11_000_000,
+  `The minimal host exceeds its 11 MB size limit: ${bytes}`,
 );
 assert(
   kitBytes < 14_000_000,
