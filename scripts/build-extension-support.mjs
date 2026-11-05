@@ -66,6 +66,10 @@ export function supportSourceInputs(product) {
   const inputs = supportProducts(product).map(
     (name) => `Packages/ExtensionSupport/Sources/${name}`,
   );
+  inputs.push(
+    "Packages/EdithIcons/Package.swift",
+    "Packages/EdithIcons/Sources",
+  );
   if (supportProducts(product).includes("EdithExtensionCommands"))
     inputs.push(
       "Packages/ExtensionSupport/Licenses/swift-argument-parser-license.txt",

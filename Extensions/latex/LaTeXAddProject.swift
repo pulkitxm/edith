@@ -8,8 +8,8 @@ struct LaTeXAddProject: View {
     let model: LaTeXModel
     let onAdded: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var location = LaTeXLocation.disk
-    @State private var compiler = LaTeXCompiler.tectonic
+    @State private var location: LaTeXLocation
+    @State private var compiler: LaTeXCompiler
     @State private var name = ""
     @State private var sourcePath = ""
     @State private var repository = ""
@@ -17,13 +17,18 @@ struct LaTeXAddProject: View {
     @State private var busy = false
     @State private var error: String?
 
+    init(
+        model: LaTeXModel, location: LaTeXLocation = .disk, onAdded: @escaping () -> Void
+    ) {
+        self.model = model
+        self.onAdded = onAdded
+        _location = State(initialValue: location)
+        _compiler = State(initialValue: location == .github ? .pdfLatex : .tectonic)
+    }
+
     var body: some View {
-        PageScaffold(width: .readable) {
-            PageHeader(
-                "Add LaTeX project",
-                trailing: {
-                    Button("Cancel") { dismiss() }.disabled(busy)
-                })
+        PageScaffold(width: .readable, pinnedHeader: true) {
+            PageHeader("Add LaTeX project", divider: true)
         } content: {
             EdithSegmentedPicker(
                 "Storage", selection: $location, options: LaTeXLocation.allCases,
@@ -34,27 +39,33 @@ struct LaTeXAddProject: View {
                 sourcePath = ""; error = nil
                 compiler = location == .github ? .pdfLatex : .tectonic
             }
-            EdithSegmentedPicker(
-                "Compiler", selection: $compiler, options: LaTeXCompiler.allCases,
-                label: { $0.title }
-            ).disabled(busy)
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            Text(location.summary).font(.edithText(.subheadline)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
+                Text("Compiler").font(.edithText(.headline))
+                EdithSegmentedPicker(
+                    "Compiler", selection: $compiler, options: LaTeXCompiler.allCases,
+                    label: { $0.title }
+                ).disabled(busy)
+                Text(compiler.summary).font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 field("Project name", placeholder: "Research paper", text: $name)
                 if location == .github {
                     field("Repository", placeholder: "owner/repository", text: $repository)
                     field("Base branch", placeholder: "Repository default", text: $branch)
                     field("Source path", placeholder: "papers/main.tex", text: $sourcePath)
                     Text(
-                        "GitHub holds the source and compiled PDFs. Submitting changes adds a compiler workflow and opens a pull request. Review with Quinjet, then squash merge now or after checks pass."
+                        "Nothing is cloned to your Mac. The first save adds a PDF build workflow and opens a pull request you can review and merge. Requires GitHub access through Pukbot."
                     )
                     .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                 } else {
-                    HStack(alignment: .bottom) {
+                    HStack(alignment: .bottom, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                         field("Source file", placeholder: "/path/to/main.tex", text: $sourcePath)
                         Button("Choose file…") { chooseFile() }
+                            .buttonStyle(.edith(.secondary))
                     }
                     Text(
-                        "The source stays on this Mac. Save & compile writes a PDF beside the .tex file."
+                        "Your file is never moved or copied. Edith only reads it and saves your edits back to it."
                     )
                     .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                 }
@@ -62,29 +73,52 @@ struct LaTeXAddProject: View {
             if let error {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.red).textSelection(.enabled)
             }
-            HStack {
-                if busy { LoadingIndicator(); Text("Checking source…").font(.edithText(.caption)) }
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                if busy {
+                    LoadingIndicator()
+                    Text("Checking source…").font(.edithText(.caption))
+                } else if let addDisabledReason {
+                    Text(addDisabledReason).font(.edithText(.caption))
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.edith(.secondary))
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(busy)
                 Button("Add project") { add() }
                     .buttonStyle(.edith(.primary))
-                    .disabled(
-                        busy || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || sourcePath.isEmpty
-                    )
+                    .disabled(!canAdd)
+                    .help(addDisabledReason ?? "Add this project to your library")
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .frame(width: UIScale.pt(520), height: UIScale.pt(510))
+        .frame(width: UIScale.pt(520), height: UIScale.pt(580))
         .transientPresentation(
             dismissible: !busy && name.isEmpty && sourcePath.isEmpty && repository.isEmpty)
     }
 
+    private var canAdd: Bool { !busy && addDisabledReason == nil }
+
+    private var addDisabledReason: String? {
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Give the project a name first."
+        }
+        if sourcePath.isEmpty {
+            return location == .disk
+                ? "Choose a .tex file first." : "Enter the path of the .tex file in the repository."
+        }
+        if location == .github && repository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return "Enter the repository as owner/repository."
+        }
+        return nil
+    }
+
     private func field(_ title: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
             Text(title).font(.edithText(.headline))
-            TextField(placeholder, text: text)
-                .textFieldStyle(.roundedBorder)
-                .font(.edithText(.body))
+            EdithTextField(placeholder: placeholder, text: text)
                 .accessibilityLabel(title)
         }
     }

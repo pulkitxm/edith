@@ -61,7 +61,8 @@ import Foundation
                         "The background owner did not acknowledge this job.")
                 }
                 await services.refresh()
-            })
+            },
+            settleAttempts: 4)
     }
 
     static func policy(_ services: HostCoreServices) -> HostBackgroundPolicyEnvironment {

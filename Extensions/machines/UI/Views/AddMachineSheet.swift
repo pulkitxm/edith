@@ -32,6 +32,7 @@ struct AddMachineSheet: View {
     }
 
     var editing: Machine?
+    var loadConfiguration: (@MainActor () async throws -> MachineUIConfigurationState)?
     let onSave: (Machine, Secrets) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -52,6 +53,8 @@ struct AddMachineSheet: View {
     @State private var sshClipboardEnabled = false
     @State private var testState = TestState.idle
     @State private var testTask: Task<Void, Never>?
+    @State private var showsMoreOptions = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var dark: Bool { scheme == .dark }
 
@@ -64,7 +67,7 @@ struct AddMachineSheet: View {
 
         var title: String {
             switch self {
-            case .agent: return "SSH agent or default key"
+            case .agent: return "SSH agent"
             case .key: return "Key file"
             case .password: return "Password"
             }
@@ -76,24 +79,25 @@ struct AddMachineSheet: View {
             headerBar
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                    if editing == nil {
-                        EdithSegmentedPicker(
-                            "", selection: $mode, options: Mode.allCases, label: { $0.title }
-                        )
-                        .labelsHidden()
-                    }
-                    if mode == .sshConfig, editing == nil {
-                        configSection
-                    } else {
-                        manualSection
+                VStack(alignment: .leading, spacing: UIScale.pt(24)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        if editing == nil {
+                            EdithSegmentedPicker(
+                                "", selection: $mode, options: Mode.allCases, label: { $0.title }
+                            )
+                            .labelsHidden()
+                        }
+                        if mode == .sshConfig, editing == nil {
+                            configSection
+                        } else {
+                            manualSection
+                        }
                     }
                     authSection
-                    sshClipboardSection
-                    sudoSection
+                    moreOptions
                     testSection
                 }
-                .padding(UIScale.pt(20))
+                .padding(UIScale.pt(24))
                 .machinePrivacyCover()
             }
             Divider()
@@ -106,23 +110,32 @@ struct AddMachineSheet: View {
     }
 
     private var headerBar: some View {
-        HStack {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(editing == nil ? "Add a machine" : "Edit machine")
                 .font(DashSkin.heading(20))
                 .foregroundStyle(DashSkin.ink(dark))
-            Spacer()
+                .accessibilityAddTraits(.isHeader)
+            Text(
+                editing == nil
+                    ? "Connect any computer you can reach over SSH. You can change these details later."
+                    : "Changes apply the next time Edith connects to this machine."
+            )
+            .font(.edithText(.callout))
+            .foregroundStyle(DashSkin.inkSoft(dark))
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, UIScale.pt(20))
-        .padding(.vertical, UIScale.pt(14))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, UIScale.pt(24))
+        .padding(.top, UIScale.pt(20))
+        .padding(.bottom, UIScale.pt(16))
     }
 
     private var configSection: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            eyebrow("HOSTS IN ~/.SSH/CONFIG")
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             if configHosts.isEmpty {
-                Text("No hosts found in ~/.ssh/config. Switch to Enter details instead.")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                helpText("No hosts found in ~/.ssh/config. Choose Enter details instead.")
+            } else {
+                helpText("Pick a host you already set up in ~/.ssh/config.")
             }
             VStack(spacing: UIScale.pt(0)) {
                 ForEach(configHosts) { configHost in
@@ -130,25 +143,22 @@ struct AddMachineSheet: View {
                         select(configHost)
                     } label: {
                         HStack(spacing: UIScale.pt(10)) {
-                            Image(
-                                systemName: selectedAlias == configHost.alias
-                                    ? "largecircle.fill.circle" : "circle"
-                            )
-                            .foregroundStyle(
-                                selectedAlias == configHost.alias
-                                    ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                            EdithIconView(selectedAlias == configHost.alias ? .radioOn : .ring)
+                                .foregroundStyle(
+                                    selectedAlias == configHost.alias
+                                        ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                                 Text(configHost.alias)
-                                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                    .font(.edithText(.body).weight(.medium))
                                     .foregroundStyle(DashSkin.ink(dark))
                                 Text(configHost.displayTarget)
-                                    .font(DashSkin.mono(10.5))
+                                    .font(.edithText(.caption, design: .monospaced))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                             }
                             Spacer(minLength: 0)
                         }
-                        .padding(.vertical, UIScale.pt(7))
-                        .padding(.horizontal, UIScale.pt(9))
+                        .padding(.vertical, UIScale.pt(8))
+                        .padding(.horizontal, UIScale.pt(12))
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
@@ -161,80 +171,111 @@ struct AddMachineSheet: View {
     }
 
     private var manualSection: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            eyebrow("CONNECTION")
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             labelledField("Display name", text: $name, placeholder: "Build server")
-            labelledField("Host", text: $host, placeholder: "192.168.1.12")
-            HStack(spacing: UIScale.pt(10)) {
-                labelledField("User", text: $username, placeholder: "pulkit")
+            labelledField("Address", text: $host, placeholder: "192.168.1.12 or server.example.com")
+            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                labelledField("Username", text: $username, placeholder: "admin")
                 labelledField("Port", text: $port, placeholder: "22")
-                    .frame(width: UIScale.pt(110))
+                    .frame(width: UIScale.pt(96))
             }
         }
     }
 
     private var authSection: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            eyebrow("AUTHENTICATION")
-            Picker("", selection: $authKind) {
-                ForEach(AuthKind.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.radioGroup)
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            PageCapsLabel("Sign in with")
+            EdithSegmentedPicker(
+                "", selection: $authKind, options: AuthKind.allCases, label: { $0.title }
+            )
             .labelsHidden()
             if authKind == .key {
-                HStack(spacing: UIScale.pt(8)) {
+                HStack(alignment: .bottom, spacing: UIScale.pt(8)) {
                     labelledField("Key file", text: $keyPath, placeholder: "~/.ssh/id_ed25519")
                     Button("Choose…") { chooseKey() }
+                        .buttonStyle(.edith(.secondary))
                 }
                 secureField("Passphrase (optional)", text: $secret)
             }
             if authKind == .password {
                 secureField("Password", text: $secret)
-                Text("Stored in your Mac's Keychain and never passed on a command line.")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                helpText("Stored in your Mac's Keychain and never passed on a command line.")
             }
             if authKind == .agent {
-                Text("Uses your SSH agent and the keys ssh already loads for this host.")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                helpText(
+                    "Uses your SSH agent and the keys ssh already loads for this host. Pick this if ssh works in Terminal without a password."
+                )
+            }
+        }
+    }
+
+    private var moreOptions: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            Button {
+                withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                    showsMoreOptions.toggle()
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                    EdithIconView(.chevronRight)
+                        .font(.edithText(.caption).weight(.semibold))
+                        .rotationEffect(.degrees(showsMoreOptions ? 90 : 0))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text("More options")
+                            .font(.edithText(.body).weight(.medium))
+                            .foregroundStyle(DashSkin.ink(dark))
+                        Text("Clipboard sync and a sudo password. Optional.")
+                            .font(.edithText(.caption))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .accessibilityValue(showsMoreOptions ? "Expanded" : "Collapsed")
+            if showsMoreOptions {
+                sshClipboardSection
+                sudoSection
             }
         }
     }
 
     private var sudoSection: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            eyebrow("PRIVILEGED ACTIONS")
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            PageCapsLabel("Admin actions")
             if sudoPasswordStored, sudoPassword.isEmpty, !forgetSudoPassword {
-                HStack(spacing: UIScale.pt(10)) {
-                    Text("A sudo password is saved for this machine.")
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                HStack(spacing: UIScale.pt(8)) {
+                    helpText("A sudo password is saved for this machine.")
                     Button("Forget") { forgetSudoPassword = true }
+                        .buttonStyle(.edith(.secondary))
                 }
             }
-            secureField("Sudo password (optional)", text: $sudoPassword)
-            Text(
-                "Shut down, restart and unit actions need root. Without this, Edith can only try "
+            secureField("Sudo password", text: $sudoPassword)
+            helpText(
+                "Shut down, restart and service actions need root. Without this, Edith can only try "
                     + "passwordless sudo. Stored in your Mac's Keychain and sent on the command's "
-                    + "standard input, never on a command line."
-            )
-            .font(.system(size: UIScale.pt(11)))
-            .foregroundStyle(DashSkin.inkFaint(dark))
+                    + "standard input, never on a command line.")
         }
     }
 
     private var sshClipboardSection: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            eyebrow("SSH CLIPBOARD")
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            PageCapsLabel("Clipboard")
             Toggle("Sync clipboard with this machine", isOn: $sshClipboardEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(.edithSwitch)
+                .font(.edithText(.body))
                 .disabled(authKind != .agent)
-            Text(sshClipboardHelp)
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .fixedSize(horizontal: false, vertical: true)
+            helpText(sshClipboardHelp)
         }
+    }
+
+    private func helpText(_ text: String) -> some View {
+        Text(text)
+            .font(.edithText(.caption))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var sshClipboardHelp: String {
@@ -245,18 +286,22 @@ struct AddMachineSheet: View {
             return
                 "Saving installs or repairs the background service on both machines and starts syncing automatically."
         }
-        return "Clipboard sync is disabled for this machine."
+        return "Copy on one machine and paste on the other. Off by default."
     }
 
     private var testSection: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack(spacing: UIScale.pt(10)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            HStack(spacing: UIScale.pt(12)) {
                 Button {
                     runTest()
                 } label: {
                     Text("Test connection")
                 }
+                .buttonStyle(.edith(.secondary))
                 .disabled(!isValid || testState == .testing)
+                .fixedSize()
+                helpText(
+                    isValid ? "Checks the address and sign-in before you save." : missingDetails)
                 Spacer(minLength: 0)
             }
             switch testState {
@@ -277,38 +322,42 @@ struct AddMachineSheet: View {
                 }
                 .accessibilityLabel("Testing connection")
             case let .success(message):
-                statusLine(message, symbol: "checkmark.circle.fill", color: DashSkin.ok)
+                statusLine(message, icon: .success, color: DashSkin.ok)
             case let .failure(message):
-                statusLine(message, symbol: "exclamationmark.triangle.fill", color: DashSkin.danger)
+                statusLine(message, icon: .warning, color: DashSkin.danger)
             default:
                 EmptyView()
             }
         }
     }
 
-    private func statusLine(_ message: String, symbol: String, color: Color) -> some View {
+    private func statusLine(_ message: String, icon: EdithIcon, color: Color) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(7)) {
-            Image(systemName: symbol).foregroundStyle(color)
+            EdithIconView(icon).foregroundStyle(color)
             Text(message)
-                .font(.system(size: UIScale.pt(11.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(UIScale.pt(10))
+        .padding(UIScale.pt(12))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
 
     private var footerBar: some View {
-        HStack {
-            Button("Cancel") { dismiss() }
-                .keyboardShortcut(.cancelAction)
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             Spacer()
+            Button("Cancel") { dismiss() }
+                .buttonStyle(.edith(.secondary))
+                .keyboardShortcut(.cancelAction)
             Button(editing == nil ? "Add machine" : "Save") { save() }
+                .buttonStyle(.edith(.primary))
                 .keyboardShortcut(.defaultAction)
                 .disabled(!isValid)
+                .help(isValid ? "" : missingDetails)
         }
-        .padding(UIScale.pt(16))
+        .padding(.horizontal, UIScale.pt(24))
+        .padding(.vertical, UIScale.pt(16))
     }
 
     private func labelledField(
@@ -316,21 +365,26 @@ struct AddMachineSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(title)
-                .font(.system(size: UIScale.pt(11), weight: .medium))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            TextField(placeholder, text: text)
-                .textFieldStyle(.roundedBorder)
+                .font(.edithText(.subheadline).weight(.medium))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+            EdithTextField(placeholder: placeholder, text: text)
         }
     }
 
     private func secureField(_ title: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(title)
-                .font(.system(size: UIScale.pt(11), weight: .medium))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            SecureField("", text: text)
-                .textFieldStyle(.roundedBorder)
+                .font(.edithText(.subheadline).weight(.medium))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+            EdithSecureField(placeholder: "", text: text)
+                .accessibilityLabel(title)
         }
+    }
+
+    private var missingDetails: String {
+        mode == .sshConfig && editing == nil
+            ? "Pick a host and give it a name first."
+            : "Add a name and an address first."
     }
 
     private var isValid: Bool {
@@ -340,12 +394,17 @@ struct AddMachineSheet: View {
     }
 
     private func load() async {
-        guard let client = MachinesModel.shared.uiClient else {
+        let loader =
+            loadConfiguration
+            ?? MachinesModel.shared.uiClient.map { client in
+                { try await client.configuration() }
+            }
+        guard let loader else {
             testState = .failure(MachineUIError.unavailable.localizedDescription)
             return
         }
         do {
-            let configuration = try await client.configuration()
+            let configuration = try await loader()
             guard !Task.isCancelled else { return }
             configHosts = configuration.hosts
             sudoPasswordStored =
@@ -356,6 +415,7 @@ struct AddMachineSheet: View {
             testState = .failure(error.localizedDescription)
         }
         guard let editing else { return }
+        showsMoreOptions = editing.sshClipboardEnabled || sudoPasswordStored
         mode = .manual
         name = editing.name
         host = editing.host

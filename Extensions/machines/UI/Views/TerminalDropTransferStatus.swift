@@ -27,7 +27,7 @@ struct TerminalDropTransferStatus: View {
             }
             if let error = holder.dropTransferError {
                 Text(error)
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(DashSkin.warn)
                     .padding(UIScale.pt(10))
                     .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 8))

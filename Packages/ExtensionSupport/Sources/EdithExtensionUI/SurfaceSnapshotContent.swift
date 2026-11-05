@@ -26,7 +26,7 @@ public struct SurfaceSnapshotContent: View {
                             Text(metric.title).font(.edithText(.caption)).foregroundStyle(
                                 .secondary)
                             if let fraction = metric.fraction, tile.shows("progress") {
-                                ProgressView(value: fraction)
+                                LoadingProgress(value: fraction)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -45,7 +45,7 @@ public struct SurfaceSnapshotContent: View {
                             {
                                 SurfaceThumbnailImage(thumbnail: thumbnail, dense: tile.dense)
                             } else {
-                                Image(systemName: row.icon)
+                                EdithIconView(row.icon)
                             }
                             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                                 Text(row.title).lineLimit(tile.dense ? 1 : 2).accessibilityLabel(
@@ -62,7 +62,7 @@ public struct SurfaceSnapshotContent: View {
                             }
                         }.font(.edithText(.callout))
                         if let progress = row.progress, tile.shows("progress") {
-                            ProgressView(value: progress)
+                            LoadingProgress(value: progress)
                         }
                         if tile.showActions {
                             sliders(row.sliders)
@@ -113,7 +113,7 @@ public struct SurfaceSnapshotContent: View {
             Button {
                 perform(action)
             } label: {
-                Label(action.title, systemImage: action.icon)
+                Label(action.title, edith: action.icon)
             }
             .buttonStyle(.edith(.secondary)).font(.edithText(.caption))
         }

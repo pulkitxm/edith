@@ -8,6 +8,17 @@ import EdithExtensionSupport
 import EdithExtensionUI
 
 @Suite(.serialized) @MainActor struct QuinjetDiffViewTests {
+    @Test func diffColorsComeFromTheSelectedTheme() {
+        for dark in [false, true] {
+            let house = QuinjetDiffColors.options(dark: dark, theme: .accent)
+            let teal = QuinjetDiffColors.options(dark: dark, theme: .teal)
+            #expect(teal.count == 7)
+            #expect(teal["accent"] != house["accent"])
+            #expect(teal["selected"] != house["selected"])
+            #expect(teal["surface"] == house["surface"])
+        }
+    }
+
     @Test func offlineReviewSelectsFiltersAndRendersSafeHighlightedDiffs() async throws {
         _ = TestWindowHost.application
         let patch = #"""
@@ -58,7 +69,7 @@ import EdithExtensionUI
                 arguments: [:], in: nil, contentWorld: .page) as? Bool
         #expect(colored == true)
         _ = try await view.callAsyncJavaScript(
-            "document.querySelectorAll('#files button')[1].click(); window.edithReview.configure({patch, split:true, dark:false, fontSize:16});",
+            "document.querySelectorAll('#files button')[1].click(); window.edithReview.configure({patch, split:true, dark:false, fontSize:16, colors:{}});",
             arguments: ["patch": patch], in: nil, contentWorld: .page)
         let selected =
             try await view.callAsyncJavaScript(

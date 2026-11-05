@@ -40,16 +40,16 @@ public enum StudioKind: String, CaseIterable, Codable, Hashable, Sendable {
         }
     }
 
-    public var symbolName: String {
+    public var iconName: String {
         switch self {
         case .image: "photo"
-        case .pdf: "doc.richtext"
+        case .pdf: "docText"
         case .video: "film"
         case .audio: "waveform"
-        case .document: "doc.text"
-        case .presentation: "rectangle.on.rectangle.angled"
-        case .spreadsheet: "tablecells"
-        case .archive: "archivebox"
+        case .document: "docText"
+        case .presentation: "windows"
+        case .spreadsheet: "table"
+        case .archive: "archive"
         case .other: "doc"
         }
     }

@@ -141,15 +141,15 @@ final class MicMuteEngine: NSObject, FeatureModule {
             ) {
                 Label(
                     muted ? "Microphone muted" : "Microphone on",
-                    systemImage: muted ? "mic.slash.fill" : "mic.fill")
+                    edith: muted ? .micMute : .mic)
             }
         }
     }
 
     private func updateIcon() {
-        let name = muted ? "mic.slash.fill" : "mic.fill"
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Microphone")
-        statusItem?.button?.image = image
+        let icon: EdithIcon = muted ? .micMute : .mic
+        statusItem?.button?.image = icon.nsImage(size: 16, tone: .monochrome)
+        statusItem?.button?.setAccessibilityLabel("Microphone")
         statusItem?.button?.contentTintColor = muted ? .systemRed : nil
     }
 

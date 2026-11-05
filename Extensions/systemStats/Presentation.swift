@@ -1,5 +1,6 @@
 import CoreFoundation
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 import Observation
 
@@ -21,8 +22,6 @@ struct ControlPresentationAction: Codable {
 struct ControlPresentationState: Codable {
     var muted = false
     var error: String?
-    var cpu = 0.0
-    var memory = 0.0
     var jevConfigured = false
 }
 
@@ -378,37 +377,4 @@ final class ControlPresentation {
     }
 }
 
-import EdithExtensionUI
-import SwiftUI
-
-struct ControlSettingsHost<Content: View>: View {
-    let presentation: ControlPresentation
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if presentation.ready, let error = presentation.error {
-                HStack {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                    Button("Retry", action: retry)
-                }.padding()
-            }
-            PageLoading(
-                state: presentation.load.state, title: "Settings unavailable",
-                message: presentation.error ?? "The extension engine is unavailable.",
-                layout: .editor, retry: retry
-            ) { content() }
-        }
-        .pageRefresh(
-            active: presentation.active && presentation.running,
-            interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
-        ) {
-            await presentation.refresh()
-        }
-    }
-
-    private func retry() {
-        presentation.changed()
-        Task { await presentation.refresh() }
-    }
-}
+extension ControlPresentation: ControlSettingsPresenting {}

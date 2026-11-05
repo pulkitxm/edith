@@ -23,7 +23,7 @@ import Testing
     @Test func originalAppDocumentationAndContributorLinksKeepTheirStableNames() {
         let entries = HostAppLinksCLI.entries(
             extensions: [
-                .init(id: "calendar", title: "Calendar", symbolName: "calendar", category: "Tools")
+                .init(id: "calendar", title: "Calendar", icon: .calendar, category: "Tools")
             ],
             contributors: ["synthetic": URL(string: "https://github.com/synthetic")!])
         let calendar = entries.first { $0.id == "extension-doc:calendar:guide" }

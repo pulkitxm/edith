@@ -98,15 +98,14 @@ struct HerdrDragOverlay: View {
                     .foregroundStyle(highlighted ? accent : DashSkin.inkSoft(dark))
                 Text(hideAgents ? agent.kind : agent.title)
                     .font(
-                        .system(
-                            size: UIScale.pt(highlighted ? 13 : 11),
-                            weight: highlighted ? .semibold : .medium)
+                        .edithText(highlighted ? .body : .subheadline)
+                            .weight(highlighted ? .semibold : .medium)
                     )
                     .foregroundStyle(highlighted ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                     .lineLimit(1)
                 if highlighted, let hint = hint(target) {
                     Text(hint)
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .font(.edithText(.caption).weight(.medium))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
@@ -165,7 +164,7 @@ struct HerdrDragOverlay: View {
             }
             .overlay {
                 Text(label)
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
             }
             .frame(width: max(0, rect.width), height: max(0, rect.height))
@@ -197,11 +196,11 @@ struct HerdrDragOverlay: View {
             }
         } else {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                EdithIconView(.grid)
+                    .font(.edithText(.caption).weight(.semibold))
                 Text("Layouts")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                Image(systemName: "chevron.up")
+                    .font(.edithText(.subheadline).weight(.semibold))
+                EdithIconView(.chevronUp)
                     .font(.system(size: UIScale.pt(8), weight: .bold))
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
@@ -236,14 +235,14 @@ struct HerdrDragOverlay: View {
             }
             HStack(spacing: UIScale.pt(2)) {
                 if thumbnail.template.isSaved {
-                    Image(systemName: "bookmark.fill")
+                    EdithIconView(.bookmark)
                         .font(.system(size: UIScale.pt(7)))
                         .foregroundStyle(accent)
                 }
                 Text(thumbnail.template.title)
             }
             .font(
-                .system(size: UIScale.pt(9), weight: hoveredSlot == nil ? .medium : .semibold)
+                .edithText(.caption).weight(hoveredSlot == nil ? .medium : .semibold)
             )
             .foregroundStyle(hoveredSlot == nil ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
             .lineLimit(1)
@@ -264,16 +263,16 @@ struct HerdrDragOverlay: View {
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(12))
                     .foregroundStyle(DashSkin.ink(dark))
             } else if case .space = item {
-                Image(systemName: "folder")
+                EdithIconView(.folder)
                     .foregroundStyle(DashSkin.ink(dark))
             }
             Text(ghostTitle(agents, tearing: tearing))
-                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             if drag.target == nil {
-                Image(systemName: "nosign")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                EdithIconView(.blocked)
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }

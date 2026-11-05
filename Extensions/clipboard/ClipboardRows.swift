@@ -7,8 +7,8 @@ import SwiftUI
 struct ClipboardRows: View {
     @State private var preferences = ClipboardPreferences()
     let presentation: ClipboardPresentation?
+    let openPalette: () -> Void
 
-    @State private var tab = "general"
     @State private var recent: ClipboardRecentModel
     let history: ClipboardHistoryModel
     @State private var showHistory = false
@@ -17,9 +17,10 @@ struct ClipboardRows: View {
 
     init(
         client: ClipboardClient, history: ClipboardHistoryModel,
-        presentation: ClipboardPresentation? = nil
+        presentation: ClipboardPresentation? = nil, openPalette: @escaping () -> Void = {}
     ) {
         self.presentation = presentation
+        self.openPalette = openPalette
         _preferences = State(
             initialValue: presentation?.preferences
                 ?? ClipboardPreferences.read(SharedDefaults.store))
@@ -29,6 +30,8 @@ struct ClipboardRows: View {
                 try await client.snapshot(.init(limit: 5, recentlyCreated: true)).entries
             }))
     }
+
+    private var available: Bool { presentation?.available ?? true }
 
     private var maxItemMB: Binding<Int> {
         Binding(
@@ -54,54 +57,42 @@ struct ClipboardRows: View {
 
     var body: some View {
         Group {
-            Section {
-                EdithSegmentedPicker(
-                    "", selection: $tab, options: ["general", "storage", "appearance", "ignore"],
-                    label: { $0.capitalized }
-                )
-                .labelsHidden()
+            if !available {
+                Section {
+                    SettingsNoticeRow(
+                        "Clipboard is off",
+                        message:
+                            "Nothing you copy is being recorded. Turn it on to keep a history and change these settings.",
+                        icon: .power)
+                }
+            } else if let error = presentation?.error {
+                Section {
+                    SettingsErrorRow(
+                        "A change was not saved", message: error,
+                        retry: { Task { await presentation?.refresh() } })
+                }
             }
-
             Group {
-                switch tab {
-                case "storage": storageSections
-                case "appearance": appearanceSections
-                case "ignore": ignoreSections
-                default: generalSections
-                }
-            }
-
-            Section {
-                if let error = presentation?.error {
-                    Text(error).settingsCaption().foregroundStyle(.orange)
-                }
-                if let error = recent.error {
-                    Text(error).settingsCaption().foregroundStyle(.orange)
-                    Button("Retry") { reload() }
-                } else if recent.loading, recent.entries.isEmpty {
-                    HStack {
-                        SkeletonGroup {
-                            SkeletonBlock(width: 168, height: 9, corner: 4)
-                            Spacer()
-                            SkeletonBlock(width: 72, height: 9, corner: 4)
-                        }
+                Section {
+                    LabeledContent {
+                        Button("Open History", action: openPalette)
+                            .buttonStyle(.edith(.primary))
+                    } label: {
+                        Text("Paste something again")
+                        Text("Search everything you copied recently and pick an item to paste it.")
                     }
-                    .settingsCaption()
-                    .accessibilityLabel("Loading clipboard history")
-                } else if recent.entries.isEmpty {
-                    Label(
-                        "No clipboard history yet. Copy something to get started.",
-                        systemImage: "doc.on.clipboard"
-                    )
-                    .settingsCaption()
+                    SettingsShortcutRow(
+                        keyPrefix: "clipboardHotKey", defaultLabel: "\u{2303}\u{21E7}C",
+                        purpose: "Opens your clipboard history from any app.")
                 }
-                ForEach(recent.entries) { entry in
-                    recentRow(entry)
-                }
-                Button("Open history ▸") { showHistory = true }
-            } header: {
-                Text("Recent")
+                recentSection
+                captureSection
+                pastingSection
+                historySection
+                popupSection
             }
+            .disabled(!available)
+            .opacity(available ? 1 : 0.5)
         }
         .pageRefresh(
             interval: { .seconds(2) },
@@ -130,184 +121,192 @@ struct ClipboardRows: View {
         }
     }
 
-    @ViewBuilder private var generalSections: some View {
-        Section {
-            LabeledContent {
-                HotKeyRecorderControl(keyPrefix: "clipboardHotKey", defaultLabel: "⌃⇧C")
-            } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Open")
-                    InfoDot(
-                        "Global shortcut to open and close the history popup. Default: ⌃⇧C.")
+    @ViewBuilder private var recentSection: some View {
+        Section("Recently copied") {
+            if let error = recent.error, recent.entries.isEmpty {
+                SettingsErrorRow(
+                    "Recent items did not load", message: error, retry: reload)
+            } else if recent.loading, recent.entries.isEmpty {
+                ForEach(0..<3, id: \.self) { _ in
+                    SkeletonGroup {
+                        HStack(spacing: UIScale.pt(12)) {
+                            SkeletonBlock(width: 20, height: 20, corner: 5)
+                            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                                SkeletonBlock(width: 220, height: 10, corner: 4)
+                                SkeletonBlock(width: 120, height: 8, corner: 4)
+                            }
+                            Spacer(minLength: 0)
+                            SkeletonBlock(width: 64, height: 10, corner: 4)
+                        }
+                    }
+                }
+                .accessibilityLabel("Loading clipboard history")
+            } else if recent.entries.isEmpty {
+                VStack(spacing: UIScale.pt(2)) {
+                    Text("Nothing copied yet")
+                    Text("Copy some text, a link or an image in any app and it shows up here.")
+                        .settingsCaption()
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
+            } else {
+                ForEach(recent.entries) { entry in
+                    ClipboardRecentRow(entry: entry)
+                }
+                LabeledContent {
+                    Button("Browse All") { showHistory = true }
+                        .buttonStyle(.edith(.secondary))
+                } label: {
+                    Text("Full history")
+                    Text("Search, pin and delete everything Edith has kept.")
                 }
             }
         }
+    }
+
+    @ViewBuilder private var captureSection: some View {
         Section {
-            Toggle(
-                isOn: binding(\.capturePaused)
+            Toggle(isOn: binding(\.capturePaused)) {
+                Text("Pause recording")
+                Text(
+                    "New copies are ignored until you turn this off. Your history stays available.")
+            }
+            Toggle(isOn: binding(\.saveText)) {
+                Text("Keep text and links")
+            }
+            Toggle(isOn: binding(\.saveImages)) {
+                Text("Keep images")
+            }
+            Toggle(isOn: binding(\.saveFiles)) {
+                Text("Keep files")
+            }
+            SettingsRow(
+                "Ignored apps",
+                subtitle:
+                    "Copies made in these apps are never recorded. Password managers are listed already."
             ) {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Pause capture")
-                    InfoDot(
-                        "New copies are ignored until you resume. Your history stays available in the popup."
-                    )
-                }
+                TextField(
+                    "Ignored apps", text: binding(\.ignoredApps),
+                    prompt: Text("com.example.app, com.other.app")
+                )
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.leading)
+                .lineLimit(1)
+                .frame(width: UIScale.pt(220))
             }
         } header: {
-            Text("Capture")
+            Text("Recording")
         }
-        Section {
+    }
+
+    @ViewBuilder private var pastingSection: some View {
+        Section("Pasting") {
             Toggle(
                 isOn: Binding(
                     get: { preferences.autoPaste },
                     set: { newValue in
-                        binding(\.autoPaste).wrappedValue =
-                            newValue
+                        binding(\.autoPaste).wrappedValue = newValue
                         if newValue, !preferences.accessibilityGranted {
                             requestPermission()
                         }
                     })
             ) {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Paste automatically")
-                    InfoDot(
-                        "Picking a clip pastes it straight into the app you were using instead of just copying it. Needs Accessibility."
-                    )
-                }
+                Text("Paste for me")
+                Text(
+                    "Picking an item pastes it into the app you were using, instead of only copying it."
+                )
             }
             if preferences.autoPaste, !preferences.accessibilityGranted {
-                Text(
-                    "Accessibility isn't granted yet - selecting an item only copies until you grant it."
-                )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.orange)
+                LabeledContent {
+                    Button("Allow Access", action: requestPermission)
+                        .buttonStyle(.edith(.secondary))
+                } label: {
+                    Text(edith: .warning).foregroundColor(
+                        .orange)
+                        + Text(" Accessibility is needed")
+                    Text("Until you allow it, picking an item only copies it.")
+                }
             }
-            Toggle(
-                "Paste without formatting",
-                isOn: binding(\.pastePlainText)
-            )
-            Text("Strips fonts, colors and links so pasted text matches the destination.")
-                .settingsCaption()
-        } header: {
-            Text("Behavior")
+            Toggle(isOn: binding(\.pastePlainText)) {
+                Text("Paste as plain text")
+                Text("Removes fonts, colors and links so text matches where you paste it.")
+            }
         }
     }
 
-    @ViewBuilder private var storageSections: some View {
-        Section {
-            Toggle(
-                "Files", isOn: binding(\.saveFiles)
-            )
-            Toggle(
-                "Images", isOn: binding(\.saveImages)
-            )
-            Toggle(
-                "Text", isOn: binding(\.saveText)
-            )
-            Text("Change what types of copied content should be stored.")
-                .settingsCaption()
-        } header: {
-            Text("Save")
-        }
-        Section {
-            LabeledContent {
-                HStack(spacing: UIScale.pt(4)) {
-                    EdithNumberField(
-                        value: boundedMaxItems,
-                        width: UIScale.pt(64))
+    @ViewBuilder private var historySection: some View {
+        Section("History") {
+            SettingsRow(
+                "Items to keep",
+                subtitle: "The oldest unpinned item is removed when the list is full."
+            ) {
+                HStack(spacing: UIScale.pt(8)) {
+                    EdithNumberField(value: boundedMaxItems, width: UIScale.pt(64))
+                    Stepper("Items to keep", value: boundedMaxItems, in: 1...999)
+                        .labelsHidden()
+                }
+            }
+            SettingsRow("Largest item", subtitle: "Bigger copies are skipped and not saved.") {
+                HStack(spacing: UIScale.pt(8)) {
+                    Text("\(maxItemMB.wrappedValue) MB")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                     Stepper(
-                        "", value: boundedMaxItems,
-                        in: 1...999
+                        "Largest item", value: maxItemMB,
+                        in: 1...(ClipboardArchive.maximumBlobBytes / 1_000_000)
                     )
                     .labelsHidden()
                 }
-            } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Size")
-                    InfoDot("Number of history items to keep. Default: 200.")
-                }
             }
-            Stepper(
-                value: maxItemMB,
-                in: 1...(ClipboardArchive.maximumBlobBytes / 1_000_000)
-            ) {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Maximum item size: \(maxItemMB.wrappedValue) MB")
-                    InfoDot(
-                        "Copies larger than this aren't saved - a small indicator shows when one was skipped."
-                    )
-                }
-            }
-            Picker(
-                selection: binding(\.maxAgeDays)
-            ) {
+            Picker(selection: binding(\.maxAgeDays)) {
                 Text("Never").tag(0)
-                Text("7 days").tag(7)
-                Text("30 days").tag(30)
-                Text("90 days").tag(90)
+                Text("After 7 days").tag(7)
+                Text("After 30 days").tag(30)
+                Text("After 90 days").tag(90)
             } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Auto-delete after")
-                    InfoDot("Removes entries older than N days, pinned items excepted.")
-                }
+                Text("Delete old items")
+                Text("Pinned items are always kept.")
             }
-            Stepper(
-                value: binding(\.checkInterval),
-                in: 0.2...5, step: 0.1
+            SettingsRow(
+                "Check for copies every",
+                subtitle: "Longer saves battery. Shorter catches quick copies in a row."
             ) {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Check interval: \(String(format: "%.1f", preferences.checkInterval))s")
-                    InfoDot(
-                        "How often Edith peeks at the clipboard. Larger saves battery; smaller catches rapid copies."
+                HStack(spacing: UIScale.pt(8)) {
+                    Text(String(format: "%.1f s", preferences.checkInterval))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                    Stepper(
+                        "Check for copies every", value: binding(\.checkInterval), in: 0.2...5,
+                        step: 0.1
                     )
+                    .labelsHidden()
                 }
             }
         }
     }
 
-    @ViewBuilder private var appearanceSections: some View {
-        Section {
+    @ViewBuilder private var popupSection: some View {
+        Section("History popup") {
             Picker(selection: binding(\.popupAt)) {
                 ForEach(PopupPosition.allCases) { position in
                     Text(position.title).tag(position.rawValue)
                 }
             } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Popup at")
-                    InfoDot(
-                        "Where the popup appears: at the mouse cursor, under the menu icon, centered on the front window or screen, or wherever you last dragged it."
-                    )
-                }
+                Text("Opens at")
+                Text("Where the popup appears when you press the shortcut.")
             }
             Picker(selection: binding(\.pinTo)) {
                 Text("Top").tag("top")
                 Text("Bottom").tag("bottom")
             } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Pin to")
-                    InfoDot("Whether pinned items stick to the top or the bottom of the list.")
-                }
+                Text("Pinned items")
+                Text("Where pinned items sit in the list.")
             }
             Toggle(isOn: binding(\.showFooter)) {
-                HStack(spacing: UIScale.pt(6)) {
-                    Text("Show keyboard hints")
-                    InfoDot("Shows the keyboard hints at the bottom of the popup.")
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private var ignoreSections: some View {
-        Section {
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                LabeledContent("Ignored apps") {
-                    EdithTextField(
-                        placeholder: "com.app.bundleid, com.other.app",
-                        text: binding(\.ignoredApps))
-                }
-                Text(
-                    "Copies made in these apps are never recorded (password managers are pre-listed)."
-                )
-                .settingsCaption()
+                Text("Show keyboard hints")
+                Text("A line of shortcuts along the bottom of the popup.")
             }
         }
     }
@@ -342,16 +341,26 @@ struct ClipboardRows: View {
         refreshTask?.cancel()
         refreshTask = Task { await recent.refresh() }
     }
+}
 
-    private func recentRow(_ entry: ClipboardEntry) -> some View {
-        HStack {
-            Text(entry.displayPreview).lineLimit(1)
-            Spacer()
-            Text(entry.sourceApp ?? "Unknown")
-            Text("·")
+private struct ClipboardRecentRow: View {
+    let entry: ClipboardEntry
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            EdithIconView(ClipboardCategory(entry).icon)
+                .foregroundStyle(.secondary)
+                .frame(width: UIScale.pt(20))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(entry.displayPreview).lineLimit(1).truncationMode(.tail)
+                Text(entry.sourceApp ?? "Unknown app").settingsCaption()
+            }
+            Spacer(minLength: UIScale.pt(PageMetrics.controlSpacing))
             Text(entry.createdAt.formatted(.relative(presentation: .named)))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .settingsCaption()
+        .accessibilityElement(children: .combine)
     }
 }
 

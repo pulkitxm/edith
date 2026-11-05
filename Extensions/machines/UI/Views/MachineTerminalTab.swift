@@ -115,7 +115,7 @@ struct MachineTerminalTab: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
             if let message = holder.exitMessage {
                 Text(message)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.warn)
             }
             Spacer(minLength: 0)
@@ -124,7 +124,7 @@ struct MachineTerminalTab: View {
             }
             if let action = presentation.action {
                 Button(action.title) { perform(action) }
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
             }
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
@@ -138,7 +138,7 @@ struct MachineTerminalTab: View {
                     selectWindowsShell(shell)
                 } label: {
                     if shell == selectedWindowsShell {
-                        Label(shell.label, systemImage: "checkmark")
+                        Label(shell.label, edith: .check)
                     } else {
                         Text(shell.label)
                     }
@@ -154,15 +154,13 @@ struct MachineTerminalTab: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(5)) {
-                Image(systemName: "terminal")
+                EdithIcon.terminal.image(size: UIScale.pt(12))
                 Text(selectedWindowsShell.label)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: UIScale.pt(8), weight: .semibold))
             }
             .font(DashSkin.mono(11))
             .foregroundStyle(DashSkin.inkFaint(dark))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .fixedSize()
         .help("Choose the shell for this terminal")
     }
@@ -173,15 +171,15 @@ struct MachineTerminalTab: View {
                 TerminalLoadingSkeleton(palette: .edith(dark: dark))
             } else {
                 VStack(spacing: UIScale.pt(10)) {
-                    Image(systemName: presentation.symbol)
-                        .font(.system(size: UIScale.pt(24), weight: .light))
+                    EdithIconView(presentation.icon)
+                        .font(.edithText(.title).weight(.light))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     Text(presentation.title)
-                        .font(.system(size: UIScale.pt(14), weight: .semibold))
+                        .font(.edithText(.title3).weight(.semibold))
                         .foregroundStyle(DashSkin.ink(dark))
                     if let detail = presentation.detail {
                         Text(detail)
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: UIScale.pt(520))
@@ -323,7 +321,7 @@ enum MachineTerminalAction: Equatable {
 struct MachineTerminalPresentation: Equatable {
     let title: String
     let detail: String?
-    let symbol: String
+    let icon: EdithIcon
     let showsProgress: Bool
     let showsTerminal: Bool
     let action: MachineTerminalAction?
@@ -334,49 +332,49 @@ struct MachineTerminalPresentation: Equatable {
     ) -> MachineTerminalPresentation {
         if started {
             return MachineTerminalPresentation(
-                title: "Terminal running", detail: nil, symbol: "terminal",
+                title: "Terminal running", detail: nil, icon: .terminal,
                 showsProgress: false, showsTerminal: true,
                 action: launchEnabled ? .restart : nil)
         }
         if isLocal {
             if let exitMessage {
                 return MachineTerminalPresentation(
-                    title: "Terminal session ended", detail: exitMessage, symbol: "terminal",
+                    title: "Terminal session ended", detail: exitMessage, icon: .terminal,
                     showsProgress: false, showsTerminal: false,
                     action: launchEnabled ? .start : nil)
             }
             return MachineTerminalPresentation(
-                title: "Starting local shell…", detail: nil, symbol: "terminal",
+                title: "Starting local shell…", detail: nil, icon: .terminal,
                 showsProgress: true, showsTerminal: false, action: nil)
         }
         switch state {
         case .disconnected:
             return MachineTerminalPresentation(
                 title: "Not connected", detail: "Connect to \(target) to start a terminal.",
-                symbol: "network.slash", showsProgress: false, showsTerminal: false,
+                icon: .nodes, showsProgress: false, showsTerminal: false,
                 action: .connect)
         case .connecting:
             return MachineTerminalPresentation(
-                title: "Connecting to \(target)…", detail: nil, symbol: "network",
+                title: "Connecting to \(target)…", detail: nil, icon: .nodes,
                 showsProgress: true, showsTerminal: false, action: nil)
         case let .reconnecting(message):
             return MachineTerminalPresentation(
-                title: "Reconnecting to \(target)…", detail: message, symbol: "network",
+                title: "Reconnecting to \(target)…", detail: message, icon: .nodes,
                 showsProgress: true, showsTerminal: false, action: nil)
         case .connected:
             if let exitMessage {
                 return MachineTerminalPresentation(
-                    title: "Terminal session ended", detail: exitMessage, symbol: "terminal",
+                    title: "Terminal session ended", detail: exitMessage, icon: .terminal,
                     showsProgress: false, showsTerminal: false,
                     action: launchEnabled ? .start : nil)
             }
             return MachineTerminalPresentation(
-                title: "Starting terminal…", detail: nil, symbol: "terminal",
+                title: "Starting terminal…", detail: nil, icon: .terminal,
                 showsProgress: true, showsTerminal: false, action: nil)
         case let .failed(message, recoverable):
             return MachineTerminalPresentation(
                 title: "Couldn’t connect to \(target)", detail: message,
-                symbol: "exclamationmark.triangle", showsProgress: false,
+                icon: .warning, showsProgress: false,
                 showsTerminal: false, action: recoverable ? .retry : nil)
         }
     }
@@ -409,7 +407,7 @@ struct ContainerTerminalSheet: View {
                 Spacer()
                 if let message = holder.exitMessage {
                     Text(message)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.warn)
                 }
                 Button("Done") {

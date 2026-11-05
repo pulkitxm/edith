@@ -170,7 +170,7 @@ struct HostStoragePageTests {
         #expect(sample.item.extensionID == "sample")
         #expect(sample.bytes.logical == 15250)
         #expect(usage.allSatisfy { $0.bytes.allocated > 0 || !$0.bytes.complete })
-        #expect(inventory.items.allSatisfy { !$0.symbolName.isEmpty && !$0.scopeIDs.isEmpty })
+        #expect(inventory.items.allSatisfy { $0.icon != .placeholder && !$0.scopeIDs.isEmpty })
         #expect(Set(inventory.items.map(\.id)).count == inventory.items.count)
     }
 
@@ -221,6 +221,7 @@ struct HostStoragePageTests {
         for (name, width, zoom, scheme) in [
             ("regular-light", 1100.0, 1.0, ColorScheme.light),
             ("regular-dark", 1100.0, 1.0, ColorScheme.dark),
+            ("wide-light", 1600.0, 1.0, ColorScheme.light),
             ("compact-light", 520.0, 1.0, ColorScheme.light),
             ("compact-dark", 520.0, 1.0, ColorScheme.dark),
             ("zoom-light", 700.0, 1.5, ColorScheme.light),
@@ -347,12 +348,12 @@ struct HostStoragePageTests {
                 identity: identity,
                 entries: [
                     HostExtension(
-                        id: "sample", title: "Sample extension", symbolName: "square",
+                        id: "sample", title: "Sample extension", icon: .checkbox,
                         category: "Tools")
                 ]
                     + (1..<40).map {
                         HostExtension(
-                            id: "tool\($0)", title: "Sample tool \($0)", symbolName: "square",
+                            id: "tool\($0)", title: "Sample tool \($0)", icon: .checkbox,
                             category: "Tools")
                     },
                 store: store,

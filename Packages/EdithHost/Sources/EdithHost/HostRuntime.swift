@@ -227,7 +227,11 @@ import SwiftUI
             sectionWindows = windows
             windows.install()
             delegate.stopWorkers = { services.killForQuit() }
-            delegate.preventsQuit = { await loaded.sessions.preventsQuit() }
+            delegate.quitBlockers = {
+                await loaded.sessions.quitBlockers().map { id in
+                    loaded.entries.first { $0.id == id }?.title ?? id
+                }
+            }
             delegate.shutdown = {
                 await interactions.cancelPending()
                 let stops: [Task<Void, Never>] = [
@@ -242,9 +246,10 @@ import SwiftUI
                 await slots.stop()
                 await services.shutdown(); core.shutdown(); control.shutdown()
             }
-            await services.start()
+            async let coreStarted: Void = services.start()
             await loaded.loadCachedCatalog()
             await loaded.restoreEnabledExtensions()
+            await coreStarted
             await loaded.refreshCatalogIfStale()
             await loaded.updateInstalledIfDue()
         } catch { startupError = true }

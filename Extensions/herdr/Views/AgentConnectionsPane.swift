@@ -158,8 +158,8 @@ struct AgentConnectionsPane: View {
                 Spacer()
                 Label(
                     status(provider),
-                    systemImage: monitor.activity.providerSignals[provider.rawValue] == nil
-                        ? "circle.dotted" : "checkmark.circle.fill"
+                    edith: monitor.activity.providerSignals[provider.rawValue] == nil
+                        ? .scan : .success
                 )
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
             }

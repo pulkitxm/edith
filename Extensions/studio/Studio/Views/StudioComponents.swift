@@ -5,7 +5,7 @@ import EdithStudio
 import SwiftUI
 
 enum StudioPalette {
-    static func tint(for kind: StudioKind) -> Color {
+    static func formatBadge(for kind: StudioKind) -> Color {
         switch kind {
         case .pdf: Color(red: 0.86, green: 0.27, blue: 0.24)
         case .image: Color(red: 0.23, green: 0.52, blue: 0.93)
@@ -18,11 +18,11 @@ enum StudioPalette {
         case .other: Color.gray
         }
     }
+}
 
-    static func tint(for tool: StudioTool) -> Color {
-        tool.group == .intelligence
-            ? Color(red: 0.62, green: 0.34, blue: 0.86) : tint(for: tool.family)
-    }
+private func studioGlyphSize(near target: CGFloat) -> CGFloat {
+    let sizes: [CGFloat] = [12, 16, 20, 24, 32, 40, 60, 80]
+    return sizes.min { abs($0 - target) < abs($1 - target) } ?? target
 }
 
 struct StudioThumbnail: View {
@@ -43,9 +43,8 @@ struct StudioThumbnail: View {
                     .padding(UIScale.pt(6))
                     .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
             } else {
-                Image(systemName: url.studioKind.symbolName)
-                    .font(.system(size: UIScale.pt(side * 0.22), weight: .light))
-                    .foregroundStyle(StudioPalette.tint(for: url.studioKind).opacity(0.7))
+                PageIcon(icon: url.studioKind.icon, size: studioGlyphSize(near: side * 0.22))
+                    .foregroundStyle(DashSkin.accent(scheme == .dark).opacity(0.7))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
@@ -64,64 +63,28 @@ struct StudioKindBadge: View {
 
     var body: some View {
         Text(label ?? kind.title.uppercased())
-            .font(DashSkin.mono(9, weight: .semibold))
+            .font(.edithText(.caption).weight(.semibold)).monospacedDigit()
             .foregroundStyle(.white)
             .padding(.horizontal, UIScale.pt(5))
             .padding(.vertical, UIScale.pt(2))
             .background(
-                StudioPalette.tint(for: kind), in: RoundedRectangle(cornerRadius: UIScale.pt(4)))
+                StudioPalette.formatBadge(for: kind),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(4)))
     }
 }
 
 struct StudioToolIcon: View {
     let tool: StudioTool
     var size: CGFloat = 34
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let tint = StudioPalette.tint(for: tool)
-        Image(systemName: tool.symbolName)
-            .font(.system(size: UIScale.pt(size * 0.46), weight: .semibold))
+        let tint = DashSkin.accent(scheme == .dark)
+        PageIcon(icon: tool.icon, size: studioGlyphSize(near: size * 0.46))
             .foregroundStyle(tint)
             .frame(width: UIScale.pt(size), height: UIScale.pt(size))
             .background(
                 tint.opacity(0.13), in: RoundedRectangle(cornerRadius: UIScale.pt(size * 0.28)))
-    }
-}
-
-struct StudioChip: View {
-    let title: String
-    var count: Int?
-    let selected: Bool
-    let action: () -> Void
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: UIScale.pt(5)) {
-                Text(title)
-                if let count {
-                    Text("\(count)")
-                        .font(DashSkin.mono(10, weight: .medium))
-                        .foregroundStyle(
-                            selected
-                                ? Color.white.opacity(0.85) : DashSkin.inkFaint(scheme == .dark))
-                }
-            }
-            .font(.system(size: UIScale.pt(12), weight: .medium))
-            .padding(.horizontal, UIScale.pt(11))
-            .padding(.vertical, UIScale.pt(5))
-            .foregroundStyle(selected ? Color.white : DashSkin.ink(scheme == .dark))
-            .background(
-                selected ? DashSkin.accent(scheme == .dark) : DashSkin.paper2(scheme == .dark),
-                in: Capsule()
-            )
-            .overlay(
-                Capsule().strokeBorder(selected ? Color.clear : DashSkin.line(scheme == .dark))
-            )
-            .edithButtonTarget(.borderless)
-        }
-        .buttonStyle(.edith(.borderless))
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -145,7 +108,7 @@ struct StudioCard<Content: View>: View {
 struct StudioBackBar<Trailing: View>: View {
     let title: String
     var subtitle: String?
-    var symbol: String?
+    var icon: EdithIcon?
     let back: () -> Void
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.colorScheme) private var scheme
@@ -155,13 +118,16 @@ struct StudioBackBar<Trailing: View>: View {
             HStack(spacing: UIScale.pt(10)) {
                 heading.fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: UIScale.pt(8))
-                trailing().fixedSize(horizontal: true, vertical: false)
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) { trailing() }
+                    .fixedSize(horizontal: true, vertical: false)
             }
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 heading
-                ScrollView(.horizontal) { trailing() }
-                    .scrollIndicators(.automatic)
-                    .frame(height: UIScale.pt(36))
+                ScrollView(.horizontal) {
+                    HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) { trailing() }
+                }
+                .scrollIndicators(.automatic)
+                .frame(height: UIScale.pt(36))
             }
         }
         .padding(.horizontal, UIScale.pt(16))
@@ -172,13 +138,13 @@ struct StudioBackBar<Trailing: View>: View {
     private var heading: some View {
         HStack(spacing: UIScale.pt(10)) {
             Button(action: back) {
-                Label("Studio", systemImage: "chevron.left")
+                Label("Studio", edith: .chevronLeft)
                     .font(.edithText(.body))
             }
             .buttonStyle(.edith(.secondary))
             .help("Back to Studio")
-            if let symbol {
-                Image(systemName: symbol)
+            if let icon {
+                EdithIconView(icon)
                     .foregroundStyle(DashSkin.accent(scheme == .dark))
             }
             VStack(alignment: .leading, spacing: 1) {
@@ -201,18 +167,18 @@ struct StudioEngineBanner: View {
         let missing = model.environment.missing(for: tool)
         if !missing.isEmpty {
             HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                EdithIconView(.warning)
                     .foregroundStyle(DashSkin.warn)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(StudioEngineText.title(missing))
-                        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                        .font(.edithText(.callout).weight(.semibold))
                     Text(StudioEngineText.detail(missing))
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let log = model.installLog, model.installing != nil {
                         Text(log)
-                            .font(DashSkin.mono(10))
+                            .font(.edithText(.caption)).monospacedDigit()
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -336,7 +302,7 @@ struct StudioToast: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: UIScale.pt(12), weight: .medium))
+            .font(.edithText(.callout).weight(.medium))
             .padding(.horizontal, UIScale.pt(14))
             .padding(.vertical, UIScale.pt(8))
             .background(DashSkin.panel, in: Capsule())

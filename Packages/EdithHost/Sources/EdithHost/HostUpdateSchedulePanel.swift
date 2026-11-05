@@ -183,7 +183,7 @@ struct HostUpdateSchedulePanel: View {
                 Spacer()
                 if !updater.checkHistory.isEmpty {
                     Button("Clear", action: updater.clearCheckHistory)
-                        .buttonStyle(.link)
+                        .buttonStyle(.edithLink)
                         .font(.system(size: UIScale.pt(11)))
                 }
             }

@@ -40,8 +40,8 @@ struct DatabaseConnectionOverview: View {
                     .tracking(-0.4)
                     .lineLimit(2)
                 if connection.isFavorite {
-                    Image(systemName: "star.fill")
-                        .foregroundStyle(DashSkin.gold)
+                    EdithIconView(.heart)
+                        .foregroundStyle(palette.accent)
                         .accessibilityLabel("Favorite connection")
                 }
                 Spacer(minLength: 0)
@@ -81,7 +81,7 @@ struct DatabaseConnectionOverview: View {
     }
 
     private func safetyCard(_ connection: DatabaseConnectionSummary) -> some View {
-        sectionCard(title: "Connection context", symbol: "shield.lefthalf.filled") {
+        sectionCard(title: "Connection context", icon: .shield) {
             factRow("Environment", connection.environmentSummary)
             factRow("Access", connection.readOnlySummary)
             factRow("Mutation policy", connection.productionSummary)
@@ -95,11 +95,11 @@ struct DatabaseConnectionOverview: View {
     }
 
     private func sessionCard(_ connection: DatabaseConnectionSummary) -> some View {
-        sectionCard(title: "Session", symbol: "bolt.horizontal.circle") {
+        sectionCard(title: "Session", icon: .bolt) {
             switch model.selectedSessionState {
             case .disconnected:
                 sessionStatus(
-                    symbol: "circle",
+                    icon: .ring,
                     title: "Disconnected",
                     detail: "Connecting is always an explicit action.",
                     tint: palette.inkFaint)
@@ -112,7 +112,7 @@ struct DatabaseConnectionOverview: View {
                 SkeletonReplica("Connecting to \(connection.name)") {
                     VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                         sessionStatus(
-                            symbol: "checkmark.circle.fill",
+                            icon: .success,
                             title: "Connected",
                             detail: "A secure database session is available.",
                             tint: DashSkin.ok)
@@ -122,7 +122,7 @@ struct DatabaseConnectionOverview: View {
                 }
             case .connected(let session, let quality):
                 sessionStatus(
-                    symbol: "checkmark.circle.fill",
+                    icon: .success,
                     title: "Connected",
                     detail: connectedDetail(session),
                     tint: DashSkin.ok)
@@ -136,7 +136,7 @@ struct DatabaseConnectionOverview: View {
                 SkeletonReplica("Disconnecting from \(connection.name)") {
                     VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                         sessionStatus(
-                            symbol: "circle",
+                            icon: .ring,
                             title: "Disconnected",
                             detail: "Connecting is always an explicit action.",
                             tint: palette.inkFaint)
@@ -146,7 +146,7 @@ struct DatabaseConnectionOverview: View {
                 }
             case .failed(let message, let previous):
                 sessionStatus(
-                    symbol: "exclamationmark.triangle.fill",
+                    icon: .warning,
                     title: "Session error",
                     detail: message,
                     tint: DashSkin.danger)
@@ -165,7 +165,7 @@ struct DatabaseConnectionOverview: View {
                 }
             case .outcomeUnknown(let message, let previous):
                 sessionStatus(
-                    symbol: "questionmark.circle.fill",
+                    icon: .help,
                     title: "Session status unknown",
                     detail: message,
                     tint: DashSkin.warn)
@@ -184,7 +184,7 @@ struct DatabaseConnectionOverview: View {
     }
 
     private func capabilitiesCard(_ connection: DatabaseConnectionSummary) -> some View {
-        sectionCard(title: "Capabilities", symbol: "switch.2") {
+        sectionCard(title: "Capabilities", icon: .toolbox) {
             switch model.selectedCapabilityState {
             case .unavailable:
                 Text("Connect to discover the features available for this database.")
@@ -208,7 +208,7 @@ struct DatabaseConnectionOverview: View {
                 capabilitySnapshot(snapshot, quality: quality)
             case .failed(let message, let snapshot, let quality):
                 sessionStatus(
-                    symbol: "exclamationmark.triangle.fill",
+                    icon: .warning,
                     title: "Capability refresh failed",
                     detail: message,
                     tint: DashSkin.danger)
@@ -236,7 +236,7 @@ struct DatabaseConnectionOverview: View {
             VStack(spacing: UIScale.pt(7)) {
                 ForEach(0..<4, id: \.self) { index in
                     HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                        Image(systemName: "checkmark.circle.fill")
+                        EdithIconView(.success)
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(index.isMultiple(of: 2) ? "Browse records" : "Run read queries")
                                 .font(DashSkin.mono(10.5, weight: .medium))
@@ -261,7 +261,7 @@ struct DatabaseConnectionOverview: View {
             Button {
                 Task { await model.refreshSelectedCapabilities() }
             } label: {
-                Label("Refresh capabilities", systemImage: "arrow.clockwise")
+                Label("Refresh capabilities", edith: .refresh)
             }
             .buttonStyle(.edith(.secondary))
             .accessibilityLabel("Refresh capabilities for \(connection.name)")
@@ -306,7 +306,7 @@ struct DatabaseConnectionOverview: View {
                     ForEach(
                         Array(snapshot.safetyLimitations.enumerated()), id: \.offset
                     ) { _, value in
-                        Label(value, systemImage: "exclamationmark.shield")
+                        Label(value, edith: .shield)
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(DashSkin.warn)
                     }
@@ -321,7 +321,7 @@ struct DatabaseConnectionOverview: View {
 
     private func capabilityRow(_ capability: DatabaseCapabilitySummary) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(8)) {
-            Image(systemName: capabilitySymbol(capability.availability))
+            EdithIconView(capabilityIcon(capability.availability))
                 .foregroundStyle(capabilityColor(capability.availability))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -373,13 +373,13 @@ struct DatabaseConnectionOverview: View {
                 EmptyView()
             case .partial:
                 sessionStatus(
-                    symbol: "exclamationmark.circle.fill",
+                    icon: .alert,
                     title: "Partial \(noun)",
                     detail: "Some details were unavailable and are labeled conservatively.",
                     tint: DashSkin.warn)
             case .stale:
                 sessionStatus(
-                    symbol: "clock.arrow.circlepath",
+                    icon: .history,
                     title: "Stale \(noun)",
                     detail: "Refresh before relying on this information.",
                     tint: DashSkin.warn)
@@ -388,13 +388,13 @@ struct DatabaseConnectionOverview: View {
     }
 
     private func sessionStatus(
-        symbol: String,
+        icon: EdithIcon,
         title: String,
         detail: String,
         tint: Color
     ) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(9)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -428,11 +428,11 @@ struct DatabaseConnectionOverview: View {
 
     private func sectionCard<Content: View>(
         title: String,
-        symbol: String,
+        icon: EdithIcon,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Label(title, systemImage: symbol)
+            Label(title, edith: icon)
                 .font(.system(size: UIScale.pt(13), weight: .semibold))
                 .foregroundStyle(palette.ink)
             content()
@@ -459,8 +459,7 @@ struct DatabaseConnectionOverview: View {
 
     private var noSelection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Image(systemName: "cylinder.split.1x2")
-                .font(.system(size: UIScale.pt(32), weight: .light))
+            PageIcon(icon: .database, size: 32)
                 .foregroundStyle(palette.inkFaint)
                 .accessibilityHidden(true)
             Text("Select a saved connection")
@@ -504,12 +503,12 @@ struct DatabaseConnectionOverview: View {
             ?? snapshot.product.displayName
     }
 
-    private func capabilitySymbol(_ availability: DatabaseCapabilityAvailability) -> String {
+    private func capabilityIcon(_ availability: DatabaseCapabilityAvailability) -> EdithIcon {
         switch availability {
-        case .available: "checkmark.circle.fill"
-        case .degraded: "exclamationmark.circle.fill"
-        case .unavailable: "xmark.circle.fill"
-        case .planned: "clock.fill"
+        case .available: .success
+        case .degraded: .alert
+        case .unavailable: .closeFilled
+        case .planned: .clock
         }
     }
 

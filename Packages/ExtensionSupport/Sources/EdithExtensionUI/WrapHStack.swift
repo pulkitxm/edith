@@ -28,7 +28,12 @@ struct _WrapLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout [CGSize])
         -> CGSize
     {
-        let maxWidth = proposal.width ?? 300
+        let singleLine =
+            cache.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(cache.count - 1, 0))
+        guard let proposed = proposal.width, proposed.isFinite else {
+            return CGSize(width: singleLine, height: cache.map(\.height).max() ?? 0)
+        }
+        let maxWidth = proposed
         var x: CGFloat = 0
         var y: CGFloat = 0
         var lineHeight: CGFloat = 0
@@ -42,6 +47,24 @@ struct _WrapLayout: Layout {
             lineHeight = max(lineHeight, size.height)
         }
         return CGSize(width: maxWidth, height: y + lineHeight)
+    }
+
+    func explicitAlignment(
+        of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize,
+        subviews: Subviews, cache: inout [CGSize]
+    ) -> CGFloat? {
+        guard guide == .firstTextBaseline,
+            let first = subviews.first, let firstSize = cache.first
+        else { return nil }
+        var lineWidth: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        for size in cache {
+            if lineWidth + size.width > bounds.width, lineWidth > 0 { break }
+            lineWidth += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        let baseline = first.dimensions(in: .unspecified)[.firstTextBaseline]
+        return bounds.minY + (lineHeight - firstSize.height) / 2 + baseline
     }
 
     func placeSubviews(

@@ -37,18 +37,18 @@ struct CodeStatsRows: View {
         }
 
         Group {
-            Section("Mirror") {
+            Section("Storage") {
                 LabeledContent("Folder") {
                     HStack {
                         Text(folder.isEmpty ? "Not chosen" : folder)
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .foregroundStyle(.secondary)
-                        Button("Choose folder...") { chooseFolder() }
+                        Button("Choose folder…") { chooseFolder() }
                     }
                 }
                 Text(
-                    "Every repository you can reach on GitHub is kept here as a bare clone. It can take gigabytes, so an external drive works well; results stay visible while it is unplugged."
+                    "Every repository you can reach on GitHub is kept here as a read-only copy. It can take gigabytes, so an external drive works well; results stay visible while it is unplugged."
                 )
                 .settingsCaption()
                 Toggle(
@@ -154,7 +154,7 @@ struct CodeStatsRows: View {
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Choose"
-        panel.message = "Choose the folder for your GitHub mirror"
+        panel.message = "Choose a folder for copies of your repositories"
         guard CodeStatsExecutionEnvironment.fixtureHome == nil else { return }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         refreshTask?.cancel()
@@ -182,7 +182,7 @@ struct CodeStatsRows: View {
     }
 
     private func refresh() {
-        message = "Starting a refresh..."
+        message = "Starting a refresh…"
         refreshTask?.cancel()
         refreshTask = Task {
             do {

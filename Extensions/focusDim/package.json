@@ -1,7 +1,7 @@
 {
   "id": "focusDim",
   "title": "Focus Dim",
-  "symbolName": "circle.lefthalf.filled",
+  "icon": "contrast",
   "category": "desk",
   "background": false,
   "commands": [],
@@ -26,5 +26,32 @@
   "notchCards": [
     "extension:focusDim"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Dim everything except the window you are working in.",
+    "summary": "Darkens the background behind your front window so you can focus. Turn it on with the shortcut or the switch in settings, and it follows you as you switch apps. Needs Screen Recording permission to find windows.",
+    "steps": [
+      {
+        "icon": "layoutCenter",
+        "title": "Turn it on",
+        "detail": "Press Option+Command+F or use the Dim background windows switch in settings."
+      },
+      {
+        "icon": "shield",
+        "title": "Allow Screen Recording",
+        "detail": "macOS asks once so Edith can tell which windows are open. No video is saved."
+      },
+      {
+        "icon": "contrast",
+        "title": "Work as usual",
+        "detail": "Other windows fade back and the dimming follows the app you switch to."
+      },
+      {
+        "icon": "adjust",
+        "title": "Set the strength",
+        "detail": "Change how dark it gets and how fast it fades in settings."
+      }
+    ],
+    "examples": []
+  }
 }

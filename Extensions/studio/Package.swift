@@ -28,6 +28,7 @@ let package = Package(
                 "StudioExtension", .product(name: "EdithStudio", package: "NativeRuntime"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 .product(name: "ViewInspector", package: "ViewInspector"),
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]

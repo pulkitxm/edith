@@ -134,8 +134,7 @@ struct DatabaseSafetyReviewSheet: View {
     private var headerIdentity: some View {
         let accent = riskColor(presentation.risk)
         return HStack(alignment: .top, spacing: UIScale.pt(14)) {
-            Image(systemName: presentation.risk.symbol)
-                .font(.system(size: UIScale.pt(24), weight: .semibold))
+            PageIcon(icon: presentation.risk.icon, size: 24)
                 .foregroundStyle(accent)
                 .frame(width: UIScale.pt(44), height: UIScale.pt(44))
                 .background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
@@ -160,14 +159,14 @@ struct DatabaseSafetyReviewSheet: View {
         VStack(alignment: alignment, spacing: UIScale.pt(7)) {
             DatabaseSafetyPill(
                 title: presentation.risk.title,
-                symbol: presentation.risk.symbol,
+                icon: presentation.risk.icon,
                 accentColor: riskColor(presentation.risk),
                 dark: dark)
             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                 let expired = timeline.date >= presentation.expiresAt
                 DatabaseSafetyPill(
                     title: expirationTitle(now: timeline.date),
-                    symbol: expired ? "clock.badge.xmark" : "clock.fill",
+                    icon: expired ? .hourglass : .clock,
                     accentColor: expired ? DashSkin.danger : palette.accent,
                     dark: dark)
             }
@@ -185,7 +184,7 @@ struct DatabaseSafetyReviewSheet: View {
             if !presentation.warnings.isEmpty {
                 warningsCard
             }
-            DatabaseSafetyCard(title: "Execution context", symbol: "scope", dark: dark) {
+            DatabaseSafetyCard(title: "Execution context", icon: .scan, dark: dark) {
                 DatabaseSafetyFactsGrid(facts: presentation.connectionFacts, dark: dark)
             }
             if DatabaseSafetyReviewLayout(width: Double(width), zoom: UIScale.current)
@@ -202,7 +201,7 @@ struct DatabaseSafetyReviewSheet: View {
                 }
             }
             DatabaseSafetyCard(
-                title: "Transaction and recovery", symbol: "arrow.triangle.2.circlepath",
+                title: "Transaction and recovery", icon: .sync,
                 dark: dark
             ) {
                 DatabaseSafetyFactsGrid(facts: presentation.behaviorFacts, dark: dark)
@@ -214,13 +213,13 @@ struct DatabaseSafetyReviewSheet: View {
 
     private var warningsCard: some View {
         DatabaseSafetyCard(
-            title: "Warnings", symbol: "exclamationmark.triangle.fill", dark: dark,
+            title: "Warnings", icon: .warning, dark: dark,
             stroke: DashSkin.danger.opacity(0.42)
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 ForEach(presentation.warnings) { warning in
                     HStack(alignment: .top, spacing: UIScale.pt(9)) {
-                        Image(systemName: warning.symbol)
+                        EdithIconView(warning.icon)
                             .font(.system(size: UIScale.pt(13), weight: .semibold))
                             .foregroundStyle(warningColor(warning.severity))
                             .frame(width: UIScale.pt(18))
@@ -245,7 +244,7 @@ struct DatabaseSafetyReviewSheet: View {
 
     private var selectionCard: some View {
         DatabaseSafetyCard(
-            title: "Predicate or selection", symbol: "line.3.horizontal.decrease.circle", dark: dark
+            title: "Predicate or selection", icon: .filter, dark: dark
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(presentation.selectionTitle)
@@ -262,7 +261,7 @@ struct DatabaseSafetyReviewSheet: View {
     }
 
     private var impactCard: some View {
-        DatabaseSafetyCard(title: "Impact", symbol: "chart.bar.doc.horizontal", dark: dark) {
+        DatabaseSafetyCard(title: "Impact", icon: .chartBar, dark: dark) {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 Text(presentation.impactTitle)
                     .font(.system(size: UIScale.pt(13), weight: .semibold))
@@ -279,7 +278,7 @@ struct DatabaseSafetyReviewSheet: View {
 
     private var requestCard: some View {
         DatabaseSafetyCard(
-            title: "Generated request", symbol: "chevron.left.forwardslash.chevron.right",
+            title: "Generated request", icon: .code,
             dark: dark
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -308,22 +307,22 @@ struct DatabaseSafetyReviewSheet: View {
             if case let .failed(message) = activePhase {
                 DatabaseSafetyStatusLine(
                     text: DatabaseSafetyReviewPresentation.displayText(message, limit: 1_024),
-                    symbol: "xmark.octagon.fill",
+                    icon: .error,
                     color: DashSkin.danger, dark: dark)
             } else if case let .outcomeUnknown(message) = activePhase {
                 DatabaseSafetyStatusLine(
                     text: DatabaseSafetyReviewPresentation.displayText(message, limit: 1_024),
-                    symbol: "questionmark.diamond.fill",
+                    icon: .help,
                     color: DashSkin.warn, dark: dark)
             } else if case let .accepted(message) = activePhase {
                 DatabaseSafetyStatusLine(
                     text: DatabaseSafetyReviewPresentation.displayText(message, limit: 1_024),
-                    symbol: "clock.badge.checkmark.fill",
+                    icon: .success,
                     color: DashSkin.warn, dark: dark)
             } else if case let .succeeded(message) = activePhase {
                 DatabaseSafetyStatusLine(
                     text: DatabaseSafetyReviewPresentation.displayText(message, limit: 1_024),
-                    symbol: "checkmark.circle.fill",
+                    icon: .success,
                     color: DashSkin.ok, dark: dark)
             }
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -341,7 +340,7 @@ struct DatabaseSafetyReviewSheet: View {
                             .padding(.vertical, UIScale.pt(7))
                     }
                     Button(action: copyConfirmation) {
-                        Image(systemName: "doc.on.doc")
+                        EdithIconView(.copy)
                             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                     }
                     .buttonStyle(.edith(.borderless))
@@ -396,7 +395,8 @@ struct DatabaseSafetyReviewSheet: View {
     ) -> some View {
         DatabaseSafetyStatusLine(
             text: confirmationStatusText(state, now: now),
-            symbol: confirmationStatusSymbol(state),
+            icon: confirmationStatusIcon(state),
+            tone: state == .failed ? .muted : .duotone,
             color: confirmationStatusColor(state),
             dark: dark)
     }
@@ -437,7 +437,7 @@ struct DatabaseSafetyReviewSheet: View {
             Button {
                 Task { await reconcile() }
             } label: {
-                Label("Check mutation status", systemImage: "arrow.clockwise")
+                Label("Check mutation status", edith: .refresh)
                     .frame(maxWidth: fillsWidth ? .infinity : nil)
             }
             .buttonStyle(.edith(.primary, tint: DashSkin.warn))
@@ -449,7 +449,7 @@ struct DatabaseSafetyReviewSheet: View {
             Button {
                 Task { await reconcile() }
             } label: {
-                Label("Check status", systemImage: "arrow.clockwise")
+                Label("Check status", edith: .refresh)
                     .frame(maxWidth: fillsWidth ? .infinity : nil)
             }
             .buttonStyle(.edith(.primary, tint: DashSkin.warn))
@@ -462,7 +462,7 @@ struct DatabaseSafetyReviewSheet: View {
                     if activePhase == .cancelling {
                         Text("Cancel mutation")
                     } else {
-                        Label("Check mutation status", systemImage: "arrow.clockwise")
+                        Label("Check mutation status", edith: .refresh)
                     }
                 }
                 .frame(maxWidth: fillsWidth ? .infinity : nil)
@@ -482,7 +482,7 @@ struct DatabaseSafetyReviewSheet: View {
                     interaction.finishRefresh(requestID)
                 }
             } label: {
-                Label("Create fresh preview", systemImage: "arrow.clockwise")
+                Label("Create fresh preview", edith: .refresh)
                     .frame(maxWidth: fillsWidth ? .infinity : nil)
             }
             .buttonStyle(.edith(.primary, tint: palette.accent))
@@ -581,18 +581,17 @@ struct DatabaseSafetyReviewSheet: View {
         }
     }
 
-    private func confirmationStatusSymbol(_ state: DatabaseSafetyConfirmationState) -> String {
+    private func confirmationStatusIcon(_ state: DatabaseSafetyConfirmationState) -> EdithIcon {
         switch state {
-        case .empty: "clock.fill"
-        case .mismatch: "xmark.circle.fill"
-        case .ready: "checkmark.circle.fill"
-        case .expired: "clock.badge.xmark"
-        case .executing: "bolt.circle.fill"
-        case .outcomeUnknown: "questionmark.diamond.fill"
-        case .partiallyApplied: "exclamationmark.triangle.fill"
-        case .failed: "lock.slash.fill"
-        case .completed:
-            activePhase.isAccepted ? "clock.badge.checkmark.fill" : "checkmark.seal.fill"
+        case .empty: .clock
+        case .expired: .hourglass
+        case .mismatch: .closeFilled
+        case .ready: .success
+        case .completed: activePhase.isAccepted ? .clock : .success
+        case .executing: .bolt
+        case .outcomeUnknown: .help
+        case .partiallyApplied: .warning
+        case .failed: .lock
         }
     }
 

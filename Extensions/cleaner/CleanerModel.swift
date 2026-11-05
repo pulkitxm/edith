@@ -125,6 +125,11 @@ final class CleanerModel {
     @ObservationIgnored private var remoteStamp: Int?
     private let sizeText = CleanerSizeText()
 
+    var presentation: CleanerPresentation {
+        CleanerPresentation(
+            scanned: scanned, scanning: scanning, hasCategories: !categories.isEmpty)
+    }
+
     var uiStamp: Int { revision &* 2 &+ (driveOptionsLoad.isRunning ? 1 : 0) }
 
     private func refreshList() {
@@ -391,6 +396,14 @@ final class CleanerModel {
         removeExternalConfirmation(path)
     }
 
+    static let cleaningTitle = "Moving items to the Trash…"
+    var cleaningInProgress: Bool { scanning && operationTitle == Self.cleaningTitle }
+    var currentScanLocation: String? {
+        guard scanning, !cleaningInProgress, let line = logs.last, line.hasPrefix("Scanning ")
+        else { return nil }
+        let location = line.dropFirst("Scanning ".count)
+        return String(location.hasSuffix("…") ? location.dropLast() : location)
+    }
     var reclaimableTotal: Int64 { list.reclaimableTotal }
     var visibleCategories: [JunkCategory] { selection.applied(to: list.visibleCategories) }
     var selectedTotal: Int64 { stats.selectedBytes }
@@ -831,7 +844,7 @@ final class CleanerModel {
         cancelScan()
         scanning = true
         cleaning = true
-        operationTitle = "Scanning…"
+        operationTitle = Self.cleaningTitle
         let token = CleanerCancellation()
         scanToken = token
         workTask = track { [self, services] in

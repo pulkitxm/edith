@@ -38,10 +38,7 @@ function report(update) {
 
 function editorTheme(options) {
   const dark = options.dark;
-  const ink = dark ? "#d4d9e3" : "#263044";
-  const muted = dark ? "#737c8f" : "#8991a2";
-  const surface = dark ? "#171a21" : "#ffffff";
-  const accent = dark ? "#bdabff" : "#653bbe";
+  const { ink, muted, surface, raised, border, accent, selected } = options.colors;
   return [
     EditorView.theme({
       "&": { height: "100%", color: ink, backgroundColor: surface, fontSize: `${options.fontSize}px` },
@@ -51,11 +48,11 @@ function editorTheme(options) {
       ".cm-cursor, .cm-dropCursor": { borderLeftColor: ink, borderLeftWidth: "2px" },
       ".cm-gutters": { backgroundColor: surface, color: muted, borderRight: "none" },
       ".cm-lineNumbers .cm-gutterElement": { padding: "0 12px 0 14px", minWidth: "28px" },
-      ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: dark ? "#222733" : "#f3f5fa" },
-      ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: dark ? "#3a4765" : "#d6e3fa" },
-      ".cm-matchingBracket": { color: accent, backgroundColor: dark ? "#3a334e" : "#e9e2fb", outline: "1px solid #8070a8" },
-      ".cm-panels": { color: ink, backgroundColor: dark ? "#222733" : "#f3f5fa" },
-      ".cm-panels-top": { borderBottom: `1px solid ${dark ? "#363c49" : "#d8dde8"}` },
+      ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: raised },
+      ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: selected },
+      ".cm-matchingBracket": { color: accent, backgroundColor: selected, outline: `1px solid ${accent}` },
+      ".cm-panels": { color: ink, backgroundColor: raised },
+      ".cm-panels-top": { borderBottom: `1px solid ${border}` },
       ".cm-search": { padding: "10px 12px", fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif", fontSize: `${options.fontSize * 12 / 14}px`, lineHeight: "1.8" },
       ".cm-search input, .cm-search button, .cm-search label": { fontFamily: "inherit", fontSize: "inherit" },
       ".cm-search .cm-textfield": { padding: "5px 8px", width: "150px" },
@@ -64,7 +61,7 @@ function editorTheme(options) {
       ".cm-textfield": { color: ink, backgroundColor: surface, border: `1px solid ${muted}`, borderRadius: "4px", padding: "5px 8px" },
       ".cm-button": { color: ink, backgroundImage: "none", backgroundColor: surface, border: `1px solid ${muted}`, borderRadius: "4px", padding: "4px 8px" },
       ".cm-tooltip": { border: `1px solid ${muted}`, backgroundColor: surface },
-      ".cm-tooltip-autocomplete ul li[aria-selected]": { color: ink, backgroundColor: dark ? "#3a4765" : "#d6e3fa" },
+      ".cm-tooltip-autocomplete ul li[aria-selected]": { color: ink, backgroundColor: selected },
       ".cm-searchMatch": { backgroundColor: dark ? "#65502c" : "#fff0b1" },
       ".cm-searchMatch-selected": { backgroundColor: dark ? "#896a32" : "#ffd974" },
     }, { dark }),
@@ -74,7 +71,7 @@ function editorTheme(options) {
       { tag: [tags.number, tags.bool], color: dark ? "#ebbb83" : "#a05d15" },
       { tag: tags.comment, color: muted, fontStyle: "italic" },
       { tag: [tags.atom, tags.variableName, tags.attributeName], color: dark ? "#87c8de" : "#226b8b" },
-      { tag: [tags.bracket, tags.punctuation], color: dark ? "#aeb8cc" : "#627089" },
+      { tag: [tags.bracket, tags.punctuation], color: muted },
       { tag: tags.invalid, color: dark ? "#f392a1" : "#bf3450" },
     ])),
   ];
@@ -148,7 +145,7 @@ window.edithEditor = {
       view.scrollDOM.scrollTop = scrollTop;
     } else {
       const effects = [];
-      if (current.dark !== options.dark || current.fontSize !== options.fontSize) effects.push(theme.reconfigure(editorTheme(options)));
+      if (current.dark !== options.dark || current.fontSize !== options.fontSize || JSON.stringify(current.colors) !== JSON.stringify(options.colors)) effects.push(theme.reconfigure(editorTheme(options)));
       if (current.wrapsLines !== options.wrapsLines) effects.push(wrapping.reconfigure(options.wrapsLines ? EditorView.lineWrapping : []));
       if (current.editable !== options.editable) effects.push(editing.reconfigure([EditorView.editable.of(options.editable), EditorState.readOnly.of(!options.editable)]));
       if (effects.length) view.dispatch({ effects, annotations: Transaction.addToHistory.of(false) });

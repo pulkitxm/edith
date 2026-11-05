@@ -3,20 +3,9 @@ import EdithExtensionSupport
 import SwiftUI
 
 struct AppGlyph: View {
-    var systemName: String
+    var icon: EdithIcon
     var logoName: String?
     var size: CGFloat
-    var weight: Font.Weight = .medium
-
-    init(
-        systemName: String, logoName: String? = nil, size: CGFloat,
-        weight: Font.Weight = .medium
-    ) {
-        self.systemName = systemName
-        self.logoName = logoName
-        self.size = size
-        self.weight = weight
-    }
 
     var body: some View {
         Group {
@@ -26,8 +15,7 @@ struct AppGlyph: View {
                     .renderingMode(.template)
                     .scaledToFit()
             } else {
-                Image(systemName: systemName)
-                    .font(.system(size: size, weight: weight))
+                EdithIconView(icon).font(.system(size: size))
             }
         }
         .frame(width: size, height: size)

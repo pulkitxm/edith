@@ -36,13 +36,16 @@ struct ClipboardHistoryView: View {
                 Spacer()
                 Button("Done") { dismiss() }
             }
-            .padding()
+            .padding(.horizontal, ClipboardHistoryRow.inset)
+            .padding(.vertical, UIScale.pt(14))
             if let error = model.error {
-                Text(error).settingsCaption().foregroundStyle(.red).padding(.horizontal)
+                Text(error).settingsCaption().foregroundStyle(.red)
+                    .padding(.horizontal, ClipboardHistoryRow.inset)
             }
             Divider()
             SearchField(placeholder: "Search…", text: $filterText, typeAhead: true)
-                .padding(UIScale.pt(10))
+                .padding(.horizontal, ClipboardHistoryRow.inset)
+                .padding(.vertical, UIScale.pt(10))
             VirtualList(
                 filtered, rowHeight: { _ in ClipboardHistoryRow.height }, header: { EmptyView() }
             ) { entry in
@@ -62,6 +65,7 @@ struct ClipboardHistoryView: View {
 
 private struct ClipboardHistoryRow: View {
     @MainActor static var height: CGFloat { UIScale.pt(58) }
+    @MainActor static var inset: CGFloat { UIScale.pt(14) }
 
     let entry: ClipboardEntry
     let model: ClipboardHistoryModel
@@ -73,7 +77,7 @@ private struct ClipboardHistoryRow: View {
             ClipboardThumbnailView(
                 entry: entry, maxHeight: entry.kind == .text ? 18 : 40, client: model.client
             ) {
-                Image(systemName: icon)
+                EdithIconView(icon)
                     .foregroundStyle(.secondary)
                     .frame(width: UIScale.pt(18))
             }
@@ -100,13 +104,13 @@ private struct ClipboardHistoryRow: View {
             Button {
                 model.copy(entry)
             } label: {
-                Image(systemName: "doc.on.doc")
+                EdithIconView(.copy)
             }
             .buttonStyle(.edith(.borderless))
             Button {
                 model.mutate(.init(entry.pinned ? .unpin : .pin, ids: [entry.id]))
             } label: {
-                Image(systemName: entry.pinned ? "pin.fill" : "pin")
+                EdithIconView(.pin, tone: entry.pinned ? .duotone : .muted)
                     .foregroundStyle(entry.pinned ? themeColor(themeName) : .secondary)
             }
             .buttonStyle(.edith(.borderless))
@@ -114,24 +118,24 @@ private struct ClipboardHistoryRow: View {
             Button(role: .destructive) {
                 model.mutate(.init(.delete, ids: [entry.id]))
             } label: {
-                Image(systemName: "trash")
+                EdithIconView(.trash)
             }
             .buttonStyle(.edith(.borderless))
         }
-        .padding(.horizontal, UIScale.pt(14))
+        .padding(.horizontal, Self.inset)
         .frame(height: Self.height)
         .overlay(alignment: .bottom) { Divider().opacity(0.6) }
     }
 
-    private var icon: String {
+    private var icon: EdithIcon {
         switch entry.kind {
-        case .image: return "photo"
-        case .file: return "doc"
-        case .richText, .html: return "doc.richtext"
-        case .text: return "doc.plaintext"
-        case .document: return "doc.text"
-        case .media: return "play.rectangle"
-        case .data: return "externaldrive"
+        case .image: return .photo
+        case .file: return .doc
+        case .richText, .html: return .docText
+        case .text: return .textLines
+        case .document: return .docText
+        case .media: return .play
+        case .data: return .drive
         }
     }
 }

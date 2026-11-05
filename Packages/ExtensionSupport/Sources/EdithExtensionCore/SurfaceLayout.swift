@@ -1,3 +1,4 @@
+import EdithIcons
 import Foundation
 
 public enum SurfaceTarget: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -104,24 +105,24 @@ public enum SurfaceWidget: Codable, RawRepresentable, CaseIterable, Hashable, Id
         case .ability(let id): id
         }
     }
-    public var icon: String {
+    public var icon: EdithIcon {
         switch self {
-        case .clocks: "clock"
-        case .actions: "bolt"
-        case .activity: "chart.bar.xaxis"
-        case .usage: "chart.pie"
-        case .limits: "gauge.with.dots.needle.50percent"
-        case .music: "music.note"
-        case .calendar: "calendar"
-        case .codeStats: "curlybraces"
-        case .agents: "terminal"
-        case .focus: "timer"
-        case .databases: "externaldrive"
-        case .machines: "desktopcomputer"
-        case .desk: "square.grid.2x2"
-        case .media: "play.rectangle"
-        case .github: "point.3.connected.trianglepath.dotted"
-        case .ability: "puzzlepiece.extension"
+        case .clocks: .clock
+        case .actions: .bolt
+        case .activity: .chartBar
+        case .usage: .pie
+        case .limits: .gauge
+        case .music: .music
+        case .calendar: .calendar
+        case .codeStats: .braces
+        case .agents: .terminal
+        case .focus: .timer
+        case .databases: .drive
+        case .machines: .display
+        case .desk: .grid
+        case .media: .play
+        case .github: .nodes
+        case .ability: .puzzle
         }
     }
     public var summary: String {

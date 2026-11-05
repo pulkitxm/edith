@@ -170,3 +170,30 @@ struct CleanerListStateTests {
         #expect(model.list.rows.isEmpty)
     }
 }
+
+@Suite("Cleaner presentation")
+struct CleanerPresentationTests {
+    @Test func neverScannedShowsTheFirstRunGuide() {
+        #expect(
+            CleanerPresentation(scanned: false, scanning: false, hasCategories: false) == .firstRun)
+    }
+
+    @Test func scanningWithoutResultsShowsProgress() {
+        #expect(
+            CleanerPresentation(scanned: false, scanning: true, hasCategories: false) == .scanning)
+        #expect(
+            CleanerPresentation(scanned: true, scanning: true, hasCategories: false) == .scanning)
+    }
+
+    @Test func scannedWithoutCategoriesIsAnExplainedEmptyResult() {
+        #expect(
+            CleanerPresentation(scanned: true, scanning: false, hasCategories: false)
+                == .nothingToClean)
+    }
+
+    @Test func categoriesAlwaysShowResults() {
+        #expect(
+            CleanerPresentation(scanned: true, scanning: false, hasCategories: true) == .results)
+        #expect(CleanerPresentation(scanned: true, scanning: true, hasCategories: true) == .results)
+    }
+}

@@ -72,6 +72,11 @@ final class HostTerminalInput {
         }
     }
 
+    static func isWindowCloseKey(characters: String?, modifiers: NSEvent.ModifierFlags) -> Bool {
+        modifiers.intersection([.command, .control, .option, .shift]) == .command
+            && characters?.lowercased() == "w"
+    }
+
     func consumeTabKey(characters: String?, modifiers: NSEvent.ModifierFlags) -> Bool {
         guard let action = Self.tabAction(characters: characters, modifiers: modifiers), !stopped,
             !closing, available(),

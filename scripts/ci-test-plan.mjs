@@ -91,7 +91,7 @@ export function planSwiftTests(
   const include = [];
   if (
     matches(
-      /^Packages\/(EdithHost|ExtensionMarketplace)\/|^Packages\/ExtensionSupport\/(Package\.(swift|resolved)$|Sources\/(EdithExtensionCore|EdithExtensionSupport|EdithExtensionUI)\/)/,
+      /^Packages\/(EdithHost|ExtensionMarketplace)\/|^Packages\/ExtensionSupport\/(Package\.(swift|resolved)$|Sources\/(EdithExtensionCore|EdithExtensionSupport|EdithExtensionUI)\/)|^Packages\/EdithIcons\/(Package\.swift$|Sources\/)/,
     )
   ) {
     include.push({
@@ -102,11 +102,12 @@ export function planSwiftTests(
   const targets = [];
   if (
     matches(
-      /^Packages\/ExtensionSupport\/|^Extensions\/Package\.(swift|resolved)$|^Extensions\/fixtureSupport\//,
+      /^Packages\/ExtensionSupport\/|^Packages\/EdithIcons\/(Package\.swift$|Sources\/)|^Extensions\/Package\.(swift|resolved)$|^Extensions\/fixtureSupport\//,
     )
   ) {
     targets.push("ci-extension-support");
   }
+  if (matches(/^Packages\/EdithIcons\//)) targets.push("ci-edith-icons");
   if (
     matches(
       /^Packages\/EdithDocsWorker\/|^Extensions\/docs\/|^scripts\/generate-cli-docs-bundle\.mjs$/,

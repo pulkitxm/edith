@@ -112,12 +112,7 @@ final class EmojiService: ExtensionService {
         return NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    PageWorkspace {
-                        PageHeader("Emoji Picker")
-                    } content: {
-                        Form { EmojiSettingsRows(presentation: presentation) }.formStyle(
-                            .grouped)
-                    }
+                    Form { EmojiSettingsRows(presentation: presentation) }.settingsForm()
                 }
             })
     }

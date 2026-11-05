@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionCore
 import Foundation
 
@@ -28,10 +29,10 @@ public enum FileViewMode: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    public var symbol: String {
+    public var icon: EdithIcon {
         switch self {
-        case .icon: return "square.grid.2x2"
-        case .list: return "list.bullet"
+        case .icon: return .grid
+        case .list: return .list
         }
     }
 }

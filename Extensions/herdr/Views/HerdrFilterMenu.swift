@@ -19,8 +19,8 @@ struct HerdrFilterButton: View {
 
     var body: some View {
         Button(action: onPress) {
-            Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+            EdithIconView(.filter)
+                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(active ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                 .frame(minWidth: UIScale.pt(22), minHeight: UIScale.pt(22))
                 .padding(.horizontal, UIScale.pt(4))
@@ -66,7 +66,7 @@ struct HerdrFilterButton: View {
             let count = chips.count + (store.accountFilter == nil ? 0 : 1)
             Text(count > 9 ? "9+" : "\(count)")
                 .font(DashSkin.mono(8, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(DashSkin.onAccent(dark))
                 .padding(.horizontal, UIScale.pt(3))
                 .padding(.vertical, UIScale.pt(1))
                 .background(DashSkin.accent(dark), in: Capsule())
@@ -86,7 +86,7 @@ struct HerdrFilterButton: View {
     }
 }
 
-private struct HerdrFilterMenu: View {
+struct HerdrFilterMenu: View {
     var store: HerdrStore
     var hideAgents: Bool
     var onOpenSpace: (HerdrAgentSpace) -> Void
@@ -143,7 +143,7 @@ private struct HerdrFilterMenu: View {
             search
             if rows.isEmpty {
                 Text("No matching filters")
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, UIScale.pt(8))
@@ -166,12 +166,12 @@ private struct HerdrFilterMenu: View {
 
     private var search: some View {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+            EdithIconView(.search)
+                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             TextField("Filter", text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: UIScale.pt(13)))
+                .font(.edithText(.body))
                 .disableAutocorrection(true)
                 .focused($searchFocused)
                 .accessibilityLabel("Filter sessions")
@@ -230,7 +230,7 @@ private struct HerdrFilterMenu: View {
 
     private func sectionTitle(_ title: String, first: Bool) -> some View {
         Text(title)
-            .font(.system(size: UIScale.pt(10), weight: .semibold))
+            .font(.edithText(.caption).weight(.semibold))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .padding(.horizontal, UIScale.pt(8))
             .padding(.top, UIScale.pt(first ? 2 : 10))
@@ -246,15 +246,15 @@ private struct HerdrFilterMenu: View {
             activate(row)
         } label: {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: symbol(for: row))
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                EdithIconView(icon(for: row))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(markColor(row))
                     .frame(width: UIScale.pt(14), height: UIScale.pt(14))
                 if let kind = kindMark(row) {
                     HerdrKindMark(kind: kind, size: UIScale.pt(13))
                 }
                 Text(row.title)
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                     .presenterTextBlur(hideAgents && space, fontSize: 12.5)
@@ -279,20 +279,20 @@ private struct HerdrFilterMenu: View {
         }
     }
 
-    private func symbol(for row: HerdrSessionFilterRow) -> String {
+    private func icon(for row: HerdrSessionFilterRow) -> EdithIcon {
         switch row.action {
         case .machine, .agent("all"):
-            row.selected ? "checkmark.circle.fill" : "circle"
+            row.selected ? .success : .ring
         case .agent:
-            row.selected ? "checkmark.square.fill" : "square"
+            row.selected ? .checkboxOn : .checkbox
         case .grouping:
-            row.selected ? "checkmark.square.fill" : "square"
+            row.selected ? .checkboxOn : .checkbox
         case .space:
-            "macwindow"
+            .window
         case .launch:
-            "pencil"
+            .edit
         case .clear:
-            "xmark"
+            .close
         }
     }
 

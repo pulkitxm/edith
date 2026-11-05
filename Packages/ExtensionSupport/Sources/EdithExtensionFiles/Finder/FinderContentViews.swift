@@ -241,7 +241,7 @@ struct FinderListView: View {
                 Text(title)
                     .font(.system(size: UIScale.pt(10), weight: .medium))
                 if model.sortKey == key {
-                    Image(systemName: model.sortAscending ? "chevron.up" : "chevron.down")
+                    EdithIconView(model.sortAscending ? .chevronUp : .chevronDown)
                         .font(.system(size: UIScale.pt(7), weight: .bold))
                 }
             }
@@ -433,7 +433,7 @@ struct QuickLookOverlay: View {
             Button {
                 close()
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
             }
             .buttonStyle(.edith(.toolbar))
             .keyboardShortcut(.cancelAction)
@@ -447,14 +447,14 @@ struct QuickLookOverlay: View {
             Button {
                 model.moveSelection(by: -1, extend: false)
             } label: {
-                Image(systemName: "chevron.up")
+                EdithIconView(.chevronUp)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Previous")
             Button {
                 model.moveSelection(by: 1, extend: false)
             } label: {
-                Image(systemName: "chevron.down")
+                EdithIconView(.chevronDown)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Next")
@@ -552,7 +552,7 @@ private struct FinderSidebarRow: View {
             model.requestKeyFocus()
         } label: {
             HStack(spacing: UIScale.pt(7)) {
-                Image(systemName: place.symbol)
+                EdithIconView(place.icon)
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(
                         selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark)

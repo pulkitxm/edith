@@ -79,7 +79,7 @@ struct ProjectDrilldownView: View {
                 toggleButton
                 if model.projListOpen {
                     SearchField(
-                        placeholder: "Filter repositories, folders, worktrees, chats…",
+                        placeholder: "Filter repositories and chats",
                         text: $model.projQuery, compact: true
                     )
                     .frame(maxWidth: UIScale.pt(260))
@@ -88,13 +88,13 @@ struct ProjectDrilldownView: View {
             }
             if let message = actions.failureMessage {
                 HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    EdithIconView(.warning)
                     Text(message).lineLimit(2)
                     Spacer(minLength: 0)
                     Button("Dismiss") { actions.dismissFailure() }
                         .buttonStyle(.edith(.borderless))
                 }
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.danger)
                 .padding(.horizontal, UIScale.pt(9))
                 .padding(.vertical, UIScale.pt(7))
@@ -127,7 +127,7 @@ struct ProjectDrilldownView: View {
                         if displayNodes.isEmpty, !debouncedQuery.isEmpty {
                             Text("No projects match “\(model.projQuery)”")
                                 .presenterBlur(.agents)
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .padding(UIScale.pt(12))
                         }
@@ -171,12 +171,12 @@ struct ProjectDrilldownView: View {
             model.projListOpen.toggle()
         } label: {
             HStack(spacing: UIScale.pt(4)) {
-                Image(systemName: model.projListOpen ? "chevron.down" : "chevron.right")
+                EdithIconView(model.projListOpen ? .chevronDown : .chevronRight)
                     .font(.system(size: UIScale.pt(8), weight: .semibold))
                 Text(
                     "\(model.projListOpen ? "Hide" : "Show") repositories (\(model.projectTree.count))"
                 )
-                .font(DashSkin.mono(11))
+                .font(.edithText(.subheadline).monospacedDigit())
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
         }
@@ -205,9 +205,9 @@ struct ProjectDrilldownView: View {
             sortBy(key)
         } label: {
             HStack(spacing: UIScale.pt(3)) {
-                Text(title).font(.system(size: UIScale.pt(11), weight: .medium))
+                Text(title).font(.edithText(.subheadline).weight(.medium))
                 if model.projSortKey == key {
-                    Image(systemName: model.projSortAscending ? "chevron.up" : "chevron.down")
+                    EdithIconView(model.projSortAscending ? .chevronUp : .chevronDown)
                         .font(.system(size: UIScale.pt(7), weight: .bold))
                 }
                 Spacer(minLength: 0)
@@ -391,7 +391,7 @@ private struct ProjectRow: View {
     private var nameColumn: some View {
         HStack(spacing: UIScale.pt(5)) {
             if hasChildren {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                EdithIconView(expanded ? .chevronDown : .chevronRight)
                     .font(.system(size: UIScale.pt(8), weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(10))
@@ -425,12 +425,12 @@ private struct ProjectRow: View {
 
     private var rowLabel: some View {
         HStack(spacing: UIScale.pt(5)) {
-            Text(node.label).font(.system(size: UIScale.pt(11))).lineLimit(1)
+            Text(node.label).font(.edithText(.subheadline)).lineLimit(1)
                 .truncationMode(.tail)
                 .presenterBlur(.agents)
             if let note = node.note {
                 Text(note)
-                    .font(.system(size: UIScale.pt(9)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
                     .presenterBlur(.agents)
@@ -447,10 +447,10 @@ private struct ProjectRow: View {
 
     @ViewBuilder private var iconView: some View {
         let img = ZStack(alignment: .topTrailing) {
-            Image(systemName: icon).font(.system(size: UIScale.pt(10)))
+            EdithIconView(icon).font(.edithText(.caption))
             if node.badge > 0 {
                 Text(node.badge > 99 ? "99+" : "\(node.badge)")
-                    .font(.system(size: UIScale.pt(7), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .offset(x: 7, y: -4)
             }
         }
@@ -468,7 +468,7 @@ private struct ProjectRow: View {
 
     private func num(_ text: String, width: CGFloat, blurWhen: Bool = false) -> some View {
         Text(text)
-            .font(DashSkin.mono(11))
+            .font(.edithText(.subheadline).monospacedDigit())
             .lineLimit(1)
             .foregroundStyle(tint)
             .frame(width: width, alignment: .leading)
@@ -483,12 +483,12 @@ private struct ProjectRow: View {
         }
     }
 
-    private var icon: String {
+    private var icon: EdithIcon {
         switch node.kind {
-        case .repository: return "shippingbox"
-        case .folder: return "folder"
-        case .worktree: return "arrow.triangle.branch"
-        case .chat, .more: return "message"
+        case .repository: return .box
+        case .folder: return .folder
+        case .worktree: return .quinjet
+        case .chat, .more: return .message
         }
     }
 }

@@ -3,6 +3,7 @@ import EdithExtensionUI
 import EdithExtensionSupport
 struct EmbeddedMusicStreamingControls: View {
     @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
     @State private var optionsPresented = false
     @State private var accounts = EmbeddedMusicAccounts.shared
     init(accounts: EmbeddedMusicAccounts? = nil) {
@@ -17,7 +18,7 @@ struct EmbeddedMusicStreamingControls: View {
                 Button {
                     optionsPresented = true
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
+                    EdithIconView(.adjust)
                         .frame(width: UIScale.pt(26), height: UIScale.pt(30))
                 }
                 .buttonStyle(.edith(.toolbar))
@@ -44,7 +45,7 @@ struct EmbeddedMusicStreamingControls: View {
                     accounts.spotify.library.navigate(to: .queue)
                     EmbeddedMusicRemote.shared.send(.openMusic)
                 } label: {
-                    Image(systemName: "list.bullet")
+                    EdithIconView(.list)
                 }
                 .buttonStyle(.edith(.toolbar)).accessibilityLabel("Open playback queue")
                 volumeSlider
@@ -75,20 +76,21 @@ struct EmbeddedMusicStreamingControls: View {
             Button {
                 accounts.spotify.library.setShuffle(!accounts.spotify.library.shuffle)
             } label: {
-                Image(systemName: "shuffle").foregroundStyle(
-                    accounts.spotify.library.shuffle ? Color.accentColor : .secondary)
+                EdithIconView(.shuffle).foregroundStyle(
+                    accounts.spotify.library.shuffle ? DashSkin.accent(scheme == .dark) : .secondary
+                )
             }.buttonStyle(.edith(.toolbar)).accessibilityLabel("Shuffle")
             Button {
                 let modes = ["off", "context", "track"]
                 let index = modes.firstIndex(of: accounts.spotify.library.repeatMode) ?? 0
                 accounts.spotify.library.setRepeat(modes[(index + 1) % modes.count])
             } label: {
-                Image(
-                    systemName: accounts.spotify.library.repeatMode == "track"
-                        ? "repeat.1" : "repeat"
+                EdithIconView(
+                    accounts.spotify.library.repeatMode == "track" ? .repeatOne : .repeatAll
                 )
                 .foregroundStyle(
-                    accounts.spotify.library.repeatMode == "off" ? Color.secondary : .accentColor)
+                    accounts.spotify.library.repeatMode == "off"
+                        ? Color.secondary : DashSkin.accent(scheme == .dark))
             }.buttonStyle(.edith(.toolbar)).accessibilityLabel(
                 "Repeat: \(accounts.spotify.library.repeatMode)")
         }
@@ -96,11 +98,11 @@ struct EmbeddedMusicStreamingControls: View {
 
     private var transport: some View {
         HStack(spacing: UIScale.pt(14)) {
-            control("backward.fill", label: "Previous track", action: "previous")
+            control(.rewind, label: "Previous track", action: "previous")
             control(
-                accounts.spotify.playing ? "pause.fill" : "play.fill", label: "Play or pause",
+                accounts.spotify.playing ? .pause : .play, label: "Play or pause",
                 action: "toggle")
-            control("forward.fill", label: "Next track", action: "next")
+            control(.fastForward, label: "Next track", action: "next")
         }
     }
 
@@ -134,7 +136,7 @@ struct EmbeddedMusicStreamingControls: View {
 
     private var volumeSlider: some View {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: "speaker.wave.2")
+            EdithIconView(.speaker)
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
             Slider(
                 value: Binding(
@@ -145,11 +147,11 @@ struct EmbeddedMusicStreamingControls: View {
         }
     }
 
-    private func control(_ symbol: String, label: String, action: String) -> some View {
+    private func control(_ icon: EdithIcon, label: String, action: String) -> some View {
         Button {
             accounts.spotify.send(["action": action])
         } label: {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(14)))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(30))
         }

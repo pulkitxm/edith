@@ -300,8 +300,8 @@ public enum DockerProjectOrder {
         return isCompanion(project) ? "Companion" : project
     }
 
-    public static func symbol(_ project: String?) -> String {
-        guard let project else { return "cube" }
-        return isCompanion(project) ? "brain.head.profile" : "square.stack"
+    public static func icon(_ project: String?) -> EdithIcon {
+        guard let project else { return .box }
+        return isCompanion(project) ? .companion : .layers
     }
 }

@@ -95,7 +95,7 @@ import HostWorkerFixtureSupport
             label: "F15")
         defer { HotKeyRegistrar.clear(hotkey.id) }
         let entry = HostExtension(
-            id: "sample", title: "Synthetic", symbolName: "square", category: "desk",
+            id: "sample", title: "Synthetic", icon: .checkbox, category: "desk",
             background: false, hotkeys: [hotkey])
         let shortcuts = HostIdleShortcuts(
             entries: [entry], identity: identity, sessions: fixture.sessions)
@@ -514,7 +514,7 @@ import HostWorkerFixtureSupport
                 forName: identity.defaultsSuite)
         }
         let entry = HostExtension(
-            id: "sample", title: "Synthetic", symbolName: "square", category: "Tools")
+            id: "sample", title: "Synthetic", icon: .checkbox, category: "Tools")
         let surfaces = try HostSurfaces(
             identity: identity, entries: [entry], sessions: fixture.sessions)
         let channel = ExtensionSharedState(
@@ -563,7 +563,7 @@ import HostWorkerFixtureSupport
             snapshot["pid"] = Int32.max
             try JSONSerialization.data(withJSONObject: snapshot).write(to: file)
             let entry = HostExtension(
-                id: "presenter", title: "Presenter", symbolName: "square", category: "Tools")
+                id: "presenter", title: "Presenter", icon: .checkbox, category: "Tools")
             let surfaces = try HostSurfaces(
                 identity: identity, entries: [entry], sessions: fixture.sessions)
             #expect(surfaces.privacy.values["active"] == expected)

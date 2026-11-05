@@ -4,6 +4,15 @@ import Observation
 @MainActor @Observable final class EmbeddedMusicTools {
     static let shared = EmbeddedMusicTools()
     static let names = ["yt-dlp", "ffmpeg", "deno", "gallery-dl"]
+    static func purpose(of name: String) -> String {
+        switch name {
+        case "yt-dlp": "Required. Downloads videos and audio from most sites."
+        case "ffmpeg": "Converts audio and merges the best video and sound."
+        case "deno": "Helps yt-dlp read sites that need scripts to load."
+        case "gallery-dl": "Saves photos, galleries and carousels from posts."
+        default: ""
+        }
+    }
     var installed: Set<String> = []
     var installing: String?
     var error: String?

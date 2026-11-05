@@ -28,7 +28,7 @@ enum CodeStatsBannerTone: Sendable {
 
 struct CodeStatsBanner: Identifiable, Equatable, Sendable {
     let id: String
-    let symbol: String
+    let icon: EdithIcon
     let title: String
     let message: String
     var command: String?
@@ -43,7 +43,7 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
         if !status.gitAvailable {
             banners.append(
                 CodeStatsBanner(
-                    id: "git", symbol: "hammer", title: "git is missing",
+                    id: "git", icon: .hammer, title: "git is missing",
                     message: "Code Stats needs git to mirror and read repositories.",
                     command: "ed tools install git", tone: .danger))
         }
@@ -60,11 +60,11 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
         switch run.outcome {
         case .failed(let message):
             return CodeStatsBanner(
-                id: "lastRun", symbol: "exclamationmark.octagon",
+                id: "lastRun", icon: .error,
                 title: "The last refresh failed", message: message + firstError, tone: .danger)
         case .interrupted:
             return CodeStatsBanner(
-                id: "lastRun", symbol: "exclamationmark.arrow.circlepath",
+                id: "lastRun", icon: .sync,
                 title: "The last refresh stopped early",
                 message:
                     "Edith stopped before the refresh finished. Repositories it finished are kept; refresh to continue."
@@ -76,7 +76,7 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
 
     static func report(_ message: String) -> CodeStatsBanner {
         CodeStatsBanner(
-            id: "report", symbol: "chart.bar.xaxis", title: "Results could not be loaded",
+            id: "report", icon: .chartBar, title: "Results could not be loaded",
             message: message, retriesReport: true, tone: .danger)
     }
 
@@ -84,21 +84,21 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
         switch issue {
         case .unavailable:
             CodeStatsBanner(
-                id: "github", symbol: "person.crop.circle.badge.questionmark",
+                id: "github", icon: .person,
                 title: "GitHub CLI is not installed",
                 message:
                     "Install gh to list and mirror your repositories. Repositories already in the folder are still counted.",
                 command: "ed tools install gh")
         case .signedOut:
             CodeStatsBanner(
-                id: "github", symbol: "person.crop.circle.badge.exclamationmark",
+                id: "github", icon: .person,
                 title: "GitHub CLI is signed out",
                 message:
                     "Sign in so Edith can list your repositories. Run this in Terminal, then refresh.",
                 command: "gh auth login")
         case .failed(let message):
             CodeStatsBanner(
-                id: "github", symbol: "exclamationmark.icloud", title: "GitHub could not be read",
+                id: "github", icon: .cloud, title: "GitHub could not be read",
                 message: message)
         }
     }
@@ -109,7 +109,7 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
             return nil
         case .notConfigured:
             return CodeStatsBanner(
-                id: "storage", symbol: "folder.badge.questionmark", title: "No mirror folder",
+                id: "storage", icon: .folder, title: "No storage folder",
                 message: status.storage.summary, choosesFolder: true)
         case .volumeDisconnected(let volume):
             let since = status.state.reportedAt.map {
@@ -117,13 +117,13 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
                     + ". "
             }
             return CodeStatsBanner(
-                id: "storage", symbol: "externaldrive.badge.xmark",
+                id: "storage", icon: .drive,
                 title: "\(volume) is disconnected",
                 message: (since ?? "") + "Reconnect it or choose another folder.",
                 choosesFolder: true)
         case .missing, .notDirectory, .notWritable:
             return CodeStatsBanner(
-                id: "storage", symbol: "folder.badge.minus", title: "Mirror folder unavailable",
+                id: "storage", icon: .folderRemove, title: "Storage folder unavailable",
                 message: status.storage.summary, choosesFolder: true, tone: .danger)
         }
     }
@@ -172,6 +172,19 @@ enum CodeStatsProgressMath {
 }
 
 extension CodeStatsStatus {
+    func runSummary(now: Date) -> String {
+        let updated =
+            state.reportedAt.map {
+                "Updated " + $0.formatted(.relative(presentation: .named, unitsStyle: .wide))
+            } ?? "Not updated yet"
+        let next =
+            isRunning
+            ? "Refreshing now"
+            : settings.schedule == .manual
+                ? "Refreshes when you ask" : "Next refresh: " + nextRunLabel(now: now)
+        return updated + ". " + next + "."
+    }
+
     func nextRunLabel(now: Date) -> String {
         if isRunning { return "Running now" }
         if settings.schedule == .manual { return "Manual" }

@@ -5,6 +5,7 @@ import SwiftUI
 struct FleetHomeView: View {
     let model: MachinesModel
     let onSelect: (UUID) -> Void
+    var onAddMachine: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.windowVisible) private var windowVisible
@@ -21,6 +22,7 @@ struct FleetHomeView: View {
     var body: some View {
         PageScaffold(pinnedHeader: true, header: {}) {
             PageLoading(state: loaded ? .content : .loading, layout: .cards) {
+                if FleetFirstRun.needsRemoteMachine(model.snapshots) { firstRunCard }
                 fleetBanner
                 metricsGrid
                 storageCard
@@ -42,21 +44,24 @@ struct FleetHomeView: View {
     private var fleetBanner: some View {
         let fleet = model.fleet
         return HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "square.stack.3d.up")
-                .font(.system(size: UIScale.pt(12)))
+            EdithIconView(.layers)
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            Text("\(fleet.machinesOnline) of \(fleet.machinesTotal) machines online")
-                .font(.system(size: UIScale.pt(12.5), weight: .medium))
+            Text(FleetFirstRun.onlineSummary(fleet))
+                .font(.edithText(.callout).weight(.medium))
                 .foregroundStyle(DashSkin.ink(dark))
-            Spacer(minLength: 0)
+                .lineLimit(1)
+            Spacer(minLength: UIScale.pt(8))
             Text(bannerDetail(fleet))
-                .font(DashSkin.mono(10.5))
+                .font(.edithText(.caption).monospacedDigit())
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .lineLimit(1)
         }
-        .padding(.horizontal, UIScale.pt(14))
-        .padding(.vertical, UIScale.pt(10))
-        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+        .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
+        .padding(.vertical, UIScale.pt(12))
+        .widgetBar(
+            cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark))
     }
 
     private func bannerDetail(_ fleet: FleetSummary) -> String {
@@ -73,13 +78,11 @@ struct FleetHomeView: View {
     private var metricsGrid: some View {
         let fleet = model.fleet
         return LazyVGrid(
-            columns: compact
-                ? [GridItem(.flexible(minimum: 0))]
-                : [
-                    GridItem(.flexible(minimum: 0), spacing: UIScale.pt(12)),
-                    GridItem(.flexible(minimum: 0), spacing: UIScale.pt(12)),
-                ],
-            spacing: UIScale.pt(12)
+            columns: Array(
+                repeating: GridItem(
+                    .flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top),
+                count: 2),
+            spacing: UIScale.pt(PageMetrics.cardSpacing)
         ) {
             MetricCard(
                 title: "CPU", value: String(format: "%.0f%%", fleet.cpuPercent),
@@ -107,7 +110,7 @@ struct FleetHomeView: View {
                         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                             HStack {
                                 Text(row.name)
-                                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                                    .font(.edithText(.callout).weight(.medium))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Spacer()
@@ -115,7 +118,7 @@ struct FleetHomeView: View {
                                     "\(ByteFormatter.string(row.diskUsedKB * 1024)) of "
                                         + ByteFormatter.string(row.diskTotalKB * 1024)
                                 )
-                                .font(DashSkin.mono(10.5))
+                                .font(.edithText(.caption).monospacedDigit())
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             }
                             let percent = Double(row.diskUsedKB) / Double(max(row.diskTotalKB, 1))
@@ -137,23 +140,27 @@ struct FleetHomeView: View {
             VStack(alignment: .leading, spacing: UIScale.pt(7)) {
                 ForEach(model.fleet.alerts) { alert in
                     HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: alert.symbol)
-                            .font(.system(size: UIScale.pt(11)))
+                        EdithIconView(alert.icon)
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(
                                 alert.kind == .updates ? DashSkin.gold : DashSkin.warn
                             )
                             .frame(width: UIScale.pt(16))
                         Text(alert.machineName)
-                            .font(.system(size: UIScale.pt(12), weight: .medium))
+                            .font(.edithText(.callout).weight(.medium))
                             .foregroundStyle(DashSkin.ink(dark))
                         Text(alert.detail)
-                            .font(.system(size: UIScale.pt(11.5)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         Spacer(minLength: 0)
                     }
                 }
             }
         }
+    }
+
+    private var firstRunCard: some View {
+        FleetFirstRunCard(dark: dark, onAddMachine: onAddMachine)
     }
 
     private var machinesCard: some View {
@@ -190,25 +197,32 @@ private struct FleetMachineRow: View {
                 if compact {
                     VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                         HStack(spacing: UIScale.pt(12)) {
-                            Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
-                                .font(.system(size: UIScale.pt(13)))
+                            EdithIconView(snapshot.isLocal ? .laptop : .server)
+                                .font(.edithText(.body))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                                Text(snapshot.name).font(.edithText(.headline)).lineLimit(1)
-                                Text(snapshot.online ? snapshot.os : "Not connected")
+                                Text(snapshot.name).font(.edithText(.body).weight(.medium))
+                                    .lineLimit(1)
+                                Text(snapshot.online ? snapshot.os : offlineDetail)
                                     .font(.edithText(.caption)).foregroundStyle(
-                                        DashSkin.inkFaint(dark))
+                                        DashSkin.inkFaint(dark)
+                                    )
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help(snapshot.connectionFailure ?? "")
                             }
                             Spacer(minLength: 0)
                             if hostsCompanion {
-                                Image(systemName: "brain.head.profile").foregroundStyle(
+                                EdithIconView(.companion).foregroundStyle(
                                     DashSkin.accent(dark))
                             }
                             if snapshot.online {
-                                Text("\(snapshot.cores) cores").font(DashSkin.mono(10))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                Text("\(snapshot.cores) cores").font(
+                                    .edithText(.caption).monospacedDigit()
+                                )
+                                .foregroundStyle(DashSkin.inkFaint(dark))
                             }
-                            Image(systemName: "chevron.right").font(.edithText(.caption))
+                            EdithIconView(.chevronRight).font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                         if snapshot.online {
@@ -226,24 +240,24 @@ private struct FleetMachineRow: View {
                     }
                 } else {
                     HStack(spacing: UIScale.pt(12)) {
-                        Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
-                            .font(.system(size: UIScale.pt(13)))
+                        EdithIconView(snapshot.isLocal ? .laptop : .server)
+                            .font(.edithText(.body))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                             .frame(width: UIScale.pt(18))
                         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                             HStack(spacing: UIScale.pt(5)) {
                                 Text(snapshot.name)
-                                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                    .font(.edithText(.body).weight(.medium))
                                     .foregroundStyle(DashSkin.ink(dark))
                                 if hostsCompanion {
-                                    Image(systemName: "brain.head.profile")
+                                    EdithIconView(.companion)
                                         .font(.system(size: UIScale.pt(9.5)))
                                         .foregroundStyle(DashSkin.accent(dark))
-                                        .help("Runs the companion")
+                                        .help("Runs Memory")
                                 }
                             }
                             Text(snapshot.online ? snapshot.os : "Not connected")
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                         }
@@ -256,16 +270,19 @@ private struct FleetMachineRow: View {
                                 color: snapshot.diskPercent > FleetMath.diskWarningPercent
                                     ? DashSkin.danger : DashSkin.gold)
                             Text("\(snapshot.cores) cores")
-                                .font(DashSkin.mono(10))
+                                .font(.edithText(.caption).monospacedDigit())
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .frame(width: UIScale.pt(60), alignment: .trailing)
                         } else {
-                            Text("Offline")
-                                .font(.system(size: UIScale.pt(11)))
+                            Text(offlineDetail)
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(snapshot.connectionFailure ?? "")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        Image(systemName: "chevron.right")
+                        EdithIconView(.chevronRight)
                             .font(.system(size: UIScale.pt(9)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
@@ -283,14 +300,16 @@ private struct FleetMachineRow: View {
         .onHover { hovering = $0 }
     }
 
+    private var offlineDetail: String {
+        snapshot.connectionFailure ?? "Open this machine to connect"
+    }
+
     private func meter(_ label: String, percent: Double, color: Color) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-            HStack(spacing: UIScale.pt(4)) {
-                Text(label)
-                    .font(.system(size: UIScale.pt(8.5), weight: .semibold))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(4)) {
+                PageCapsLabel(label)
                 Text(String(format: "%.0f%%", percent))
-                    .font(DashSkin.mono(9.5))
+                    .font(.edithText(.caption2).monospacedDigit())
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
             MeterBar(fraction: percent / 100, color: color, track: DashSkin.line(dark))
@@ -299,24 +318,94 @@ private struct FleetMachineRow: View {
     }
 }
 
+enum FleetFirstRun {
+    static func needsRemoteMachine(_ snapshots: [MachineSnapshot]) -> Bool {
+        !snapshots.contains { !$0.isLocal }
+    }
+
+    static func onlineSummary(_ fleet: FleetSummary) -> String {
+        if fleet.machinesTotal == 1 {
+            return fleet.machinesOnline == 1 ? "1 machine online" : "1 machine, offline"
+        }
+        return "\(fleet.machinesOnline) of \(fleet.machinesTotal) machines online"
+    }
+}
+
+private struct FleetFirstRunCard: View {
+    let dark: Bool
+    let onAddMachine: () -> Void
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: UIScale.pt(16)) {
+                PageGuideBadge(icon: .server, size: 48)
+                copy.frame(maxWidth: UIScale.pt(560), alignment: .leading)
+                Spacer(minLength: UIScale.pt(16))
+                addButton
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                    PageGuideBadge(icon: .server, size: 40)
+                    Text(FleetFirstRunCopy.title)
+                        .font(.edithText(.headline)).fontWeight(.semibold)
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                details
+                addButton
+            }
+        }
+        .padding(UIScale.pt(20))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .widgetBar(
+            cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark)
+        )
+        .accessibilityElement(children: .contain)
+    }
+
+    private var copy: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            Text(FleetFirstRunCopy.title)
+                .font(.edithText(.headline)).fontWeight(.semibold)
+                .foregroundStyle(DashSkin.ink(dark))
+                .accessibilityAddTraits(.isHeader)
+            details
+        }
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text(FleetFirstRunCopy.message)
+                .font(.edithText(.callout)).foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(FleetFirstRunCopy.footnote)
+                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var addButton: some View {
+        Button(action: onAddMachine) {
+            Label("Add machine", edith: .plus)
+        }
+        .buttonStyle(.edith(.primary))
+        .keyboardShortcut(.defaultAction)
+        .fixedSize()
+        .accessibilityIdentifier("machines.first-run.add")
+    }
+}
+
+enum FleetFirstRunCopy {
+    static let title = "Add your first remote machine"
+    static let message =
+        "Connect a server, a Raspberry Pi or any computer you can reach over SSH. Its CPU, memory and disk show up here, and you can open a terminal, browse its files and manage its containers."
+    static let footnote =
+        "Edith signs in with your SSH keys or a password saved in your keychain. Removing a machine later only forgets it."
+}
+
 enum MachinesMode: String {
     case fleet
     case workspace
     case machine
-}
-
-struct FleetChip: View {
-    let title: String
-    let subtitle: String
-    let symbol: String
-    let selected: Bool
-    let dark: Bool
-    let onSelect: () -> Void
-
-    var body: some View {
-        SelectableChipRow(
-            icon: symbol, title: title, subtitle: subtitle, selected: selected, dark: dark,
-            onSelect: onSelect
-        ) { EmptyView() }
-    }
 }

@@ -190,36 +190,36 @@ final class MusicSurface {
         for state in ordered {
             let playing = !state.trackKey.isEmpty
             var actions = [
-                SurfaceAction(state.identifier("open"), "Open Music", "arrow.up.forward.app")
+                SurfaceAction(state.identifier("open"), "Open Music", .external)
             ]
             if playing {
                 actions += [
-                    .init(state.identifier("previous"), "Previous", "backward.end.fill"),
+                    .init(state.identifier("previous"), "Previous", .skipBack),
                     .init(
                         state.identifier("toggle"), state.playing ? "Pause" : "Play",
-                        state.playing ? "pause.fill" : "play.fill"),
-                    .init(state.identifier("next"), "Next", "forward.end.fill"),
+                        state.playing ? .pause : .play),
+                    .init(state.identifier("next"), "Next", .skipForward),
                 ]
                 if target == .notch {
                     actions += [
                         .init(
-                            state.identifier("backward"), "Back 15 seconds", "gobackward.15",
+                            state.identifier("backward"), "Back 15 seconds", .seekBack,
                             field: "seekControls"),
                         .init(
-                            state.identifier("forward"), "Forward 15 seconds", "goforward.15",
+                            state.identifier("forward"), "Forward 15 seconds", .seekForward,
                             field: "seekControls"),
                     ]
                     if let shuffle = state.shuffle {
                         actions.append(
                             .init(
                                 state.identifier("shuffle"), shuffle ? "Shuffle on" : "Shuffle off",
-                                "shuffle", field: "shuffle"))
+                                .shuffle, field: "shuffle"))
                     }
                     if let repeating = state.repeating {
                         actions.append(
                             .init(
                                 state.identifier("repeat"), repeating ? "Repeat on" : "Repeat off",
-                                "repeat", field: "repeat"))
+                                .repeatAll, field: "repeat"))
                     }
                 }
             }
@@ -228,14 +228,14 @@ final class MusicSurface {
                 if state.duration > 0, state.seekable {
                     sliders.append(
                         .init(
-                            state.identifier("seek"), "Playback position", "clock",
+                            state.identifier("seek"), "Playback position", .clock,
                             value: UnitInterval.clamp(state.elapsed / state.duration),
                             field: "progress"))
                 }
                 if state.volumeAvailable {
                     sliders.append(
                         .init(
-                            state.identifier("volume"), "Volume", "speaker.wave.2.fill",
+                            state.identifier("volume"), "Volume", .speaker,
                             value: UnitInterval.clamp(state.volume), field: "volume"))
                 }
             }
@@ -249,7 +249,7 @@ final class MusicSurface {
                             + (tile.shows("progress")
                                 ? " · " + time(state.elapsed) + " / " + time(state.duration) : "")
                         : state.sourceTitle,
-                    icon: "music.note",
+                    icon: .music,
                     progress: playing && state.duration > 0
                         ? UnitInterval.clamp(state.elapsed / state.duration) : nil,
                     actions: actions, sliders: sliders,
@@ -259,11 +259,11 @@ final class MusicSurface {
                     .init(
                         "queue:" + MusicSurfacePlayback.token(state.sourceID + "\0" + track.key),
                         sourceID: state.sourceID,
-                        title: text(track.title), detail: "Up next", icon: "music.note.list",
+                        title: text(track.title), detail: "Up next", icon: .playlist,
                         field: "queue",
                         actions: [
                             .init(
-                                state.queuedIdentifier(track), "Play", "play.fill", field: "queue")
+                                state.queuedIdentifier(track), "Play", .play, field: "queue")
                         ])
                 }
             }
@@ -272,7 +272,7 @@ final class MusicSurface {
             providerID: "music", rows: rows,
             actions: target == .notch
                 ? Array(ordered.prefix(8)).map {
-                    .init($0.identifier("openPlayer"), "Open player", "arrow.up.forward.app")
+                    .init($0.identifier("openPlayer"), "Open player", .external)
                 } : [],
             facts: [
                 "hasTrack": ordered.contains { !$0.trackKey.isEmpty } ? 1 : 0,

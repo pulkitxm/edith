@@ -48,26 +48,39 @@ import UserNotifications
                 case .inputMonitoring: _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
                 case .screenRecording: _ = CGRequestScreenCaptureAccess()
                 case .camera: _ = await AVCaptureDevice.requestAccess(for: .video)
-                case .fullDisk: break
-                case .applicationAudio, .bluetooth, .automation: return
+                case .fullDisk, .applicationAudio, .bluetooth, .automation: break
                 }
-                if let settings = permission.settingsURL { NSWorkspace.shared.open(settings) }
             }, openSettings: { NSWorkspace.shared.open($0) })
     }
 }
 
 @MainActor @Observable final class HostPermissions {
+    static let awaitingRelaunchKey = "permissionsAwaitingRelaunch"
     private(set) var granted: [HostPermission: Bool] = [:]
     private(set) var requesting: HostPermission?
+    private(set) var awaitingRelaunch: Set<HostPermission>
     private let environment: HostPermissionEnvironment
     private var revision = 0
     private let recordPrompt: @MainActor () -> Void
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let relaunchApplication: @MainActor () -> Void
     init(
         environment: HostPermissionEnvironment = .live,
-        recordPrompt: @escaping @MainActor () -> Void = { HostPermissionPromptTracker.record() }
+        defaults: UserDefaults = SharedDefaults.store,
+        recordPrompt: @escaping @MainActor () -> Void = { HostPermissionPromptTracker.record() },
+        relaunch: @escaping @MainActor () -> Void = { HostApplicationRelaunch.perform() }
     ) {
         self.environment = environment
+        self.defaults = defaults
         self.recordPrompt = recordPrompt
+        relaunchApplication = relaunch
+        awaitingRelaunch = Self.stored(in: defaults)
+    }
+
+    private static func stored(in defaults: UserDefaults) -> Set<HostPermission> {
+        Set(
+            (defaults.stringArray(forKey: awaitingRelaunchKey) ?? [])
+                .compactMap(HostPermission.init(rawValue:)).filter(\.needsRelaunch))
     }
 
     func refresh() async {
@@ -76,7 +89,24 @@ import UserNotifications
         let status = await environment.read()
         guard !Task.isCancelled, revision == current else { return }
         granted = status
+        let stored = Self.stored(in: defaults)
+        let remaining = stored.filter { status[$0] != true }
+        if remaining != stored {
+            setAwaitingRelaunch(remaining)
+        } else if stored != awaitingRelaunch {
+            awaitingRelaunch = stored
+        }
     }
+
+    func watch(interval: Duration = .seconds(1), while active: @MainActor () -> Bool = { true })
+        async
+    {
+        while !Task.isCancelled, active() {
+            await refresh()
+            try? await Task.sleep(for: interval)
+        }
+    }
+
     func request(_ permission: HostPermission) async {
         guard !permission.grantsOnFirstUse, requesting == nil else { return }
         requesting = permission
@@ -84,12 +114,37 @@ import UserNotifications
         recordPrompt()
         await environment.request(permission)
         guard !Task.isCancelled else { return }
+        markAwaitingRelaunch(permission)
         await refresh()
+        guard !Task.isCancelled, granted[permission] != true,
+            let settings = permission.settingsURL
+        else { return }
+        _ = environment.openSettings(settings)
     }
+
     func openSettings(_ permission: HostPermission) -> Bool {
-        permission.settingsURL.map(environment.openSettings) ?? false
+        guard let url = permission.settingsURL else { return false }
+        markAwaitingRelaunch(permission)
+        return environment.openSettings(url)
     }
+
+    func relaunch() {
+        setAwaitingRelaunch([])
+        defaults.synchronize()
+        relaunchApplication()
+    }
+
     func usages(entries: [HostExtension], activeIDs: Set<String>) -> [HostPermissionUsage] {
         HostPermissionCatalog.usages(entries: entries, activeIDs: activeIDs, granted: granted)
+    }
+
+    private func markAwaitingRelaunch(_ permission: HostPermission) {
+        guard permission.needsRelaunch, granted[permission] != true else { return }
+        setAwaitingRelaunch(awaitingRelaunch.union([permission]))
+    }
+
+    private func setAwaitingRelaunch(_ value: Set<HostPermission>) {
+        awaitingRelaunch = value
+        defaults.set(value.map(\.rawValue).sorted(), forKey: Self.awaitingRelaunchKey)
     }
 }

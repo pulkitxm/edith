@@ -6,6 +6,7 @@ import Observation
 @available(macOS 14.4, *) @MainActor protocol AudioMixerPresenting {
     var apps: [MixerApp] { get }
     var errorMessage: String? { get }
+    var loaded: Bool { get }
     func setVolume(_ app: MixerApp, _ volume: Float)
     func retry()
     func viewAppeared()
@@ -23,6 +24,7 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
     private static var cache: (apps: [MixerApp], error: String?)?
     private(set) var apps: [MixerApp] = []
     private(set) var errorMessage: String?
+    private(set) var loaded = false
     private let client: ExtensionEngineClient
     private var poll: Task<Void, Never>?
     private var action: Task<Void, Never>?
@@ -34,7 +36,9 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
 
     init(client: ExtensionEngineClient) {
         self.client = client
-        if let cached = Self.cache { apps = cached.apps; errorMessage = cached.error }
+        if let cached = Self.cache {
+            apps = cached.apps; errorMessage = cached.error; loaded = true
+        }
         _ = track { [self] in await refresh() }
     }
     func viewAppeared() {
@@ -107,9 +111,13 @@ final class AudioMixerRemoteModel: AudioMixerPresenting {
         } catch is CancellationError {} catch {
             guard !stopped, generation == revision else { return }
             errorMessage = error.localizedDescription
+            loaded = true
         }
     }
-    private func remember() { Self.cache = (apps, errorMessage) }
+    private func remember() {
+        loaded = true
+        Self.cache = (apps, errorMessage)
+    }
     private func publish(_ records: [AudioMixerAppRecord], icons: [String: Data]) {
         apps = records.map { record in
             MixerApp(

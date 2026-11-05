@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 
 enum HostPermission: String, CaseIterable, Hashable, Sendable {
@@ -60,18 +61,39 @@ enum HostPermission: String, CaseIterable, Hashable, Sendable {
         }
     }
 
-    var symbolName: String {
+    var icon: EdithIcon {
         switch self {
-        case .calendar: "calendar"
-        case .notifications: "bell.badge"
-        case .accessibility: "figure.wave"
-        case .inputMonitoring: "keyboard"
-        case .fullDisk: "externaldrive"
-        case .screenRecording: "rectangle.inset.filled.badge.record"
-        case .applicationAudio: "speaker.wave.2"
-        case .camera: "camera"
-        case .bluetooth: "wave.3.right"
-        case .automation: "gearshape.2"
+        case .calendar: .calendar
+        case .notifications: .permissionNotifications
+        case .accessibility: .permissionAccessibility
+        case .inputMonitoring: .permissionInputMonitoring
+        case .fullDisk: .permissionFullDisk
+        case .screenRecording: .permissionScreenRecording
+        case .applicationAudio: .permissionApplicationAudio
+        case .camera: .permissionCamera
+        case .bluetooth: .permissionBluetooth
+        case .automation: .permissionAutomation
+        }
+    }
+
+    var needsRelaunch: Bool {
+        [.inputMonitoring, .screenRecording, .fullDisk].contains(self)
+    }
+
+    var plainWords: String {
+        switch self {
+        case .calendar: "Lets Edith read your events so your schedule shows up in the app."
+        case .notifications: "Lets Edith warn you before limits run out or when something finishes."
+        case .accessibility:
+            "Lets Edith press keys and read windows for you, for example to paste or move windows."
+        case .inputMonitoring: "Lets Edith notice key presses for hotkeys and keystroke overlays."
+        case .fullDisk: "Lets Edith read files macOS protects, such as usage data from other apps."
+        case .screenRecording:
+            "Lets Edith see what is on your screen to sample colors, blur numbers, or record."
+        case .applicationAudio: "Lets Edith change the volume of individual apps."
+        case .camera: "Lets Edith show and style your camera."
+        case .bluetooth: "Lets Edith notice when headphones and other devices connect."
+        case .automation: "Lets Edith control other apps such as your music player."
         }
     }
 

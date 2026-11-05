@@ -96,9 +96,9 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(apps/music-player/|Packages/(EdithHost|EdithDocsWorker|ExtensionMarketplace|ExtensionSupport)/|Extensions/|Resources/|scripts/(build-minimal-host\.mjs|package-shipping-host\.py|host_build_metadata\.py|verify.shipping.host\.py|package-host-dmg\.py)$|build\.sh$|Makefile$|\.swift-format$)'
-          area extensions '^(Extensions/|Packages/(ExtensionMarketplace|EdithHost|ExtensionSupport|EdithDocsWorker)/|docs/cli/|scripts/generate-cli-docs-bundle\.mjs$|scripts/[^/]*extension|scripts/release-asset-|scripts/release-lookup\.|scripts/(build-minimal-host|build-contained-host-runtime|build-camera-carrier)\.mjs$|scripts/build-ghostty\.sh$|scripts/patches/ghostty-external-io\.patch$|apps/music-player/|\.github/actions/cache-host/|\.github/workflows/(extensions|ci)\.yml$|scripts/(package-shipping-host|verify_shipping_host|host_build_metadata)\.py$)'
-          area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionCore|EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|Host.entitlements|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|host_build_metadata.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
+          area swift '^(apps/music-player/|Packages/(EdithHost|EdithDocsWorker|EdithIcons|ExtensionMarketplace|ExtensionSupport)/|Extensions/|Resources/|scripts/(build-minimal-host\.mjs|package-shipping-host\.py|host_build_metadata\.py|verify.shipping.host\.py|package-host-dmg\.py)$|build\.sh$|Makefile$|\.swift-format$)'
+          area extensions '^(Extensions/|Packages/(ExtensionMarketplace|EdithHost|ExtensionSupport|EdithDocsWorker)/|Packages/EdithIcons/(Package\.swift$|Sources/)|docs/cli/|scripts/generate-cli-docs-bundle\.mjs$|scripts/[^/]*extension|scripts/release-asset-|scripts/release-lookup\.|scripts/(build-minimal-host|build-contained-host-runtime|build-camera-carrier)\.mjs$|scripts/build-ghostty\.sh$|scripts/patches/ghostty-external-io\.patch$|apps/music-player/|\.github/actions/cache-host/|\.github/workflows/(extensions|ci)\.yml$|scripts/(package-shipping-host|verify_shipping_host|host_build_metadata)\.py$)'
+          area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/EdithIcons/(Package\.swift$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionCore|EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|Host.entitlements|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|host_build_metadata.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'
@@ -176,6 +176,9 @@ jobs:
       - name: No duplicate UserDefaults keys
         if: needs.changes.outputs.swift == 'true'
         run: make ci-duplicate-keys
+      - name: Every icon comes from EdithIcons
+        if: needs.changes.outputs.swift == 'true'
+        run: make ci-icons
       - name: Lint (Biome)
         if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.site == 'true'
         run: make ci-lint
@@ -275,14 +278,15 @@ jobs:
           path: |
             Packages/ExtensionMarketplace/.build
             Packages/ExtensionSupport/.build
+            Packages/EdithIcons/.build
             Packages/EdithDocsWorker/.build
             Extensions/.build
             Extensions/music/Native/target
             ${{ matrix.extension && format('Extensions/{0}/.build', matrix.extension) || '' }}
             ${{ matrix.extension && format('Extensions/{0}/*/.build', matrix.extension) || '' }}
             ${{ matrix.extension && format('local/extension-support/{0}_*', matrix.extension) || '' }}
-          key: native-tests-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ matrix.extension && hashFiles(format('Extensions/{0}/**/Package.*', matrix.extension)) || 'shared' }}-${{ github.sha }}
-          restore-keys: native-tests-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ matrix.extension && hashFiles(format('Extensions/{0}/**/Package.*', matrix.extension)) || 'shared' }}-
+          key: native-tests-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithIcons/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ matrix.extension && hashFiles(format('Extensions/{0}/**/Package.*', matrix.extension)) || 'shared' }}-${{ github.sha }}
+          restore-keys: native-tests-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithIcons/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ matrix.extension && hashFiles(format('Extensions/{0}/**/Package.*', matrix.extension)) || 'shared' }}-
       - name: Identify the optional terminal test toolchain
         if: matrix.ghostty == true
         id: ghostty-toolchain
@@ -302,6 +306,15 @@ jobs:
         run: |
           read -r -a targets <<< "$TARGETS"
           make "${targets[@]}"
+      - name: Crash reports
+        if: failure()
+        run: |
+          shopt -s nullglob
+          for report in ~/Library/Logs/DiagnosticReports/*.ips; do
+            echo "::group::$(basename "$report")"
+            head -c 40000 "$report"
+            echo "::endgroup::"
+          done
 
   companion:
     name: companion

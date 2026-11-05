@@ -76,7 +76,7 @@ struct AttentionEntitiesPanel: View {
                 }
             }
             if items.isEmpty {
-                AttentionEmpty(text: "No activity matches your search", symbol: "magnifyingglass")
+                AttentionEmpty(text: "No activity matches your search", icon: .search)
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .top, spacing: UIScale.pt(20)) {
@@ -134,7 +134,7 @@ struct AttentionEntitiesPanel: View {
         Text(
             "\(items.count) activities · \(AttentionFormat.duration(items.reduce(0) { $0 + $1.duration }))"
         )
-        .font(.system(size: UIScale.pt(12)))
+        .font(.edithText(.callout))
         .foregroundStyle(.secondary)
     }
 
@@ -179,13 +179,13 @@ struct AttentionEntitiesPanel: View {
             AttentionEntityIcon(entity: entity, size: 28)
             VStack(alignment: .leading, spacing: 5) {
                 Text(entity.name)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text(categories > 1 ? "\(categories) categories" : entity.category.name)
                     Text("· \(entity.visits) visits")
                 }
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 AttentionMixBar(
@@ -196,11 +196,11 @@ struct AttentionEntitiesPanel: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Text(AttentionFormat.duration(entity.duration))
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
+                .font(.edithText(.title3).weight(.semibold))
                 .monospacedDigit()
                 .frame(width: UIScale.pt(74), alignment: .trailing)
             Text(AttentionFormat.percent(entity.duration, of: model.summary.activeDuration))
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .frame(width: UIScale.pt(52), alignment: .trailing)
@@ -235,21 +235,21 @@ struct AttentionActivityInspector: View {
 
     var body: some View {
         let dark = scheme == .dark
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(entity.name).font(DashSkin.heading(19)).lineLimit(2)
                     Text(
                         "\(AttentionFormat.duration(entity.duration)) active · \(entity.visits) visits"
                     )
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 AttentionCategoryMenu(model: model, entity: entity)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("CATEGORY SPLIT").font(DashSkin.mono(10)).foregroundStyle(.secondary)
+                PageCapsLabel("Category split")
                 ForEach(entity.categoryDurations.sorted { $0.value > $1.value }, id: \.key) {
                     id, duration in
                     Button {
@@ -265,9 +265,9 @@ struct AttentionActivityInspector: View {
             }
             Divider()
             HStack {
-                Text("PAGES AND WINDOWS").font(DashSkin.mono(10)).foregroundStyle(.secondary)
+                PageCapsLabel("Pages and windows")
                 Spacer()
-                Text("\(entity.details.count)").font(DashSkin.mono(10)).foregroundStyle(.secondary)
+                Text("\(entity.details.count)").pageCapsStyle().monospacedDigit()
             }
             TextField("Find a title or URL", text: $search)
                 .textFieldStyle(.roundedBorder)
@@ -276,7 +276,7 @@ struct AttentionActivityInspector: View {
                     entity.details.isEmpty
                         ? "No page or window title was recorded." : "No titles match this search."
                 )
-                .font(.system(size: UIScale.pt(12))).foregroundStyle(.secondary)
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
             } else {
                 Group {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -284,11 +284,11 @@ struct AttentionActivityInspector: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                                     Text(detail.name)
-                                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                                        .font(.edithText(.callout).weight(.medium))
                                         .lineLimit(2).help(detail.name)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                     Text(AttentionFormat.duration(detail.duration))
-                                        .font(.system(size: UIScale.pt(12), weight: .semibold))
+                                        .font(.edithText(.callout).weight(.semibold))
                                         .monospacedDigit().fixedSize()
                                 }
                                 HStack {
@@ -298,9 +298,9 @@ struct AttentionActivityInspector: View {
                                         AttentionFormat.percent(
                                             detail.duration, of: entity.duration))
                                 }
-                                .font(.system(size: UIScale.pt(10.5))).foregroundStyle(.secondary)
+                                .font(.edithText(.caption)).foregroundStyle(.secondary)
                                 if let url = detail.url {
-                                    Text(url).font(.system(size: UIScale.pt(10)))
+                                    Text(url).font(.edithText(.caption))
                                         .foregroundStyle(.secondary).lineLimit(1).help(url)
                                         .textSelection(.enabled)
                                 }
@@ -318,9 +318,7 @@ struct AttentionActivityInspector: View {
                 }
             }
         }
-        .padding(UIScale.pt(16))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 12))
         .onChange(of: entity.id) {
             search = ""; limit = 20
         }
@@ -343,7 +341,7 @@ struct AttentionLabeledBar: View {
                     .foregroundStyle(.secondary).monospacedDigit().frame(
                         width: UIScale.pt(40), alignment: .trailing)
             }
-            .font(.system(size: UIScale.pt(12), weight: .medium))
+            .font(.edithText(.callout).weight(.medium))
             GeometryReader { geometry in
                 Capsule().fill(color.opacity(0.13))
                     .overlay(alignment: .leading) {

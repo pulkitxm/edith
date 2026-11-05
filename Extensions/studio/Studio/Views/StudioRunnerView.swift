@@ -13,7 +13,7 @@ struct StudioRunnerView: View {
     var body: some View {
         VStack(spacing: 0) {
             StudioBackBar(
-                title: job.tool.title, subtitle: job.tool.summary, symbol: job.tool.symbolName,
+                title: job.tool.title, subtitle: job.tool.summary, icon: job.tool.icon,
                 back: model.goHome
             ) {
                 if case .finished = job.phase {
@@ -34,9 +34,11 @@ struct StudioRunnerView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Divider()
-                StudioOptionsPanel(model: model, job: job)
-                    .frame(width: compact ? nil : UIScale.pt(330))
+                if job.phase != .finished {
+                    Divider()
+                    StudioOptionsPanel(model: model, job: job)
+                        .frame(width: compact ? nil : UIScale.pt(330))
+                }
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -60,19 +62,18 @@ struct StudioInputsPanel: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 StudioEngineBanner(model: model, tool: job.tool)
                 if job.tool.needsFiles {
-                    HStack {
-                        Text(heading)
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
-                        Spacer()
-                        Button {
-                            choose()
-                        } label: {
-                            Label("Add files", systemImage: "plus")
+                    PageSectionHeader(heading) {
+                        if !job.inputs.isEmpty {
+                            Button {
+                                choose()
+                            } label: {
+                                Label("Add files", edith: .plus)
+                            }
+                            .buttonStyle(.edith(.secondary))
                         }
-                        .buttonStyle(.edith(.secondary))
                     }
                     if job.inputs.isEmpty {
                         StudioInputsDropZone(tool: job.tool, choose: choose)
@@ -82,34 +83,26 @@ struct StudioInputsPanel: View {
                         {
                             StudioPreviewPanel(job: job, environment: model.environment)
                         }
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(150)), spacing: UIScale.pt(12))
-                            ],
-                            alignment: .leading, spacing: UIScale.pt(12)
-                        ) {
-                            ForEach(Array(job.inputs.enumerated()), id: \.element) { index, url in
-                                StudioInputTile(
-                                    job: job, url: url, index: index, ordered: ordered,
-                                    facts: model.facts[url]
-                                )
-                                .pageTask(id: url) { await model.loadFacts(for: url) }
-                            }
+                        StudioTileGrid(items: job.inputs.indexedInputs, minimum: 150) { input in
+                            StudioInputTile(
+                                job: job, url: input.url, index: input.index, ordered: ordered,
+                                facts: model.facts[input.url]
+                            )
+                            .pageTask(id: input.url) { await model.loadFacts(for: input.url) }
                         }
                         if ordered {
                             Text("Files are used in this order. Use the arrows to change it.")
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.secondary)
                         }
                     }
                 } else {
                     StudioEmptyNote(
-                        symbol: job.tool.symbolName,
+                        icon: job.tool.icon,
                         text: "This tool does not need files. Fill in the settings and run it.")
                 }
             }
-            .padding(UIScale.pt(20))
+            .padding(UIScale.pt(StudioLayoutMetrics.workspaceInset))
         }
     }
 
@@ -133,13 +126,30 @@ struct StudioInputsPanel: View {
     }
 }
 
+struct StudioIndexedInput: Identifiable {
+    let index: Int
+    let url: URL
+
+    var id: URL { url }
+}
+
+extension Array where Element == URL {
+    var indexedInputs: [StudioIndexedInput] {
+        enumerated().map { StudioIndexedInput(index: $0.offset, url: $0.element) }
+    }
+}
+
 enum StudioInputText {
     static func accepted(_ tool: StudioTool) -> String {
         let kinds = StudioKind.allCases.filter { tool.inputs.contains($0) }
         if kinds.count >= 6 { return "files" }
-        let names = kinds.map { $0.pluralTitle.lowercased() }
-        let extras = tool.extraExtensions.sorted().map { $0.uppercased() }
-        return (names + extras).joined(separator: ", ")
+        let names = kinds.map { kind in
+            kind == .pdf ? kind.pluralTitle : kind.pluralTitle.lowercased()
+        }
+        let extras = tool.extraExtensions.sorted().map { "\($0.uppercased()) files" }
+        let all = names + extras
+        guard let last = all.last else { return "files" }
+        return all.count == 1 ? last : all.dropLast().joined(separator: ", ") + " or " + last
     }
 }
 
@@ -149,22 +159,28 @@ struct StudioInputsDropZone: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(spacing: UIScale.pt(10)) {
-            Image(systemName: tool.symbolName)
-                .font(.system(size: UIScale.pt(30), weight: .light))
-                .foregroundStyle(StudioPalette.tint(for: tool))
+        VStack(spacing: UIScale.pt(12)) {
+            StudioToolIcon(tool: tool, size: 48)
             Text("Drop \(StudioInputText.accepted(tool)) here")
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
-            if tool.arity.minimum > 1 {
-                Text("Add at least \(tool.arity.minimum) files.")
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(.secondary)
+                .font(.edithText(.headline))
+                .multilineTextAlignment(.center)
+            Text(
+                tool.arity.minimum > 1
+                    ? "Add at least \(tool.arity.minimum) files, or choose them from your Mac."
+                    : "Or choose them from your Mac."
+            )
+            .font(.edithText(.callout))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            Button(action: choose) {
+                Label("Choose files", edith: .plus)
             }
-            Button("Choose files", action: choose)
-                .buttonStyle(.edith(.primary))
+            .buttonStyle(.edith(.primary))
+            .padding(.top, UIScale.pt(4))
         }
+        .padding(.horizontal, UIScale.pt(16))
         .frame(maxWidth: .infinity)
-        .padding(.vertical, UIScale.pt(46))
+        .padding(.vertical, UIScale.pt(40))
         .background(
             DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14))
         )
@@ -192,7 +208,7 @@ struct StudioInputTile: View {
                 Button {
                     job.remove(url)
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    EdithIconView(.closeFilled)
                         .font(.system(size: UIScale.pt(15)))
                         .foregroundStyle(.secondary)
                         .background(Circle().fill(DashSkin.paper2(scheme == .dark)).padding(2))
@@ -203,8 +219,8 @@ struct StudioInputTile: View {
                 .help("Remove from this run")
                 if ordered {
                     Text("\(index + 1)")
-                        .font(DashSkin.mono(10, weight: .bold))
-                        .foregroundStyle(.white)
+                        .font(.edithText(.caption).weight(.bold)).monospacedDigit()
+                        .foregroundStyle(DashSkin.onAccent(scheme == .dark))
                         .frame(width: UIScale.pt(20), height: UIScale.pt(20))
                         .background(DashSkin.accent(scheme == .dark), in: Circle())
                         .padding(UIScale.pt(6))
@@ -212,12 +228,12 @@ struct StudioInputTile: View {
                 }
             }
             Text(url.lastPathComponent)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
             HStack(spacing: UIScale.pt(4)) {
                 Text(StudioFileActions.describe(facts, kind: url.studioKind))
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -225,7 +241,7 @@ struct StudioInputTile: View {
                     Button {
                         job.move(url, by: -1)
                     } label: {
-                        Image(systemName: "arrow.left")
+                        EdithIconView(.arrowLeft)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .disabled(index == 0 || job.isRunning)
@@ -233,7 +249,7 @@ struct StudioInputTile: View {
                     Button {
                         job.move(url, by: 1)
                     } label: {
-                        Image(systemName: "arrow.right")
+                        EdithIconView(.arrowRight)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .disabled(index == job.inputs.count - 1 || job.isRunning)
@@ -242,6 +258,7 @@ struct StudioInputTile: View {
             }
         }
         .padding(UIScale.pt(8))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12))
         )
@@ -262,32 +279,32 @@ struct StudioOptionsPanel: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     if job.tool.options.isEmpty {
                         Text("No settings needed.")
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(.secondary)
                     } else {
                         StudioOptionsForm(job: job)
                     }
                 }
-                .padding(UIScale.pt(18))
+                .padding(UIScale.pt(StudioLayoutMetrics.workspaceInset))
             }
             Divider()
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if case let .failed(message) = job.phase {
-                    Label(message, systemImage: "exclamationmark.octagon.fill")
-                        .font(.system(size: UIScale.pt(11.5)))
+                    Label(message, edith: .error)
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if let validation = job.validationMessage,
                     !job.inputs.isEmpty || !job.tool.needsFiles
                 {
                     Text(validation)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Save to")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                     StudioDestinationPicker(model: model)
                         .labelsHidden()
@@ -297,7 +314,7 @@ struct StudioOptionsPanel: View {
                     model.run(job)
                 } label: {
                     Text(job.tool.actionTitle)
-                        .font(.system(size: UIScale.pt(13.5), weight: .semibold))
+                        .font(.edithText(.body).weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, UIScale.pt(3))
                 }
@@ -306,7 +323,7 @@ struct StudioOptionsPanel: View {
                 .disabled(!canRun)
                 .help("\(job.tool.actionTitle) (⌘↩)")
             }
-            .padding(UIScale.pt(16))
+            .padding(UIScale.pt(StudioLayoutMetrics.workspaceInset))
         }
         .background(DashSkin.paper2(scheme == .dark).opacity(0.55))
     }
@@ -327,17 +344,17 @@ struct StudioProgressCard: View {
             VStack(spacing: UIScale.pt(12)) {
                 StudioToolIcon(tool: job.tool, size: 44)
                 Text(job.status ?? "\(job.tool.actionTitle)…")
-                    .font(.system(size: UIScale.pt(13.5), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .lineLimit(1)
                 if job.units > 1 {
                     Text("File \(min(job.unit + 1, job.units)) of \(job.units)")
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
                 LoadingProgress(value: job.progress)
                     .frame(width: UIScale.pt(260))
                 Text("\(Int((job.progress * 100).rounded()))%")
-                    .font(DashSkin.mono(11))
+                    .font(.edithText(.subheadline)).monospacedDigit()
                     .foregroundStyle(.secondary)
                 Button("Cancel") { job.cancel() }
                     .buttonStyle(.edith(.secondary))
@@ -361,54 +378,47 @@ struct StudioResultView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                    Image(systemName: "checkmark.circle.fill")
+                    EdithIconView(.success)
                         .font(.system(size: UIScale.pt(30)))
                         .foregroundStyle(DashSkin.ok)
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(StudioResultText.headline(job.tool, result))
-                            .font(.system(size: UIScale.pt(17), weight: .semibold))
+                            .font(.edithText(.title2).weight(.semibold))
                         Text(StudioResultText.detail(result))
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button {
                         StudioFileActions.reveal(outputs, facade: model.facade)
                     } label: {
-                        Label("Show in Finder", systemImage: "folder")
+                        Label("Show in Finder", edith: .folder)
                     }
                     .buttonStyle(.edith(.primary))
                 }
                 ForEach(result.notes, id: \.self) { note in
-                    Label(note, systemImage: "info.circle")
-                        .font(.system(size: UIScale.pt(11.5)))
+                    Label(note, edith: .info)
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
                 ForEach(result.failures, id: \.self) { failure in
                     Label(
                         "\(failure.file): \(failure.message)",
-                        systemImage: "exclamationmark.triangle"
+                        edith: .warning
                     )
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.warn)
                 }
-                VStack(spacing: 0) {
+                StudioListSurface {
                     ForEach(Array(result.outputs.prefix(200).enumerated()), id: \.element.id) {
                         index, output in
                         if index > 0 { Divider().opacity(0.5) }
                         StudioOutputRow(model: model, output: output)
                     }
                 }
-                .background(
-                    DashSkin.paper2(scheme == .dark),
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
-                        DashSkin.line(scheme == .dark)))
                 if result.outputs.count > 200 {
                     Text("And \(result.outputs.count - 200) more in the folder.")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
                 HStack(spacing: UIScale.pt(8)) {
@@ -420,26 +430,16 @@ struct StudioResultView: View {
                 let next = StudioResultText.continuations(for: outputs, after: job.tool)
                 if !next.isEmpty {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        Text("CONTINUE WITH")
-                            .font(DashSkin.mono(10, weight: .semibold))
-                            .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(190)), spacing: UIScale.pt(8))
-                            ],
-                            alignment: .leading, spacing: UIScale.pt(8)
-                        ) {
-                            ForEach(next) { tool in
-                                StudioToolRow(tool: tool, environment: model.environment) {
-                                    model.continueWith(tool, outputs: outputs)
-                                }
+                        PageCapsLabel("Continue with")
+                        StudioTileGrid(items: next, minimum: 190, spacing: 8) { tool in
+                            StudioToolRow(tool: tool, environment: model.environment) {
+                                model.continueWith(tool, outputs: outputs)
                             }
                         }
                     }
                 }
             }
-            .padding(UIScale.pt(22))
+            .padding(UIScale.pt(StudioLayoutMetrics.workspaceInset))
         }
     }
 }
@@ -454,7 +454,7 @@ struct StudioOutputRow: View {
                 .frame(width: UIScale.pt(44), height: UIScale.pt(44))
             VStack(alignment: .leading, spacing: 1) {
                 Text(output.url.lastPathComponent)
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(
@@ -462,10 +462,10 @@ struct StudioOutputRow: View {
                         + output.url.deletingLastPathComponent().lastPathComponent
                 )
                 .help(output.url.path)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .truncationMode(.head)
+                .truncationMode(.middle)
             }
             Spacer(minLength: UIScale.pt(8))
             if let edit = StudioCatalog.quickTool(.edit, for: output.kind) {
@@ -477,7 +477,7 @@ struct StudioOutputRow: View {
             Button {
                 StudioFileActions.reveal([output.url], facade: model.facade)
             } label: {
-                Image(systemName: "magnifyingglass")
+                EdithIconView(.search)
             }
             .buttonStyle(.edith(.iconOnly))
             .help("Show in Finder")

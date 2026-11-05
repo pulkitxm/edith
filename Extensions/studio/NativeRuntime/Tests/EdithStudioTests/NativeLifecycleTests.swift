@@ -90,7 +90,7 @@ import Testing
         let started = space.url("started")
         let tool = StudioTool(
             id: "test.cancellable", title: "Cancellable fixture", summary: "Synthetic fixture",
-            symbol: "doc", group: .edit, inputs: [.document]
+            iconName: "doc", group: .edit, inputs: [.document]
         ) { run in
             let result = run.output(named: "result.txt")
             try "synthetic output".write(to: result, atomically: true, encoding: .utf8)

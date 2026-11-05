@@ -19,6 +19,33 @@ import Testing
         return (model, agent)
     }
 
+    @Test func fileTypesChipNamesTheSelectedCategories() {
+        #expect(CodeStatsFilterBar.fileTypesTitle([]) == "No file types")
+        #expect(CodeStatsFilterBar.fileTypesTitle([.docs]) == "Docs")
+        #expect(CodeStatsFilterBar.fileTypesTitle(CodeStatsCategory.counted) == "3 file types")
+        #expect(
+            CodeStatsFilterBar.fileTypesTitle(Set(CodeStatsCategory.filterable))
+                == "All file types")
+        #expect(CodeStatsFilterBar.fileTypesTitle([.generated]) == "No file types")
+    }
+
+    @Test func streakDaysAgreeWithTheirCount() {
+        #expect(CodeStatsKPIGrid.days(1) == "1 day")
+        #expect(CodeStatsKPIGrid.days(4) == "4 days")
+    }
+
+    @Test func notCountedNoteListsOnlyExcludedChangeKinds() {
+        #expect(
+            CodeStatsFilterBar.notCountedNote(.default)
+                == "Not counted: bulk imports, formatting")
+        var everything = CodeStatsFilter.default
+        everything.includeBulk = true
+        everything.includeFormatting = true
+        #expect(CodeStatsFilterBar.notCountedNote(everything) == nil)
+        everything.includeCoAuthored = false
+        #expect(CodeStatsFilterBar.notCountedNote(everything) == "Not counted: co-authored")
+    }
+
     @Test func folderAndRefreshFailuresReachTheCallerInsteadOfTheModelAlert() async throws {
         let (model, _) = await model()
         let missing = FileManager.default.temporaryDirectory
@@ -46,7 +73,7 @@ import Testing
         let (model, agent) = await model()
         let defaults = UserDefaults(suiteName: "test.edith.persisted-filters.\(UUID())")!
         let first = CodeStatsModel(service: agent.service, defaults: defaults)
-        await first.select(.all)
+        await first.select(.preset(.allTime))
         await first.toggleRepository("octo/app")
         await first.updateFilter { $0.includeBulk = true }
         let restored = CodeStatsModel(service: agent.service, defaults: defaults)
@@ -66,14 +93,14 @@ import Testing
         #expect(model.phase == .content)
         #expect(agent.recorded.contains("facts"))
         #expect(!agent.recorded.contains { $0.hasPrefix("report") })
-        await model.select(.all)
+        await model.select(.preset(.allTime))
         #expect(model.report?.totals.commits == 4)
         #expect(model.report?.range == .all)
     }
 
     @Test func repositoryLanguageAndResetFiltersRecompute() async {
         let (model, _) = await model()
-        await model.select(.all)
+        await model.select(.preset(.allTime))
         await model.toggleRepository("octo/app")
         #expect(model.report?.totals.commits == 2)
         #expect(model.hasActiveFilter)
@@ -92,7 +119,7 @@ import Testing
         #expect(model.facets.repositories.first?.name == "octo/app")
         #expect(model.facets.owners.map(\.name) == ["octo"])
         #expect(Set(model.facets.languages.map(\.name)) == ["Swift", "TypeScript", "Python"])
-        await model.select(.all)
+        await model.select(.preset(.allTime))
         let before = model.audit?.counted.commits
         await model.toggleRepository("octo/site")
         #expect(model.audit?.counted.commits != before)

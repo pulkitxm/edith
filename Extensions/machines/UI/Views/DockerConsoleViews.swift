@@ -47,9 +47,9 @@ struct DockerContainerList: View {
                 if let error = session.containersError ?? session.state.failureMessage {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                         Text("Unable to refresh containers")
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .font(.edithText(.headline))
                         Text(error)
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                         Button("Retry") {
                             if session.state.failureMessage != nil {
@@ -59,13 +59,14 @@ struct DockerContainerList: View {
                             }
                         }
                         .buttonStyle(.edith(.secondary))
+                        .buttonStyle(.edith(.secondary))
                     }
                     .padding(UIScale.pt(20))
                 } else if !session.containersLoaded {
                     DockerContainerRowsSkeleton()
                 } else if filtered.isEmpty {
                     Text("No containers.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .padding(UIScale.pt(20))
                 }
@@ -83,10 +84,10 @@ struct DockerContainerList: View {
                         }
                     } header: {
                         HStack(spacing: UIScale.pt(6)) {
-                            Image(systemName: DockerProjectOrder.symbol(group.project))
-                                .font(.system(size: UIScale.pt(10)))
+                            EdithIconView(DockerProjectOrder.icon(group.project))
+                                .font(.edithText(.caption))
                             Text(DockerProjectOrder.title(group.project))
-                                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                                .font(.edithText(.subheadline).weight(.semibold))
                             if DockerProjectOrder.isCompanion(group.project) {
                                 Text("Edith")
                                     .font(DashSkin.mono(9))
@@ -101,9 +102,10 @@ struct DockerContainerList: View {
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Spacer(minLength: 0)
                             groupSwitch(group.project, group.containers)
+                                .padding(.trailing, UIScale.pt(DockerRowMetrics.openColumn))
                         }
                         .foregroundStyle(DashSkin.inkSoft(dark))
-                        .padding(.horizontal, UIScale.pt(16))
+                        .dockerPaneInset()
                         .padding(.vertical, UIScale.pt(6))
                         .background(DashSkin.panel)
                     }
@@ -131,7 +133,7 @@ struct DockerContainerList: View {
                     Button {
                         onGroupAction(key, plan.startable, "start")
                     } label: {
-                        Image(systemName: "play.fill")
+                        EdithIconView(.play)
                             .font(.system(size: UIScale.pt(9.5)))
                     }
                     .buttonStyle(.edith(.toolbar))
@@ -141,7 +143,7 @@ struct DockerContainerList: View {
                     Button {
                         onGroupAction(key, plan.stoppable, "stop")
                     } label: {
-                        Image(systemName: "stop.fill")
+                        EdithIconView(.stop)
                             .font(.system(size: UIScale.pt(9.5)))
                     }
                     .buttonStyle(.edith(.toolbar))
@@ -182,7 +184,7 @@ private struct DockerContainerRow: View {
             row(density: .medium)
             row(density: .compact)
         }
-        .padding(.horizontal, UIScale.pt(16))
+        .dockerPaneInset()
         .padding(.vertical, UIScale.pt(9))
         .background(hovering ? DashSkin.inkFaint(dark).opacity(0.06) : .clear)
         .contentShape(Rectangle())
@@ -231,7 +233,7 @@ private struct DockerContainerRow: View {
             Circle().fill(stateColor).frame(width: UIScale.pt(8), height: UIScale.pt(8))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(container.composeService ?? container.displayName)
-                    .font(.system(size: UIScale.pt(13), weight: .medium))
+                    .font(.edithText(.body).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                 Text(container.image)
@@ -242,7 +244,7 @@ private struct DockerContainerRow: View {
             .frame(width: UIScale.pt(density.nameWidth), alignment: .leading)
             if density.showsStatus {
                 Text(container.status)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(1)
                     .frame(width: UIScale.pt(density == .full ? 150 : 120), alignment: .leading)
@@ -250,6 +252,7 @@ private struct DockerContainerRow: View {
             if density.showsPorts {
                 portsView.frame(width: UIScale.pt(160), alignment: .leading)
             }
+            Spacer(minLength: 0)
             Text(container.cpuPercent.map { String(format: "%.1f%%", $0) } ?? "\u{2014}")
                 .font(DashSkin.mono(11))
                 .foregroundStyle(DashSkin.inkSoft(dark))
@@ -260,7 +263,6 @@ private struct DockerContainerRow: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .frame(width: UIScale.pt(70), alignment: .trailing)
             }
-            Spacer(minLength: 0)
             actions
         }
     }
@@ -289,7 +291,7 @@ private struct DockerContainerRow: View {
     }
 
     private var actions: some View {
-        HStack(spacing: UIScale.pt(2)) {
+        HStack(spacing: UIScale.pt(DockerRowMetrics.actionSpacing)) {
             if busy {
                 SkeletonGroup {
                     SkeletonBlock(width: 20, height: 20, corner: 6)
@@ -300,18 +302,18 @@ private struct DockerContainerRow: View {
                 Button {
                     onAction(container.state.isRunning ? "stop" : "start")
                 } label: {
-                    Image(systemName: container.state.isRunning ? "stop.fill" : "play.fill")
+                    EdithIconView(container.state.isRunning ? .stop : .play)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help(container.state.isRunning ? "Stop" : "Start")
             }
             Button(action: onOpen) {
-                Image(systemName: "chevron.right")
+                EdithIconView(.chevronRight)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Open details")
         }
-        .font(.system(size: UIScale.pt(11)))
+        .font(.edithText(.subheadline))
     }
 }
 
@@ -325,18 +327,18 @@ struct DockerSimpleList: View {
             LazyVStack(spacing: 0) {
                 if rows.isEmpty {
                     Text("Nothing here.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .padding(UIScale.pt(20))
                 }
                 ForEach(rows) { row in
                     HStack(spacing: UIScale.pt(12)) {
-                        Image(systemName: row.symbol)
+                        EdithIconView(row.icon)
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(width: UIScale.pt(16))
                         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                             Text(row.title)
-                                .font(.system(size: UIScale.pt(12.5)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                                 .lineLimit(1)
                             Text(row.subtitle)
@@ -347,11 +349,11 @@ struct DockerSimpleList: View {
                         Spacer(minLength: 0)
                         if let badge = row.badge {
                             Text(badge)
-                                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                                .font(.edithText(.caption).weight(.medium))
                                 .padding(.horizontal, UIScale.pt(6))
                                 .padding(.vertical, UIScale.pt(2))
-                                .background(DashSkin.sage.opacity(0.18), in: Capsule())
-                                .foregroundStyle(DashSkin.sage)
+                                .background(Color.themeAccent.opacity(0.18), in: Capsule())
+                                .foregroundStyle(Color.themeAccent)
                         }
                         Text(row.trailing)
                             .font(DashSkin.mono(11))
@@ -360,13 +362,13 @@ struct DockerSimpleList: View {
                             Button {
                                 onDelete(row.id)
                             } label: {
-                                Image(systemName: "trash")
+                                EdithIconView(.trash)
                             }
                             .buttonStyle(.edith(.toolbar))
                             .help("Remove")
                         }
                     }
-                    .padding(.horizontal, UIScale.pt(16))
+                    .dockerPaneInset()
                     .padding(.vertical, UIScale.pt(9))
                     Divider().opacity(0.2)
                 }
@@ -386,7 +388,7 @@ struct DockerUsageView: View {
                     VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                         HStack {
                             Text(usage.type)
-                                .font(.system(size: UIScale.pt(13), weight: .medium))
+                                .font(.edithText(.body).weight(.medium))
                                 .foregroundStyle(DashSkin.ink(dark))
                             Spacer()
                             Text(ByteFormatter.string(usage.sizeBytes))
@@ -402,14 +404,15 @@ struct DockerUsageView: View {
                             "\(usage.active) active of \(usage.totalCount)  ·  "
                                 + "\(ByteFormatter.string(usage.reclaimableBytes)) reclaimable"
                         )
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                     .padding(UIScale.pt(14))
                     .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark))
                 }
             }
-            .padding(UIScale.pt(16))
+            .dockerPaneInset()
+            .padding(.vertical, UIScale.pt(16))
         }
     }
 }

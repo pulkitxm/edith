@@ -35,19 +35,19 @@ enum StudioImagePanel: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    var icon: EdithIcon {
         switch self {
-        case .select: "cursorarrow"
-        case .crop: "crop.rotate"
-        case .adjust: "slider.horizontal.3"
-        case .filters: "camera.filters"
-        case .text: "textformat"
-        case .draw: "scribble.variable"
-        case .shapes: "square.on.circle"
-        case .stickers: "face.smiling"
-        case .blur: "eye.slash"
-        case .frame: "square.dashed"
-        case .export: "arrow.up.left.and.arrow.down.right"
+        case .select: .cursor
+        case .crop: .rotate
+        case .adjust: .adjust
+        case .filters: .filters
+        case .text: .text
+        case .draw: .signature
+        case .shapes: .dot
+        case .stickers: .emoji
+        case .blur: .eyeOff
+        case .frame: .selection
+        case .export: .expand
         }
     }
 }

@@ -156,8 +156,9 @@ import Testing
             Data("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}".utf8))
         let list = try await output.response(2)
         #expect(
-            list.object?["result"]?.object?["tools"]?.array?.first?.object?["name"]
-                == .string("edith_music_remove"))
+            list.object?["result"]?.object?["tools"]?.array?.compactMap {
+                $0.object?["name"]?.string
+            } == ["edith_catalog", "edith_music_remove"])
         try await server.accept(
             Data(
                 "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"edith_music_remove\",\"arguments\":{\"arguments\":[\"--yes=true\"]}}}"
@@ -175,8 +176,9 @@ import Testing
         try await server.accept(
             Data("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/list\"}".utf8))
         #expect(
-            try await output.response(5).object?["result"]?.object?["tools"]?.array?.isEmpty == true
-        )
+            try await output.response(5).object?["result"]?.object?["tools"]?.array?.compactMap {
+                $0.object?["name"]?.string
+            } == ["edith_catalog"])
         await server.shutdown()
     }
 

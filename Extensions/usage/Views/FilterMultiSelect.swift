@@ -68,7 +68,7 @@ struct FilterMultiSelect: View {
                     }
                     if visible.isEmpty {
                         Text("No matches")
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .padding(UIScale.pt(8))
                     }
@@ -78,7 +78,7 @@ struct FilterMultiSelect: View {
             Divider().opacity(0.4)
             HStack(spacing: UIScale.pt(8)) {
                 Text(summary)
-                    .font(DashSkin.mono(10))
+                    .font(.edithText(.caption).monospacedDigit())
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer(minLength: 0)
                 if selection.count < options.count {
@@ -86,12 +86,12 @@ struct FilterMultiSelect: View {
                         apply(MultiSelectLogic.selectAll(order: options.map(\.id)))
                     }
                     .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 }
                 Button("Done") { dismiss() }
                     .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.accent(dark))
             }
             .padding(.horizontal, UIScale.pt(6))
@@ -139,12 +139,12 @@ private struct FilterSelectRow: View {
                 HStack(spacing: UIScale.pt(8)) {
                     Color.clear.frame(width: UIScale.pt(28), height: UIScale.pt(28))
                     Text(label)
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(1)
                     Spacer(minLength: 0)
                     Text(actionLabel)
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .padding(.horizontal, UIScale.pt(6))
                         .padding(.vertical, UIScale.pt(2))
                         .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
@@ -169,7 +169,7 @@ private struct FilterSelectRow: View {
                 Spacer(minLength: 0)
                 Button(action: onAction) {
                     Text(actionLabel)
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .padding(.horizontal, UIScale.pt(6))
                         .padding(.vertical, UIScale.pt(2))
@@ -200,9 +200,9 @@ private struct FilterSelectRow: View {
                 .strokeBorder(
                     checked ? Color.clear : DashSkin.lineStrong(dark), lineWidth: UIScale.pt(1))
             if checked {
-                Image(systemName: "checkmark")
+                EdithIconView(.check)
                     .font(.system(size: UIScale.pt(8.5), weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DashSkin.onAccent(dark))
             }
         }
         .frame(width: UIScale.pt(15), height: UIScale.pt(15))

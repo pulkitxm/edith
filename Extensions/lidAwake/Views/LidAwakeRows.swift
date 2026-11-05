@@ -52,77 +52,104 @@ struct LidAwakeRows: View {
             })
     }
 
+    private var error: String? { operations.errorMessage ?? operations.lastSnapshot?.lastError }
+
+    private var statusKnown: Bool { operations.lastSnapshot != nil }
+
+    private var activeDetail: String {
+        Self.activeDetail(snapshot: operations.lastSnapshot, failed: error != nil)
+    }
+
+    static func activeDetail(snapshot: LidAwakeSnapshot?, failed: Bool) -> String {
+        guard let snapshot else {
+            return failed
+                ? "Status unknown. Edith could not reach Lid Awake."
+                : "Checking the current state."
+        }
+        if snapshot.batterySuspended {
+            return "Paused because the battery is low. It resumes after charging."
+        }
+        if snapshot.active, let seconds = snapshot.remainingSeconds, seconds > 0 {
+            let minutes = Int((seconds / 60).rounded(.up))
+            return "On. Turns off in \(minutes) min."
+        }
+        return snapshot.active
+            ? "On. Your Mac keeps running when you close the lid."
+            : "Off. Closing the lid sleeps the Mac, even with Keep Awake on."
+    }
+
     var body: some View {
         Group {
+            if let error {
+                Section {
+                    SettingsErrorRow(
+                        statusKnown
+                            ? "Lid Awake couldn’t apply the last change"
+                            : "Couldn’t read Lid Awake’s status",
+                        message: error, retryTitle: "Retry"
+                    ) { operations.refreshStatus() }
+                }
+            }
             Section {
                 Toggle(isOn: activeBinding) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Keep running with lid closed")
-                        InfoDot(
-                            "Closing the lid normally sleeps the Mac even when Keep awake is on. This turns that pathway off, so the Mac keeps running with the lid shut - no external display or charger needed."
-                        )
-                    }
+                    Text("Keep running with lid closed")
+                    Text(activeDetail)
                 }
-                Text(
-                    "The first activation may open Login Items for one-time approval of Edith's background helper. After that, shelf toggles are silent."
-                )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
-                Picker("Session", selection: sessionBinding) {
+                .accessibilityLabel("Keep running with lid closed")
+                .accessibilityValue(activeDetail)
+                Picker(selection: sessionBinding) {
                     ForEach(LidAwakeSession.allCases, id: \.self) { session in
                         Text(session.title).tag(session)
                     }
+                } label: {
+                    Text("How long")
+                    Text("Lid Awake turns itself off after this.")
                 }
-                Picker("Auto-pause below", selection: batteryBinding) {
+                .accessibilityLabel("How long")
+                Picker(selection: batteryBinding) {
                     Text("Off").tag(0)
                     Text("10% battery").tag(10)
                     Text("20% battery").tag(20)
                     Text("30% battery").tag(30)
+                } label: {
+                    Text("Auto-pause below")
+                    Text("On battery, Lid Awake pauses at this level until the Mac is charged.")
                 }
-                Text(
-                    "When the Mac is on battery and reaches this floor, lid awake pauses until it is charged again. Starting it manually below the floor overrides the pause for that discharge."
-                )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .accessibilityLabel("Auto-pause below")
                 Toggle(isOn: restoration.binding) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Restore normal sleep when Edith quits")
-                        InfoDot(
-                            "Leave this on so the Mac sleeps normally again once Edith is not running. Turning the extension off always restores it, whatever this is set to."
-                        )
-                    }
+                    Text("Restore normal sleep when Edith quits")
+                    Text("Recommended. Turning Lid Awake off always restores it.")
                 }
-                Text(
-                    "While this is on the Mac stays awake with a closed lid, so it keeps drawing power and shedding heat. Do not put it in a bag like this."
-                )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
                 if operations.applying {
-                    HStack {
-                        SkeletonGroup {
-                            SkeletonBlock(width: 184, height: 9, corner: 4)
-                        }
+                    SettingsRow("Updating sleep settings") {
+                        SkeletonGroup { SkeletonBlock(width: 120, height: 8, corner: 4) }
                     }
-                    .settingsCaption()
                     .accessibilityLabel("Applying system sleep state")
                 }
-                if let error = operations.errorMessage ?? operations.lastSnapshot?.lastError {
-                    Text(error)
-                        .settingsCaption()
-                        .foregroundStyle(.red)
-                }
+            } header: {
+                Text("Lid closed")
+            } footer: {
+                Text(
+                    enabled || !statusKnown
+                        ? "The first time, macOS may ask you to approve Edith's helper in Login Items. With the lid closed the Mac still uses power and makes heat, so do not put it in a bag while this is on."
+                        : "Lid Awake is turned off. Turn it on in Extensions to use these controls."
+                )
+                .settingsCaption()
             }
+            .disabled(!statusKnown || !enabled || operations.applying)
             Section {
                 Text(
                     "The lid-awake idea was inspired by Awayke, an MIT-licensed macOS utility by daemonphantom."
                 )
-                Link(
+                .foregroundStyle(.secondary)
+                EdithLink(
                     "View Awayke on GitHub",
-                    destination: URL(string: "https://github.com/daemonphantom/Awayke")!)
+                    destination: URL(string: "https://github.com/daemonphantom/Awayke")!
+                )
             } header: {
                 Text("Acknowledgement")
             }
         }
-        .disabled(!enabled)
-        .disabled(operations.applying)
-        .opacity(enabled ? 1 : 0.5)
         .pageTask(cancel: { operations.cancel() }) { operations.refreshStatus() }
         .onReceive(
             DistributedNotificationCenter.default().publisher(

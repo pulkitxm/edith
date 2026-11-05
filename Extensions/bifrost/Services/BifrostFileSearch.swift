@@ -137,7 +137,7 @@ public enum BifrostFileSearch {
             built.append(
                 BifrostResult(
                     id: "file:" + file.id, kind: .file, title: file.name,
-                    subtitle: subtitle(for: file), symbolName: "doc",
+                    subtitle: subtitle(for: file), icon: .doc,
                     iconPath: file.machine == nil ? file.path : nil,
                     action: .launch(path: file.path), score: 0,
                     detail: detail(for: file, now: now), group: group))

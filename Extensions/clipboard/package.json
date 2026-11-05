@@ -1,7 +1,7 @@
 {
   "id": "clipboard",
   "title": "Clipboard",
-  "symbolName": "doc.on.clipboard",
+  "icon": "clipboard",
   "category": "desk",
   "background": true,
   "commands": [
@@ -26,5 +26,37 @@
   ],
   "notchTabs": [
     "clipboard"
-  ]
+  ],
+  "guide": {
+    "tagline": "Everything you copy, searchable and one shortcut away.",
+    "summary": "Keeps a history of text, links, images and files you copy so you can paste an older item again. Pin what you reuse. History stays on this Mac, and password managers are ignored by default.",
+    "steps": [
+      {
+        "icon": "copy",
+        "title": "Copy as usual",
+        "detail": "Edith records each copy in the background. Pause recording any time in settings."
+      },
+      {
+        "icon": "keyboard",
+        "title": "Press Control+Shift+C",
+        "detail": "The history popup opens. Search it, or use the arrow keys."
+      },
+      {
+        "icon": "enter",
+        "title": "Pick an item",
+        "detail": "It is copied back, or pasted straight into your app if you allow Accessibility."
+      },
+      {
+        "icon": "pin",
+        "title": "Pin favourites",
+        "detail": "Pinned items stay at the edge and never age out."
+      }
+    ],
+    "examples": [
+      "ed clipboard ls",
+      "ed clipboard ls --category link --limit 5",
+      "ed clipboard copy 1",
+      "ed clipboard stats"
+    ]
+  }
 }

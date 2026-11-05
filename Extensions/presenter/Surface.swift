@@ -9,7 +9,7 @@ enum PresenterSurface {
             actions: [
                 .init(
                     state.manual ? "stop" : "start", state.manual ? "Turn off" : "Turn on",
-                    "person.wave.2")
+                    .person)
             ], updatedAt: Date())
     }
 }

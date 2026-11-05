@@ -63,11 +63,11 @@ public struct MachineSurfaceItem: Equatable, Sendable {
                 title: String(item.name.prefix(128)), detail: String(item.detail.prefix(256)),
                 value: monitored
                     ? (reachable[item.id.uuidString] == true ? "Online" : "Offline") : "Unknown",
-                icon: "desktopcomputer",
+                icon: .display,
                 field: field,
                 actions: [
                     .init(
-                        actions[item.id]!.uuidString, "Open fleet", "arrow.up.right", field: field)
+                        actions[item.id]!.uuidString, "Open fleet", .arrowUpRight, field: field)
                 ])
         }
         var metrics: [SurfaceMetric] = [.init("total", "Registered", "\(selected.count)")]

@@ -1,3 +1,4 @@
+import EdithIcons
 import SwiftUI
 
 public enum PageNoticeTone {
@@ -15,12 +16,20 @@ public enum PageNoticeTone {
         }
     }
 
-    var symbol: String {
+    var fill: Color {
+        self == .information ? Color.primary.opacity(0.04) : color.opacity(0.08)
+    }
+
+    var stroke: Color {
+        self == .information ? Color.primary.opacity(0.12) : color.opacity(0.3)
+    }
+
+    var icon: EdithIcon {
         switch self {
-        case .information: "info.circle"
-        case .success: "checkmark.circle"
-        case .warning: "exclamationmark.triangle"
-        case .error: "exclamationmark.octagon"
+        case .information: .info
+        case .success: .success
+        case .warning: .warning
+        case .error: .error
         }
     }
 }
@@ -29,44 +38,57 @@ public struct PageNotice<Detail: View, Actions: View>: View {
     let message: String
     var title: String?
     var tone: PageNoticeTone = .information
-    var symbol: String?
+    var icon: EdithIcon?
     @ViewBuilder let detail: () -> Detail
     @ViewBuilder let actions: () -> Actions
 
     public init(
         _ message: String, title: String? = nil, tone: PageNoticeTone = .information,
-        symbol: String? = nil,
+        icon: EdithIcon? = nil,
         @ViewBuilder detail: @escaping () -> Detail = { EmptyView() },
         @ViewBuilder actions: @escaping () -> Actions = { EmptyView() }
     ) {
         self.message = message
         self.title = title
         self.tone = tone
-        self.symbol = symbol
+        self.icon = icon
         self.detail = detail
         self.actions = actions
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                Image(systemName: symbol ?? tone.symbol).foregroundStyle(tone.color)
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    if let title {
-                        Text(title).font(.edithText(.headline))
-                    }
-                    Text(message).font(.edithText(.body)).foregroundStyle(.secondary)
+        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
+            EdithIconView(icon ?? tone.icon)
+                .font(.edithText(title == nil ? .body : .headline))
+                .foregroundStyle(tone.color)
+                .frame(width: UIScale.pt(16))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                if let title {
+                    Text(title).font(.edithText(.headline))
                         .fixedSize(horizontal: false, vertical: true)
-                    detail()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(message).font(.edithText(.body)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                detail()
+                if Actions.self != EmptyView.self {
+                    WrapHStack(
+                        spacing: UIScale.pt(PageMetrics.controlSpacing),
+                        lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
+                    ) {
+                        actions()
+                    }
+                    .buttonStyle(.edith(.secondary))
+                    .padding(.top, UIScale.pt(4))
+                }
             }
-            actions().buttonStyle(.edith(.secondary))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(UIScale.pt(14))
+        .padding(.horizontal, UIScale.pt(16))
+        .padding(.vertical, UIScale.pt(12))
         .frame(maxWidth: .infinity, alignment: .leading)
         .widgetBar(
-            cornerRadius: 14, fill: tone.color.opacity(0.08), stroke: tone.color.opacity(0.3)
+            cornerRadius: 12, fill: tone.fill, stroke: tone.stroke
         )
         .accessibilityElement(children: .contain)
     }

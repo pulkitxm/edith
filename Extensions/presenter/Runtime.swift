@@ -158,7 +158,7 @@ final class PresenterExtensionService: ExtensionService {
         return NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    Form { PresenterRows(presentation: presentation) }.edithForm()
+                    Form { PresenterRows(presentation: presentation) }.settingsForm()
                 }
             })
     }

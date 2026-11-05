@@ -362,7 +362,7 @@ struct VideoRecorderSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("Record a video", systemImage: "record.circle").font(.edithText(.title2).bold())
+            Label("Record a video", edith: .record).font(.edithText(.title2).bold())
             if recorder.recording {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text(

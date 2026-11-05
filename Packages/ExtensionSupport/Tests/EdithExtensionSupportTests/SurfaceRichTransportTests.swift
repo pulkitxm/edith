@@ -37,7 +37,7 @@ struct SurfaceRichTransportTests {
                         rows: [.init("track", title: "Synthetic track", thumbnail: thumbnail)],
                         sliders: [
                             .init(
-                                "volume", "Volume", "speaker.wave.2", value: volume, field: "volume"
+                                "volume", "Volume", .speaker, value: volume, field: "volume"
                             )
                         ],
                         charts: [

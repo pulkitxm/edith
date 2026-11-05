@@ -1,0 +1,8 @@
+{
+  "name": "edith-icon-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pathkit-wasm": "1.0.0"
+  }
+}

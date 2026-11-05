@@ -7,15 +7,15 @@ const require_ = createRequire(import.meta.url);
 const COMPONENT_GROUP = 2;
 
 const GROUPS = [
-  { id: "smileys-emotion", name: "Smileys", symbol: "face.smiling" },
-  { id: "people-body", name: "People", symbol: "hand.wave" },
-  { id: "animals-nature", name: "Nature", symbol: "leaf" },
-  { id: "food-drink", name: "Food", symbol: "fork.knife" },
-  { id: "travel-places", name: "Travel", symbol: "airplane" },
-  { id: "activities", name: "Activities", symbol: "soccerball" },
-  { id: "objects", name: "Objects", symbol: "lightbulb" },
-  { id: "symbols", name: "Symbols", symbol: "number" },
-  { id: "flags", name: "Flags", symbol: "flag" },
+  { id: "smileys-emotion", name: "Smileys", icon: "emoji" },
+  { id: "people-body", name: "People", icon: "person" },
+  { id: "animals-nature", name: "Nature", icon: "leaf" },
+  { id: "food-drink", name: "Food", icon: "cutlery" },
+  { id: "travel-places", name: "Travel", icon: "airplane" },
+  { id: "activities", name: "Activities", icon: "ball" },
+  { id: "objects", name: "Objects", icon: "box" },
+  { id: "symbols", name: "Symbols", icon: "hash" },
+  { id: "flags", name: "Flags", icon: "flag" },
 ];
 
 export const parseArguments = (arguments_) => {

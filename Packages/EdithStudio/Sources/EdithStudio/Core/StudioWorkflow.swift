@@ -99,7 +99,7 @@ public struct StudioWorkflow: Codable, Hashable, Identifiable, Sendable {
         return StudioTool(
             id: toolID, title: title,
             summary: summary.isEmpty ? "Runs a saved chain of tools." : summary,
-            symbol: "arrow.triangle.branch", group: .create, inputs: first.inputs,
+            iconName: "quinjet", group: .create, inputs: first.inputs,
             extraExtensions: first.extraExtensions, arity: .combine(minimum: 1, maximum: nil),
             produces: .same, keywords: ["workflow", "automation"], actionTitle: "Run workflow",
             family: first.family

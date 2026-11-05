@@ -16,14 +16,14 @@ enum HostSidebarUtility: String, CaseIterable, Identifiable {
         case .micMute: "Mic mute"
         }
     }
-    var icon: String {
+    var icon: EdithIcon {
         switch self {
-        case .system: "keyboard"
-        case .keepAwake: "moon.zzz"
-        case .lidAwake: "laptopcomputer"
-        case .keystrokeHighlight: "keyboard.badge.ellipsis"
-        case .presenter: "theatermasks.fill"
-        case .micMute: "mic.slash"
+        case .system: .keyboard
+        case .keepAwake: .moon
+        case .lidAwake: .laptop
+        case .keystrokeHighlight: .keystrokeHighlight
+        case .presenter: .presenter
+        case .micMute: .micMute
         }
     }
     var help: String {
@@ -103,7 +103,7 @@ struct HostSidebarFooter: View {
                         }
                         if let version = updater.updateReady {
                             HostSidebarNotice(
-                                symbol: "arrow.down.circle.fill", title: "Update ready",
+                                icon: .arrowDown, title: "Update ready",
                                 detail: "v\(version)", tint: DashSkin.sage,
                                 action: updater.checkForUpdates
                             ).help("Show update options")
@@ -116,7 +116,7 @@ struct HostSidebarFooter: View {
                                 Button {
                                     presenterSettings.toggle()
                                 } label: {
-                                    Image(systemName: "slider.horizontal.3")
+                                    EdithIconView(.adjust)
                                         .font(.edithText(.caption))
                                         .frame(
                                             width: UIScale.pt(30),
@@ -147,7 +147,7 @@ struct HostSidebarFooter: View {
                         }
                         if missingPermissions {
                             HostSidebarNotice(
-                                symbol: "exclamationmark.triangle.fill",
+                                icon: .warning,
                                 title: "Permissions needed", tint: DashSkin.warn,
                                 action: openPermissions
                             ).help("Open Permissions settings")
@@ -274,17 +274,12 @@ struct HostSidebarUtilityButton: View {
     let active: Bool
     let theme: Color
     let action: () -> Void
-    @State private var clicks = 0
     var body: some View {
-        Button {
-            clicks += 1
-            action()
-        } label: {
+        Button(action: action) {
             HStack(spacing: UIScale.pt(7)) {
-                Image(systemName: utility == .keepAwake && active ? "moon.zzz.fill" : utility.icon)
+                EdithIconView(utility == .keepAwake && active ? .keepAwakeOn : utility.icon)
                     .font(.edithText(.caption))
                     .frame(width: UIScale.pt(16))
-                    .symbolEffect(.bounce, value: utility == .system ? clicks : (active ? 1 : 0))
                 Text(utility.title).font(.edithText(.caption).weight(.medium)).lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -303,7 +298,7 @@ struct HostSidebarUtilityButton: View {
 }
 
 struct HostSidebarNotice: View {
-    let symbol: String
+    let icon: EdithIcon
     let title: String
     var detail: String? = nil
     let tint: Color
@@ -312,7 +307,7 @@ struct HostSidebarNotice: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(7)) {
-                Image(systemName: symbol).frame(width: UIScale.pt(16))
+                EdithIconView(icon).frame(width: UIScale.pt(16))
                 Text(title).fontWeight(.medium).lineLimit(1)
                 if let detail { Text(detail).opacity(0.75).lineLimit(1) }
                 Spacer(minLength: 0)

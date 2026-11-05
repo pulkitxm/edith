@@ -22,6 +22,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 "KeepAwakeExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "Tests"),
     ]

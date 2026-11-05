@@ -1,3 +1,4 @@
+import EdithExtensionTestSupport
 import AppKit
 import QuartzCore
 import SwiftUI

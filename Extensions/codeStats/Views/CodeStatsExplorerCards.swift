@@ -10,10 +10,10 @@ struct CodeStatsTooltip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(title).font(.system(size: UIScale.pt(11), weight: .semibold))
+            Text(title).font(.edithText(.subheadline).weight(.semibold))
             ForEach(lines, id: \.self) { Text($0) }
         }
-        .font(.system(size: UIScale.pt(10.5)))
+        .font(.edithText(.caption))
         .monospacedDigit()
         .foregroundStyle(DashSkin.ink(dark))
         .padding(UIScale.pt(8))
@@ -35,7 +35,7 @@ struct CodeStatsRepositoryStripCard: View {
         ) {
             if explorer.stripRepositories.isEmpty {
                 Text("No repository activity in this range.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             } else {
                 Grid(
@@ -48,7 +48,7 @@ struct CodeStatsRepositoryStripCard: View {
                                 actions.toggleRepository(repository)
                             } label: {
                                 Text(repository)
-                                    .font(.system(size: UIScale.pt(11)))
+                                    .font(.edithText(.subheadline))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                     .truncationMode(.middle)
@@ -76,7 +76,7 @@ struct CodeStatsRepositoryStripCard: View {
                                         .dateTime.month(.abbreviated).year(.twoDigits))
                                     : ""
                             )
-                            .font(.system(size: UIScale.pt(9)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .fixedSize()
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -91,7 +91,7 @@ struct CodeStatsRepositoryStripCard: View {
                     }
                     Spacer()
                 }
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .monospacedDigit()
             }
@@ -159,7 +159,9 @@ struct CodeStatsYearOverYearCard: View {
     }
 
     var body: some View {
-        PageCard(title: "Year over year", note: "Same month, different years") {
+        PageCard(
+            title: "Year over year", note: "Same month, different years, across your whole history"
+        ) {
             EdithSegmentedPicker(
                 "Metric", selection: $commits, options: [false, true],
                 label: { $0 ? "Commits" : "Lines" }
@@ -196,7 +198,7 @@ struct CodeStatsYearOverYearCard: View {
                     AxisValueLabel {
                         if let month = value.as(Int.self) {
                             Text(Calendar.current.shortMonthSymbols[month - 1])
-                                .font(.system(size: UIScale.pt(9)))
+                                .font(.edithText(.caption))
                         }
                     }
                 }
@@ -207,7 +209,7 @@ struct CodeStatsYearOverYearCard: View {
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
                             Text(CodeStatsNumberFormat.compact(Int(number.rounded())))
-                                .font(.system(size: UIScale.pt(9)))
+                                .font(.edithText(.caption))
                         }
                     }
                 }
@@ -278,13 +280,13 @@ private struct CodeStatsRhythmChart: View {
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
                             Text(CodeStatsNumberFormat.compact(Int(number.rounded())))
-                                .font(.system(size: UIScale.pt(9)))
+                                .font(.edithText(.caption))
                         }
                     }
                 }
             }
             .chartXAxis {
-                AxisMarks { _ in AxisValueLabel().font(.system(size: UIScale.pt(9))) }
+                AxisMarks { _ in AxisValueLabel().font(.edithText(.caption)) }
             }
             .frame(height: UIScale.pt(170))
         }
@@ -350,7 +352,7 @@ private struct CodeStatsDonut: View {
         ) {
             if slices.reduce(0, { $0 + $1.lines }) == 0 {
                 Text("No counted lines in this range.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             } else {
                 donut
@@ -377,9 +379,9 @@ private struct CodeStatsDonut: View {
                     VStack(spacing: UIScale.pt(1)) {
                         if let hovered {
                             Text(CodeStatsNumberFormat.percent(hovered.share * 100))
-                                .font(.system(size: UIScale.pt(16), weight: .semibold))
+                                .font(.edithText(.title3).weight(.semibold))
                             Text(CodeStatsNumberFormat.compact(hovered.lines) + " lines")
-                                .font(.system(size: UIScale.pt(10)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                     }
@@ -401,7 +403,7 @@ private struct CodeStatsDonut: View {
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                     .monospacedDigit()
                             }
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.ink(dark))
                             .contentShape(Rectangle())
                         }
@@ -436,8 +438,15 @@ struct CodeStatsNewRepositoriesCard: View {
         PageCard(title: "New repositories", note: "Month of your first commit in each") {
             if explorer.newRepositories.isEmpty {
                 Text("You did not start any new repositories in this range.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
+            } else if explorer.newRepositories.count == 1,
+                let month = explorer.newRepositories.first
+            {
+                Text(Self.names(month).joined(separator: ", "))
+                    .font(.edithText(.callout))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 chart
             }
@@ -452,7 +461,7 @@ struct CodeStatsNewRepositoriesCard: View {
                         x: .value("Month", month.date, unit: .month),
                         y: .value("Repositories", month.count)
                     )
-                    .foregroundStyle(DashPalette.slate(dark).opacity(0.75))
+                    .foregroundStyle(DashSkin.accent(dark).opacity(0.75))
                     .cornerRadius(2)
                 }
                 if let selected {
@@ -472,7 +481,7 @@ struct CodeStatsNewRepositoriesCard: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { _ in
                     AxisGridLine().foregroundStyle(.primary.opacity(0.06))
-                    AxisValueLabel().font(.system(size: UIScale.pt(9)))
+                    AxisValueLabel().font(.edithText(.caption))
                 }
             }
             .frame(height: UIScale.pt(160))

@@ -25,7 +25,7 @@ import Testing
                 providerID: "plugins"))
         let result = try SurfaceSnapshot.decode(data, providerID: "plugins")
         #expect(result.rows.count == 1)
-        #expect(result.rows.first?.id == "first" && result.rows.first?.icon == "terminal")
+        #expect(result.rows.first?.id == "first" && result.rows.first?.icon == .terminal)
         #expect(result.metrics.map(\.title) == ["Detected agents", "Available skills"])
         #expect(result.metrics.map(\.value) == ["2", "\(model.skills.count)"])
         #expect(result.actions.isEmpty)

@@ -107,17 +107,17 @@ struct EmbeddedDownloadSheet: View {
         HStack(spacing: UIScale.pt(10)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text("Downloads")
-                    .font(DashSkin.heading(22))
+                    .font(.edithText(.title2)).fontWeight(.semibold)
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("Videos, photos and posts. Saved to your Mac.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
             }
             Spacer()
             Button {
                 downloader.updateYTDLP()
             } label: {
-                Image(systemName: "arrow.clockwise")
+                EdithIconView(.refresh)
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -130,12 +130,12 @@ struct EmbeddedDownloadSheet: View {
                 switch result {
                 case .success(let msg):
                     Text(msg)
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.green)
                         .lineLimit(1)
                 case .failure(let error):
                     Text(error.localizedDescription)
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.red)
                         .lineLimit(1)
                 }
@@ -144,7 +144,7 @@ struct EmbeddedDownloadSheet: View {
                 Button {
                     dismiss()
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(12), weight: .semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -153,23 +153,26 @@ struct EmbeddedDownloadSheet: View {
                 .buttonStyle(.edith(.toolbar))
             }
         }
-        .padding(.horizontal, UIScale.pt(22))
+        .pageGutter(compact)
         .padding(.vertical, UIScale.pt(14))
+        .pageColumn(compact ? nil : UIScale.pt(PageMetrics.readableWidth))
     }
 
     private func unavailableView(_ reason: String) -> some View {
         VStack(spacing: UIScale.pt(14)) {
             Spacer()
-            Image(systemName: "exclamationmark.triangle")
+            EdithIconView(.warning)
                 .font(.system(size: UIScale.pt(30)))
                 .foregroundStyle(.orange)
             Text(reason)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
             Button("Open Music settings") { settingsPresented = true }
-                .edithSheet(isPresented: $settingsPresented) { EmbeddedMusicSettings() }
+                .edithSheet(isPresented: $settingsPresented) {
+                    EmbeddedMusicSettings(done: { settingsPresented = false })
+                }
                 .buttonStyle(.edith(.toolbar))
             Button("Check again") { downloader.checkAvailability() }
                 .buttonStyle(.edith(.toolbar))
@@ -203,7 +206,7 @@ struct EmbeddedDownloadSheet: View {
                         Text("Your downloads")
                             .font(DashSkin.heading(15))
                         Text("\(downloader.items.count)")
-                            .font(.system(size: UIScale.pt(11), weight: .medium))
+                            .font(.edithText(.subheadline).weight(.medium))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, UIScale.pt(7))
                             .padding(.vertical, UIScale.pt(3))
@@ -211,7 +214,7 @@ struct EmbeddedDownloadSheet: View {
                         Spacer()
                         if !summaryText.isEmpty {
                             Text(summaryText)
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -237,7 +240,8 @@ struct EmbeddedDownloadSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .pageContent(compact)
+            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+            .pageContent(compact, width: .readable)
         }
         .edithSheet(item: $logItem) { item in
             logSheet(item)
@@ -252,8 +256,8 @@ struct EmbeddedDownloadSheet: View {
                 Button {
                     Task { if let pasted = await downloader.paste() { urlText = pasted } }
                 } label: {
-                    Label("Paste", systemImage: "clipboard")
-                        .font(.system(size: UIScale.pt(11)))
+                    Label("Paste", edith: .clipboard)
+                        .font(.edithText(.subheadline))
                 }
                 .buttonStyle(.edith(.toolbar))
             }
@@ -269,7 +273,7 @@ struct EmbeddedDownloadSheet: View {
                     .padding(.vertical, UIScale.pt(8))
                 if urlText.isEmpty {
                     Text("https://…\nAdd several links on separate lines")
-                        .font(.system(size: UIScale.pt(12.5)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .padding(.horizontal, UIScale.pt(14))
                         .padding(.vertical, UIScale.pt(10))
@@ -287,20 +291,20 @@ struct EmbeddedDownloadSheet: View {
             HStack(spacing: UIScale.pt(10)) {
                 if parsedCount > 0 {
                     HStack(spacing: UIScale.pt(4)) {
-                        Image(systemName: "checkmark.circle.fill")
+                        EdithIconView(.success)
                             .font(.system(size: UIScale.pt(10)))
                             .foregroundStyle(.green)
                         Text("\(parsedCount) web link\(parsedCount == 1 ? "" : "s")")
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(.secondary)
                     }
                 } else if !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Enter a complete http:// or https:// link")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.orange)
                 } else {
                     Text("YouTube · Instagram · TikTok · X · Reddit · and more")
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -317,8 +321,8 @@ struct EmbeddedDownloadSheet: View {
                     Button {
                         downloadKindRaw = kind.rawValue
                     } label: {
-                        Label(kind.title, systemImage: formatSymbol(kind))
-                            .font(.system(size: UIScale.pt(12), weight: .medium))
+                        Label(kind.title, edith: formatIcon(kind))
+                            .font(.edithText(.callout).weight(.medium))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, UIScale.pt(10))
                             .foregroundStyle(downloadKind == kind ? theme : DashSkin.inkSoft(dark))
@@ -342,10 +346,10 @@ struct EmbeddedDownloadSheet: View {
                     }
                     Spacer()
                 }
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
             }
             Text(formatDescription)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -363,19 +367,19 @@ struct EmbeddedDownloadSheet: View {
         }
     }
 
-    private func formatSymbol(_ kind: EmbeddedDownloadKind) -> String {
+    private func formatIcon(_ kind: EmbeddedDownloadKind) -> EdithIcon {
         switch kind {
-        case .post: "square.stack"
-        case .images: "photo"
-        case .audio: "waveform"
-        case .video: "play.rectangle"
+        case .post: .layers
+        case .images: .photo
+        case .audio: .waveform
+        case .video: .play
         }
     }
 
     private func sizeChip(_ kind: EmbeddedDownloadKind) -> some View {
         let selected = kind == downloadKind
         return HStack(spacing: UIScale.pt(4)) {
-            Image(systemName: kind == .audio ? "waveform" : "film")
+            EdithIconView(kind == .audio ? .waveform : .film)
             Text(kind.title)
             if estimating {
                 SkeletonGroup {
@@ -456,16 +460,16 @@ struct EmbeddedDownloadSheet: View {
             Text(
                 "Downloads continue when you close this window."
             )
-            .font(.system(size: UIScale.pt(10.5)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(.secondary)
             Spacer()
             Button(action: startDownload) {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "arrow.down.circle")
+                    EdithIconView(.arrowDown)
                     Text(parsedCount > 1 ? "Download \(parsedCount) links" : "Download")
                         .font(.system(size: UIScale.pt(12.5), weight: .semibold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(canStart ? Color.themeOnAccent : .white)
                 .padding(.horizontal, UIScale.pt(18))
                 .padding(.vertical, UIScale.pt(9))
                 .background(canStart ? theme : Color.gray.opacity(0.35))
@@ -488,7 +492,7 @@ struct EmbeddedDownloadSheet: View {
                     }
                 } label: {
                     HStack {
-                        Image(systemName: "folder")
+                        EdithIconView(.folder)
                         Text(
                             (outputDirectory
                                 ?? EmbeddedMediaDownloadInput.defaultDirectory(for: downloadKind))
@@ -498,7 +502,7 @@ struct EmbeddedDownloadSheet: View {
                         Spacer()
                         Text("Change…").foregroundStyle(.secondary)
                     }
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .padding(UIScale.pt(8))
                     .background(
                         DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
@@ -509,7 +513,7 @@ struct EmbeddedDownloadSheet: View {
                         ?? EmbeddedMediaDownloadInput.defaultDirectory(for: downloadKind)).path
                 )
                 Text("Choose where completed files are saved.")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -524,7 +528,7 @@ struct EmbeddedDownloadSheet: View {
                 .labelsHidden()
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(32), alignment: .leading)
                 Text("For posts that need a signed-in account.")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -534,11 +538,11 @@ struct EmbeddedDownloadSheet: View {
     private var emptyState: some View {
         VStack(spacing: UIScale.pt(6)) {
             Spacer()
-            Image(systemName: "tray")
+            EdithIconView(.tray)
                 .font(.system(size: UIScale.pt(24)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text("No downloads yet")
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer()
         }
@@ -573,7 +577,7 @@ struct EmbeddedDownloadSheet: View {
                     Group {
                         switch item.status {
                         case .queued:
-                            Image(systemName: "clock")
+                            EdithIconView(.clock)
                                 .font(.system(size: UIScale.pt(12)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         case .resolving:
@@ -585,15 +589,15 @@ struct EmbeddedDownloadSheet: View {
                                 SkeletonBlock(width: 15, height: 15, corner: 8)
                             }
                         case .done:
-                            Image(systemName: "checkmark.circle.fill")
+                            EdithIconView(.success)
                                 .font(.system(size: UIScale.pt(15)))
                                 .foregroundStyle(.green)
                         case .error:
-                            Image(systemName: "xmark.circle.fill")
+                            EdithIconView(.closeFilled)
                                 .font(.system(size: UIScale.pt(15)))
                                 .foregroundStyle(.red)
                         case .interrupted:
-                            Image(systemName: "pause.circle.fill")
+                            EdithIconView(.pause)
                                 .font(.system(size: UIScale.pt(16)))
                                 .foregroundStyle(.orange)
                         }
@@ -604,7 +608,7 @@ struct EmbeddedDownloadSheet: View {
 
                     VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                         Text(item.resolvedTitle ?? displayURL(item.url))
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(
                                 isActive ? AnyShapeStyle(tint) : AnyShapeStyle(DashSkin.ink(dark))
                             )
@@ -620,7 +624,7 @@ struct EmbeddedDownloadSheet: View {
                             HStack(spacing: UIScale.pt(4)) {
                                 if videoIndex > 0, videoCount > 0 {
                                     Text("\(videoIndex)/\(videoCount)")
-                                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                                        .font(.edithText(.subheadline).weight(.medium))
                                         .foregroundStyle(theme)
                                 }
                                 if !progress.isEmpty {
@@ -635,12 +639,12 @@ struct EmbeddedDownloadSheet: View {
                             }
                         case let .done(output):
                             Text(output)
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                         case let .error(msg):
                             Text(msg)
-                                .font(.system(size: UIScale.pt(10)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.red)
                                 .lineLimit(2)
                         case .interrupted:
@@ -674,7 +678,7 @@ struct EmbeddedDownloadSheet: View {
                     Button {
                         downloader.cancel(item)
                     } label: {
-                        Image(systemName: "xmark")
+                        EdithIconView(.close)
                     }
                     .buttonStyle(.edith(.toolbar))
                     .font(.system(size: UIScale.pt(11)))
@@ -685,7 +689,7 @@ struct EmbeddedDownloadSheet: View {
                         downloader.retry(item)
                     }
                     .buttonStyle(.edith(.toolbar))
-                    .font(.system(size: UIScale.pt(10), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .foregroundStyle(theme)
                     .disabled(downloader.isRunning)
                 case .done:
@@ -693,18 +697,18 @@ struct EmbeddedDownloadSheet: View {
                         Button {
                             downloader.openResult(item)
                         } label: {
-                            Image(systemName: "arrow.up.forward.app")
+                            EdithIconView(.external)
                         }
                         .help("Open downloaded file")
                         Button {
                             downloader.revealResult(item)
                         } label: {
-                            Image(systemName: "folder")
+                            EdithIconView(.folder)
                         }
                         .help("Reveal downloaded file")
                     }
                     .buttonStyle(.edith(.toolbar))
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 }
             }
             .padding(.trailing, UIScale.pt(10))
@@ -716,28 +720,28 @@ struct EmbeddedDownloadSheet: View {
             Group {
                 switch item.status {
                 case .done:
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: UIScale.pt(14)))
+                    EdithIconView(.success)
+                        .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(.green)
                 case .error:
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: UIScale.pt(14)))
+                    EdithIconView(.closeFilled)
+                        .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(.red)
                 case .interrupted:
-                    Image(systemName: "pause.circle.fill")
-                        .font(.system(size: UIScale.pt(14)))
+                    EdithIconView(.pause)
+                        .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(.orange)
                 default:
                     EmptyView()
                 }
             }
-            .frame(width: UIScale.pt(18))
+            .frame(width: UIScale.pt(20))
 
-            EmbeddedDownloadThumb(url: item.url, dark: dark, height: UIScale.pt(30))
+            EmbeddedDownloadThumb(url: item.url, dark: dark, height: UIScale.pt(34))
 
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(item.resolvedTitle ?? displayURL(item.url))
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -745,17 +749,17 @@ struct EmbeddedDownloadSheet: View {
                 switch item.status {
                 case .done:
                     Text(displayURL(item.url))
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 case let .error(msg):
                     Text(msg)
-                        .font(.system(size: UIScale.pt(9.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(.red)
                         .lineLimit(1)
                 case let .interrupted(reason):
                     Text(reason ?? "Paused")
-                        .font(.system(size: UIScale.pt(9.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(.orange)
                 default:
                     EmptyView()
@@ -770,7 +774,7 @@ struct EmbeddedDownloadSheet: View {
                     downloader.retry(item)
                 }
                 .buttonStyle(.edith(.toolbar))
-                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .font(.edithText(.caption).weight(.medium))
                 .foregroundStyle(theme)
                 .disabled(downloader.isRunning)
             case .done:
@@ -778,18 +782,18 @@ struct EmbeddedDownloadSheet: View {
                     Button {
                         downloader.openResult(item)
                     } label: {
-                        Image(systemName: "arrow.up.forward.app")
+                        EdithIconView(.external)
                     }
                     .help("Open downloaded file")
                     Button {
                         downloader.revealResult(item)
                     } label: {
-                        Image(systemName: "folder")
+                        EdithIconView(.folder)
                     }
                     .help("Reveal downloaded file")
                 }
                 .buttonStyle(.edith(.toolbar))
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
             default:
                 EmptyView()
             }
@@ -797,7 +801,7 @@ struct EmbeddedDownloadSheet: View {
             Button {
                 downloader.remove(item)
             } label: {
-                Image(systemName: "trash")
+                EdithIconView(.trash)
             }
             .buttonStyle(.edith(.toolbar))
             .font(.system(size: UIScale.pt(11)))
@@ -805,7 +809,7 @@ struct EmbeddedDownloadSheet: View {
             .help("Remove from download history")
         }
         .padding(.vertical, UIScale.pt(5))
-        .padding(.horizontal, UIScale.pt(8))
+        .padding(.horizontal, UIScale.pt(10))
         .background(Color.clear, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
     }
 
@@ -820,7 +824,7 @@ struct EmbeddedDownloadSheet: View {
                 Button {
                     logItem = nil
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(12), weight: .semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -882,14 +886,14 @@ struct EmbeddedDownloadSheet: View {
             if downloader.items.contains(where: { $0.record.canRetry }) {
                 Button("Retry failed") { downloader.retryAll() }
                     .buttonStyle(.edith(.toolbar))
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
             }
             if !downloader.items.isEmpty {
                 Button("Clear History") {
                     confirmClearHistory = true
                 }
                 .buttonStyle(.edith(.toolbar))
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .disabled(downloader.isRunning)
                 .confirmationDialog(
                     "Clear download history?", isPresented: $confirmClearHistory,
@@ -907,8 +911,8 @@ struct EmbeddedDownloadSheet: View {
                 Button {
                     downloader.cancelAll()
                 } label: {
-                    Label("Cancel All", systemImage: "xmark")
-                        .font(.system(size: UIScale.pt(11)))
+                    Label("Cancel All", edith: .close)
+                        .font(.edithText(.subheadline))
                 }
                 .buttonStyle(.edith(.toolbar))
             }
@@ -918,23 +922,23 @@ struct EmbeddedDownloadSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.edith(.toolbar))
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
             }
         }
-        .padding(.horizontal, UIScale.pt(22))
+        .padding(.horizontal, -UIScale.pt(6))
         .padding(.vertical, UIScale.pt(10))
     }
 
     private func label(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: UIScale.pt(10), weight: .semibold))
+            .font(.edithText(.caption).weight(.semibold))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .tracking(UIScale.pt(0.6))
     }
 
     private func statusBadge(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+            .font(.edithText(.caption).weight(.medium))
             .foregroundStyle(color)
             .padding(.horizontal, UIScale.pt(5))
             .padding(.vertical, UIScale.pt(1))
@@ -978,7 +982,7 @@ private struct EmbeddedDownloadThumb: View {
     }
 
     private var placeholder: some View {
-        Image(systemName: "play.rectangle.fill")
+        EdithIconView(.play)
             .font(.system(size: height * 0.4))
             .foregroundStyle(DashSkin.inkFaint(dark))
     }

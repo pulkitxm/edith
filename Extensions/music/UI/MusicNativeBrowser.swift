@@ -299,7 +299,14 @@ struct EmbeddedMusicYoutubeWebView: View {
             if let session, !session.stopped {
                 EmbeddedMusicNativeBrowser(session: session)
             } else if failure == nil {
-                LoadingIndicator()
+                VStack(spacing: UIScale.pt(10)) {
+                    SkeletonBlock(height: 28)
+                    SkeletonBlock(height: 160, corner: 12)
+                    SkeletonBlock(height: 12)
+                }
+                .padding(UIScale.pt(16))
+                .frame(maxHeight: .infinity, alignment: .top)
+                .accessibilityLabel("Opening YouTube Music")
             }
         }
         .pageTask(id: EmbeddedMusicAccounts.shared.youtubePresentationRevision) {

@@ -318,9 +318,9 @@ final class CompanionChatModel {
                 return detail.isEmpty
                     ? "No reasoning provider is configured; set one in Settings." : detail
             case let .badResponse(status, detail):
-                return detail.isEmpty ? "The companion answered HTTP \(status)." : detail
+                return detail.isEmpty ? "Memory answered with an error (HTTP \(status))." : detail
             case .unreachable:
-                return "The companion is not reachable right now."
+                return "Memory is not reachable right now. Open Backend to check on it."
             }
         }
         return error.localizedDescription
@@ -337,6 +337,8 @@ struct CompanionChatScreen: View {
     let home: CompanionHomeModel
     var isActive = true
     var openEpisode: (String) -> Void = { _ in }
+    var openLibrary: () -> Void = {}
+    var openCapture: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -394,28 +396,14 @@ struct CompanionChatScreen: View {
     }
 
     private var rail: some View {
-        VStack(spacing: UIScale.pt(6)) {
+        VStack(spacing: UIScale.pt(8)) {
             Button {
                 model.newChat()
             } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "plus")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    Text("New chat")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
-                }
-                .foregroundStyle(
-                    model.streaming ? DashSkin.inkFaint(dark) : DashSkin.accent(dark)
-                )
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, UIScale.pt(7))
-                .overlay {
-                    RoundedRectangle(cornerRadius: UIScale.pt(9))
-                        .strokeBorder(DashSkin.line(dark), style: StrokeStyle(dash: [4, 3]))
-                }
-                .contentShape(Rectangle())
+                Label("New chat", edith: .plus)
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edith(.secondary))
             .disabled(model.streaming || !isActive)
             .modifier(ActiveShortcut(active: isActive, key: "n", modifiers: .command))
             .help("Start a fresh conversation (⌘N)")
@@ -428,19 +416,16 @@ struct CompanionChatScreen: View {
                         retry: { Task { await model.loadConversations() } }
                     ) {
                         if model.conversations.isEmpty {
-                            Text("Nothing yet. The first chat starts the record.")
-                                .font(.system(size: UIScale.pt(11)))
+                            Text("Your chats will show up here.")
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
-                                .padding(.horizontal, UIScale.pt(10))
-                                .padding(.top, UIScale.pt(8))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, UIScale.pt(4))
                         } else {
                             ForEach(buckets, id: \.label) { bucket in
-                                Text(bucket.label.uppercased())
-                                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                                    .tracking(UIScale.pt(0.8))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                                    .padding(.horizontal, UIScale.pt(10))
-                                    .padding(.top, UIScale.pt(10))
+                                PageCapsLabel(bucket.label)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.top, UIScale.pt(12))
                                 ForEach(bucket.items) { conversation in
                                     ConversationRow(
                                         conversation: conversation,
@@ -456,8 +441,10 @@ struct CompanionChatScreen: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, UIScale.pt(10))
-        .frame(width: UIScale.pt(230))
+        .padding(.top, UIScale.pt(16))
+        .padding(.leading, PageMetrics.gutter(compact))
+        .padding(.trailing, UIScale.pt(12))
+        .frame(width: UIScale.pt(248))
     }
 
     private var thread: some View {
@@ -475,7 +462,11 @@ struct CompanionChatScreen: View {
                     transcript
                 }
             } else if model.messages.isEmpty {
-                greeting
+                if CompanionMemoryState.resolve(status: home.status) == .empty {
+                    emptyMemory
+                } else {
+                    greeting
+                }
             } else {
                 transcript
             }
@@ -505,7 +496,7 @@ struct CompanionChatScreen: View {
                 .frame(maxWidth: columnWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.horizontal, PageMetrics.gutter(compact))
-                .padding(.top, UIScale.pt(10))
+                .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                 .padding(.bottom, UIScale.pt(16))
             }
             .defaultScrollAnchor(.bottom)
@@ -535,10 +526,10 @@ struct CompanionChatScreen: View {
     private func jumpToLatest(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(5)) {
-                Image(systemName: "arrow.down")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                EdithIconView(.arrowDown)
+                    .font(.edithText(.caption).weight(.semibold))
                 Text("Latest")
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
             }
             .foregroundStyle(DashSkin.ink(dark))
             .padding(.horizontal, UIScale.pt(11))
@@ -565,7 +556,7 @@ struct CompanionChatScreen: View {
         HStack(spacing: UIScale.pt(10)) {
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             Text(label)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .fixedSize()
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
@@ -580,40 +571,58 @@ struct CompanionChatScreen: View {
         return previous.role == message.role ? UIScale.pt(10) : UIScale.pt(22)
     }
 
+    private var emptyMemory: some View {
+        CompanionFittingEmptyState {
+            emptyMemoryState
+        }
+    }
+
+    private var emptyMemoryState: some View {
+        PageEmptyState(
+            icon: .tray, title: "Your memory is empty",
+            message:
+                "Chat answers only from what you have saved. Add a few notes, PDFs or a voice memo first, then ask a question and it will cite the notes it used.",
+            steps: [
+                PageGuideStep(
+                    icon: .docText, title: "Add notes or files",
+                    detail: "Markdown, PDFs, photos and recordings all work."),
+                PageGuideStep(
+                    icon: .mic, title: "Or record a memo",
+                    detail: "Capture turns speech into searchable text."),
+                PageGuideStep(
+                    icon: .messages, title: "Then ask",
+                    detail: "Answers show which notes they came from."),
+            ],
+            primary: PageAction("Add to memory", icon: .plus, perform: openLibrary),
+            secondary: PageAction("Record a voice memo", icon: .mic, perform: openCapture),
+            footnote: "You can also drop files anywhere on this page.")
+    }
+
     private var greeting: some View {
         VStack(spacing: UIScale.pt(12)) {
             Spacer()
             Text("What do you want to remember?")
                 .font(DashSkin.heading(24, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
-            Text("It answers from your own notes, days and doings.")
-                .font(.system(size: UIScale.pt(12.5)))
+            Text("Ask anything. Answers come from your own notes and activity.")
+                .font(.edithText(.body))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            WrapHStack(spacing: UIScale.pt(8), lineSpacing: UIScale.pt(8)) {
+                .multilineTextAlignment(.center)
+            CompanionCenteredChips {
                 ForEach(
                     ["How was my week?", "What am I avoiding?", "What did I write about last?"],
                     id: \.self
                 ) { suggestion in
-                    Button {
+                    PageChip(suggestion) {
                         model.draft = suggestion
                         model.send()
-                    } label: {
-                        Text(suggestion)
-                            .font(.system(size: UIScale.pt(11.5)))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
-                            .padding(.horizontal, UIScale.pt(11))
-                            .padding(.vertical, UIScale.pt(5))
-                            .overlay {
-                                Capsule().strokeBorder(DashSkin.line(dark))
-                            }
-                            .contentShape(Capsule())
                     }
-                    .buttonStyle(.edith(.borderless))
                 }
             }
-            .frame(maxWidth: UIScale.pt(500))
+            .frame(maxWidth: UIScale.pt(560))
             Spacer()
         }
+        .padding(.horizontal, PageMetrics.gutter(compact))
         .frame(maxWidth: .infinity)
     }
 
@@ -623,7 +632,7 @@ struct CompanionChatScreen: View {
             HStack {
                 Spacer(minLength: UIScale.pt(80))
                 Text(message.content)
-                    .font(.system(size: UIScale.pt(13)))
+                    .font(.edithText(.body))
                     .foregroundStyle(DashSkin.ink(dark))
                     .textSelection(.enabled)
                     .padding(.horizontal, UIScale.pt(13))
@@ -640,10 +649,7 @@ struct CompanionChatScreen: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                Text(eyebrow(for: message))
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                    .tracking(UIScale.pt(1.1))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(eyebrow(for: message)).pageCapsStyle()
                 MarkdownBody(
                     text: message.content, dark: dark, size: 13, bodyInk: true,
                     cacheKey: message.id)
@@ -652,7 +658,7 @@ struct CompanionChatScreen: View {
                 }
                 if message.stopped {
                     Text("stopped")
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 if !message.citations.isEmpty {
@@ -665,7 +671,7 @@ struct CompanionChatScreen: View {
 
     private func eyebrow(for message: CompanionChatModel.DisplayMessage) -> String {
         let model = (message.model ?? self.model.model).map { " · \($0)" } ?? ""
-        return "COMPANION\(model)".uppercased()
+        return "Memory\(model)"
     }
 
     private func citationChips(_ citations: [CompanionAskCitation]) -> some View {
@@ -680,11 +686,11 @@ struct CompanionChatScreen: View {
 
     private func failureStrip(_ failure: CompanionChatModel.ChatFailure) -> some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: UIScale.pt(11)))
+            EdithIconView(.warning)
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.warn)
             Text(failure.message)
-                .font(.system(size: UIScale.pt(11.5)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(2)
             Spacer(minLength: 0)
@@ -717,46 +723,28 @@ struct CompanionChatScreen: View {
                 }
             }
             Spacer(minLength: 0)
-            CompanionLinkButton(
-                title: model.councilRunning ? "Asking three lenses…" : "Second opinion",
-                disabled: model.councilRunning || model.streaming
-                    || model.councilSubject == nil,
-                help: model.councilRunning
-                    ? "Analyst, coach and skeptic are answering; this takes a minute"
-                    : "Ask analyst, coach and skeptic at once about the typed or last question"
-            ) {
-                Task { await model.askCouncil() }
+            if model.councilRunning || model.councilSubject != nil {
+                CompanionLinkButton(
+                    title: model.councilRunning ? "Asking three lenses…" : "Second opinion",
+                    disabled: model.councilRunning || model.streaming,
+                    help: model.councilRunning
+                        ? "Analyst, coach and skeptic are answering; this takes a minute"
+                        : "Ask analyst, coach and skeptic at once about the typed or last question"
+                ) {
+                    Task { await model.askCouncil() }
+                }
             }
         }
         .frame(maxWidth: columnWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, PageMetrics.gutter(compact))
-        .padding(.bottom, UIScale.pt(6))
+        .padding(.bottom, UIScale.pt(8))
     }
 
     private func personaChip(id: String?, label: String) -> some View {
-        let selected = model.persona == id
-        return Button {
+        PageChip(label, active: model.persona == id) {
             model.persona = id
-        } label: {
-            Text(label)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                .padding(.horizontal, UIScale.pt(9))
-                .padding(.vertical, UIScale.pt(4))
-                .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-                .background {
-                    if selected {
-                        Capsule().fill(DashSkin.paper2(dark))
-                    }
-                }
-                .overlay {
-                    if selected {
-                        Capsule().strokeBorder(DashSkin.lineStrong(dark))
-                    }
-                }
-                .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
     }
 
     @ViewBuilder
@@ -773,10 +761,10 @@ struct CompanionChatScreen: View {
                         ForEach(council.answers, id: \.persona) { answer in
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                 Text(answer.label)
-                                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                                    .font(.edithText(.callout).weight(.semibold))
                                     .foregroundStyle(DashSkin.ink(dark))
                                 Text(answer.answer)
-                                    .font(.system(size: UIScale.pt(12.5)))
+                                    .font(.edithText(.callout))
                                     .foregroundStyle(DashSkin.inkSoft(dark))
                                     .textSelection(.enabled)
                             }
@@ -787,12 +775,12 @@ struct CompanionChatScreen: View {
                 Divider().opacity(0.3)
                 if !council.crux.isEmpty {
                     Text("the crux: \(council.crux)")
-                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .foregroundStyle(DashSkin.ink(dark))
                 }
                 if !council.cruxQuestion.isEmpty {
                     Text(council.cruxQuestion)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 CompanionLinkButton(title: "Close") { model.dismissCouncil() }
@@ -810,7 +798,7 @@ struct CompanionChatScreen: View {
             TextField("Talk to your memory…", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...8)
-                .font(.system(size: UIScale.pt(13.5)))
+                .font(.edithText(.body))
                 .foregroundStyle(DashSkin.ink(dark))
                 .tint(DashSkin.accent(dark))
                 .focused($composerFocused)
@@ -842,8 +830,8 @@ struct CompanionChatScreen: View {
             Button {
                 model.stop()
             } label: {
-                Image(systemName: "stop.circle.fill")
-                    .font(.system(size: UIScale.pt(24)))
+                EdithIconView(.stop)
+                    .font(.edithText(.title))
                     .foregroundStyle(DashSkin.accent(dark))
             }
             .buttonStyle(.edith(.borderless))
@@ -853,8 +841,8 @@ struct CompanionChatScreen: View {
             Button {
                 model.send()
             } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: UIScale.pt(24)))
+                EdithIconView(.arrowUp)
+                    .font(.edithText(.title))
                     .foregroundStyle(
                         draftEmpty ? DashSkin.inkFaint(dark) : DashSkin.accent(dark))
             }
@@ -978,7 +966,7 @@ private struct StreamingCaret: View {
                 }
             }
         }
-        .accessibilityLabel("Companion is responding")
+        .accessibilityLabel("Memory is responding")
     }
 }
 
@@ -1045,24 +1033,19 @@ private struct CitationChip: View {
         } label: {
             HStack(spacing: UIScale.pt(4)) {
                 Text("\(index)")
-                    .font(.system(size: UIScale.pt(10), weight: .bold))
+                    .font(.edithText(.caption).weight(.bold))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text(
                     "\(citation.title) · \(String(citation.occurredAt.prefix(10))) · \(supportLabel)"
                 )
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: UIScale.pt(220))
             }
-            .padding(.horizontal, UIScale.pt(9))
-            .padding(.vertical, UIScale.pt(3))
-            .background(DashSkin.paper(dark), in: Capsule())
-            .overlay { Capsule().strokeBorder(DashSkin.line(dark)) }
-            .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.pageChip())
         .help("Preview this citation")
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -1070,11 +1053,11 @@ private struct CitationChip: View {
                     .font(DashSkin.heading(15, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("\(String(citation.occurredAt.prefix(10))) · \(supportLabel)")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 if !citation.quote.isEmpty {
                     Text("\u{201C}\(citation.quote)\u{201D}")
-                        .font(.system(size: UIScale.pt(12.5)))
+                        .font(.edithText(.callout))
                         .italic()
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .textSelection(.enabled)
@@ -1109,13 +1092,13 @@ private struct ConversationRow: View {
             Button(action: open) {
                 VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                     Text(conversation.title.isEmpty ? "Untitled" : conversation.title)
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
+                        .font(.edithText(.callout).weight(.semibold))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(1)
                     Text(
                         "\(String(conversation.lastActiveAt.prefix(10))) · \(conversation.messageCount) messages"
                     )
-                    .font(.system(size: UIScale.pt(10)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1124,7 +1107,7 @@ private struct ConversationRow: View {
             .buttonStyle(.edith(.borderless))
             if hovering {
                 Button(action: delete) {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(9), weight: .bold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .contentShape(Rectangle())

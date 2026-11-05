@@ -1,7 +1,7 @@
 {
   "id": "audioMixer",
   "title": "Audio Mixer",
-  "symbolName": "slider.horizontal.3",
+  "icon": "adjust",
   "category": "desk",
   "background": false,
   "commands": [
@@ -15,5 +15,32 @@
   ],
   "notchTabs": [
     "audio"
-  ]
+  ],
+  "guide": {
+    "tagline": "Set the volume of each app separately.",
+    "summary": "Audio Mixer adds a volume slider for every app that is playing sound, in the notch's Audio tab. Turn one app down without touching the rest. macOS asks for audio access the first time, and it needs macOS 14.4 or later.",
+    "steps": [
+      {
+        "icon": "play",
+        "title": "Play something",
+        "detail": "Apps appear in the mixer only while they are making sound."
+      },
+      {
+        "icon": "adjust",
+        "title": "Open the Audio tab",
+        "detail": "Open the notch and choose Audio to see one slider per app."
+      },
+      {
+        "icon": "speakerOff",
+        "title": "Drag or mute",
+        "detail": "Slide to lower an app, or drag to zero to mute it. Full volume restores it."
+      }
+    ],
+    "examples": [
+      "ed audio ls",
+      "ed audio volume Music 40",
+      "ed audio mute Music",
+      "ed audio unmute Music"
+    ]
+  }
 }

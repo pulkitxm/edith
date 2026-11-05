@@ -208,6 +208,7 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
             backing: .buffered, defer: true)
         created.isOpaque = false
         created.backgroundColor = .clear
+        created.appearance = NSAppearance(named: .darkAqua)
         created.hasShadow = true
         created.level = .statusBar
         created.collectionBehavior = [

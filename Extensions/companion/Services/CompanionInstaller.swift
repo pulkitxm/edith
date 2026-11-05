@@ -59,7 +59,7 @@ public enum CompanionDeployStage: String, Codable, CaseIterable, Sendable {
     public var title: String {
         switch self {
         case .prepare: "Prepare the directory"
-        case .source: "Sync the companion source"
+        case .source: "Copy the Memory service"
         case .files: "Write the compose files"
         case .env: "Write the environment"
         case .start: "Build and start the services"

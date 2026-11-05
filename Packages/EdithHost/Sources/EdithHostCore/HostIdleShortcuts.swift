@@ -33,7 +33,7 @@ final class HostIdleShortcuts {
     private func register(_ entry: HostExtension) {
         guard let defaults = UserDefaults(suiteName: identity.extensionDefaultsSuite(entry.id))
         else { return }
-        for hotkey in entry.hotkeys where !HotKeyRegistrar.isRegistered(hotkey.id) {
+        for hotkey in entry.hotkeys {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(
                     id: hotkey.id, prefix: hotkey.prefix, defaultCode: hotkey.code,

@@ -11,7 +11,7 @@ import Testing
         let model = AttentionPageModel(
             repository: fixture.repository,
             uiClient: fixture.client(counter: AttentionRequestCounter()))
-        model.select(.today)
+        model.select(.preset(.today))
         model.reload()
         await model.waitForReload()
         await model.checkBrowser()

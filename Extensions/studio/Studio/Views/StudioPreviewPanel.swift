@@ -116,9 +116,9 @@ struct StudioPreviewPanel: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                     HStack {
                         Text("Preview")
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .font(.edithText(.body).weight(.semibold))
                         Text(input.lastPathComponent)
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         Spacer()
@@ -128,14 +128,14 @@ struct StudioPreviewPanel: View {
                     }
                     HStack(spacing: UIScale.pt(12)) {
                         pane("Before", preview.before)
-                        Image(systemName: "arrow.right")
+                        EdithIconView(.arrowRight)
                             .foregroundStyle(.secondary)
                         pane("After", preview.after)
                     }
                     .frame(height: UIScale.pt(230))
                     if let failure = preview.failure {
                         Text(failure)
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.warn)
                     }
                 }
@@ -162,7 +162,7 @@ struct StudioPreviewPanel: View {
                 }
             }
             Text(title.uppercased())
-                .font(DashSkin.mono(9.5, weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold)).monospacedDigit()
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)

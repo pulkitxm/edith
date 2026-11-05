@@ -429,8 +429,7 @@ struct WorkspaceView: View {
                         } label: {
                             Label(
                                 workspace.name,
-                                systemImage: workspace.id == model.layout.id
-                                    ? "checkmark.circle.fill" : "rectangle.split.2x1")
+                                edith: workspace.id == model.layout.id ? .success : .layoutLeft)
                         }
                     }
                     Divider()
@@ -442,22 +441,22 @@ struct WorkspaceView: View {
                 Divider()
                 Button("Single pane") { usePreset(.single) }
             } label: {
-                Label("Layout", systemImage: "rectangle.split.2x1")
+                Label("Layout", edith: .layoutLeft)
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .fixedSize()
             .help("Choose a layout")
 
             Button {
                 model.equalize()
             } label: {
-                Image(systemName: "equal.square")
+                EdithIconView(.grid)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Even out the panes")
 
             Text("\(model.layout.paneCount) pane\(model.layout.paneCount == 1 ? "" : "s")")
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer(minLength: 0)
         }

@@ -7,6 +7,9 @@ struct BlitzTreeRings: View {
     let report: BlitzTreeReport
     let activate: (BlitzTreeReport.Entry) -> Void
     @State private var selection: Double?
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @Environment(\.colorScheme) private var scheme
 
     private var entries: [BlitzTreeReport.Entry] {
         Array(report.report.inventory.largestChildren.filter { $0.allocatedBytes > 0 }.prefix(60))
@@ -17,13 +20,15 @@ struct BlitzTreeRings: View {
         let other = entries.reduce(report.summary.allocatedBytes) {
             $0 - min($0, $1.allocatedBytes)
         }
+        let tones = BlitzTreePalette.tones(
+            theme: AppTheme(storedName: themeName), dark: scheme == .dark)
         Chart {
-            ForEach(entries) { entry in
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                 SectorMark(
                     angle: .value("Allocated bytes", Double(entry.allocatedBytes)),
                     innerRadius: .ratio(0.55), angularInset: 1
                 )
-                .foregroundStyle(by: .value("Folder", entry.name))
+                .foregroundStyle(Color(nsColor: tones[index % tones.count]))
                 .accessibilityLabel(entry.name)
                 .accessibilityValue(
                     ByteCountFormatter.string(
@@ -34,14 +39,13 @@ struct BlitzTreeRings: View {
                     angle: .value("Allocated bytes", Double(other)), innerRadius: .ratio(0.55),
                     angularInset: 1
                 )
-                .foregroundStyle(.gray.opacity(0.5))
+                .foregroundStyle(.quaternary)
                 .accessibilityLabel("Other unlisted space")
             }
         }
-        .chartLegend(.hidden)
         .chartAngleSelection(value: $selection)
         .overlay {
-            VStack(spacing: 4) {
+            VStack(spacing: UIScale.pt(4)) {
                 Text("Allocated").font(.edithText(.caption)).foregroundStyle(.secondary)
                 Text(
                     ByteCountFormatter.string(

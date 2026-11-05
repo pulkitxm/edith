@@ -76,6 +76,38 @@ enum HerdrAgentTerminalOverlay: Equatable {
     }
 }
 
+struct HerdrAgentTerminalOverlayView: View {
+    let overlay: HerdrAgentTerminalOverlay
+    let kind: String
+    let launchEnabled: Bool
+    let retry: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        switch overlay {
+        case .none:
+            EmptyView()
+        case .progress:
+            HerdrAgentTerminalSkeleton(kind: kind, palette: .edith(dark: scheme == .dark))
+        case .failure(let message):
+            PageEmptyState(
+                icon: .warning, title: "Could not reach this agent",
+                message: message,
+                primary: PageAction("Try again", icon: .refresh, perform: retry),
+                style: .compact, tint: DashSkin.warn
+            )
+            .disabled(!launchEnabled)
+        case .ended(let message):
+            PageEmptyState(
+                icon: .stop, title: "This session ended", message: message,
+                primary: PageAction("Restart", icon: .refresh, perform: retry),
+                style: .compact
+            )
+            .disabled(!launchEnabled)
+        }
+    }
+}
+
 struct HerdrResizeHandle: View {
     var axis = Axis.horizontal
     let label: String
@@ -397,7 +429,7 @@ struct HerdrSessionView: View {
                 .id(ObjectIdentifier(finder))
             } else if let message = tab.files.errorMessage {
                 Text(message)
-                    .font(.system(size: UIScale.pt(13)))
+                    .font(.edithText(.body))
                     .foregroundStyle(DashSkin.warn)
                     .multilineTextAlignment(.center)
                     .padding(UIScale.pt(16))
@@ -442,40 +474,15 @@ struct HerdrSessionView: View {
         .presenterCover(hideAgents, dark: dark)
     }
 
-    @ViewBuilder
     private var agentTerminalOverlay: some View {
-        switch HerdrAgentTerminalOverlay.make(
-            connectError: connection.error, starting: connection.starting,
-            started: tab.holder.started,
-            exitMessage: tab.holder.exitMessage)
-        {
-        case .none:
-            EmptyView()
-        case .progress:
-            HerdrAgentTerminalSkeleton(
-                kind: agent.kind,
-                palette: .edith(dark: dark)
-            )
-        case .failure(let message):
-            VStack(spacing: UIScale.pt(10)) {
-                Text(message)
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(DashSkin.warn)
-                Button("Retry") { HerdrWorkOwnership.start { await startIfNeeded() } }
-                    .buttonStyle(.edith(.secondary))
-                    .disabled(!launchEnabled)
-            }
-            .padding(UIScale.pt(16))
-        case .ended(let message):
-            VStack(spacing: UIScale.pt(10)) {
-                Text(message)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Button("Restart") { HerdrWorkOwnership.start { await startIfNeeded() } }
-                    .buttonStyle(.edith(.primary))
-                    .disabled(!launchEnabled)
-            }
-            .padding(UIScale.pt(20))
+        HerdrAgentTerminalOverlayView(
+            overlay: HerdrAgentTerminalOverlay.make(
+                connectError: connection.error, starting: connection.starting,
+                started: tab.holder.started,
+                exitMessage: tab.holder.exitMessage),
+            kind: agent.kind, launchEnabled: launchEnabled
+        ) {
+            HerdrWorkOwnership.start { await startIfNeeded() }
         }
     }
 
@@ -519,12 +526,12 @@ struct HerdrSessionView: View {
     {
         VStack(spacing: UIScale.pt(10)) {
             Text(title)
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
+                .font(.edithText(.title3).weight(.semibold))
                 .foregroundStyle(Color(nsColor: palette.foreground))
                 .multilineTextAlignment(.center)
             if let detail {
                 Text(detail)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(Color(nsColor: palette.foreground).opacity(0.7))
                     .multilineTextAlignment(.center)
             }

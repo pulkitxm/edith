@@ -14,7 +14,7 @@ enum CompanionSetupStep: Int, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .welcome: "Meet it"
+        case .welcome: "Welcome"
         case .machine: "Pick a machine"
         case .deploy: "Set it up"
         case .intelligence: "Connect a model"
@@ -297,31 +297,35 @@ struct CompanionSetupSheet: View {
     private var rail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(0)) {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "brain.head.profile")
-                    .font(.system(size: UIScale.pt(17)))
+                EdithIconView(.companion)
+                    .font(.edithText(.title2))
                     .foregroundStyle(DashSkin.accent(dark))
-                Text("Companion")
+                Text("Memory")
                     .font(DashSkin.heading(19, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
+                    .lineLimit(1)
                 Spacer(minLength: 0)
                 Button {
                     model.onFinish(false)
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut(.cancelAction)
                 .disabled(model.deploying)
-                .accessibilityLabel("Close companion setup")
+                .accessibilityLabel("Close Memory setup")
             }
             .padding(.bottom, UIScale.pt(24))
             ForEach(CompanionSetupStep.allCases) { step in
                 stepRow(step)
             }
             Spacer(minLength: 0)
-            Text("Everything runs in containers on a machine you choose. Nothing leaves it.")
-                .font(.system(size: UIScale.pt(10.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            Text(
+                "Everything runs in containers on a machine you choose. Nothing leaves it unless you connect a cloud model."
+            )
+            .font(.edithText(.caption))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(UIScale.pt(20))
         .frame(width: UIScale.pt(210))
@@ -346,28 +350,25 @@ struct CompanionSetupSheet: View {
                     }
                     .frame(width: UIScale.pt(20), height: UIScale.pt(20))
                 if state == "done" {
-                    Image(systemName: "checkmark")
+                    EdithIconView(.check)
                         .font(.system(size: UIScale.pt(9), weight: .bold))
                         .foregroundStyle(DashSkin.accent(dark))
                 } else {
                     Text("\(step.rawValue + 1)")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                         .foregroundStyle(
                             state == "current" ? DashSkin.paper(dark) : DashSkin.inkFaint(dark))
                 }
             }
             VStack(alignment: .leading, spacing: 0) {
                 Text(step.title)
-                    .font(
-                        .system(
-                            size: UIScale.pt(12.5),
-                            weight: state == "current" ? .semibold : .regular)
-                    )
+                    .font(.edithText(.body).weight(state == "current" ? .semibold : .regular))
+                    .lineLimit(1)
                     .foregroundStyle(
                         state == "upcoming" ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
                 if step.optional {
-                    Text("optional")
-                        .font(.system(size: UIScale.pt(9.5)))
+                    Text("Optional")
+                        .font(.edithText(.caption2))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -387,57 +388,63 @@ struct CompanionSetupSheet: View {
     }
 
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            Text("Meet the companion")
-                .font(DashSkin.heading(26, weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text(
-                "A private memory that lives on your own hardware. It reads what you give "
-                    + "it, notices what you actually do, and answers from evidence."
-            )
-            .font(.system(size: UIScale.pt(12.5)))
-            .foregroundStyle(DashSkin.inkSoft(dark))
-            .fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                stepHeading("Set up Memory")
+                Text(
+                    "A private memory that lives on your own hardware. It reads what you give "
+                        + "it, notices what you actually do, and answers from evidence."
+                )
+                .font(.edithText(.body))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 CompanionFieldLabel(text: "What will happen")
                 planRow(
                     1, "Pick a machine",
-                    "this Mac, or any SSH machine from your fleet")
+                    "This Mac, or any machine you added in Machines.")
                 planRow(
                     2, "Set it up there",
-                    "five containers: the API, Postgres, Redis, Ollama and Whisper; "
-                        + "roughly 12 GB of disk")
+                    "Five containers: the API, Postgres, Redis, Ollama and Whisper. "
+                        + "About 12 GB of disk.")
                 planRow(
                     3, "Reach it from here",
-                    "a port forward puts it on localhost:4820, opened for you")
+                    "A port forward puts it on localhost:4820. Edith opens it for you.")
                 planRow(
-                    4, "Verify it",
-                    "health checks prove the database, models and vault all answer")
+                    4, "Check it works",
+                    "Health checks prove the database, models and vault all answer.")
             }
-            .padding(.top, UIScale.pt(6))
             Text(
                 "Your notes and recordings are stored on that machine only, as plain files "
                     + "and Postgres rows you can export or wipe at any time from Settings."
             )
-            .font(.system(size: UIScale.pt(10.5)))
+            .font(.edithText(.caption))
             .foregroundStyle(DashSkin.inkFaint(dark))
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.top, UIScale.pt(4))
         }
         .padding(UIScale.pt(28))
+    }
+
+    private func stepHeading(_ title: String) -> some View {
+        Text(title)
+            .font(DashSkin.heading(22, weight: .semibold))
+            .foregroundStyle(DashSkin.ink(dark))
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func planRow(_ index: Int, _ title: String, _ detail: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
             Text("\(index)")
-                .font(DashSkin.heading(14, weight: .semibold))
+                .font(.edithText(.body).weight(.semibold).monospacedDigit())
                 .foregroundStyle(DashSkin.accent(dark))
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                .frame(width: UIScale.pt(16), alignment: .leading)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title)
-                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text(detail)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -446,19 +453,18 @@ struct CompanionSetupSheet: View {
 
     private var machinePicker: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Text("Where should it live?")
-                .font(DashSkin.heading(22, weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text("Every machine below was just probed. Grayed reasons say what is missing.")
-                .font(.system(size: UIScale.pt(11.5)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            stepHeading("Where should it live?")
+            Text("Edith checked each machine. Anything missing is listed under it.")
+                .font(.edithText(.body))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
             ScrollView {
                 VStack(spacing: UIScale.pt(8)) {
                     if model.hosts.isEmpty, model.probing {
                         hostCardsSkeleton
                     } else if model.hosts.isEmpty {
-                        Text("No machines were found. Check your machine settings and probe again.")
-                            .font(.system(size: UIScale.pt(11.5)))
+                        Text("No machines were found. Add one in Machines, then check again.")
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(UIScale.pt(12))
@@ -470,7 +476,7 @@ struct CompanionSetupSheet: View {
             }
             HStack {
                 CompanionButton(
-                    title: "Probe again", busy: model.probing, busyTitle: "Probing…"
+                    title: "Check again", busy: model.probing, busyTitle: "Checking…"
                 ) {
                     Task { await model.probeHosts() }
                 }
@@ -486,34 +492,35 @@ struct CompanionSetupSheet: View {
             model.selectedHostID = host.id
         } label: {
             HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                Image(systemName: host.isLocal ? "laptopcomputer" : "server.rack")
-                    .font(.system(size: UIScale.pt(16)))
+                EdithIconView(host.isLocal ? .laptop : .server)
+                    .font(.edithText(.title3))
                     .foregroundStyle(
                         host.canHostTheStack || host.hostsTheStack
                             ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    HStack(spacing: UIScale.pt(6)) {
+                    HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
                         Text(host.name)
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .font(.edithText(.body).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                         if host.hostsTheStack {
                             MindChip(label: "hosts it now", tone: .green)
                         }
+                        Spacer(minLength: 0)
+                        if host.canHostTheStack || host.hostsTheStack {
+                            Text("Ready")
+                                .font(.edithText(.caption).weight(.medium))
+                                .foregroundStyle(DashSkin.ok)
+                        }
                     }
                     Text(host.summary)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     ForEach(Array(host.blockers.enumerated()), id: \.offset) { _, blocker in
                         Text("\(blocker.headline) · \(blocker.fix)")
-                            .font(.system(size: UIScale.pt(10.5)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.warn)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                }
-                Spacer(minLength: 0)
-                if host.canHostTheStack || host.hostsTheStack {
-                    Text("Ready")
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                        .foregroundStyle(DashSkin.ok)
                 }
             }
             .padding(UIScale.pt(12))
@@ -571,9 +578,7 @@ struct CompanionSetupSheet: View {
 
     private var deployChecklist: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Text("Setting up on \(model.selectedHost?.name ?? "the machine")")
-                .font(DashSkin.heading(22, weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
+            stepHeading("Setting up on \(model.selectedHost?.name ?? "the machine")")
             VStack(alignment: .leading, spacing: UIScale.pt(0)) {
                 ForEach(CompanionDeployStage.allCases, id: \.self) { stage in
                     stageRow(stage)
@@ -601,8 +606,8 @@ struct CompanionSetupSheet: View {
             } else if !model.deploying, model.deployed != nil {
                 CompanionStatusLine(text: "Everything answered. Continue when ready.", tone: .ok)
             } else if model.deploying {
-                Text("First-time image pulls and the Rust build can take a few minutes.")
-                    .font(.system(size: UIScale.pt(10.5)))
+                Text("The first setup downloads images and can take a few minutes.")
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Spacer(minLength: 0)
@@ -630,22 +635,22 @@ struct CompanionSetupSheet: View {
                         SkeletonBlock(width: 18, height: 18, corner: 9)
                     }
                 case .done:
-                    Image(systemName: "checkmark.circle.fill")
+                    EdithIconView(.success)
                         .foregroundStyle(DashSkin.ok)
                 case .failed:
-                    Image(systemName: "xmark.circle.fill")
+                    EdithIconView(.closeFilled)
                         .foregroundStyle(DashSkin.danger)
                 }
             }
             .frame(width: UIScale.pt(18), height: UIScale.pt(18))
             Text(stage.title)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.body))
                 .foregroundStyle(
                     state == .pending ? DashSkin.inkFaint(dark) : DashSkin.ink(dark))
             Spacer(minLength: 0)
             if case .running(let detail) = state, !detail.isEmpty {
                 Text(detail)
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
             }
@@ -655,23 +660,18 @@ struct CompanionSetupSheet: View {
 
     private var intelligence: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(spacing: UIScale.pt(8)) {
-                Text("Connect intelligence")
-                    .font(DashSkin.heading(22, weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text("OPTIONAL")
-                    .font(.system(size: UIScale.pt(9), weight: .semibold))
-                    .tracking(UIScale.pt(0.8))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                stepHeading("Connect a model")
+                PageCapsLabel("Optional")
                     .padding(.horizontal, UIScale.pt(6))
                     .padding(.vertical, UIScale.pt(2))
                     .overlay { Capsule().strokeBorder(DashSkin.line(dark)) }
             }
             Text(
-                "Memory works without this. A reasoner adds chat, reflection and the "
-                    + "personas; the bundled Ollama already runs a small local model."
+                "Memory works without this. A model adds chat, reflection and the "
+                    + "personas. The bundled Ollama already runs a small local one."
             )
-            .font(.system(size: UIScale.pt(11.5)))
+            .font(.edithText(.body))
             .foregroundStyle(DashSkin.inkSoft(dark))
             .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
@@ -699,7 +699,7 @@ struct CompanionSetupSheet: View {
             }
             HStack(spacing: UIScale.pt(8)) {
                 CompanionButton(
-                    title: "Save and verify", role: .primary,
+                    title: "Save and verify",
                     busy: model.verifying, busyTitle: "Asking it to answer…"
                 ) {
                     Task { await model.saveAndVerifyReasoner() }
@@ -717,27 +717,25 @@ struct CompanionSetupSheet: View {
     private var done: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: UIScale.pt(28)))
+                EdithIconView(.success)
+                    .font(.edithText(.title))
                     .foregroundStyle(DashSkin.accent(dark))
-                Text("The companion is live")
-                    .font(DashSkin.heading(26, weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
+                stepHeading("Memory is ready")
             }
             if let deployment = model.deployed ?? CompanionDeploymentStore.load() {
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     summaryRow("Host", deployment.machineName)
                     summaryRow("Reached at", "localhost:\(deployment.localPort)")
                     summaryRow("Tier", deployment.resolvedTier.displayName)
-                    summaryRow("Containers", "shown under Backend, and in Machines as Edith's own")
-                    summaryRow("Your data", "export, import or wipe it anytime from Settings")
+                    summaryRow("Containers", "Shown under Backend, and in Machines as Edith's own")
+                    summaryRow("Your data", "Export, import or wipe it anytime from Settings")
                 }
             }
             Text(
-                "Drop files anywhere on the Companion window to remember them. Pause, move "
-                    + "or reconfigure the stack from the Backend tab whenever you like."
+                "Drop files anywhere on the Memory page to save them. Pause, move or "
+                    + "reconfigure it from the Backend tab whenever you like."
             )
-            .font(.system(size: UIScale.pt(11.5)))
+            .font(.edithText(.body))
             .foregroundStyle(DashSkin.inkSoft(dark))
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -748,11 +746,11 @@ struct CompanionSetupSheet: View {
     private func summaryRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
             Text(label)
-                .font(.system(size: UIScale.pt(11), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(90), alignment: .trailing)
+                .frame(width: UIScale.pt(96), alignment: .trailing)
             Text(value)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.body))
                 .foregroundStyle(DashSkin.ink(dark))
         }
     }
@@ -777,13 +775,15 @@ struct CompanionSetupSheet: View {
                 }
             }
             CompanionButton(
-                title: primaryTitle, role: .primary, disabled: primaryDisabled
+                title: primaryTitle, role: .primary, disabled: primaryDisabled,
+                help: primaryDisabled && model.step == .machine
+                    ? "Pick a machine marked Ready first" : nil
             ) {
                 primaryAction()
             }
         }
         .padding(.horizontal, UIScale.pt(20))
-        .padding(.vertical, UIScale.pt(14))
+        .padding(.vertical, UIScale.pt(16))
     }
 
     private var primaryTitle: String {

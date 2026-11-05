@@ -64,8 +64,7 @@ struct AttentionAllocationPanel: View {
                                 ?? model.summary.activeDuration)
                     )
                     .font(DashSkin.heading(20)).monospacedDigit()
-                    Text(hoveredLevel?.title.uppercased() ?? "ACTIVE TIME")
-                        .font(DashSkin.mono(9)).foregroundStyle(.secondary)
+                    PageCapsLabel(hoveredLevel?.title ?? "Active time")
                 }
             }
             .frame(width: UIScale.pt(170), height: UIScale.pt(170))
@@ -93,7 +92,7 @@ struct AttentionAllocationPanel: View {
         let dark = scheme == .dark
         let summary = model.summary
         return VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Text("WORK AND PERSONAL").font(DashSkin.mono(10)).foregroundStyle(.secondary)
+            PageCapsLabel("Work and personal")
             ForEach(AttentionSphere.allCases, id: \.self) { sphere in
                 let duration = summary.duration(sphere)
                 if duration > 0 {
@@ -116,13 +115,13 @@ struct AttentionAllocationPanel: View {
                 } label: {
                     Label(
                         "\(AttentionFormat.duration(summary.unclassifiedDuration)) needs categorization",
-                        systemImage: "tag"
+                        edith: .tag
                     )
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                 }
                 .buttonStyle(.edith(.borderless))
                 Text("Included in neutral time until you choose a category.")
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
             }
         }
     }

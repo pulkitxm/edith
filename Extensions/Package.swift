@@ -28,6 +28,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 "FocusDimExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "focusDim/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
@@ -45,6 +46,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 "HingeExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "hinge/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
@@ -62,6 +64,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 "WindowSweatersExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "windowSweaters/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
@@ -79,6 +82,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 "ColorPickerExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "colorPicker/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
@@ -96,6 +100,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 "KeystrokeHighlightExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "keystrokeHighlight/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
@@ -113,6 +118,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 "MicMuteExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "micMute/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
@@ -130,6 +136,7 @@ let package = Package(
                 .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
                 "EmojiExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "emoji/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
@@ -141,7 +148,11 @@ let package = Package(
             path: "calendar", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "CalendarExtensionTests", dependencies: ["CalendarExtension"],
+            name: "CalendarExtensionTests",
+            dependencies: [
+                "CalendarExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ],
             path: "calendar/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )

@@ -44,7 +44,7 @@ enum PDFOrganizeTools {
     static let merge = StudioTool(
         id: "pdf.merge", title: "Merge PDF",
         summary: "Combine PDFs and images into one PDF in the order you want.",
-        symbol: "square.stack.3d.down.right", group: .organize, inputs: [.pdf, .image],
+        iconName: "layers", group: .organize, inputs: [.pdf, .image],
         arity: .combine(minimum: 2, maximum: nil), produces: .kind(.pdf),
         options: [
             .toggle(
@@ -101,7 +101,7 @@ enum PDFOrganizeTools {
     static let split = StudioTool(
         id: "pdf.split", title: "Split PDF",
         summary: "Separate pages into several PDFs, by ranges, a fixed size or every page.",
-        symbol: "rectangle.split.3x1", group: .organize, inputs: [.pdf],
+        iconName: "columns", group: .organize, inputs: [.pdf],
         produces: .kind(.pdf),
         options: [
             .choice(
@@ -168,7 +168,7 @@ enum PDFOrganizeTools {
     static let removePages = StudioTool(
         id: "pdf.remove-pages", title: "Remove pages",
         summary: "Delete the pages you do not need from a PDF.",
-        symbol: "minus.rectangle", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
+        iconName: "minus", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
         options: [
             .text(
                 "pages", "Pages to remove", placeholder: "2, 5-7, last", default: "",
@@ -205,7 +205,7 @@ enum PDFOrganizeTools {
     static let reorder = StudioTool(
         id: "pdf.reorder", title: "Reorder pages",
         summary: "Reverse, interleave scanned sides or put pages in a custom order.",
-        symbol: "arrow.up.arrow.down", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
+        iconName: "arrowSort", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
         options: [
             .choice(
                 "order", "Order",
@@ -245,7 +245,7 @@ enum PDFOrganizeTools {
     static let rotate = StudioTool(
         id: "pdf.rotate", title: "Rotate PDF",
         summary: "Turn all pages or just some of them. Works on many PDFs at once.",
-        symbol: "rotate.right", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
+        iconName: "rotate", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
         options: [
             .choice(
                 "angle", "Rotate",
@@ -287,14 +287,14 @@ enum PDFOrganizeTools {
     static let organize = StudioTool(
         id: "pdf.organize", title: "Organize PDF",
         summary: "Sort, rotate, delete, duplicate and insert pages visually.",
-        symbol: "square.grid.3x3", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
+        iconName: "gridDense", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
         style: .editor(.pdf, pdfMode: .organize),
         keywords: ["sort", "arrange", "insert", "delete", "pages"])
 
     static let nUp = StudioTool(
         id: "pdf.n-up", title: "Pages per sheet",
         summary: "Print-ready layouts with 2, 4, 6, 9 or 16 pages on each sheet.",
-        symbol: "square.grid.2x2", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
+        iconName: "grid", group: .organize, inputs: [.pdf], produces: .kind(.pdf),
         options: [
             .choice(
                 "layout", "Pages per sheet",
@@ -321,7 +321,7 @@ enum PDFOrganizeTools {
     static let resize = StudioTool(
         id: "pdf.page-size", title: "Change page size",
         summary: "Fit every page onto A4, Letter or another paper size.",
-        symbol: "arrow.up.left.and.arrow.down.right.rectangle", group: .organize, inputs: [.pdf],
+        iconName: "expand", group: .organize, inputs: [.pdf],
         produces: .kind(.pdf),
         options: [
             .choice("paper", "Paper", StudioPaperSize.choices, default: "a4"),
@@ -347,7 +347,7 @@ enum PDFOrganizeTools {
     static let crop = StudioTool(
         id: "pdf.crop", title: "Crop PDF",
         summary: "Trim white margins automatically or cut fixed margins from pages.",
-        symbol: "crop", group: .edit, inputs: [.pdf], produces: .kind(.pdf),
+        iconName: "crop", group: .edit, inputs: [.pdf], produces: .kind(.pdf),
         options: [
             .choice(
                 "mode", "Crop",
@@ -413,7 +413,7 @@ enum PDFOrganizeTools {
     static let cropVisual = StudioTool(
         id: "pdf.crop-area", title: "Crop area",
         summary: "Draw the area to keep on a page and apply it to one page or the whole PDF.",
-        symbol: "crop.rotate", group: .edit, inputs: [.pdf], produces: .kind(.pdf),
+        iconName: "rotate", group: .edit, inputs: [.pdf], produces: .kind(.pdf),
         style: .editor(.pdf, pdfMode: .crop), keywords: ["select", "region", "trim"])
 }
 

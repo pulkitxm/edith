@@ -46,6 +46,18 @@ enum AttentionFormat {
         return "\(change > 0 ? "+" : "-")\(duration(abs(change))) vs before"
     }
 
+    static func joined(_ parts: String?...) -> String {
+        parts.compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func share(_ value: TimeInterval, of total: TimeInterval, previous: TimeInterval?)
+        -> String
+    {
+        joined(
+            "\(percent(value, of: total)) of active",
+            delta(value, previous))
+    }
+
     static func count(_ value: Int) -> String {
         value.formatted(.number.notation(.compactName))
     }
@@ -61,6 +73,7 @@ struct AttentionPanel<Content: View, Trailing: View>: View {
     let trailing: Trailing
     let content: Content
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.attentionPanelFills) private var fills
 
     init(
         _ title: String, subtitle: String? = nil,
@@ -74,7 +87,7 @@ struct AttentionPanel<Content: View, Trailing: View>: View {
     }
 
     var body: some View {
-        PagePanel {
+        PagePanel(fill: fills) {
             PageSectionHeader(title, subtitle: subtitle) { trailing }
         } content: {
             content
@@ -82,41 +95,14 @@ struct AttentionPanel<Content: View, Trailing: View>: View {
     }
 }
 
-struct AttentionTile: View {
-    let label: String
-    let value: String
-    let detail: String?
-    let tint: Color
-    let symbol: String
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        PageMetric(title: label, value: value, detail: detail ?? " ", symbol: symbol, tint: tint)
-    }
+private struct AttentionPanelFillsKey: EnvironmentKey {
+    static let defaultValue = false
 }
 
-struct AttentionChip: View {
-    let title: String
-    let color: Color
-    var active = false
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        let dark = scheme == .dark
-        HStack(spacing: UIScale.pt(5)) {
-            Circle().fill(color).frame(width: UIScale.pt(7), height: UIScale.pt(7))
-            Text(title)
-                .font(.system(size: UIScale.pt(11), weight: active ? .semibold : .medium))
-                .foregroundStyle(DashSkin.ink(dark))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, UIScale.pt(9))
-        .padding(.vertical, UIScale.pt(4))
-        .widgetBar(
-            cornerRadius: 8,
-            fill: active
-                ? AnyShapeStyle(color.opacity(0.18)) : AnyShapeStyle(DashSkin.paper2(dark)),
-            stroke: active ? color.opacity(0.6) : DashSkin.lineStrong(dark))
+extension EnvironmentValues {
+    var attentionPanelFills: Bool {
+        get { self[AttentionPanelFillsKey.self] }
+        set { self[AttentionPanelFillsKey.self] = newValue }
     }
 }
 
@@ -147,7 +133,7 @@ struct AttentionCategoryBadge: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .font(.system(size: UIScale.pt(10), weight: .semibold))
+        .font(.edithText(.caption).weight(.semibold))
         .foregroundStyle(DashSkin.inkSoft(dark))
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(2))
@@ -203,17 +189,17 @@ struct AttentionLegendRow: View {
             RoundedRectangle(cornerRadius: 2).fill(color)
                 .frame(width: UIScale.pt(9), height: UIScale.pt(9))
             Text(label)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             Spacer(minLength: UIScale.pt(6))
             if let detail {
                 Text(detail)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Text(value)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
@@ -222,21 +208,21 @@ struct AttentionLegendRow: View {
 
 struct AttentionEmpty: View {
     let text: String
-    var symbol = "tray"
+    var icon = EdithIcon.tray
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         VStack(spacing: UIScale.pt(8)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(18)))
                 .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
             Text(text)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
                 .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity)
         .padding(.vertical, UIScale.pt(22))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -249,7 +235,7 @@ struct AttentionStatusPill: View {
         HStack(spacing: UIScale.pt(6)) {
             Circle().fill(good ? Color.green : Color.orange)
                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-            Text("\(title): \(state)").font(.system(size: UIScale.pt(10), weight: .semibold))
+            Text("\(title): \(state)").font(.edithText(.caption).weight(.semibold))
         }
         .padding(.horizontal, UIScale.pt(9)).padding(.vertical, UIScale.pt(6))
         .background((good ? Color.green : Color.orange).opacity(0.1), in: Capsule())
@@ -259,7 +245,7 @@ struct AttentionStatusPill: View {
 enum AttentionEventIconDescriptor: Hashable {
     case application(bundleID: String?)
     case website(URL?)
-    case symbol(String)
+    case icon(EdithIcon)
 
     init(event: AttentionEvent) {
         switch event.source {
@@ -268,11 +254,11 @@ enum AttentionEventIconDescriptor: Hashable {
         case .browser:
             self = .website(Self.remoteURL(event.faviconURL))
         case .media:
-            self = .symbol(event.media?.kind == "audio" ? "music.note" : "play.rectangle")
+            self = .icon(event.media?.kind == "audio" ? .music : .play)
         case .manual:
-            self = .symbol("hand.tap")
+            self = .icon(.cursor)
         case .agent:
-            self = .symbol("sparkles")
+            self = .icon(.herdr)
         }
     }
 
@@ -288,11 +274,11 @@ enum AttentionEventIconDescriptor: Hashable {
             case .browser:
                 self = .website(nil)
             case .media:
-                self = .symbol("music.note")
+                self = .icon(.music)
             case .manual:
-                self = .symbol("hand.tap")
+                self = .icon(.cursor)
             case .agent:
-                self = .symbol("sparkles")
+                self = .icon(.herdr)
             }
         }
     }
@@ -324,7 +310,7 @@ struct AttentionResolvedIcon: View {
                     .scaledToFit()
                     .padding(descriptor.isWebsite ? UIScale.pt(3) : 0)
             } else {
-                Image(systemName: descriptor.fallbackSymbol)
+                EdithIconView(descriptor.fallbackIcon)
                     .font(.system(size: UIScale.pt(size * 0.62), weight: .medium))
                     .foregroundStyle(fallbackColor)
             }
@@ -352,11 +338,11 @@ extension AttentionEventIconDescriptor {
         return false
     }
 
-    var fallbackSymbol: String {
+    var fallbackIcon: EdithIcon {
         switch self {
-        case .application: "macwindow"
-        case .website: "globe"
-        case .symbol(let name): name
+        case .application: .window
+        case .website: .globe
+        case .icon(let icon): icon
         }
     }
 }

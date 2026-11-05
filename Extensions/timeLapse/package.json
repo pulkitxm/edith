@@ -1,7 +1,7 @@
 {
   "id": "timeLapse",
   "title": "Screen Recorder",
-  "symbolName": "record.circle",
+  "icon": "record",
   "category": "media",
   "background": false,
   "commands": [],
@@ -9,7 +9,7 @@
     {
       "id": "timeLapse",
       "title": "Screen Recorder",
-      "symbolName": "record.circle",
+      "icon": "record",
       "order": 3
     }
   ],
@@ -21,5 +21,27 @@
     "media",
     "extension:timeLapse"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Record your screen, or speed up a long session into a short time-lapse.",
+    "summary": "Record a display or chosen windows at normal speed, or as a time-lapse that captures a frame every few seconds. Recording keeps running if you leave the page. Export a video when you are done. Everything stays on your Mac.",
+    "steps": [
+      {
+        "icon": "display",
+        "title": "Choose what to record",
+        "detail": "Pick a display or specific windows. macOS asks for Screen Recording access the first time."
+      },
+      {
+        "icon": "record",
+        "title": "Press Record",
+        "detail": "Add audio or the cursor under Audio & options, then stop whenever you are done."
+      },
+      {
+        "icon": "share",
+        "title": "Export a video",
+        "detail": "Select a recording, choose a quality and save it as a video file."
+      }
+    ],
+    "examples": []
+  }
 }

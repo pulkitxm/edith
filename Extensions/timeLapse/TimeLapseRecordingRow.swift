@@ -10,7 +10,7 @@ struct TimeLapseRecordingRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(12)) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                EdithIconView(selected ? .success : .ring)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(recording.session.settings.mode.rawValue)
                         .font(.edithText(.callout)).fontWeight(.medium)
@@ -27,7 +27,8 @@ struct TimeLapseRecordingRow: View {
                     }
                 }
             }
-            .padding(UIScale.pt(3))
+            .padding(.horizontal, UIScale.pt(11))
+            .padding(.vertical, UIScale.pt(3))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.edith(.row, selected: selected))

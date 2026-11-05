@@ -127,10 +127,12 @@ private struct EdithButtonBody<Label: View>: View {
 
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.controlActiveState) private var activeState
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
+    @Environment(\.font) private var font
     @State private var hovering = false
 
     private var metrics: EdithButtonMetrics { .metrics(for: role) }
@@ -145,6 +147,7 @@ private struct EdithButtonBody<Label: View>: View {
     @ViewBuilder var body: some View {
         if role.usesFeatureAppearance {
             label
+                .font(font ?? .edithText(.body))
                 .overlay {
                     if focused, enabled {
                         shape.strokeBorder(resolvedTint.opacity(0.8), lineWidth: 2)
@@ -156,6 +159,7 @@ private struct EdithButtonBody<Label: View>: View {
                 .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
         } else {
             label
+                .font(font ?? .edithText(.body))
                 .padding(.horizontal, UIScale.pt(metrics.horizontalPadding))
                 .padding(.vertical, UIScale.pt(metrics.verticalPadding))
                 .frame(
@@ -183,7 +187,10 @@ private struct EdithButtonBody<Label: View>: View {
 
     private var foreground: Color {
         switch role {
-        case .primary, .destructive:
+        case .primary:
+            return tint.map { OnAccent.foreground(on: $0, dark: scheme == .dark) }
+                ?? themeOnAccentColor(themeName)
+        case .destructive:
             return .white
         case .toolbar, .iconOnly:
             return tint ?? .primary
@@ -267,7 +274,11 @@ extension View {
     }
 
     public func settingsCaption() -> some View {
-        font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+        font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+    }
+
+    public func settingsSubtitle() -> some View {
+        font(.edithText(.body)).foregroundStyle(.secondary)
     }
 
     public func card() -> some View {
@@ -347,10 +358,7 @@ extension Color {
 }
 
 public func eyebrow(_ text: String) -> some View {
-    Text(text)
-        .font(.system(size: UIScale.pt(10), weight: .semibold))
-        .tracking(UIScale.pt(1.4))
-        .foregroundStyle(.tertiary)
+    PageCapsLabel(text)
 }
 
 public struct EmptyStateText: View {
@@ -362,10 +370,12 @@ public struct EmptyStateText: View {
 
     public var body: some View {
         Text(text)
-            .font(.system(size: 12))
+            .font(.edithText(.callout))
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
-            .padding(.vertical, 28)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, UIScale.pt(24))
+            .padding(.horizontal, UIScale.pt(16))
             .frame(maxWidth: .infinity)
     }
 }

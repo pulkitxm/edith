@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -17,11 +18,11 @@ import Testing
             rootView: state.withContext {
                 ExtensionPageHost {
                     ControlSettingsHost(presentation: model) {
-                        Form { PresenterRows(presentation: model) }.edithForm()
+                        Form { PresenterRows(presentation: model) }.settingsForm()
                     }
                 }
             })
-        let window = PresenterTestWindowHost.window(
+        let window = TestWindowHost.window(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 320))
         window.contentView = host
         window.orderFront(nil)

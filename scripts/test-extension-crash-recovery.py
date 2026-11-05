@@ -106,7 +106,7 @@ def proof(products, destination):
         "CFBundleVersion": "1", "CFBundleShortVersionString": "1.0.0", "LSUIElement": True,
     })
     entries = [{
-        "id": name, "title": name, "symbolName": "square", "category": "desk",
+        "id": name, "title": name, "icon": "appTile", "category": "desk",
         "background": True, "commands": [], "hotkeys": [], "launchWhen": [], "pages": [],
         "sections": [], "homeCards": [], "notchCards": [], "notchTabs": [],
     } for name in ["crashProbe", "healthyProbe"]]

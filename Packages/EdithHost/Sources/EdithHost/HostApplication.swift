@@ -37,8 +37,9 @@ struct HostApplication: App {
                         )
                         .environment(\.hostTerminalWindows, runtime.terminalWindows)
                     } else if runtime.startupError {
-                        ContentUnavailableView(
-                            "Edith could not start", systemImage: "exclamationmark.triangle")
+                        ContentUnavailableView {
+                            Label("Edith could not start", edith: .warning)
+                        }
                     } else {
                         Color.clear
                     }
@@ -51,7 +52,9 @@ struct HostApplication: App {
                 .task {
                     delegate.openMainWindow = { openWindow(id: "main") }
                     runtime.launch()
-                    if delegate.launchedAtLogin { delegate.mainWindow()?.close() }
+                    if delegate.launchedAtLogin, let window = delegate.mainWindow() {
+                        HostMainWindowHider.hide(window)
+                    }
                 }
             }
             .tracksHostWindowVisibility()
@@ -81,6 +84,10 @@ struct HostApplication: App {
                     .keyboardShortcut("q", modifiers: [.command, .option])
             }
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .saveItem) {
+                Button("Close") { HostWindowClose.perform(window: NSApp.keyWindow) }
+                    .keyboardShortcut("w")
+            }
         }
         Settings { HostSettingsRedirect() }
     }

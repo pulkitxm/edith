@@ -102,13 +102,13 @@ import Testing
             calendar: CodeStatsPageFixture.calendar,
             today: { CodeStatsPageFixture.date("2026-10-05") })
         await model.refresh()
-        await model.select(.year)
+        await model.select(.preset(.last12Months))
         await model.zoom(
             from: CodeStatsPageFixture.date("2026-03-01"),
             to: CodeStatsPageFixture.date("2026-03-31"))
-        #expect(model.isCustomRange)
+        #expect(model.canReturnToNamedRange)
         #expect(model.report?.totals.commits == 2)
-        await model.clearCustomRange()
+        await model.returnToNamedRange()
         #expect(model.range == .year)
         await model.toggleExcludedRepository("me/big")
         #expect(model.filter.excludedRepositories == ["me/big"])

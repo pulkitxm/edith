@@ -9,7 +9,7 @@ struct QuinjetSettingsPage: View {
             Section("Launch") {
                 Picker("Terminal", selection: terminal) {
                     ForEach(QuinjetTerminal.allCases) { option in
-                        Label(option.label, systemImage: option.icon).tag(option.rawValue)
+                        Label(option.label, edith: option.icon).tag(option.rawValue)
                             .disabled(option == .cmux && model.state?.cmuxAvailable != true)
                     }
                 }
@@ -22,6 +22,7 @@ struct QuinjetSettingsPage: View {
                 if let error = model.error {
                     Text(error).font(.edithText(.caption)).foregroundStyle(.red)
                     Button("Retry") { Task { await model.read() } }
+                        .buttonStyle(.edith(.secondary))
                 }
             }
             .disabled(model.loading)

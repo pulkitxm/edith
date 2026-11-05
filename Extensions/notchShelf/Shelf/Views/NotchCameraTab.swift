@@ -51,7 +51,7 @@ struct NotchCameraTab: View {
 
     private var switchButton: some View {
         Button(action: cycleCamera) {
-            Image(systemName: "arrow.triangle.2.circlepath.camera")
+            EdithIconView(.sync)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
@@ -79,47 +79,59 @@ struct NotchCameraTab: View {
     }
 
     private func prompt(action: @escaping () -> Void) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "camera.fill").font(.system(size: 20))
-                .foregroundStyle(.white.opacity(0.7))
-            Text("Mirror check, right in the notch")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.9))
-            Text("macOS asks for camera access once. Nothing is recorded or sent anywhere.")
-                .font(.system(size: 10.5))
-                .foregroundStyle(.white.opacity(0.5))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-            HStack(spacing: 8) {
-                Button("Allow Camera", action: action)
-                    .buttonStyle(.edith(.primary))
-                    .controlSize(.small)
-                Button("All Permissions") {
-                    NotchWorkerPresentation.openPrivacySettings()
-                }
-                .buttonStyle(.edith(.borderless))
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.55))
-            }
-            .padding(.top, 2)
+        message(
+            icon: .camera, title: "Mirror check, right in the notch",
+            detail: "macOS asks for camera access once. Nothing is recorded or sent anywhere."
+        ) {
+            Button("Allow Camera", action: action)
+                .buttonStyle(.edith(.primary))
+                .controlSize(.small)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var denied: some View {
-        Button {
-            NotchWorkerPresentation.openPrivacySettings()
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: "camera.metering.none").font(.system(size: 20))
-                Text("Camera access is off").font(.system(size: 12))
-                Text("Open System Settings").font(.system(size: 10)).foregroundStyle(
-                    .white.opacity(0.5))
-            }
-            .foregroundStyle(.white.opacity(0.7))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        message(
+            icon: .scan, title: "Camera access is off",
+            detail: "Allow Edith under Camera in Privacy settings to see yourself here."
+        ) {
+            Button("Open Privacy Settings") { NotchWorkerPresentation.openPrivacySettings() }
+                .buttonStyle(.edith(.secondary))
+                .controlSize(.small)
         }
-        .buttonStyle(.edith(.borderless))
+    }
+
+    private func message<Action: View>(
+        icon: EdithIcon, title: String, detail: String,
+        @ViewBuilder action: @escaping () -> Action
+    ) -> some View {
+        NotchTabMessage(icon: icon, title: title, detail: detail, action: action)
+    }
+}
+
+struct NotchTabMessage<Action: View>: View {
+    let icon: EdithIcon
+    let title: String
+    let detail: String
+    @ViewBuilder let action: () -> Action
+
+    var body: some View {
+        VStack(spacing: 6) {
+            EdithIconView(icon)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.bottom, 4)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+            Text(detail)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.55))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 280)
+            action().padding(.top, 6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

@@ -18,9 +18,9 @@ struct SurfaceCommandServiceTests {
                 .init("a", sourceID: "cask", title: "Cask"),
                 .init(
                     "b", sourceID: "formula", title: "Formula", detail: "Private details",
-                    progress: 0.5, actions: [.init("open:b", "Open", "arrow.up")]),
+                    progress: 0.5, actions: [.init("open:b", "Open", .arrowUp)]),
                 .init("c", sourceID: "formula", title: "Another"),
-            ], actions: [.init("refresh", "Refresh", "arrow.clockwise", field: "refresh")],
+            ], actions: [.init("refresh", "Refresh", .refresh, field: "refresh")],
             updatedAt: Date())
         let value = SurfaceCommandService.project(snapshot, tile: tile)
         #expect(value.metrics.map(\.id) == ["packages"])
@@ -44,10 +44,10 @@ struct SurfaceCommandServiceTests {
             rows: [
                 .init(
                     "a", sourceID: "formula", title: "Formula",
-                    actions: [.init("open:a", "Open", "arrow.up")]),
+                    actions: [.init("open:a", "Open", .arrowUp)]),
                 .init(
                     "b", sourceID: "cask", title: "Cask",
-                    actions: [.init("open:b", "Open", "arrow.up")]),
+                    actions: [.init("open:b", "Open", .arrowUp)]),
             ])
         for id in ["open:b", "arbitrary:path", "disable"] {
             let action = SurfaceActionRequest(
@@ -91,7 +91,7 @@ struct SurfaceCommandServiceTests {
                 snapshot: { _ in
                     withUnsafeCurrentTask { $0?.cancel() }
                     return .init(
-                        providerID: "keepAwake", actions: [.init("enable", "Enable", "power")])
+                        providerID: "keepAwake", actions: [.init("enable", "Enable", .power)])
                 }, perform: { _ in performed = true })
         }
         await #expect(throws: CancellationError.self) { try await task.value }
@@ -121,7 +121,7 @@ struct SurfaceCommandServiceTests {
                 snapshot: { _ in
                     reads += 1
                     return .init(
-                        providerID: "colorPicker", actions: [.init("pick", "Pick", "eyedropper")])
+                        providerID: "colorPicker", actions: [.init("pick", "Pick", .eyedropper)])
                 }, perform: { _ in actions += 1 }, privacyValues: { ["active": "1"] })
         }
         #expect(reads == 0 && actions == 0)
@@ -147,10 +147,10 @@ struct SurfaceCommandServiceTests {
     @Test(arguments: ["contract", "duplicates", "size"])
     func invalidCurrentSnapshotsCannotAuthorizeActions(_ defect: String) async throws {
         var current = SurfaceSnapshot(
-            providerID: "keepAwake", actions: [.init("enable", "Enable", "power")])
+            providerID: "keepAwake", actions: [.init("enable", "Enable", .power)])
         switch defect {
         case "contract": current.contractVersion = 2
-        case "duplicates": current.actions.append(.init("enable", "Again", "power"))
+        case "duplicates": current.actions.append(.init("enable", "Again", .power))
         default: current.message = String(repeating: "x", count: 4097)
         }
         var performed = false

@@ -48,6 +48,8 @@ public final class UsageWorkerController {
     private let machinesNeedRecovery: @MainActor () -> Bool
     private var observedMachinesVersion: String??
     private var recoveryPending = false
+    private var runningPolicy: UsageMachineRefreshPolicy = .skip
+    private var queuedPolicy: UsageMachineRefreshPolicy?
     private var recoveryTriggers: UsageRecoveryTriggers?
     private var machinesWatch: Task<Void, Never>?
     static let machinesWatchInterval = Duration.seconds(15)
@@ -94,22 +96,59 @@ public final class UsageWorkerController {
         dataDirectory.appendingPathComponent("limits-snapshot.json")
     }
 
+    static let transactionPatience: Duration = .seconds(90)
+
+    static func waitingForTransaction(
+        patience: Duration = transactionPatience,
+        _ body: @escaping @Sendable () throws -> Void
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: patience)
+        var delay: Duration = .milliseconds(100)
+        while true {
+            let attempt = Task.detached(priority: .utility, operation: body)
+            do {
+                return try await withTaskCancellationHandler {
+                    try await attempt.value
+                } onCancel: {
+                    attempt.cancel()
+                }
+            } catch UsageDataTransactionError.refreshBusy
+                where ContinuousClock.now.advanced(by: delay) < deadline
+            {
+                try await Task.sleep(for: delay)
+                delay = min(delay * 2, .seconds(2))
+            }
+        }
+    }
+
     @discardableResult
     public func requestRefresh(policy: UsageMachineRefreshPolicy = .due) throws -> String {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         indexDemanded = true
-        if let usageID { return usageID.uuidString }
+        if let usageID {
+            let covered = max(runningPolicy.rawValue, queuedPolicy?.rawValue ?? 0)
+            if policy.rawValue > covered { queuedPolicy = policy }
+            return usageID.uuidString
+        }
         let id = UUID()
-        usageID = id
         refreshing = true
-        failure = nil
         UsageEvents.post(UsageEvents.refreshStarted)
+        let recorder = UsageRefreshRecorder()
+        refreshRecorder = recorder
+        startRefresh(id: id, policy: policy, recorder: recorder)
+        return id.uuidString
+    }
+
+    private func startRefresh(
+        id: UUID, policy: UsageMachineRefreshPolicy, recorder: UsageRefreshRecorder
+    ) {
+        usageID = id
+        runningPolicy = policy
+        failure = nil
         let collect = self.collect
         let directory = dataDirectory
         let progress = UsageRefreshProgress(directory: directory)
         self.progress = progress
-        let recorder = UsageRefreshRecorder()
-        refreshRecorder = recorder
         usageTask = Task { [weak self] in
             do {
                 let collected = try await collect(
@@ -127,7 +166,7 @@ public final class UsageWorkerController {
                 if next != cache { try next.save(dataDir: directory) }
                 let fresh = UsageAttribution.attributed(collected, cache: next)
                 try Task.checkCancellation()
-                let write = Task.detached(priority: .utility) {
+                try await Self.waitingForTransaction {
                     try Task.checkCancellation()
                     guard fresh.count <= 64 * 1_024 * 1_024, UsageHistory.isValidDocument(fresh)
                     else {
@@ -150,11 +189,6 @@ public final class UsageWorkerController {
                         try UsageDataFiles.write(merged, to: url)
                     }
                 }
-                try await withTaskCancellationHandler {
-                    try await write.value
-                } onCancel: {
-                    write.cancel()
-                }
                 try Task.checkCancellation()
                 guard let self, !self.stopped, self.usageID == id else { return }
                 self.notice = Self.pricingNotice(fresh)
@@ -170,6 +204,12 @@ public final class UsageWorkerController {
             progress.close()
             self.progress = nil
             self.usageTask = nil
+            let next = self.queuedPolicy
+            self.queuedPolicy = nil
+            if let next, !Task.isCancelled, !self.stopped, self.failure == nil {
+                self.startRefresh(id: id, policy: next, recorder: recorder)
+                return
+            }
             self.usageID = nil
             self.refreshing = false
             self.finishRefreshWaiters()
@@ -179,7 +219,6 @@ public final class UsageWorkerController {
                 self.recoverRemoteMachines()
             }
         }
-        return id.uuidString
     }
 
     func observeMachinesAvailability() {
@@ -383,6 +422,7 @@ public final class UsageWorkerController {
         guard usageID == id else { return }
         usageTask = nil
         usageID = nil
+        queuedPolicy = nil
         refreshing = false
         finishRefreshWaiters()
     }
@@ -435,6 +475,7 @@ public final class UsageWorkerController {
         recoveryTriggers?.stop()
         recoveryTriggers = nil
         recoveryPending = false
+        queuedPolicy = nil
         ambientPolicy.stop()
         backgroundContinuation?.finish()
         backgroundWake?()

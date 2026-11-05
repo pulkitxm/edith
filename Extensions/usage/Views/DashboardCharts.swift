@@ -144,7 +144,7 @@ struct ComboChart: View {
                 AxisGridLine().foregroundStyle(.primary.opacity(0.06))
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                        Text(DashFmt.tokens(d)).font(.edithText(.caption)).foregroundStyle(
                             DashSkin.inkSoft(dark)
                         ).presenterBlur(blurTokens)
                     }
@@ -153,7 +153,7 @@ struct ComboChart: View {
             AxisMarks(position: .trailing) { value in
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.usd(d / scale)).font(.system(size: UIScale.pt(9)))
+                        Text(DashFmt.usd(d / scale)).font(.edithText(.caption))
                             .foregroundStyle(
                                 lineColor
                             ).presenterBlur(blur)
@@ -182,7 +182,7 @@ func categoryLabels(_ labels: [String], dark: Bool) -> some AxisContent {
         AxisValueLabel(orientation: .verticalReversed) {
             if let index = value.as(Int.self), labels.indices.contains(index) {
                 Text(labels[index])
-                    .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.ink(dark))
+                    .font(.edithText(.caption)).foregroundStyle(DashSkin.ink(dark))
             }
         }
     }
@@ -196,10 +196,10 @@ struct PointTooltip: View {
     var blurTokens = false
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text(label).font(.system(size: UIScale.pt(9))).foregroundStyle(.secondary)
-            Text(DashFmt.tokens(tokens)).font(.system(size: UIScale.pt(11), weight: .semibold))
+            Text(label).font(.edithText(.caption)).foregroundStyle(.secondary)
+            Text(DashFmt.tokens(tokens)).font(.edithText(.subheadline).weight(.semibold))
                 .presenterBlur(blurTokens)
-            Text(DashFmt.usdFull(cost)).font(.system(size: UIScale.pt(10))).foregroundStyle(
+            Text(DashFmt.usdFull(cost)).font(.edithText(.caption)).foregroundStyle(
                 .secondary
             )
             .presenterBlur(blur)
@@ -251,7 +251,7 @@ struct AdaptiveChartLegend: View {
                         .fill(item.color)
                         .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                     Text(item.label)
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -301,7 +301,7 @@ struct StackedChart: View {
                     x: .value("Day", index),
                     y: .value("Cost", p.cost * scale)
                 )
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DashSkin.gold)
                 .interpolationMethod(.catmullRom)
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(1.2)))
             }
@@ -334,7 +334,7 @@ struct StackedChart: View {
                 AxisGridLine().foregroundStyle(.primary.opacity(0.06))
                 AxisValueLabel {
                     if let d = value.as(Double.self) {
-                        Text(DashFmt.tokens(d)).font(.system(size: UIScale.pt(9))).foregroundStyle(
+                        Text(DashFmt.tokens(d)).font(.edithText(.caption)).foregroundStyle(
                             DashSkin.inkSoft(dark)
                         ).presenterBlur(blurTokens)
                     }
@@ -426,22 +426,22 @@ struct DonutChart: View {
             VStack(spacing: UIScale.pt(1)) {
                 if let s = selected {
                     Text(s.label)
-                        .font(.system(size: UIScale.pt(10), weight: .medium)).foregroundStyle(
+                        .font(.edithText(.caption).weight(.medium)).foregroundStyle(
                             .secondary
                         )
                         .lineLimit(1)
                     Text(DashFmt.tokens(s.value)).font(
-                        .system(size: UIScale.pt(13), weight: .semibold)
+                        .edithText(.headline)
                     )
                     .presenterBlur(blurTokens)
-                    Text(DashFmt.pct(s.value / percentageTotal)).font(.system(size: UIScale.pt(9)))
+                    Text(DashFmt.pct(s.value / percentageTotal)).font(.edithText(.caption))
                         .foregroundStyle(.tertiary)
                 } else {
                     Text(DashFmt.tokens(total)).font(
-                        .system(size: UIScale.pt(13), weight: .semibold)
+                        .edithText(.headline)
                     )
                     .presenterBlur(blurTokens)
-                    Text("tokens").font(.system(size: UIScale.pt(8))).foregroundStyle(.tertiary)
+                    Text("tokens").font(.edithText(.caption)).foregroundStyle(.tertiary)
                 }
             }
             .frame(maxWidth: UIScale.pt(110))
@@ -470,13 +470,13 @@ struct HeatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             Text(DashboardModel.ymd.string(from: detail.date))
-                .font(.system(size: UIScale.pt(11), weight: .semibold)).foregroundStyle(.secondary)
+                .font(.edithText(.subheadline).weight(.semibold)).foregroundStyle(.secondary)
             HStack(spacing: UIScale.pt(5)) {
                 Text("\(DashFmt.tokens(detail.tokens)) tokens")
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                     .presenterBlur(blurTokens)
                 Text("· \(DashFmt.usdFull(detail.cost))")
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                     .presenterBlur(blur)
             }
             HStack(spacing: UIScale.pt(5)) {
@@ -501,7 +501,7 @@ struct HeatCard: View {
 
     private func chip(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: UIScale.pt(9), weight: .medium))
+            .font(.edithText(.caption).weight(.medium))
             .padding(.horizontal, UIScale.pt(6)).padding(.vertical, UIScale.pt(2))
             .background(.primary.opacity(0.08), in: Capsule())
             .foregroundStyle(.secondary)
@@ -520,7 +520,7 @@ struct HeatCard: View {
         HStack {
             Text(label).settingsCaption()
             Spacer()
-            Text(DashFmt.tokens(value)).font(.system(size: UIScale.pt(10))).monospacedDigit()
+            Text(DashFmt.tokens(value)).font(.edithText(.caption)).monospacedDigit()
                 .presenterBlur(blurTokens)
         }
     }
@@ -529,7 +529,7 @@ struct HeatCard: View {
         -> some View
     {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            Text(title).font(.system(size: UIScale.pt(8), weight: .semibold)).tracking(
+            Text(title).font(.edithText(.caption).weight(.semibold)).tracking(
                 UIScale.pt(0.8)
             )
             .foregroundStyle(.tertiary)
@@ -539,22 +539,22 @@ struct HeatCard: View {
 
     private var projectList: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            Text("TOP PROJECTS").font(.system(size: UIScale.pt(8), weight: .semibold)).tracking(
+            Text("TOP PROJECTS").font(.edithText(.caption).weight(.semibold)).tracking(
                 UIScale.pt(0.8)
             )
             .foregroundStyle(.tertiary)
             ForEach(detail.projects.prefix(4)) { p in
                 HStack {
-                    Text(p.name).font(.system(size: UIScale.pt(10))).lineLimit(1)
+                    Text(p.name).font(.edithText(.caption)).lineLimit(1)
                         .presenterBlur(.agents)
                     Spacer()
-                    Text(DashFmt.tokens(p.value)).font(.system(size: UIScale.pt(9)))
+                    Text(DashFmt.tokens(p.value)).font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                         .presenterBlur(blurTokens)
                 }
             }
             if detail.projects.count > 4 {
-                Text("+\(detail.projects.count - 4) more").font(.system(size: UIScale.pt(9)))
+                Text("+\(detail.projects.count - 4) more").font(.edithText(.caption))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -572,7 +572,7 @@ struct FlowTags: View {
                 HStack(spacing: UIScale.pt(3)) {
                     Circle().fill(color(item.id)).frame(width: UIScale.pt(6), height: UIScale.pt(6))
                     Text("\(item.name) \(DashFmt.tokens(item.value))")
-                        .font(.system(size: UIScale.pt(9)))
+                        .font(.edithText(.caption))
                         .presenterBlur(blurTokens)
                 }
                 .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(2))
@@ -665,7 +665,7 @@ struct DashCard<Content: View>: View {
             HStack {
                 eyebrow(title)
                 if let subtitle {
-                    Text(subtitle).font(.system(size: UIScale.pt(10))).foregroundStyle(.tertiary)
+                    Text(subtitle).font(.edithText(.caption)).foregroundStyle(.tertiary)
                 }
                 Spacer()
             }

@@ -9,7 +9,7 @@ struct AttentionOverview: View {
     private var summary: AttentionSummary { model.summary }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             Text(
                 "App breakdowns and productivity show active use. Idle and locked time are kept separately."
             )
@@ -45,22 +45,23 @@ struct AttentionOverview: View {
         @ViewBuilder _ leading: () -> Leading, @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         if compact {
-            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 leading()
                 trailing()
             }
         } else {
-            HStack(alignment: .top, spacing: UIScale.pt(14)) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 leading().frame(maxWidth: .infinity, alignment: .top)
                 trailing().frame(maxWidth: .infinity, alignment: .top)
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .environment(\.attentionPanelFills, true)
         }
     }
 }
 
 struct AttentionHeadline: View {
     let model: AttentionPageModel
-    @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -75,55 +76,53 @@ struct AttentionHeadline: View {
         let hours = max(active / 3_600, 1 / 60)
         let perHour = Double(summary.contextSwitches) / hours
         let longestBlock = summary.focusBlocks.map(\.duration).max() ?? 0
-        LazyVGrid(
-            columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
-            spacing: UIScale.pt(12)
-        ) {
-            AttentionTile(
-                label: "Screen time",
+        PageMetricGrid(maximumColumns: 4) {
+            PageMetric(
+                title: "Screen time",
                 value: AttentionFormat.duration(
                     summary.screenTime(excludingIdle: model.excludeIdleTime)),
-                detail:
-                    model.excludeIdleTime
+                detail: model.excludeIdleTime
                     ? "idle and locked time excluded" : "includes idle and locked time",
-                tint: quiet, symbol: "clock")
-            AttentionTile(
-                label: "Idle / locked", value: AttentionFormat.duration(summary.idleDuration),
+                icon: .clock, tint: quiet)
+            PageMetric(
+                title: "Idle / locked", value: AttentionFormat.duration(summary.idleDuration),
                 detail: "idle after \(Int(model.settings.idleThreshold / 60))m without input",
-                tint: quiet, symbol: "moon.zzz")
-            AttentionTile(
-                label: "Active", value: AttentionFormat.duration(active),
+                icon: .moon, tint: quiet)
+            PageMetric(
+                title: "Active", value: AttentionFormat.duration(active),
                 detail:
                     "\(AttentionFormat.duration(summary.duration(AttentionSphere.work))) work · \(AttentionFormat.duration(summary.duration(AttentionSphere.personal))) personal",
-                tint: quiet, symbol: "cursorarrow")
-            AttentionTile(
-                label: "Productive", value: AttentionFormat.duration(productive),
-                detail:
-                    "\(AttentionFormat.percent(productive, of: active)) · \(AttentionFormat.delta(productive, previous?.productive) ?? "of active time")",
-                tint: accent, symbol: "scope")
-            AttentionTile(
-                label: "Distracting", value: AttentionFormat.duration(distracting),
-                detail:
-                    "\(AttentionFormat.percent(distracting, of: active)) · \(AttentionFormat.delta(distracting, previous?.distracting) ?? "of active time")",
-                tint: AttentionPalette.level(.veryDistracting, dark: dark),
-                symbol: "arrow.down.right")
-            AttentionTile(
-                label: "Deep work", value: AttentionFormat.duration(summary.deepWorkDuration),
+                icon: .cursor, tint: quiet)
+            PageMetric(
+                title: "Productive", value: AttentionFormat.duration(productive),
+                detail: AttentionFormat.share(
+                    productive, of: active, previous: previous?.productive), icon: .scan,
+                tint: accent)
+            PageMetric(
+                title: "Distracting", value: AttentionFormat.duration(distracting),
+                detail: AttentionFormat.share(
+                    distracting, of: active, previous: previous?.distracting),
+                icon: .arrowDownRight,
+                tint: AttentionPalette.level(.veryDistracting, dark: dark))
+            PageMetric(
+                title: "Deep work", value: AttentionFormat.duration(summary.deepWorkDuration),
                 detail: summary.focusBlocks.isEmpty
                     ? "no block of \(Int(model.settings.focusBlockMinimum / 60))m yet"
                     : "\(summary.focusBlocks.count) blocks, longest \(AttentionFormat.duration(longestBlock))",
-                tint: quiet, symbol: "brain.head.profile")
-            AttentionTile(
-                label: "Switches", value: String(format: "%.0f/h", perHour),
+                icon: .companion, tint: quiet)
+            PageMetric(
+                title: "Switches", value: String(format: "%.0f/h", perHour),
                 detail:
                     "\(summary.contextSwitches) total · \(AttentionFormat.duration(summary.medianStretch)) median stretch",
-                tint: quiet, symbol: "arrow.triangle.2.circlepath")
-            AttentionTile(
-                label: "Agent work", value: AttentionFormat.duration(summary.agents.working),
+                icon: .sync, tint: quiet)
+            PageMetric(
+                title: "Agent work", value: AttentionFormat.duration(summary.agents.working),
                 detail: summary.agents.isEmpty
                     ? "no agent activity recorded"
-                    : "peak \(summary.agents.peakConcurrent) at once · \(AttentionFormat.delta(summary.agents.working, previous?.agentWorking) ?? "")",
-                tint: quiet, symbol: "sparkles")
+                    : AttentionFormat.joined(
+                        "peak \(summary.agents.peakConcurrent) at once",
+                        AttentionFormat.delta(summary.agents.working, previous?.agentWorking)),
+                icon: .herdr, tint: quiet)
         }
     }
 }
@@ -145,7 +144,7 @@ struct AttentionDayPanel: View {
                 : "Active time per day, split by productivity."
         ) {
             if summary.activeDuration == 0 {
-                AttentionEmpty(text: "No active time in this period", symbol: "moon.zzz")
+                AttentionEmpty(text: "No active time in this period", icon: .moon)
             } else {
                 if model.period.isSingleDay {
                     AttentionDayRibbon(blocks: model.dayRibbon, day: day)
@@ -159,7 +158,7 @@ struct AttentionDayPanel: View {
             {
                 Divider()
                 Text("Agents working")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(.secondary)
                 AttentionConcurrencyChart(
                     points: summary.agents.concurrency.filter { range.contains($0.start) },
@@ -201,7 +200,7 @@ struct AttentionHoursPanel: View {
                 : "Active time by weekday and hour. Darker is busier."
         ) {
             if summary.hours.isEmpty {
-                AttentionEmpty(text: "No active hours yet", symbol: "clock")
+                AttentionEmpty(text: "No active hours yet", icon: .clock)
             } else if model.period.isSingleDay {
                 AttentionHourBars(cells: summary.hours)
             } else {
@@ -229,7 +228,7 @@ struct AttentionCategoryMenu: View {
                                     model.assign(entity: entity, to: category.id)
                                 } label: {
                                     if category.id == entity.category.id {
-                                        Label(category.name, systemImage: "checkmark")
+                                        Label(category.name, edith: .check)
                                     } else {
                                         Text(category.name)
                                     }
@@ -245,7 +244,7 @@ struct AttentionCategoryMenu: View {
                         model.assign(entity: entity, productivity: level)
                     } label: {
                         if level == entity.productivity {
-                            Label(level.title, systemImage: "checkmark")
+                            Label(level.title, edith: .check)
                         } else {
                             Text(level.title)
                         }
@@ -258,7 +257,7 @@ struct AttentionCategoryMenu: View {
                         model.assign(entity: entity, sphere: sphere)
                     } label: {
                         if sphere == entity.sphere {
-                            Label(sphere.title, systemImage: "checkmark")
+                            Label(sphere.title, edith: .check)
                         } else {
                             Text(sphere.title)
                         }
@@ -266,10 +265,9 @@ struct AttentionCategoryMenu: View {
                 }
             }
         } label: {
-            Image(systemName: "tag")
-                .font(.system(size: UIScale.pt(12)))
+            EdithIcon.tag.image()
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .frame(width: UIScale.pt(24))
         .help("Change category, productivity or whether it is work or personal")
@@ -306,20 +304,20 @@ struct AttentionTriagePanel: View {
                             AttentionEntityIcon(entity: entity, size: 26)
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                 Text(entity.name)
-                                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                    .font(.edithText(.callout).weight(.medium))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Text(
                                     entity.details.first?.name
                                         ?? AttentionFormat.duration(entity.duration)
                                 )
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             Text(AttentionFormat.duration(entity.duration))
-                                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                                .font(.edithText(.subheadline).weight(.semibold))
                                 .monospacedDigit()
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             Spacer(minLength: UIScale.pt(6))
@@ -327,27 +325,22 @@ struct AttentionTriagePanel: View {
                         }
                         WrapHStack(spacing: UIScale.pt(6)) {
                             if entity.categorySource == .jev {
-                                Button {
+                                let color = AttentionPalette.category(entity.category, dark: dark)
+                                PageChip(
+                                    "Keep \(entity.category.name)", dot: color, active: true,
+                                    tint: color
+                                ) {
                                     model.assign(entity: entity, to: entity.category.id)
-                                } label: {
-                                    AttentionChip(
-                                        title: "Keep \(entity.category.name)",
-                                        color: AttentionPalette.category(
-                                            entity.category, dark: dark),
-                                        active: true)
                                 }
-                                .buttonStyle(.edith(.borderless))
                             }
                             ForEach(quick.filter { $0.id != entity.category.id }.prefix(4)) {
                                 category in
-                                Button {
+                                PageChip(
+                                    category.name,
+                                    dot: AttentionPalette.category(category, dark: dark)
+                                ) {
                                     model.assign(entity: entity, to: category.id)
-                                } label: {
-                                    AttentionChip(
-                                        title: category.name,
-                                        color: AttentionPalette.category(category, dark: dark))
                                 }
-                                .buttonStyle(.edith(.borderless))
                             }
                         }
                     }
@@ -378,18 +371,18 @@ struct AttentionRankList: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text(row.label)
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                         if let detail = row.detail {
                             Text(detail)
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                         }
                         Spacer(minLength: UIScale.pt(6))
                         Text(AttentionFormat.duration(row.value))
-                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                            .font(.edithText(.subheadline).weight(.medium))
                             .monospacedDigit()
                             .foregroundStyle(DashSkin.inkSoft(dark))
                     }
@@ -440,7 +433,7 @@ struct AttentionEdithPanel: View {
             if rows.isEmpty {
                 AttentionEmpty(
                     text: "Time in Edith appears here with its page, machine and agent",
-                    symbol: "rectangle.3.group")
+                    icon: .window)
             } else {
                 AttentionRankList(rows: Array(rows))
             }
@@ -469,17 +462,17 @@ struct AttentionSwitchingPanel: View {
                 }
             }
             if summary.transitions.isEmpty {
-                AttentionEmpty(text: "No switches yet", symbol: "arrow.left.arrow.right")
+                AttentionEmpty(text: "No switches yet", icon: .arrowSwap)
             } else {
                 Text("Most common switches")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     ForEach(summary.transitions.prefix(6)) { transition in
                         HStack(spacing: UIScale.pt(6)) {
                             Text(transition.from).lineLimit(1)
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: UIScale.pt(9)))
+                            EdithIconView(.arrowRight)
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Text(transition.to).lineLimit(1)
                             Spacer(minLength: UIScale.pt(6))
@@ -487,7 +480,7 @@ struct AttentionSwitchingPanel: View {
                                 .monospacedDigit()
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                         }
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                     }
                 }
@@ -502,7 +495,7 @@ struct AttentionSwitchingPanel: View {
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.ink(dark))
             Text(label)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
@@ -521,7 +514,7 @@ struct AttentionAgentsSummaryPanel: View {
             trailing: {
                 Button("Details") { model.section = .agents }
                     .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
             }
         ) {
             if agents.isEmpty {
@@ -529,7 +522,7 @@ struct AttentionAgentsSummaryPanel: View {
                     text: model.settings.agentTrackingEnabled
                         ? "Agent work appears as Herdr sessions run"
                         : "Agent tracking is off in Attention settings",
-                    symbol: "sparkles")
+                    icon: .herdr)
             } else {
                 AttentionRankList(
                     rows: agents.machines.prefix(5).map {
@@ -538,11 +531,17 @@ struct AttentionAgentsSummaryPanel: View {
                             detail: $0.sessions == 1 ? "1 session" : "\($0.sessions) sessions",
                             color: AttentionPalette.accent(dark))
                     })
-                HStack(spacing: UIScale.pt(6)) {
+                WrapHStack(
+                    spacing: UIScale.pt(PageMetrics.controlSpacing),
+                    lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
+                ) {
                     ForEach(agents.kinds.prefix(4)) { kind in
-                        AttentionChip(
-                            title: "\(kind.key) \(AttentionFormat.duration(kind.working))",
-                            color: AttentionPalette.accent(dark))
+                        PageChipLabel(
+                            "\(kind.key) \(AttentionFormat.duration(kind.working))",
+                            dot: AttentionPalette.accent(dark)
+                        )
+                        .pageChipChrome()
+                        .fixedSize()
                     }
                 }
             }
@@ -562,30 +561,30 @@ struct AttentionListeningPanel: View {
             subtitle: "Edith's player, Spotify, Apple Music and background browser tabs."
         ) {
             if music.isEmpty {
-                AttentionEmpty(text: "Nothing played in this period", symbol: "music.note")
+                AttentionEmpty(text: "Nothing played in this period", icon: .music)
             } else {
                 VStack(spacing: UIScale.pt(7)) {
                     ForEach(music.prefix(6)) { item in
                         HStack(spacing: UIScale.pt(10)) {
-                            Image(systemName: "music.note")
+                            EdithIconView(.music)
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                                 .frame(width: UIScale.pt(20))
                             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                                 Text(item.title)
-                                    .font(.system(size: UIScale.pt(12)))
+                                    .font(.edithText(.callout))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Text(
                                     [item.artist, item.service].compactMap { $0 }
                                         .joined(separator: " · ")
                                 )
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
                             }
                             Spacer(minLength: UIScale.pt(6))
                             Text(AttentionFormat.duration(item.duration))
-                                .font(.system(size: UIScale.pt(11.5)))
+                                .font(.edithText(.subheadline))
                                 .monospacedDigit()
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                         }

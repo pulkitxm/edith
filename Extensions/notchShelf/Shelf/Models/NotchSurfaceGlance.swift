@@ -4,7 +4,8 @@ import Foundation
 
 struct NotchSurfaceGlance: Equatable, Codable, Sendable {
     let source: SurfaceGlanceSource
-    let icon: String
+    let icon: EdithIcon
+    var muted = false
     let value: String
     let detail: String
     let urgency: Int
@@ -77,71 +78,71 @@ struct NotchGlanceContext: Sendable {
         switch selected {
         case .none, .automatic: return nil
         case .workingAgents:
-            return count(selected, "terminal.fill", working, "Working agents", enabled: observing)
+            return count(selected, .terminal, working, "Working agents", enabled: observing)
         case .waitingAgents:
             return count(
-                selected, "hand.raised.fill", waiting, "Agents need your input",
+                selected, .hand, waiting, "Agents need your input",
                 enabled: observing, urgency: waiting > 0 ? 1 : 0)
         case .stuckAgents:
             return count(
-                selected, "exclamationmark.triangle.fill", stuck, "Confirmed stalled agents",
+                selected, .warning, stuck, "Confirmed stalled agents",
                 enabled: monitoringStalls, urgency: stuck > 0 ? 2 : 0)
         case .activeAgents:
             return count(
-                selected, "square.stack.3d.up.fill", active, "Active sessions", enabled: observing)
+                selected, .layers, active, "Active sessions", enabled: observing)
         case .quietAgents:
             return count(
-                selected, "antenna.radiowaves.left.and.right.slash", quiet,
-                "Agents with no recent signal", enabled: observing)
+                selected, .signal, quiet, "Agents with no recent signal", enabled: observing,
+                muted: true)
         case .failedAgents:
             return count(
-                selected, "exclamationmark.circle.fill", errors, "Agent errors",
+                selected, .alert, errors, "Agent errors",
                 enabled: observing, urgency: errors > 0 ? 2 : 0)
         case .permissions:
             return count(
-                selected, "hand.raised.fill", approvals, "One-use permission requests",
+                selected, .hand, approvals, "One-use permission requests",
                 enabled: observing, urgency: approvals == 0 ? 0 : 1)
         case .music:
             guard hasMusic else { return nil }
             return NotchSurfaceGlance(
-                source: selected, icon: playingMusic ? "waveform" : "pause.fill", value: "",
+                source: selected, icon: playingMusic ? .waveform : .pause, value: "",
                 detail: "Now playing", urgency: 0)
         case .files:
             return NotchSurfaceGlance(
-                source: selected, icon: "tray.full.fill", value: String(files),
+                source: selected, icon: .tray, value: String(files),
                 detail: "Shelf files", urgency: 0)
         case .clock:
             return NotchSurfaceGlance(
-                source: selected, icon: "clock", value: now.formatted(.dateTime.hour().minute()),
+                source: selected, icon: .clock, value: now.formatted(.dateTime.hour().minute()),
                 detail: "Local time", urgency: 0)
         case .focus:
             let remaining = focus.map { max(0, $0.endsAt.timeIntervalSince(now)) }
             return NotchSurfaceGlance(
-                source: selected, icon: "timer",
+                source: selected, icon: .timer,
                 value: remaining.map { Self.minutes($0) } ?? "Idle",
                 detail: focus?.name ?? "Focus timer", urgency: remaining == 0 ? 1 : 0)
         case .limits:
             return NotchSurfaceGlance(
-                source: selected, icon: "gauge",
+                source: selected, icon: .gauge,
                 value: quotaRemaining.flatMap {
                     $0.isFinite ? "\(Int(max(0, min(100, $0))))%" : nil
                 } ?? "?", detail: "Lowest remaining quota",
                 urgency: (quotaRemaining ?? 100) <= 10 ? 1 : 0)
         case .nextMeeting:
             return NotchSurfaceGlance(
-                source: selected, icon: "calendar",
+                source: selected, icon: .calendar,
                 value: nextMeeting.map { Self.minutes(max(0, $0.timeIntervalSince(now))) }
                     ?? "Free", detail: "Next meeting", urgency: 0)
         }
     }
 
     private func count(
-        _ source: SurfaceGlanceSource, _ icon: String, _ value: Int, _ detail: String,
-        enabled: Bool, urgency: Int = 0
+        _ source: SurfaceGlanceSource, _ icon: EdithIcon, _ value: Int, _ detail: String,
+        enabled: Bool, urgency: Int = 0, muted: Bool = false
     ) -> NotchSurfaceGlance {
         NotchSurfaceGlance(
-            source: source, icon: icon, value: enabled ? String(value) : "Off", detail: detail,
-            urgency: urgency)
+            source: source, icon: icon, muted: muted, value: enabled ? String(value) : "Off",
+            detail: detail, urgency: urgency)
     }
 
     private static func minutes(_ seconds: Double) -> String {

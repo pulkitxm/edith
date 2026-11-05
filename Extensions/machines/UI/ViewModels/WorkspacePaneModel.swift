@@ -214,14 +214,13 @@ struct WorkspacePaneView: View {
                         .frame(width: UIScale.pt(5), height: UIScale.pt(5))
                 }
                 Text(machine?.name ?? "Machine")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: UIScale.pt(7), weight: .bold))
+                EdithIcon.chevronDown.image(size: UIScale.pt(12))
             }
             .foregroundStyle(DashSkin.ink(dark))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Show a different machine in this pane")
@@ -287,9 +286,9 @@ struct WorkspacePaneView: View {
                     }
                 }
             } label: {
-                Image(systemName: "plus")
+                EdithIcon.plus.image()
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Add a view to this pane")
@@ -305,9 +304,9 @@ struct WorkspacePaneView: View {
                 }
                 .disabled(model.layout.paneCount < 2)
             } label: {
-                Image(systemName: "square.split.2x1")
+                EdithIcon.layoutLeft.image()
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Split or close this pane")
@@ -334,14 +333,14 @@ struct WorkspacePaneView: View {
                 }
             } label: {
                 HStack(spacing: UIScale.pt(5)) {
-                    Image(systemName: tab.target.screen.icon)
+                    EdithIconView(tab.target.screen.icon)
                         .font(.system(size: UIScale.pt(9.5)))
                     Text(
                         foreign
                             ? "\(machine?.name ?? "Machine") · \(tab.target.screen.title)"
                             : tab.target.screen.title
                     )
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .lineLimit(1)
                     Color.clear.frame(width: UIScale.pt(16), height: UIScale.pt(16))
                 }
@@ -358,7 +357,7 @@ struct WorkspacePaneView: View {
             Button {
                 closeTab(tab)
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
                     .font(.system(size: UIScale.pt(7.5), weight: .bold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }

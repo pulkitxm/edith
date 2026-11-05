@@ -84,13 +84,13 @@ struct VideoEditorPage: View {
             Divider()
             if let message = model.externalSyncMessage {
                 HStack(spacing: UIScale.pt(8)) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
+                    EdithIconView(.sync)
                     Text(message)
                     Spacer()
                     Button("Reload saved edits") { model.discardLocalEditsAndRefresh() }
                         .buttonStyle(.edith(.secondary))
                 }
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .padding(UIScale.pt(10))
                 .background(DashSkin.paper2(scheme == .dark))
                 Divider()
@@ -101,7 +101,8 @@ struct VideoEditorPage: View {
                 LoadingContainer(state: .loading) {
                     EmptyView()
                 } placeholder: {
-                    LoadingIndicator("Opening video project")
+                    PageSkeleton(layout: .editor)
+                        .accessibilityLabel("Opening video project")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.project == nil {
@@ -213,7 +214,7 @@ struct VideoEditorPage: View {
 
     private var projectTitle: some View {
         HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "film.stack")
+            EdithIconView(.film)
                 .foregroundStyle(.tint)
             TextField(
                 "Video editor",
@@ -235,14 +236,14 @@ struct VideoEditorPage: View {
     }
 
     @ViewBuilder private var toolbarControls: some View {
-        Button("Media", systemImage: "sidebar.left") { showingMedia.toggle() }
+        Button("Media", edith: .sidebarLeft) { showingMedia.toggle() }
             .labelStyle(.iconOnly)
             .help("Media")
             .popover(isPresented: $showingMedia) {
                 mediaRail.frame(height: UIScale.pt(320))
             }
         Menu {
-            Button("Markers", systemImage: "waveform") { showingBeats = true }
+            Button("Markers", edith: .waveform) { showingBeats = true }
                 .disabled(model.project == nil)
             Toggle(
                 "Canvas",
@@ -251,16 +252,16 @@ struct VideoEditorPage: View {
                 "Guides", isOn: Binding(get: { model.safeAreas }, set: { model.safeAreas = $0 })
             )
             if #available(macOS 15.0, *) {
-                Button("Record", systemImage: "record.circle") { showingRecorder = true }
+                Button("Record", edith: .record) { showingRecorder = true }
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            EdithIcon.more.image()
         }
         .help("Editor actions").accessibilityLabel("Editor actions")
         Button {
             if compact { showingInspectorPopover.toggle() } else { showingInspector.toggle() }
         } label: {
-            Label("Inspector", systemImage: "sidebar.right")
+            Label("Inspector", edith: .sidebarRight)
         }
         .disabled(model.project == nil)
         .labelStyle(.iconOnly)
@@ -275,13 +276,13 @@ struct VideoEditorPage: View {
                 .disabled(model.project == nil)
                 .keyboardShortcut("s", modifiers: .command)
         } label: {
-            Label("Projects", systemImage: "folder")
+            Label("Projects", edith: .folder)
         }
         .labelStyle(.iconOnly)
         .help("Projects")
         Button(
             model.project?.clips.isEmpty == false ? "Add media" : "Import video",
-            systemImage: "square.and.arrow.down", action: model.importMedia
+            edith: .saveTo, action: model.importMedia
         )
         .buttonStyle(.edith(.primary))
         .labelStyle(.iconOnly)
@@ -310,11 +311,11 @@ struct VideoEditorPage: View {
                     .controlSize(.small)
             }
         case .finished:
-            Label("Exported", systemImage: "checkmark.circle.fill")
+            Label("Exported", edith: .success)
         case .failed:
-            Label("Export failed", systemImage: "exclamationmark.triangle.fill")
+            Label("Export failed", edith: .warning)
         case nil:
-            Label("Export", systemImage: "square.and.arrow.up")
+            Label("Export", edith: .share)
         }
     }
 
@@ -322,41 +323,46 @@ struct VideoEditorPage: View {
         GeometryReader { proxy in
             ScrollView {
                 VStack(spacing: UIScale.pt(16)) {
-                    Image(systemName: "film")
-                        .font(.system(size: UIScale.pt(52), weight: .ultraLight))
-                        .foregroundStyle(.secondary)
-                    Text("Make a video your own")
-                        .font(.edithText(.title2).weight(.semibold))
-                    Text("Import a video, highlight moments with zoom, add text, and export.")
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    HStack {
-                        Button("Import video", action: model.importMedia)
-                            .buttonStyle(.edith(.primary))
-                        Button("Open project", action: model.openProject)
-                            .buttonStyle(.edith(.secondary))
-                    }
+                    PageEmptyState(
+                        icon: .film, title: "Make a video your own",
+                        message:
+                            "Import a clip, then trim it, zoom into key moments, add text and captions, and export. Your original video is never changed.",
+                        steps: [
+                            PageGuideStep(
+                                icon: .saveTo, title: "Import a video",
+                                detail: "Choose a recording or any video file."),
+                            PageGuideStep(
+                                icon: .scissors, title: "Edit on the timeline",
+                                detail: "Cut, zoom, add text, music and transitions."),
+                            PageGuideStep(
+                                icon: .share, title: "Export",
+                                detail: "Save a finished video file."),
+                        ],
+                        primary: PageAction(
+                            "Import video", icon: .saveTo,
+                            identifier: "studio.video.import"
+                        ) { model.importMedia() },
+                        secondary: PageAction(
+                            "Open project", icon: .folder, identifier: "studio.video.open"
+                        ) { model.openProject() },
+                        footnote: "Projects save automatically and appear in Studio under Projects."
+                    )
                     if !model.recentProjects.isEmpty {
-                        Text("PROJECTS")
-                            .font(.edithText(.caption).weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        PageCapsLabel("Recent projects")
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, UIScale.pt(22))
-                        LazyVGrid(
-                            columns: PageMetrics.cardColumns(
-                                compact, minimum: 200, maximum: 280, spacing: 18),
-                            alignment: .leading, spacing: UIScale.pt(20)
-                        ) {
-                            ForEach(model.recentProjects) { item in
-                                VideoProjectCard(listing: item) {
-                                    model.openProject(at: item.url)
-                                }
+                            .padding(.top, UIScale.pt(8))
+                        StudioTileGrid(
+                            items: model.recentProjects, minimum: 200, spacing: 16,
+                            maximumColumns: compact ? 1 : .max
+                        ) { item in
+                            VideoProjectCard(listing: item) {
+                                model.openProject(at: item.url)
                             }
                         }
                     }
                 }
                 .frame(maxWidth: UIScale.pt(960))
-                .padding(UIScale.pt(30))
+                .padding(UIScale.pt(32))
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
@@ -455,9 +461,9 @@ struct VideoEditorPage: View {
 
     private var mediaRail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            Label("Media", systemImage: "film.stack")
+            Label("Media", edith: .film)
                 .font(.edithText(.headline))
-            Button("Add video or image", systemImage: "plus", action: model.importMedia)
+            Button("Add video or image", edith: .plus, action: model.importMedia)
                 .buttonStyle(.edith(.primary))
             Text("SOURCES")
                 .font(.edithText(.caption).weight(.semibold))
@@ -476,7 +482,7 @@ struct VideoEditorPage: View {
                                 }
                             } label: {
                                 HStack {
-                                    Image(systemName: "film")
+                                    EdithIconView(.film)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("Source \(index + 1)")
                                             .font(.edithText(.subheadline).weight(.medium))
@@ -514,16 +520,15 @@ struct VideoEditorPage: View {
                         } label: {
                             Label(
                                 tool.rawValue,
-                                systemImage: tool == .zoom
-                                    ? "plus.magnifyingglass" : "textformat")
+                                edith: tool == .zoom ? .zoomIn : .text)
                         }
                         .buttonStyle(.edith(.secondary, selected: editorTool == tool))
                     }
                     Spacer(minLength: 0)
-                    Button("Undo", systemImage: "arrow.uturn.backward", action: model.undo)
+                    Button("Undo", edith: .undo, action: model.undo)
                         .disabled(!model.canUndo)
                         .keyboardShortcut("z", modifiers: .command)
-                    Button("Redo", systemImage: "arrow.uturn.forward", action: model.redo)
+                    Button("Redo", edith: .redo, action: model.redo)
                         .disabled(!model.canRedo)
                         .keyboardShortcut("z", modifiers: [.command, .shift])
                 }
@@ -579,7 +584,7 @@ struct VideoEditorPage: View {
                 .fixedSize(horizontal: true, vertical: false)
                 Button(
                     "Add zoom",
-                    systemImage: "plus.magnifyingglass", action: model.addZoom
+                    edith: .zoomIn, action: model.addZoom
                 )
                 .buttonStyle(.edith(.primary))
                 .disabled(model.previewMetadata == nil)
@@ -587,7 +592,7 @@ struct VideoEditorPage: View {
                     Button {
                         model.removeZoom(id)
                     } label: {
-                        Image(systemName: "trash")
+                        EdithIconView(.trash)
                     }
                     .accessibilityLabel("Remove zoom")
                     .help("Remove selected zoom")
@@ -613,7 +618,7 @@ struct VideoEditorPage: View {
                 }
                 .font(.edithText(.caption))
                 .fixedSize(horizontal: true, vertical: false)
-                Button("Add text", systemImage: "plus", action: model.addCaption)
+                Button("Add text", edith: .plus, action: model.addCaption)
                     .buttonStyle(.edith(.primary))
                     .disabled(model.previewMetadata == nil || model.captionText.isEmpty)
             }
@@ -643,8 +648,9 @@ struct EditorAnnotationRow: View {
                 Button(role: .destructive) {
                     model.removeCaption(annotation.id)
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                 }
+                .accessibilityLabel("Remove")
             }
             if annotation.captionStyle != nil {
                 VideoCaptionStyleEditor(caption: annotation, model: model)
@@ -785,7 +791,7 @@ struct ZoomTimelineRegion: View {
             height: UIScale.pt(32)
         )
         .background(
-            selected ? Color.themeAccent : Color.blue.opacity(0.75),
+            selected ? Color.themeAccent : Color.themeAccent.opacity(0.55),
             in: RoundedRectangle(cornerRadius: 7)
         )
         .overlay {
@@ -927,10 +933,10 @@ private struct ZoomFocusRegion: View {
     var body: some View {
         let frame = frame
         RoundedRectangle(cornerRadius: UIScale.pt(6))
-            .fill(Color.green.opacity(0.2))
+            .fill(Color.themeAccent.opacity(0.2))
             .overlay {
                 RoundedRectangle(cornerRadius: UIScale.pt(6))
-                    .strokeBorder(Color.green, lineWidth: UIScale.pt(2))
+                    .strokeBorder(Color.themeAccent, lineWidth: UIScale.pt(2))
             }
             .frame(width: frame.width, height: frame.height)
             .position(x: frame.midX, y: frame.midY)

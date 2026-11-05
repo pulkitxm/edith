@@ -751,7 +751,8 @@ struct UsageRefreshCommand: AsyncParsableCommand {
 
             Machines counted towards usage are collected at the same time as this Mac's
             own agents, if nothing has collected from them in the last 20 minutes.
-            `--machines` collects from all of them first and stops if any fails,
+            `--machines` collects from all of them as part of the same refresh, even
+            when a refresh is already running, and fails if any of them fails,
             `--no-machines` leaves them alone.
             Changes the state this command names.
 

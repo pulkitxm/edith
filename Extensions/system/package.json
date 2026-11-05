@@ -1,7 +1,7 @@
 {
   "id": "system",
   "title": "Running Apps",
-  "symbolName": "switch.2",
+  "icon": "toolbox",
   "category": "utilities",
   "background": false,
   "commands": [
@@ -13,7 +13,7 @@
     {
       "id": "runningApps",
       "title": "Running Apps",
-      "symbolName": "cpu",
+      "icon": "cpu",
       "order": 1
     }
   ],
@@ -25,5 +25,31 @@
     "actions",
     "extension:system"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "See what is running and quit what you do not need.",
+    "summary": "Running Apps lists every open app with its processor and memory use, so you can spot what slows your Mac. Quit one app or all of them, and lock the keyboard for a few seconds while you wipe it clean.",
+    "steps": [
+      {
+        "icon": "cpu",
+        "title": "See what is using resources",
+        "detail": "Sort by CPU or memory to find the heaviest apps."
+      },
+      {
+        "icon": "closeFilled",
+        "title": "Quit what you do not need",
+        "detail": "Apps with unsaved work ask before closing. Finder and Edith always stay open."
+      },
+      {
+        "icon": "keyboard",
+        "title": "Clean your keyboard",
+        "detail": "Start cleaning mode in settings to lock the keys, then wipe away."
+      }
+    ],
+    "examples": [
+      "ed apps ls",
+      "ed apps quit Safari",
+      "ed apps quit --all --yes"
+    ]
+  }
 }

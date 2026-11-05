@@ -42,7 +42,7 @@ enum AudioTools {
     static let trim = StudioTool(
         id: "audio.trim", title: "Trim audio",
         summary: "Cut a song, voice memo or podcast down to the part you want.",
-        symbol: "waveform.path", group: .edit, inputs: [.audio],
+        iconName: "waveform", group: .edit, inputs: [.audio],
         options: [
             .span(
                 help: "Start and end, for example 0:30-1:45. Leave the end empty to keep the rest."),
@@ -82,7 +82,7 @@ enum AudioTools {
     static let convert = StudioTool(
         id: "audio.convert", title: "Convert audio",
         summary: "Change audio to MP3, M4A, WAV, FLAC, Opus, OGG, AIFF or Apple Lossless.",
-        symbol: "arrow.triangle.2.circlepath", group: .convert, inputs: [.audio, .video],
+        iconName: "sync", group: .convert, inputs: [.audio, .video],
         produces: .kind(.audio),
         options: [
             .choice("format", "Convert to", MediaEncoding.audioFormatChoices, default: "mp3"),
@@ -112,7 +112,7 @@ enum AudioTools {
     static let compress = StudioTool(
         id: "audio.compress", title: "Compress audio",
         summary: "Make audio files smaller for sharing, keeping voices and music clear.",
-        symbol: "arrow.down.right.and.arrow.up.left", group: .optimize, inputs: [.audio],
+        iconName: "collapse", group: .optimize, inputs: [.audio],
         options: [
             .choice(
                 "level", "Compression",
@@ -156,7 +156,7 @@ enum AudioTools {
     static let merge = StudioTool(
         id: "audio.merge", title: "Merge audio",
         summary: "Join audio files one after another, with an optional crossfade.",
-        symbol: "waveform.badge.plus", group: .organize, inputs: [.audio],
+        iconName: "waveform", group: .organize, inputs: [.audio],
         arity: .combine(minimum: 2, maximum: nil),
         options: [
             .choice(
@@ -221,7 +221,7 @@ enum AudioTools {
     static let volume = StudioTool(
         id: "audio.volume", title: "Change volume",
         summary: "Make audio louder or quieter, or even out loudness to podcast levels.",
-        symbol: "speaker.wave.3", group: .edit, inputs: [.audio],
+        iconName: "speaker", group: .edit, inputs: [.audio],
         options: [
             .choice(
                 "mode", "Volume",
@@ -249,7 +249,7 @@ enum AudioTools {
     static let speed = StudioTool(
         id: "audio.speed", title: "Audio speed",
         summary: "Speed up or slow down audio, keeping the pitch natural or not.",
-        symbol: "gauge.with.dots.needle.67percent", group: .edit, inputs: [.audio],
+        iconName: "gauge", group: .edit, inputs: [.audio],
         options: [
             .choice(
                 "speed", "Speed",
@@ -279,7 +279,7 @@ enum AudioTools {
     static let fade = StudioTool(
         id: "audio.fade", title: "Fade audio",
         summary: "Add smooth fades to the start and end.",
-        symbol: "waveform.path.ecg", group: .edit, inputs: [.audio],
+        iconName: "pulse", group: .edit, inputs: [.audio],
         options: [
             .number("fadeIn", "Fade in", 0...30, step: 0.5, default: 2, unit: "s"),
             .number("fadeOut", "Fade out", 0...30, step: 0.5, default: 3, unit: "s"),
@@ -311,7 +311,7 @@ enum AudioTools {
 
     static let reverse = StudioTool(
         id: "audio.reverse", title: "Reverse audio",
-        summary: "Play audio backwards.", symbol: "backward", group: .edit, inputs: [.audio],
+        summary: "Play audio backwards.", iconName: "rewind", group: .edit, inputs: [.audio],
         requirements: ffmpeg, keywords: ["backwards", "rewind"], actionTitle: "Reverse"
     ) { run in
         [try await edited(run, suffix: "reversed") { _ in "areverse" }]
@@ -320,7 +320,7 @@ enum AudioTools {
     static let removeSilence = StudioTool(
         id: "audio.remove-silence", title: "Remove silence",
         summary: "Cut long pauses from recordings, or just trim silence at the start and end.",
-        symbol: "waveform.slash", group: .optimize, inputs: [.audio],
+        iconName: "waveform", group: .optimize, inputs: [.audio],
         options: [
             .choice(
                 "where", "Remove",
@@ -356,7 +356,7 @@ enum AudioTools {
     static let denoise = StudioTool(
         id: "audio.denoise", title: "Reduce audio noise",
         summary: "Lower steady background noise such as hiss, hum and fans.",
-        symbol: "wand.and.stars", group: .optimize, inputs: [.audio],
+        iconName: "adjust", group: .optimize, inputs: [.audio],
         options: [
             .choice(
                 "strength", "Strength",
@@ -383,7 +383,7 @@ enum AudioTools {
     static let toVideo = StudioTool(
         id: "audio.to-video", title: "Audio to video",
         summary: "Turn audio into an MP4 with a cover image or a moving waveform, ready to upload.",
-        symbol: "play.rectangle", group: .convert, inputs: [.audio], produces: .kind(.video),
+        iconName: "play", group: .convert, inputs: [.audio], produces: .kind(.video),
         options: [
             .choice(
                 "style", "Picture",

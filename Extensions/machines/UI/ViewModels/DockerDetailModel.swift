@@ -490,7 +490,7 @@ struct DockerContainerDetail: View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(10)) {
                 Button(action: onBack) {
-                    Image(systemName: "chevron.left")
+                    EdithIconView(.chevronLeft)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Back to the list")
@@ -529,7 +529,7 @@ struct DockerContainerDetail: View {
                 }
                 Button("Remove", role: .destructive, action: onRemove)
             }
-            .font(.system(size: UIScale.pt(11.5)))
+            .font(.edithText(.subheadline))
         }
         .padding(.horizontal, UIScale.pt(16))
         .padding(.vertical, UIScale.pt(12))
@@ -547,29 +547,24 @@ struct DockerContainerDetail: View {
                         } label: {
                             Label(
                                 sibling.composeService ?? sibling.displayName,
-                                systemImage: symbol(for: sibling))
+                                edith: icon(for: sibling))
                         }
                     }
                 }
             } label: {
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                EdithIcon.chevronUpDown.image(size: UIScale.pt(12))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                    .padding(.horizontal, UIScale.pt(7))
-                    .padding(.vertical, UIScale.pt(5))
-                    .background(
-                        DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(7)))
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Switch to another container in this group")
         }
     }
 
-    private func symbol(for sibling: DockerContainer) -> String {
-        guard sibling.id != live.id else { return "checkmark" }
-        return sibling.state.isRunning ? "circle.fill" : "circle"
+    private func icon(for sibling: DockerContainer) -> EdithIcon {
+        guard sibling.id != live.id else { return .check }
+        return sibling.state.isRunning ? .dot : .ring
     }
 
     private var statusPill: some View {
@@ -578,7 +573,7 @@ struct DockerContainerDetail: View {
                 .fill(live.state.isRunning ? DashSkin.ok : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
             Text(live.status)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
     }
@@ -597,7 +592,7 @@ struct DockerContainerDetail: View {
                 } label: {
                     Text(item.title)
                         .lineLimit(1)
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .padding(.horizontal, UIScale.pt(11))
                         .padding(.vertical, UIScale.pt(5))
                         .foregroundStyle(tab == item ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
@@ -615,24 +610,24 @@ struct DockerContainerDetail: View {
                     .frame(width: UIScale.pt(180))
                 Toggle("Timestamps", isOn: $model.showTimestamps)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 Toggle("Follow", isOn: $model.follow)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 Toggle("Wrap", isOn: $model.wrapLines)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 Button {
                     model.logFontSize = max(9, model.logFontSize - 1)
                 } label: {
-                    Image(systemName: "textformat.size.smaller")
+                    EdithIconView(.textSmaller)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Smaller log text")
                 Button {
                     model.logFontSize = min(18, model.logFontSize + 1)
                 } label: {
-                    Image(systemName: "textformat.size.larger")
+                    EdithIconView(.textLarger)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Larger log text")
@@ -640,14 +635,14 @@ struct DockerContainerDetail: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(model.logPlainText, forType: .string)
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    EdithIconView(.copy)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Copy all visible log lines")
                 Button {
                     model.logs = []
                 } label: {
-                    Image(systemName: "clear")
+                    EdithIconView(.closeFilled)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Clear the log view")
@@ -679,26 +674,27 @@ struct DockerContainerDetail: View {
                     text: NSColor(DashSkin.inkSoft(dark)),
                     stderr: NSColor(DashSkin.warn),
                     timestamp: NSColor(DashSkin.inkFaint(dark)),
-                    background: NSColor(DashSkin.paper(dark))),
+                    background: NSColor(DashSkin.paper(dark)),
+                    selection: NSColor(DashSkin.accent(dark).opacity(0.28))),
                 follow: model.follow,
                 onScrolledAwayFromBottom: { away in
                     if away, model.follow { model.follow = false }
                 })
             if visible.isEmpty {
                 Text(model.logFilter.isEmpty ? "No output yet." : "Nothing matches that filter.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if model.streamEnded {
                 HStack(spacing: UIScale.pt(8)) {
                     Text("The log stream ended.")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     Button("Reattach") {
                         model.startLogs(session: session, container: live)
                     }
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                 }
                 .padding(.horizontal, UIScale.pt(12))
                 .padding(.vertical, UIScale.pt(7))
@@ -717,6 +713,7 @@ struct DockerContainerDetail: View {
                         message, tone: .error,
                         actions: {
                             Button("Retry") { loadGeneration &+= 1 }
+                                .buttonStyle(.edith(.secondary))
                         })
                 }
                 if let inspect = model.inspect {
@@ -730,15 +727,16 @@ struct DockerContainerDetail: View {
                         "Labels", inspect.labels.sorted { $0.key < $1.key }.map { "\($0)=\($1)" })
                 } else if model.inspectFailed {
                     HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: "exclamationmark.triangle")
+                        EdithIconView(.warning)
                             .foregroundStyle(DashSkin.warn)
                         Text("Could not read this container's configuration.")
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                         Button("Retry") {
                             loadGeneration &+= 1
                         }
-                        .font(.system(size: UIScale.pt(11), weight: .medium))
+                        .buttonStyle(.edith(.secondary))
+                        .font(.edithText(.subheadline).weight(.medium))
                     }
                 } else {
                     DockerInspectSkeleton()
@@ -753,7 +751,7 @@ struct DockerContainerDetail: View {
         return VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack(spacing: UIScale.pt(6)) {
                 Text(title.uppercased())
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .tracking(UIScale.pt(0.6))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 if !shown.isEmpty {
@@ -762,7 +760,7 @@ struct DockerContainerDetail: View {
                         NSPasteboard.general.setString(
                             shown.joined(separator: "\n"), forType: .string)
                     } label: {
-                        Image(systemName: "doc.on.doc")
+                        EdithIconView(.copy)
                             .font(.system(size: UIScale.pt(9)))
                     }
                     .buttonStyle(.edith(.borderless))
@@ -822,7 +820,7 @@ struct DockerContainerDetail: View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             HStack {
                 Text(title.uppercased())
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
                 Text(value)
@@ -842,7 +840,7 @@ struct DockerContainerDetail: View {
     private func statItem(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label.uppercased())
-                .font(.system(size: UIScale.pt(9), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(value)
                 .font(DashSkin.mono(12))
@@ -858,6 +856,7 @@ struct DockerContainerDetail: View {
                     message, tone: .error,
                     actions: {
                         Button("Retry") { loadGeneration &+= 1 }
+                            .buttonStyle(.edith(.secondary))
                     })
             }
             if !model.processesLoad.hasContent,
@@ -866,20 +865,21 @@ struct DockerContainerDetail: View {
                 DockerProcessRowsSkeleton()
             } else if model.processesFailed, !model.processesLoad.hasContent {
                 HStack(spacing: UIScale.pt(8)) {
-                    Image(systemName: "exclamationmark.triangle")
+                    EdithIconView(.warning)
                         .foregroundStyle(DashSkin.warn)
                     Text("Could not read this container's processes.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     Button("Retry") {
                         loadGeneration &+= 1
                     }
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .buttonStyle(.edith(.secondary))
+                    .font(.edithText(.subheadline).weight(.medium))
                 }
                 .padding(UIScale.pt(16))
             } else if model.processes.isEmpty {
                 Text("No processes are running in this container.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(UIScale.pt(16))
@@ -891,7 +891,7 @@ struct DockerContainerDetail: View {
                                 .font(DashSkin.mono(10.5))
                                 .frame(width: UIScale.pt(56), alignment: .leading)
                             Text(process.user)
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .frame(width: UIScale.pt(80), alignment: .leading)
                             Text(process.command)
                                 .font(DashSkin.mono(10.5))
@@ -921,7 +921,7 @@ struct DockerContainerDetail: View {
                     let parent = FileListing.parentPath(of: model.filePath) ?? "/"
                     requestedFilePath = parent
                 } label: {
-                    Image(systemName: "chevron.up")
+                    EdithIconView(.chevronUp)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .disabled(model.filePath == "/")
@@ -941,6 +941,7 @@ struct DockerContainerDetail: View {
                             message, tone: .error,
                             actions: {
                                 Button("Retry") { loadGeneration &+= 1 }
+                                    .buttonStyle(.edith(.secondary))
                             })
                     }
                     if !model.filesLoad.hasContent,
@@ -949,29 +950,30 @@ struct DockerContainerDetail: View {
                         DockerFileRowsSkeleton()
                     } else if model.filesFailed {
                         HStack(spacing: UIScale.pt(8)) {
-                            Image(systemName: "exclamationmark.triangle")
+                            EdithIconView(.warning)
                                 .foregroundStyle(DashSkin.warn)
                             Text("Could not read this folder.")
-                                .font(.system(size: UIScale.pt(12)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             Button("Retry") { loadGeneration &+= 1 }
-                                .font(.system(size: UIScale.pt(11), weight: .medium))
+                                .buttonStyle(.edith(.secondary))
+                                .font(.edithText(.subheadline).weight(.medium))
                         }
                         .padding(UIScale.pt(16))
                     } else if model.files.isEmpty {
                         Text("This folder is empty.")
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(UIScale.pt(16))
                     }
                     ForEach(model.files) { entry in
                         HStack(spacing: UIScale.pt(10)) {
-                            Image(systemName: entry.isDirectory ? "folder" : "doc")
+                            EdithIconView(entry.isDirectory ? .folder : .doc)
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .frame(width: UIScale.pt(15))
                             Text(entry.name)
-                                .font(.system(size: UIScale.pt(12)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                             Spacer(minLength: 0)
                             if !entry.isDirectory {

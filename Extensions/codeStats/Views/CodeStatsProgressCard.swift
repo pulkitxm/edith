@@ -24,14 +24,14 @@ struct CodeStatsProgressCard: View {
                     HStack {
                         Text(
                             CodeStatsProgressMath.repositories(progress)
-                                ?? progress.phase.stepTitle + "...")
+                                ?? progress.phase.stepTitle + "…")
                         Spacer()
                         Text(
                             progress.overallFraction, format: .percent.precision(.fractionLength(0))
                         )
                         .monospacedDigit()
                     }
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                 }
                 if !progress.inFlight.isEmpty {
@@ -48,11 +48,12 @@ struct CodeStatsProgressCard: View {
                         CodeStatsElapsed(progress: progress, now: context.date, dark: dark)
                     }
                     Button("Cancel", role: .cancel, action: cancel)
+                        .buttonStyle(.edith(.secondary))
                         .disabled(cancelling)
                 }
                 if let error = progress.recentErrors.last {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .font(.system(size: UIScale.pt(11)))
+                    Label(error, edith: .warning)
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.warn)
                         .lineLimit(2)
                 }
@@ -64,7 +65,7 @@ struct CodeStatsProgressCard: View {
         HStack(spacing: UIScale.pt(5)) {
             Circle().fill(tint).frame(width: UIScale.pt(7), height: UIScale.pt(7))
             Text("\(value) \(title.lowercased())")
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .monospacedDigit()
         }
@@ -84,13 +85,15 @@ private struct CodeStatsPhaseStepper: View {
                         Circle()
                             .fill(index <= step ? DashSkin.accent(dark) : DashSkin.grid(dark))
                         if index < step {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: UIScale.pt(9), weight: .bold))
-                                .foregroundStyle(.white)
+                            EdithIconView(.check)
+                                .font(.edithText(.caption).weight(.bold))
+                                .foregroundStyle(DashSkin.onAccent(dark))
                         } else {
                             Text("\(index + 1)")
-                                .font(.system(size: UIScale.pt(10), weight: .semibold))
-                                .foregroundStyle(index == step ? .white : DashSkin.inkSoft(dark))
+                                .font(.edithText(.caption).weight(.semibold))
+                                .foregroundStyle(
+                                    index == step ? DashSkin.onAccent(dark) : DashSkin.inkSoft(dark)
+                                )
                         }
                     }
                     .frame(width: UIScale.pt(20), height: UIScale.pt(20))
@@ -131,7 +134,7 @@ private struct CodeStatsInFlight: View {
                 .truncationMode(.tail)
             if repositories.count > 4 {
                 Text("+\(repositories.count - 4)")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -150,7 +153,7 @@ private struct CodeStatsElapsed: View {
             ", about " + CodeStatsProgressMath.duration($0) + " left"
         }
         Text(elapsed + " elapsed" + (remaining ?? ""))
-            .font(.system(size: UIScale.pt(12)))
+            .font(.edithText(.callout))
             .foregroundStyle(DashSkin.inkSoft(dark))
             .monospacedDigit()
     }

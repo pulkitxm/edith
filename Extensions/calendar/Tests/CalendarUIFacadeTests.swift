@@ -26,6 +26,24 @@ import Testing
         await facade.refreshAndWait()
         #expect(bridge.requests.count == 2 && !facade.authorized && facade.events.isEmpty)
     }
+    @Test func anUnchangedMetadataPollKeepsTheAdoptedAgenda() async throws {
+        let event = CalendarEventPayload(
+            id: "steady", title: "Synthetic steady event", start: Date(),
+            end: Date().addingTimeInterval(600), isAllDay: false)
+        let snapshot = CalendarUISnapshot(
+            authorized: true, blurEvents: false, days: 14, events: [event])
+        let data = try JSONEncoder().encode(snapshot)
+        let facade = CalendarUIFacade(invoke: { _, _ in data })
+        defer { facade.shutdown() }
+        await facade.refreshAndWait()
+        let before = facade.groupedDays.map(\.day)
+        let observing = Task { await facade.observe() }
+        while !facade.loaded { await Task.yield() }
+        facade.shutdown()
+        await observing.value
+        #expect(facade.groupedDays.isEmpty || facade.groupedDays.map(\.day) == before)
+    }
+
     @Test func observeShowsTheCachedAgendaBeforeTheFreshListReturns() async throws {
         let gate = CalendarFacadeReadGate()
         let cached = CalendarEventPayload(

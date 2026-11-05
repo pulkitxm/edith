@@ -16,6 +16,7 @@ struct HostPageContent: View {
     var panelShortcutChanged: () -> Void = {}
     var additionalSettings: ((String) -> AnyView?)? = nil
     var defaults: UserDefaults = SharedDefaults.store
+    var showsIntroductionButton = false
     let select: (String) -> Void
     private var active: Set<String> { marketplace.surfaceAvailability.navigableIDs }
     private var settingsSections: [HostNavigationSection] {
@@ -30,13 +31,27 @@ struct HostPageContent: View {
         Binding(get: { settingsDestination }, set: { settings = $0 })
     }
 
-    @ViewBuilder var body: some View {
+    var body: some View {
+        page.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlayPreferenceValue(HostIntroductionReopenKey.self, alignment: .topTrailing) {
+                if showsIntroductionButton, let reopen = $0 {
+                    HostIntroductionReopenButton(reopen: reopen)
+                }
+            }
+    }
+
+    @ViewBuilder private var page: some View {
         switch destination.id {
         case "home":
             HostHomePage(
                 marketplace: marketplace, customize: customize,
                 extensions: { select("extensions") }, openExtension: openExtension,
-                presenter: presenter, workflowSetup: additionalSettings?("home-setup"))
+                presenter: presenter, workflowSetup: additionalSettings?("home-setup"),
+                getStarted: AnyView(
+                    HostGetStartedCard(
+                        marketplace: marketplace, permissions: permissions, defaults: defaults,
+                        finishSetup: showWelcome, openPermissions: openPermissions,
+                        openExtensions: { select("extensions") }, openExtension: openExtension)))
         case "extensions":
             MarketplacePage(
                 marketplace: marketplace, presenter: presenter, openExtension: openExtension,
@@ -54,14 +69,14 @@ struct HostPageContent: View {
                 VStack(spacing: 0) {
                     maintenanceHeader(current: child, tight: id == "appMaintenance")
                     if id != "appMaintenance" { Divider() }
-                    content(id, section: child.id)
+                    introduced(id, section: child.id)
                 }
                 .navigationRoute(
                     "tab",
                     selection: Binding(get: { child.id }, set: { maintenanceSection = $0 }),
                     isValid: { raw in maintenanceSections.contains { $0.id == raw } })
             } else if let id = destination.extensionID {
-                content(id)
+                introduced(id)
             } else {
                 landing
             }
@@ -72,25 +87,16 @@ struct HostPageContent: View {
     }
     private func maintenanceHeader(current: HostNavigationSection, tight: Bool) -> some View {
         let sections = maintenanceSections
-        return PageHeader(
-            current.title,
-            trailing: {
-                Picker("Section", selection: $maintenanceSection) {
-                    ForEach(sections) { section in
-                        Label(section.title, systemImage: section.symbol).tag(section.id)
-                    }
+        return PageHeader(current.title, subtitle: current.summary) {
+            Picker("Section", selection: $maintenanceSection) {
+                ForEach(sections) { section in
+                    Label(section.title, edith: section.icon).tag(section.id)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .accessibilityLabel("App Maintenance section")
-            },
-            accessory: {
-                Text(current.summary)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
             }
-        )
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .accessibilityLabel("App Maintenance section")
+        }
         .padding(.bottom, tight ? -UIScale.pt(6) : 0)
     }
     @ViewBuilder private var settingsContent: some View {
@@ -121,9 +127,11 @@ struct HostPageContent: View {
             } else if let view = additionalSettings?(settingsDestination) {
                 view
             } else {
-                ContentUnavailableView(
-                    settingsSections.first(where: { $0.id == settingsDestination })?.title
-                        ?? "General", systemImage: "gearshape")
+                ContentUnavailableView {
+                    Label(
+                        settingsSections.first(where: { $0.id == settingsDestination })?.title
+                            ?? "General", edith: .gear)
+                }
             }
         }
     }
@@ -138,6 +146,19 @@ struct HostPageContent: View {
             defaults.set(id, forKey: HostMarketplaceKeys.expandedExtension)
             select("extensions")
         }
+    }
+    private func openPermissions() {
+        settings = "permissions"
+        select("settings")
+    }
+    private func introduced(_ id: String, section: String? = nil) -> some View {
+        HostIntroducedPage(
+            entry: marketplace.entries.first { $0.id == id }, defaults: defaults,
+            showsReopen: showsIntroductionButton
+        ) {
+            content(id, section: section)
+        }
+        .id(id + "/" + (section ?? ""))
     }
     private func content(_ id: String, section: String? = nil) -> some View {
         HostExtensionContent(

@@ -39,6 +39,88 @@ struct HostBackgroundJob: Codable, Equatable, Identifiable, Sendable {
     var canRun: Bool { ["idle", "paused", "failed"].contains(phase) }
 }
 
+extension HostBackgroundJob {
+    static let builtInOwners: Set<String> = ["backup", "storage"]
+
+    var ownerID: String {
+        if let ability = descriptor.abilityID { return ability }
+        let prefix = id.split(separator: ".").first.map(String.init) ?? id
+        return Self.builtInOwners.contains(prefix) ? "" : prefix
+    }
+    var isRunning: Bool { phase == "running" }
+    var needsAttention: Bool { phase == "failed" }
+    var statusTitle: String {
+        switch phase {
+        case "running": "Running"
+        case "idle": interval == nil ? "On demand" : "Scheduled"
+        case "paused": "Paused"
+        case "disabled": "Off"
+        case "failed": "Failed"
+        default: phase.capitalized
+        }
+    }
+    var scheduleSentence: String {
+        guard interval != nil else { return "Runs when needed" }
+        return cadence
+    }
+    var pauseReason: String? {
+        switch descriptor.power {
+        case "pauseOnBattery": "Pauses on battery"
+        case "pauseOnLock": "Pauses when locked"
+        default: nil
+        }
+    }
+    func lastRunText(now: Date) -> String {
+        guard let lastRun else { return "Not run yet" }
+        return "Last ran \(HostCompactDuration.text(max(0, now.timeIntervalSince(lastRun)))) ago"
+    }
+    func details(now: Date) -> String {
+        var parts = [scheduleSentence]
+        if let pauseReason { parts.append(pauseReason) }
+        if subscribers > 0 {
+            parts.append("\(subscribers) page\(subscribers == 1 ? "" : "s") watching")
+        }
+        parts.append(lastRunText(now: now))
+        return parts.joined(separator: " · ")
+    }
+    var actionTitle: String? {
+        if isRunning { return "Stop" }
+        return canRun ? "Run now" : nil
+    }
+}
+
+struct HostBackgroundOverview: Equatable, Sendable {
+    let total: Int
+    let running: Int
+    let needingAttention: Int
+
+    init(jobs: [HostBackgroundJob], activeTasks: Int = 0) {
+        total = jobs.count
+        running = jobs.filter(\.isRunning).count + activeTasks
+        needingAttention = jobs.filter(\.needsAttention).count
+    }
+
+    var sentence: String {
+        if total == 0 && running == 0 { return "No scheduled jobs yet." }
+        var parts: [String] = []
+        if total > 0 { parts.append("\(total) scheduled job\(total == 1 ? "" : "s")") }
+        parts.append(
+            running == 0 ? "none running right now" : "\(running) running now")
+        if needingAttention > 0 {
+            parts.append("\(needingAttention) need\(needingAttention == 1 ? "s" : "") attention")
+        }
+        let sentence = parts.joined(separator: ", ")
+        return sentence.prefix(1).uppercased() + sentence.dropFirst() + "."
+    }
+}
+
+struct HostBackgroundOwnerGroup: Identifiable, Equatable {
+    let ownerID: String
+    let title: String
+    let jobs: [HostBackgroundJob]
+    var id: String { ownerID }
+}
+
 struct HostBackgroundEvent: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     let date: Date
@@ -60,6 +142,10 @@ struct HostBackgroundEnvironment {
     let identity: @MainActor () -> String?
     let read: @MainActor () async throws -> HostBackgroundProjection
     let control: @MainActor (String, Bool) async throws -> Void
+    var settle: @MainActor () async throws -> Void = {
+        try await Task.sleep(for: .milliseconds(600))
+    }
+    var settleAttempts = 0
 }
 
 @MainActor @Observable final class HostBackgroundModel {
@@ -75,6 +161,29 @@ struct HostBackgroundEnvironment {
     @ObservationIgnored private var actionGeneration = UUID()
 
     init(environment: HostBackgroundEnvironment) { self.environment = environment }
+
+    func groups(titles: (String) -> String?) -> [HostBackgroundOwnerGroup] {
+        let owners = Dictionary(grouping: jobs, by: \.ownerID)
+        return owners.map { owner, jobs in
+            HostBackgroundOwnerGroup(
+                ownerID: owner, title: titles(owner) ?? Self.fallbackTitle(owner),
+                jobs: jobs.sorted {
+                    if $0.isRunning != $1.isRunning { return $0.isRunning }
+                    if $0.needsAttention != $1.needsAttention { return $0.needsAttention }
+                    return $0.descriptor.title.localizedCaseInsensitiveCompare($1.descriptor.title)
+                        == .orderedAscending
+                })
+        }.sorted {
+            if $0.ownerID.isEmpty != $1.ownerID.isEmpty { return !$0.ownerID.isEmpty }
+            return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+        }
+    }
+
+    static func fallbackTitle(_ owner: String) -> String {
+        owner.isEmpty ? "Built into Edith" : owner.prefix(1).uppercased() + owner.dropFirst()
+    }
+
+    var overview: HostBackgroundOverview { HostBackgroundOverview(jobs: jobs) }
 
     var current: Bool { acceptedIdentity != nil && acceptedIdentity == environment.identity() }
 
@@ -127,10 +236,24 @@ struct HostBackgroundEnvironment {
             try Task.checkCancellation()
             guard actionGeneration == token, environment.identity() == identity else { return }
             await refresh()
+            var attempts = environment.settleAttempts
+            while attempts > 0, actionGeneration == token, !reflects(job) {
+                attempts -= 1
+                try await environment.settle()
+                guard actionGeneration == token, environment.identity() == identity else { return }
+                await refresh()
+            }
         } catch is CancellationError {} catch {
             guard actionGeneration == token, environment.identity() == identity else { return }
             failure = error.localizedDescription
         }
+    }
+
+    private func reflects(_ job: HostBackgroundJob) -> Bool {
+        guard let latest = jobs.first(where: { $0.id == job.id }) else { return true }
+        if job.phase == "running" { return latest.phase != "running" }
+        return latest.phase == "running" || latest.runCount > job.runCount
+            || latest.lastRun != job.lastRun
     }
 
     func lastStatus(for job: HostBackgroundJob) -> String? {

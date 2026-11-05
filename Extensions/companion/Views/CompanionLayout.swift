@@ -95,27 +95,3 @@ struct PageGrid<Primary: View, Secondary: View, Full: View>: View {
         }
     }
 }
-
-struct PageTabPicker<Option: Hashable>: View {
-    let title: String
-    @Binding var selection: Option
-    let options: [Option]
-    let label: (Option) -> String
-    @Environment(\.compactLayout) private var compact
-
-    var body: some View {
-        if compact {
-            Picker(title, selection: $selection) {
-                ForEach(options, id: \.self) { Text(label($0)).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .controlSize(.large)
-            .font(.edithText(.body))
-            .accessibilityLabel(title)
-        } else {
-            EdithSegmentedPicker(title, selection: $selection, options: options, label: label)
-                .labelsHidden()
-        }
-    }
-}

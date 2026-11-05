@@ -35,7 +35,7 @@ import Foundation
                 $0.id.uuidString, sourceID: $0.id.uuidString,
                 title: String($0.name.prefix(256)), detail: String($0.baseURL.prefix(1_024)),
                 value: $0.latestRun?.averageScore.map { "\($0)%" } ?? "Not run",
-                icon: "globe")
+                icon: .globe)
         }
         let runs = selected.compactMap(\.latestRun)
         let metrics: [SurfaceMetric] = [

@@ -8,39 +8,38 @@ struct ClipboardPage: View {
     let openPalette: () -> Void
     var presentation: ClipboardPresentation? = nil
 
+    private var loading: Bool {
+        guard let presentation, presentation.available else { return false }
+        return !presentation.preferencesLoad.hasContent
+            && presentation.preferencesLoad.errorMessage == nil
+    }
+
     var body: some View {
-        PageWorkspace {
-            PageHeader(
-                "Clipboard",
-                trailing: {
-                    HStack(spacing: UIScale.pt(12)) {
-                        Button("Open clipboard", action: openPalette)
-                            .buttonStyle(.edith(.secondary))
-                    }
-                })
-        } content: {
-            if presentation?.available == false {
-                Text(
-                    "Clipboard is disabled. Enable the extension to view your history and change settings."
-                )
-                .font(.edithText(.caption)).foregroundStyle(.secondary).padding()
-            }
-            if let presentation, !presentation.preferencesLoad.hasContent {
-                if let error = presentation.preferencesLoad.errorMessage {
-                    PageNotice(
-                        error, tone: .error,
-                        actions: {
-                            Button("Retry") { Task { await presentation.refresh() } }
-                        })
-                } else if presentation.available {
-                    LoadingIndicator().padding()
+        Group {
+            if loading {
+                PageSkeleton(layout: .form)
+                    .padding(PageMetrics.groupedFormInset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else if let presentation, presentation.available,
+                !presentation.preferencesLoad.hasContent,
+                let error = presentation.preferencesLoad.errorMessage
+            {
+                PageEmptyState(
+                    icon: .warning,
+                    title: "Clipboard settings did not load",
+                    message: error + " Your history is safe.",
+                    primary: PageAction("Try Again", icon: .refresh) {
+                        Task { await presentation.refresh() }
+                    })
+            } else {
+                Form {
+                    ClipboardRows(
+                        client: client, history: history, presentation: presentation,
+                        openPalette: openPalette)
                 }
+                .settingsForm()
             }
-            Form { ClipboardRows(client: client, history: history, presentation: presentation) }
-                .formStyle(.grouped)
-                .disabled(presentation.map { !$0.preferencesLoad.hasContent } ?? false)
-                .opacity(presentation?.available == false ? 0.5 : 1)
         }
-        .disabled(presentation?.available == false || presentation?.stopped == true)
+        .disabled(presentation?.stopped == true)
     }
 }

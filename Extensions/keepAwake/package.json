@@ -1,7 +1,7 @@
 {
   "id": "keepAwake",
   "title": "Keep Awake",
-  "symbolName": "moon.zzz",
+  "icon": "moon",
   "category": "utilities",
   "background": false,
   "commands": [],
@@ -19,5 +19,27 @@
     "actions",
     "extension:keepAwake"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Stop your Mac and display from going to sleep while you work.",
+    "summary": "Keep Awake blocks idle sleep for the Mac and its display until you turn it off. It changes nothing permanent: turn it off, or quit Edith, and your normal sleep settings return. Closing the lid still sleeps the Mac.",
+    "steps": [
+      {
+        "icon": "toolbox",
+        "title": "Turn it on",
+        "detail": "Use the Keep Awake card on Home or the notch, or the toggle in settings."
+      },
+      {
+        "icon": "display",
+        "title": "Work without interruptions",
+        "detail": "Your Mac and display stay awake while it is on."
+      },
+      {
+        "icon": "moon",
+        "title": "Turn it off when done",
+        "detail": "Normal sleep settings come back right away."
+      }
+    ],
+    "examples": []
+  }
 }

@@ -26,17 +26,14 @@ struct TerminalPalette: Equatable {
     }
 
     static func edith(dark: Bool) -> TerminalPalette {
-        let theme = AppTheme(
-            storedName: SharedDefaults.store.string(forKey: AppStorageKeys.General.theme)
-                ?? AppTheme.accent.rawValue)
-        return edith(dark: dark, theme: theme)
+        edith(dark: dark, theme: ThemeStore.current)
     }
 
     static func edith(dark: Bool, theme: AppTheme) -> TerminalPalette {
         edithPalettes[EdithKey(theme: theme, dark: dark)]
             ?? .make(
-                background: NSColor(DashSkin.paper(dark, theme: theme)),
-                foreground: NSColor(DashSkin.ink(dark, theme: theme)),
+                background: NSColor(DashSkin.paper(dark)),
+                foreground: NSColor(DashSkin.ink(dark)),
                 caret: NSColor(DashSkin.accent(dark, theme: theme)), dark: dark)
     }
 
@@ -45,8 +42,8 @@ struct TerminalPalette: Equatable {
         for theme in AppTheme.allCases {
             for dark in [false, true] {
                 palettes[EdithKey(theme: theme, dark: dark)] = .make(
-                    background: NSColor(DashSkin.paper(dark, theme: theme)),
-                    foreground: NSColor(DashSkin.ink(dark, theme: theme)),
+                    background: NSColor(DashSkin.paper(dark)),
+                    foreground: NSColor(DashSkin.ink(dark)),
                     caret: NSColor(DashSkin.accent(dark, theme: theme)), dark: dark)
             }
         }

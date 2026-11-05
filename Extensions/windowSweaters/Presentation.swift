@@ -1,5 +1,6 @@
 import CoreFoundation
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 import Observation
 
@@ -27,6 +28,7 @@ struct ControlPresentationState: Codable {
 }
 
 enum ControlPresentationContract {
+    static let pendingKey = "windowSweatersPendingPreferences"
     static let writable: Set<String> = [
         "windowSweatersAccessibilityFocus", "windowSweatersActive", "windowSweatersAnchor",
         "windowSweatersBasket", "windowSweatersBorderWidth", "windowSweatersExcludedApps",
@@ -82,6 +84,12 @@ enum ControlPresentationContract {
         "windowSweatersOrder": Set(SweaterOrder.allCases.map(\.rawValue)),
     ]
 
+    @MainActor static func applyQueued(defaults: UserDefaults) {
+        guard let queued = defaults.data(forKey: pendingKey) else { return }
+        try? update(queued, defaults: defaults)
+        defaults.removeObject(forKey: pendingKey)
+    }
+
     static func valid(_ value: Any, for key: String) -> Bool {
         if let allowed = allowedValues[key] {
             guard let string = value as? String else { return false }
@@ -135,7 +143,6 @@ final class ControlPresentation {
     private var baseline: [String: Any] = [:]
     private var reading = false
     private var reads: [UUID: Task<Void, Never>] = [:]
-    private static let pendingPreferencesKey = "windowSweatersPendingPreferences"
     private var applying = false
     private var engineSynced = false
     private var stopped = false
@@ -236,7 +243,7 @@ final class ControlPresentation {
     private func queuePreferences(_ values: [String: Any]) throws {
         var queued: [String: Any] = [:]
         var removed: Set<String> = []
-        if let data = defaults.data(forKey: Self.pendingPreferencesKey) {
+        if let data = defaults.data(forKey: ControlPresentationContract.pendingKey) {
             let update = try JSONDecoder().decode(ControlPreferenceUpdate.self, from: data)
             queued = try ControlPresentationContract.decode(
                 update.values, keys: ControlPresentationContract.writable)
@@ -260,7 +267,8 @@ final class ControlPresentation {
         }
         let update = ControlPreferenceUpdate(
             values: try ControlPresentationContract.encode(queued), removed: Array(removed))
-        defaults.set(try JSONEncoder().encode(update), forKey: Self.pendingPreferencesKey)
+        defaults.set(
+            try JSONEncoder().encode(update), forKey: ControlPresentationContract.pendingKey)
     }
 
     func refresh() async {
@@ -286,11 +294,13 @@ final class ControlPresentation {
         do {
             var data = try await invoke("windowSweaters.ui.read", Data("{}".utf8))
             guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
-            if !engineSynced, let queued = defaults.data(forKey: Self.pendingPreferencesKey) {
+            if !engineSynced,
+                let queued = defaults.data(forKey: ControlPresentationContract.pendingKey)
+            {
                 _ = try await invoke("windowSweaters.ui.update", queued)
                 guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
-                if defaults.data(forKey: Self.pendingPreferencesKey) == queued {
-                    defaults.removeObject(forKey: Self.pendingPreferencesKey)
+                if defaults.data(forKey: ControlPresentationContract.pendingKey) == queued {
+                    defaults.removeObject(forKey: ControlPresentationContract.pendingKey)
                 }
                 data = try await invoke("windowSweaters.ui.read", Data("{}".utf8))
             }
@@ -331,6 +341,11 @@ final class ControlPresentation {
                 }
             }
         }
+    }
+
+    func retry() {
+        changed()
+        Task { await refresh() }
     }
 
     func perform(_ action: String, value: String = "") {
@@ -385,37 +400,4 @@ final class ControlPresentation {
     }
 }
 
-import EdithExtensionUI
-import SwiftUI
-
-struct ControlSettingsHost<Content: View>: View {
-    let presentation: ControlPresentation
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if presentation.ready, let error = presentation.error {
-                HStack {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                    Button("Retry", action: retry)
-                }.padding()
-            }
-            PageLoading(
-                state: presentation.load.state, title: "Settings unavailable",
-                message: presentation.error ?? "The extension engine is unavailable.",
-                layout: .editor, retry: retry
-            ) { content() }
-        }
-        .pageRefresh(
-            active: presentation.active && presentation.running,
-            interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
-        ) {
-            await presentation.refresh()
-        }
-    }
-
-    private func retry() {
-        presentation.changed()
-        Task { await presentation.refresh() }
-    }
-}
+extension ControlPresentation: ControlSettingsPresenting {}

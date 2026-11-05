@@ -1,6 +1,32 @@
 import EdithExtensionUI
 import SwiftUI
 
+public struct CalendarAgendaStyle: Equatable {
+    public let compact: Bool
+
+    public init(compact: Bool) {
+        self.compact = compact
+    }
+
+    var daySpacing: CGFloat { UIScale.pt(24) }
+    var headerSpacing: CGFloat { UIScale.pt(8) }
+    var rowSpacing: CGFloat { UIScale.pt(12) }
+    var rowHorizontalPadding: CGFloat { UIScale.pt(16) }
+    var rowVerticalPadding: CGFloat { UIScale.pt(12) }
+    var barWidth: CGFloat { UIScale.pt(4) }
+    var timeWidth: CGFloat { UIScale.pt(compact ? 104 : 128) }
+    var detailLeadingPadding: CGFloat {
+        rowHorizontalPadding + barWidth + rowSpacing + (compact ? 0 : timeWidth + rowSpacing)
+    }
+
+    var contentInsets: EdgeInsets {
+        let horizontal = PageMetrics.gutter(compact)
+        return EdgeInsets(
+            top: UIScale.pt(PageMetrics.pinnedContentTop), leading: horizontal,
+            bottom: UIScale.pt(PageMetrics.bottom), trailing: horizontal)
+    }
+}
+
 public struct CalendarAgendaView: View {
     private let groupedDays: [(day: Date, events: [CalendarEventPayload])]
     private let style: CalendarAgendaStyle
@@ -18,7 +44,6 @@ public struct CalendarAgendaView: View {
         onLoadMore: @escaping () -> Void,
         onOpenMeeting: @escaping (CalendarEventPayload) -> Void,
         onDirections: @escaping (CalendarEventPayload) -> Void
-
     ) {
         groupedDays = days
         self.style = style
@@ -32,482 +57,295 @@ public struct CalendarAgendaView: View {
     public var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: style.daySpacing) {
-                if groupedDays.isEmpty {
-                    CalendarEmptyState(style: style)
-                } else {
-                    ForEach(groupedDays, id: \.day) { group in
-                        CalendarDaySection(
-                            day: group.day,
-                            events: group.events,
-                            style: style,
-                            accentColor: accentColor,
-                            blurEvents: blurEvents,
-                            onOpenMeeting: onOpenMeeting,
-                            onDirections: onDirections
-                        )
-                    }
+                ForEach(groupedDays, id: \.day) { group in
+                    CalendarDaySection(
+                        day: group.day,
+                        events: group.events,
+                        style: style,
+                        accentColor: accentColor,
+                        blurEvents: blurEvents,
+                        onOpenMeeting: onOpenMeeting,
+                        onDirections: onDirections
+                    )
                 }
                 Color.clear
-                    .frame(height: style.loadMoreSentinelHeight)
+                    .frame(height: 1)
                     .onAppear(perform: onLoadMore)
             }
             .padding(style.contentInsets)
         }
-        .scrollIndicators(style.showsScrollIndicators ? .automatic : .hidden)
-        .frame(height: style.fixedHeight(for: groupedDays))
-    }
-}
-
-public struct CalendarPermissionPrompt: View {
-    private let style: CalendarAgendaStyle
-    private let accentColor: Color
-
-    private let onGrant: () -> Void
-
-    public init(style: CalendarAgendaStyle, accentColor: Color, onGrant: @escaping () -> Void) {
-        self.style = style
-        self.accentColor = accentColor
-        self.onGrant = onGrant
-    }
-
-    public var body: some View {
-        VStack(alignment: .leading, spacing: style.permissionSpacing) {
-            if style.usesEyebrowFunction {
-                eyebrow("CALENDAR ACCESS")
-            } else {
-                Text("CALENDAR ACCESS")
-                    .font(.system(size: style.permissionEyebrowSize, weight: .semibold))
-                    .tracking(style.headerTracking)
-                    .foregroundStyle(.secondary)
-            }
-            Text(style.permissionMessage)
-                .font(.system(size: style.permissionMessageSize))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: style.permissionRowSpacing) {
-                Image(systemName: style.permissionIcon)
-                    .font(.system(size: style.permissionIconSize))
-                    .foregroundStyle(.secondary)
-                Text("Calendars")
-                    .font(.system(size: style.permissionTitleSize))
-                Spacer()
-                Button("Grant…") {
-                    onGrant()
-                }
-                .buttonStyle(.edith(.toolbar))
-                .font(.system(size: style.permissionButtonSize))
-                .foregroundStyle(accentColor)
-                .help("Allow Edith to read your calendar events")
-            }
-        }
-        .padding(style.permissionPadding)
-        .background(style.permissionBackground)
-        .overlay(style.permissionStroke)
+        .scrollIndicators(.automatic)
     }
 }
 
 private struct CalendarDaySection: View {
-    private let day: Date
-    private let events: [CalendarEventPayload]
-    private let style: CalendarAgendaStyle
-    private let accentColor: Color
-    private let blurEvents: Bool
-    private let onOpenMeeting: (CalendarEventPayload) -> Void
-    private let onDirections: (CalendarEventPayload) -> Void
-
-    init(
-        day: Date,
-        events: [CalendarEventPayload],
-        style: CalendarAgendaStyle,
-        accentColor: Color,
-        blurEvents: Bool,
-        onOpenMeeting: @escaping (CalendarEventPayload) -> Void,
-        onDirections: @escaping (CalendarEventPayload) -> Void
-    ) {
-        self.day = day
-        self.events = events
-        self.style = style
-        self.accentColor = accentColor
-        self.blurEvents = blurEvents
-        self.onOpenMeeting = onOpenMeeting
-        self.onDirections = onDirections
-    }
+    let day: Date
+    let events: [CalendarEventPayload]
+    let style: CalendarAgendaStyle
+    let accentColor: Color
+    let blurEvents: Bool
+    let onOpenMeeting: (CalendarEventPayload) -> Void
+    let onDirections: (CalendarEventPayload) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: style.headerToRowsSpacing) {
-            CalendarDayHeader(day: day, eventCount: events.count, style: style)
-            if style.wrapsRowsInCard {
-                VStack(alignment: .leading, spacing: 0) {
-                    rows
+        VStack(alignment: .leading, spacing: style.headerSpacing) {
+            CalendarDayHeader(day: day, eventCount: events.count)
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(events.enumerated()), id: \.offset) { index, event in
+                    CalendarEventRow(
+                        event: event,
+                        style: style,
+                        accentColor: accentColor,
+                        blurEvents: blurEvents,
+                        onOpenMeeting: onOpenMeeting,
+                        onDirections: onDirections
+                    )
+                    if index < events.count - 1 {
+                        Divider().padding(.leading, style.rowHorizontalPadding)
+                    }
                 }
-                .padding(.vertical, style.rowCardVerticalPadding)
-                .background(style.rowCardBackground)
-                .overlay(style.rowCardStroke)
-            } else {
-                rows
             }
-        }
-    }
-
-    private var rows: some View {
-        LazyVStack(alignment: .leading, spacing: 0) {
-            dayRows
-        }
-    }
-
-    private var dayRows: some View {
-        ForEach(Array(events.enumerated()), id: \.offset) { index, event in
-            CalendarEventRow(
-                event: event,
-                style: style,
-                accentColor: accentColor,
-                blurEvents: blurEvents,
-                onOpenMeeting: onOpenMeeting,
-                onDirections: onDirections
-            )
-            if style.wrapsRowsInCard && index < events.count - 1 {
-                Divider().opacity(0.5)
-            }
+            .edithSurface(cornerRadius: 12)
         }
     }
 }
 
 private struct CalendarDayHeader: View {
-    private let day: Date
-    private let eventCount: Int
-    private let style: CalendarAgendaStyle
-
-    init(day: Date, eventCount: Int, style: CalendarAgendaStyle) {
-        self.day = day
-        self.eventCount = eventCount
-        self.style = style
-    }
+    let day: Date
+    let eventCount: Int
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: style.headerContentSpacing) {
-            Text(title)
-                .font(.system(size: style.headerSize, weight: .semibold))
-                .tracking(style.headerTracking)
-                .foregroundStyle(style.headerColor)
-            if style.showsEventCount {
-                Text(eventCount == 1 ? "1 event" : "\(eventCount) events")
-                    .font(.system(size: style.eventCountSize, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, UIScale.pt(8))
-                    .padding(.vertical, UIScale.pt(3))
-                    .background(.quaternary.opacity(0.45), in: Capsule())
-            }
+        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+            PageCapsLabel(title)
+            Text(eventCount == 1 ? "1 event" : "\(eventCount) events")
+                .font(.edithText(.caption))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             Rectangle()
-                .fill(.quaternary)
+                .fill(DashSkin.line(scheme == .dark))
                 .frame(height: 1)
+                .frame(maxWidth: .infinity)
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] }
+                .accessibilityHidden(true)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 
     private var title: String {
         let date = day.formatted(.dateTime.month(.abbreviated).day())
-        return "\(CalendarText.dayName(day)) · \(date)".uppercased()
+        return "\(CalendarText.dayName(day)) · \(date)"
     }
 }
 
 private struct CalendarEventRow: View {
     @State private var detailsExpanded = false
-    private let event: CalendarEventPayload
-    private let style: CalendarAgendaStyle
-    private let accentColor: Color
-    private let blurEvents: Bool
-    private let onOpenMeeting: (CalendarEventPayload) -> Void
-    private let onDirections: (CalendarEventPayload) -> Void
-
-    init(
-        event: CalendarEventPayload,
-        style: CalendarAgendaStyle,
-        accentColor: Color,
-        blurEvents: Bool,
-        onOpenMeeting: @escaping (CalendarEventPayload) -> Void,
-        onDirections: @escaping (CalendarEventPayload) -> Void
-    ) {
-        self.event = event
-        self.style = style
-        self.accentColor = accentColor
-        self.blurEvents = blurEvents
-        self.onOpenMeeting = onOpenMeeting
-        self.onDirections = onDirections
-    }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let event: CalendarEventPayload
+    let style: CalendarAgendaStyle
+    let accentColor: Color
+    let blurEvents: Bool
+    let onOpenMeeting: (CalendarEventPayload) -> Void
+    let onDirections: (CalendarEventPayload) -> Void
 
     var body: some View {
-        if style.showsRichRows {
-            richRow
-        } else {
-            compactRow
-        }
-    }
-
-    private var richRow: some View {
         VStack(alignment: .leading, spacing: 0) {
-            richSummary
+            summary
             if detailsExpanded {
                 Divider()
-                    .padding(.leading, style.richDetailLeadingPadding)
+                    .padding(.leading, style.detailLeadingPadding)
                 eventDetails
-                    .padding(.leading, style.richDetailLeadingPadding)
+                    .padding(.leading, style.detailLeadingPadding)
                     .padding(.trailing, style.rowHorizontalPadding)
-                    .padding(.vertical, UIScale.pt(12))
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .padding(.vertical, style.rowVerticalPadding)
+                    .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.16), value: detailsExpanded)
+        .animation(
+            Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: detailsExpanded)
     }
 
-    private var richSummary: some View {
+    private var summary: some View {
         HStack(alignment: .top, spacing: style.rowSpacing) {
             RoundedRectangle(cornerRadius: UIScale.pt(2))
                 .fill(CalendarText.calendarColor(for: event, fallback: accentColor))
-                .frame(width: UIScale.pt(4))
-                .frame(minHeight: UIScale.pt(44))
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                .frame(width: style.barWidth)
+                .frame(maxHeight: .infinity)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(CalendarText.startTime(for: event))
-                    .font(.system(size: style.timeSize, weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
-                if let detail = CalendarText.timeDetail(for: event) {
+                ForEach(timeDetails, id: \.self) { detail in
                     Text(detail)
-                        .font(.system(size: style.detailSize, weight: .medium))
+                        .font(.edithText(.caption))
                         .monospacedDigit()
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(width: style.richTimeWidth, alignment: .leading)
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            .frame(width: style.timeWidth, alignment: .leading)
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(event.title)
-                    .font(.system(size: style.titleSize, weight: .medium))
-                    .lineLimit(1)
+                    .font(.edithText(.body).weight(.medium))
+                    .lineLimit(style.compact ? 2 : 1)
                     .presenterBlur(blurEvents)
                 metadata
-            }
-            Spacer(minLength: style.trailingSpacerMinLength)
-            richActions
-        }
-        .padding(.horizontal, style.rowHorizontalPadding)
-        .padding(.vertical, style.richRowVerticalPadding)
-    }
-
-    private var compactRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: style.rowSpacing) {
-            Text(CalendarText.timeRange(for: event))
-                .font(.system(size: style.timeSize, weight: .medium))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: style.timeWidth, alignment: .leading)
-            VStack(alignment: .leading, spacing: style.titleLocationSpacing) {
-                Text(event.title)
-                    .font(.system(size: style.titleSize))
-                    .lineLimit(1)
-                    .presenterBlur(blurEvents)
-                if let location = CalendarText.visibleLocation(for: event) {
-                    Text(location)
-                        .font(.system(size: style.locationSize))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .presenterBlur(blurEvents)
+                if style.compact {
+                    actions.padding(.top, UIScale.pt(4))
                 }
             }
-            Spacer(minLength: style.trailingSpacerMinLength)
-            meetingButton
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !style.compact {
+                actions
+            }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, style.rowHorizontalPadding)
         .padding(.vertical, style.rowVerticalPadding)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(CalendarText.accessibilityLabel(for: event))
+    }
+
+    private var timeDetails: [String] {
+        guard !event.isAllDay else { return [] }
+        guard style.compact else { return CalendarText.timeDetail(for: event).map { [$0] } ?? [] }
+        let end = event.end.formatted(date: .omitted, time: .shortened)
+        return ["Until \(end)", CalendarText.duration(for: event)]
+    }
+
+    private var metadata: some View {
+        HStack(spacing: UIScale.pt(12)) { metadataItems }
     }
 
     @ViewBuilder
-    private var metadata: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            if let calendar = CalendarText.calendarName(for: event) {
-                CalendarMetadataLabel(systemImage: "calendar", text: calendar)
-            }
-            if let location = CalendarText.visibleLocation(for: event) {
-                CalendarMetadataLabel(systemImage: "mappin.and.ellipse", text: location)
-                    .presenterBlur(blurEvents)
-            }
-            if let attendees = CalendarText.attendeeSummary(for: event) {
-                CalendarMetadataLabel(systemImage: "person.2", text: attendees)
-                    .presenterBlur(blurEvents)
-            }
-            if event.isRecurring {
-                CalendarMetadataLabel(systemImage: "repeat", text: "Recurring")
-            }
+    private var metadataItems: some View {
+        if let calendar = CalendarText.calendarName(for: event) {
+            CalendarMetadataLabel(icon: .calendar, text: calendar)
         }
-        .lineLimit(1)
+        if let location = CalendarText.visibleLocation(for: event) {
+            CalendarMetadataLabel(icon: .location, text: location)
+                .presenterBlur(blurEvents)
+        }
+        if let attendees = CalendarText.attendeeSummary(for: event) {
+            CalendarMetadataLabel(icon: .people, text: attendees)
+                .presenterBlur(blurEvents)
+        }
+        if event.isRecurring {
+            CalendarMetadataLabel(icon: .repeatAll, text: "Recurring")
+        }
     }
 
-    private var richActions: some View {
-        HStack(spacing: UIScale.pt(6)) {
+    private var actions: some View {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             if let url = MeetingLink.url(for: event) {
-                CalendarActionButton(
-                    title: "Join",
-                    systemImage: "video.fill",
-                    color: CalendarText.providerColor(for: url, fallback: accentColor),
-                    help: blurEvents
-                        ? "Join meeting" : "Join meeting at \(url.host ?? url.absoluteString)"
+                PageChip(
+                    "Join", icon: .video, active: true,
+                    tint: accentColor
                 ) {
                     onOpenMeeting(event)
                 }
+                .help(
+                    blurEvents
+                        ? "Join meeting" : "Join meeting at \(url.host ?? url.absoluteString)")
             }
             if CalendarEventActions.locationURL(for: event) != nil {
-                CalendarActionButton(
-                    title: "Directions",
-                    systemImage: "arrow.triangle.turn.up.right.diamond.fill",
-                    color: .orange,
-                    help: "Open this location in Maps"
-                ) {
+                PageChip("Directions", icon: .map) {
                     onDirections(event)
                 }
+                .help("Open this location in Maps")
             }
-            CalendarActionButton(
-                title: "Details",
-                systemImage: detailsExpanded ? "chevron.up" : "chevron.down",
-                color: .secondary,
-                help: detailsExpanded ? "Hide event details" : "Show event details"
-            ) {
+            PageChip("Details", icon: detailsExpanded ? .chevronUp : .chevronDown) {
                 detailsExpanded.toggle()
             }
+            .help(detailsExpanded ? "Hide event details" : "Show event details")
+            .accessibilityValue(detailsExpanded ? "Expanded" : "Collapsed")
         }
     }
 
     private var eventDetails: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(spacing: UIScale.pt(16)) {
-                if let organizer = CalendarText.organizerSummary(for: event) {
-                    CalendarDetailLabel(
-                        title: "Organizer", value: organizer, systemImage: "person.crop.circle")
-                }
-                if let response = CalendarText.responseSummary(for: event) {
-                    CalendarDetailLabel(
-                        title: "Responses", value: response, systemImage: "checkmark.circle")
-                }
-                if event.hasAlarms {
-                    CalendarDetailLabel(
-                        title: "Reminder", value: "Enabled", systemImage: "bell")
-                }
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: UIScale.pt(16)) { summaryDetails }
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) { summaryDetails }
             }
             .presenterBlur(blurEvents)
             if let attendees = CalendarText.attendeeNames(for: event) {
-                CalendarDetailLabel(
-                    title: "Attendees", value: attendees, systemImage: "person.2"
-                )
-                .presenterBlur(blurEvents)
+                CalendarDetailLabel(title: "Attendees", value: attendees, icon: .people)
+                    .presenterBlur(blurEvents)
             }
             if let notes = CalendarText.notes(for: event) {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    Label("Notes", systemImage: "text.alignleft")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                    PageCapsLabel("Notes")
                     Text(notes)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(.secondary)
                         .lineLimit(5)
                         .textSelection(.enabled)
                         .presenterBlur(blurEvents)
                 }
             }
+            if !hasDetails {
+                Text("No organizer, attendees or notes for this event.")
+                    .font(.edithText(.callout))
+                    .foregroundStyle(.secondary)
+            }
         }
+    }
+
+    private var hasDetails: Bool {
+        CalendarText.organizerSummary(for: event) != nil
+            || CalendarText.responseSummary(for: event) != nil || event.hasAlarms
+            || CalendarText.attendeeNames(for: event) != nil
+            || CalendarText.notes(for: event) != nil
     }
 
     @ViewBuilder
-    private var meetingButton: some View {
-        if let url = MeetingLink.url(for: event) {
-            let color = CalendarText.providerColor(for: url, fallback: accentColor)
-            Button {
-                onOpenMeeting(event)
-            } label: {
-                if style.showsMeetingLabel {
-                    Label("Join", systemImage: "video.fill")
-                        .font(.system(size: style.meetingIconSize, weight: .semibold))
-                } else {
-                    Image(systemName: "video.fill")
-                        .font(.system(size: style.meetingIconSize))
-                        .foregroundStyle(color)
-                }
-            }
-            .buttonStyle(.edith(.borderless))
-            .help("Join meeting at \(url.host ?? url.absoluteString)")
+    private var summaryDetails: some View {
+        if let organizer = CalendarText.organizerSummary(for: event) {
+            CalendarDetailLabel(
+                title: "Organizer", value: organizer, icon: .person)
         }
-    }
-}
-
-private struct CalendarActionButton: View {
-    @State private var hovering = false
-    let title: String
-    let systemImage: String
-    let color: Color
-    let help: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                .padding(.horizontal, UIScale.pt(10))
-                .padding(.vertical, UIScale.pt(6))
-                .foregroundStyle(color)
-                .background(color.opacity(hovering ? 0.17 : 0.1), in: Capsule())
-                .overlay(Capsule().strokeBorder(color.opacity(hovering ? 0.34 : 0.2), lineWidth: 1))
+        if let response = CalendarText.responseSummary(for: event) {
+            CalendarDetailLabel(
+                title: "Responses", value: response, icon: .success)
         }
-        .buttonStyle(.edith(.borderless))
-        .onHover { hovering = $0 }
-        .help(help)
+        if event.hasAlarms {
+            CalendarDetailLabel(title: "Reminder", value: "On", icon: .bell)
+        }
     }
 }
 
 private struct CalendarDetailLabel: View {
     let title: String
     let value: String
-    let systemImage: String
+    let icon: EdithIcon
 
     var body: some View {
-        HStack(spacing: UIScale.pt(5)) {
-            Image(systemName: systemImage)
+        HStack(spacing: UIScale.pt(4)) {
+            EdithIconView(icon)
                 .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
             Text(title)
-                .foregroundStyle(.tertiary)
-            Text(value)
                 .foregroundStyle(.secondary)
+            Text(value)
+                .foregroundStyle(.primary)
         }
-        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+        .font(.edithText(.callout))
         .lineLimit(1)
     }
 }
 
 private struct CalendarMetadataLabel: View {
-    let systemImage: String
+    let icon: EdithIcon
     let text: String
 
     var body: some View {
-        Label(text, systemImage: systemImage)
-            .font(.system(size: UIScale.pt(10.5), weight: .medium))
-            .foregroundStyle(.tertiary)
+        Label(text, edith: icon)
+            .font(.edithText(.caption))
+            .foregroundStyle(.secondary)
             .lineLimit(1)
-    }
-}
-
-private struct CalendarEmptyState: View {
-    private let style: CalendarAgendaStyle
-
-    init(style: CalendarAgendaStyle) {
-        self.style = style
-    }
-
-    var body: some View {
-        if style.usesEmptyStateText {
-            EmptyStateText("Nothing coming up")
-        } else {
-            Text("Nothing coming up")
-                .font(.system(size: style.emptyTextSize))
-                .foregroundStyle(.secondary)
-                .padding(.vertical, style.emptyVerticalPadding)
-                .frame(maxWidth: .infinity)
-        }
     }
 }
 
@@ -619,15 +457,6 @@ enum CalendarText {
         return location
     }
 
-    static func providerColor(for url: URL, fallback: Color) -> Color {
-        let host = url.host?.lowercased() ?? ""
-        if host.contains("zoom.us") { return Color(red: 0.18, green: 0.55, blue: 1.0) }
-        if host.contains("meet.google.com") { return Color(red: 0.0, green: 0.67, blue: 0.28) }
-        if host.contains("teams.") { return Color(red: 0.38, green: 0.39, blue: 0.65) }
-        if host.contains("webex.com") { return Color(red: 0.0, green: 0.74, blue: 0.92) }
-        return fallback
-    }
-
     static func accessibilityLabel(for event: CalendarEventPayload) -> String {
         var parts = [timeRange(for: event), event.title]
         if let location = visibleLocation(for: event) {
@@ -635,414 +464,5 @@ enum CalendarText {
         }
         if MeetingLink.url(for: event) != nil { parts.append("has meeting link") }
         return parts.joined(separator: ", ")
-    }
-}
-
-public enum CalendarAgendaStyle {
-    case page(
-        compact: Bool,
-        rowBackground: Color,
-        strokeColor: Color
-    )
-    case panel
-
-    var daySpacing: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(20)
-        case .panel: return 16
-        }
-    }
-
-    var headerToRowsSpacing: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(8)
-        case .panel: return 6
-        }
-    }
-
-    var headerContentSpacing: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(10)
-        case .panel: return 8
-        }
-    }
-
-    var showsEventCount: Bool {
-        switch self {
-        case .page: return true
-        case .panel: return false
-        }
-    }
-
-    var eventCountSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(9.5)
-        case .panel: return 9
-        }
-    }
-
-    var headerSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(11)
-        case .panel: return 10
-        }
-    }
-
-    var headerTracking: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(1.2)
-        case .panel: return 1.2
-        }
-    }
-
-    var headerColor: HierarchicalShapeStyle {
-        switch self {
-        case .page: return .secondary
-        case .panel: return .tertiary
-        }
-    }
-
-    var wrapsRowsInCard: Bool {
-        switch self {
-        case .page: return true
-        case .panel: return false
-        }
-    }
-
-    var rowCardVerticalPadding: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(4)
-        case .panel: return 0
-        }
-    }
-
-    var rowCardBackground: some ShapeStyle {
-        switch self {
-        case let .page(_, rowBackground, _): return rowBackground
-        case .panel: return Color.clear
-        }
-    }
-
-    var rowCardStroke: some View {
-        RoundedRectangle(cornerRadius: rowCardRadius)
-            .strokeBorder(rowStrokeColor, lineWidth: rowStrokeWidth)
-    }
-
-    var rowCardRadius: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 0
-        }
-    }
-
-    var rowStrokeColor: Color {
-        switch self {
-        case let .page(_, _, strokeColor): return strokeColor
-        case .panel: return .clear
-        }
-    }
-
-    var rowStrokeWidth: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(1)
-        case .panel: return 0
-        }
-    }
-
-    var rowSpacing: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 10
-        }
-    }
-
-    var showsRichRows: Bool {
-        switch self {
-        case .page: return true
-        case .panel: return false
-        }
-    }
-
-    var timeSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 11
-        }
-    }
-
-    var timeWidth: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(140)
-        case .panel: return 128
-        }
-    }
-
-    var richTimeWidth: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(148)
-        case .panel: return 128
-        }
-    }
-
-    var richDetailLeadingPadding: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(180)
-        case .panel: return 0
-        }
-    }
-
-    var detailSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(10)
-        case .panel: return 10
-        }
-    }
-
-    var titleLocationSpacing: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(2)
-        case .panel: return 1
-        }
-    }
-
-    var titleSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(13.5)
-        case .panel: return 13
-        }
-    }
-
-    var locationSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(11)
-        case .panel: return 10
-        }
-    }
-
-    var trailingSpacerMinLength: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(8)
-        case .panel: return 8
-        }
-    }
-
-    var meetingIconSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 11
-        }
-    }
-
-    var showsMeetingLabel: Bool {
-        switch self {
-        case .page: return true
-        case .panel: return false
-        }
-    }
-
-    var rowHorizontalPadding: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(14)
-        case .panel: return 0
-        }
-    }
-
-    var rowVerticalPadding: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(8)
-        case .panel: return 0
-        }
-    }
-
-    var richRowVerticalPadding: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 0
-        }
-    }
-
-    var contentInsets: EdgeInsets {
-        switch self {
-        case let .page(compact, _, _):
-            let horizontal = UIScale.pt(compact ? 18 : 24)
-            return EdgeInsets(
-                top: UIScale.pt(10),
-                leading: horizontal,
-                bottom: 0,
-                trailing: horizontal)
-        case .panel:
-            return EdgeInsets(top: 0, leading: 0, bottom: 2, trailing: 0)
-        }
-    }
-
-    var loadMoreSentinelHeight: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(1)
-        case .panel: return 1
-        }
-    }
-
-    var showsScrollIndicators: Bool {
-        switch self {
-        case .page: return true
-        case .panel: return false
-        }
-    }
-
-    var usesEmptyStateText: Bool {
-        switch self {
-        case .page: return false
-        case .panel: return true
-        }
-    }
-
-    var emptyTextSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(13)
-        case .panel: return 13
-        }
-    }
-
-    var emptyVerticalPadding: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(40)
-        case .panel: return 0
-        }
-    }
-
-    func fixedHeight(for groups: [(day: Date, events: [CalendarEventPayload])]) -> CGFloat? {
-        switch self {
-        case .page:
-            return nil
-        case .panel:
-            guard !groups.isEmpty else { return 96 }
-            var height: CGFloat = 0
-            for group in groups {
-                height += 26
-                height += group.events.reduce(0) { $0 + panelRowHeight(for: $1) }
-            }
-            return min(height + 16, 460)
-        }
-    }
-
-    var permissionSpacing: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 12
-        }
-    }
-
-    var permissionEyebrowSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(10)
-        case .panel: return 10
-        }
-    }
-
-    var permissionMessage: String {
-        switch self {
-        case .page: return "Edith needs calendar access to show your schedule here."
-        case .panel: return "Edith needs calendar access to show your schedule."
-        }
-    }
-
-    var permissionMessageSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 11
-        }
-    }
-
-    var permissionRowSpacing: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(8)
-        case .panel: return 8
-        }
-    }
-
-    var permissionIcon: String {
-        switch self {
-        case .page: return "calendar"
-        case .panel: return "circle"
-        }
-    }
-
-    var permissionIconSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 12
-        }
-    }
-
-    var permissionTitleSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 12
-        }
-    }
-
-    var permissionButtonSize: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(11)
-        case .panel: return 11
-        }
-    }
-
-    var permissionPadding: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(16)
-        case .panel: return 16
-        }
-    }
-
-    @ViewBuilder
-    var permissionBackground: some View {
-        switch self {
-        case let .page(_, rowBackground, _):
-            RoundedRectangle(cornerRadius: UIScale.pt(12)).fill(rowBackground)
-        case .panel:
-            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.regularMaterial)
-        }
-    }
-
-    var permissionStroke: some View {
-        RoundedRectangle(cornerRadius: permissionStrokeRadius)
-            .strokeBorder(permissionStrokeColor, lineWidth: permissionStrokeWidth)
-    }
-
-    var permissionStrokeRadius: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(12)
-        case .panel: return 12
-        }
-    }
-
-    var permissionStrokeColor: Color {
-        switch self {
-        case let .page(_, _, strokeColor): return strokeColor
-        case .panel: return Color.white.opacity(0.08)
-        }
-    }
-
-    var permissionStrokeWidth: CGFloat {
-        switch self {
-        case .page: return UIScale.pt(1)
-        case .panel: return 1
-        }
-    }
-
-    var usesEyebrowFunction: Bool {
-        switch self {
-        case .page: return false
-        case .panel: return true
-        }
-    }
-
-    private func panelRowHeight(for event: CalendarEventPayload) -> CGFloat {
-        var height: CGFloat = 20
-        if CalendarText.visibleLocation(for: event) != nil {
-            height += 13
-        }
-        return height + 8
     }
 }

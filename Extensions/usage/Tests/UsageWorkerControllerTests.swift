@@ -187,6 +187,117 @@ struct UsageWorkerControllerTests {
     }
 }
 
+@MainActor @Suite(.serialized)
+struct UsageRefreshEscalationTests {
+    @Test func allMachinesRequestDuringARunningRefreshRunsAfterItUnderTheSameRunID() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = UsageCollectionLog()
+        let gate = UsageBlockedCollection()
+        let controller = UsageWorkerController(dataDirectory: root) { policy, _ in
+            await log.record(policy)
+            if policy == .due { await gate.wait() }
+            return try emptyDocument()
+        }
+        let first = try controller.requestRefresh(policy: .due)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(try controller.requestRefresh(policy: .all) == first)
+        #expect(try controller.requestRefresh(policy: .due) == first)
+        await gate.open()
+        await controller.waitForRefresh()
+        #expect(await log.policies == [.due, .all])
+        #expect(!controller.refreshing)
+        #expect(controller.failure == nil)
+        await controller.shutdown()
+    }
+
+    @Test func requestsNotAboveTheRunningPolicyDoNotQueueAnotherRun() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = UsageCollectionLog()
+        let gate = UsageBlockedCollection()
+        let controller = UsageWorkerController(dataDirectory: root) { policy, _ in
+            await log.record(policy)
+            await gate.wait()
+            return try emptyDocument()
+        }
+        _ = try controller.requestRefresh(policy: .all)
+        _ = try controller.requestRefresh(policy: .all)
+        _ = try controller.requestRefresh(policy: .skip)
+        await gate.open()
+        await controller.waitForRefresh()
+        #expect(await log.policies == [.all])
+        await controller.shutdown()
+    }
+
+    @Test func cancellingARefreshDropsTheQueuedEscalation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = UsageCollectionLog()
+        let controller = UsageWorkerController(dataDirectory: root) { policy, _ in
+            await log.record(policy)
+            try await Task.sleep(for: .seconds(30))
+            return try emptyDocument()
+        }
+        let first = try controller.requestRefresh(policy: .skip)
+        _ = try controller.requestRefresh(policy: .all)
+        await controller.cancelRefresh(matching: first)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await log.policies == [.skip])
+        #expect(!controller.refreshing)
+        await controller.shutdown()
+    }
+}
+
+@MainActor @Suite(.serialized)
+struct UsageRefreshTransactionTests {
+    @Test func refreshWaitsForAnotherTransactionInsteadOfReportingBusy() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let held = try UsageDataLock.acquire(
+            at: root.appendingPathComponent("usage-transaction.lock"), nonblocking: true)
+        let controller = UsageWorkerController(dataDirectory: root) { _, _ in
+            try emptyDocument()
+        }
+        try controller.requestRefresh()
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(controller.refreshing)
+        held.release()
+        await controller.waitForRefresh()
+        #expect(controller.failure == nil)
+        #expect(
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("usage.json").path))
+    }
+
+    @Test func transactionReportsBusyOnlyAfterItsPatienceRunsOut() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let held = try UsageDataLock.acquire(
+            at: root.appendingPathComponent("usage-transaction.lock"), nonblocking: true)
+        defer { held.release() }
+        let started = ContinuousClock.now
+        await #expect(throws: UsageDataTransactionError.refreshBusy) {
+            try await UsageWorkerController.waitingForTransaction(patience: .milliseconds(600)) {
+                try UsageDataTransaction.withExclusiveAccess(dataDirectory: root) {}
+            }
+        }
+        #expect(ContinuousClock.now - started >= .milliseconds(300))
+    }
+
+    @Test func lockFailuresOtherThanContentionAreNotReportedAsBusy() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("usage-transaction.lock"),
+            withIntermediateDirectories: true)
+        #expect(throws: UsageDataLockError.self) {
+            try UsageDataTransaction.withExclusiveAccess(dataDirectory: root) {}
+        }
+    }
+}
+
 private func emptyDocument(pricing: [String: Any] = [:]) throws -> Data {
     try JSONSerialization.data(withJSONObject: [
         "schemaVersion": 8, "generatedAt": "2026-10-09T12:00:00Z", "sources": [],

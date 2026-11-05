@@ -79,7 +79,7 @@ final class UsageSurface {
         try Task.checkCancellation()
         let metrics: [SurfaceMetric] = [
             .init("today", "Today", money(value.today.cost)),
-            .init("week", "Last seven days", money(value.week.cost)),
+            .init("week", "Last 7 days", money(value.week.cost)),
             .init("period", "Selected period", money(value.total.cost)),
             .init("tokens", "Tokens", TokenFormatter.compact(value.total.tokens)),
         ]
@@ -91,7 +91,7 @@ final class UsageSurface {
                         .joined(), sourceID: item.id, title: bounded(item.title, 256),
                     detail: tile.shows("tokens")
                         ? TokenFormatter.compact(item.total.tokens) + " tokens" : "",
-                    value: money(item.total.cost), icon: "chart.pie", field: "providers")
+                    value: money(item.total.cost), icon: .pie, field: "providers")
             }
             + (tile.shows("models")
                 ? value.models.prefix(tile.itemLimit).enumerated().map { index, item in
@@ -100,7 +100,7 @@ final class UsageSurface {
                         title: bounded(item.title, 256),
                         detail: tile.shows("tokens")
                             ? TokenFormatter.compact(item.total.tokens) + " tokens" : "",
-                        value: money(item.total.cost), icon: "cpu", field: "models")
+                        value: money(item.total.cost), icon: .cpu, field: "models")
                 } : [])
         let points = value.days.map { day in
             SurfaceChartPoint(
@@ -125,10 +125,10 @@ final class UsageSurface {
                     "activity", "Daily activity",
                     days: value.days.map { day in
                         SurfaceCalendarDay(
-                            day.id, date: day.id, level: scale.level(for: day),
+                            day.id, date: day.id, level: scale.surfaceLevel(for: day),
                             value: value.chartUsesTokens
                                 ? TokenFormatter.compact(day.tokens) + " tokens" : money(day.cost),
-                            action: .init("day:" + day.id, "Open Usage", "calendar"))
+                            action: .init("day:" + day.id, "Open Usage", .calendar))
                     })
             ] : []
         return .init(
@@ -180,14 +180,14 @@ final class UsageSurface {
                         title: provider.provider.label + " "
                             + slot.settingsLabel(for: provider.provider),
                         detail: details.joined(separator: " · "), value: "\(Int(used.rounded()))%",
-                        icon: "gauge", progress: used / 100, field: field))
+                        icon: .gauge, progress: used / 100, field: field))
             }
             if tile.shows("errors"), let error = provider.error {
                 rows.append(
                     .init(
                         provider.provider.rawValue + ":error", sourceID: provider.provider.rawValue,
                         title: provider.provider.label, detail: bounded(error, 1_024),
-                        icon: "exclamationmark.triangle", field: "errors"))
+                        icon: .warning, field: "errors"))
             }
         }
         let projected = UsageCompactLimitsSnapshot.project(cached, tile: tile)
@@ -212,8 +212,8 @@ final class UsageSurface {
                 + projected.metrics.filter { $0.id == "accounts" },
             rows: Array(rows.prefix(tile.itemLimit)),
             actions: [
-                .init("limits-refresh", "Refresh limits", "arrow.clockwise"),
-                .init("open", "Open Usage", "arrow.up.right"),
+                .init("limits-refresh", "Refresh limits", .refresh),
+                .init("open", "Open Usage", .arrowUpRight),
             ],
             facts: lowestRemaining(cached).map { ["lowestRemaining": $0] } ?? [:],
             sources: Array(
@@ -241,8 +241,8 @@ final class UsageSurface {
 
     private func actions() -> [SurfaceAction] {
         [
-            .init("refresh", "Refresh", "arrow.clockwise"),
-            .init("open", "Open Usage", "arrow.up.right"),
+            .init("refresh", "Refresh", .refresh),
+            .init("open", "Open Usage", .arrowUpRight),
         ]
     }
     private func money(_ amount: Double) -> String { amount.formatted(.currency(code: "USD")) }

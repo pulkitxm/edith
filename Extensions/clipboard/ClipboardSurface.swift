@@ -55,12 +55,12 @@ import Foundation
                             fromByteCount: Int64(entry.size), countStyle: .file),
                     ].compactMap { $0 }.joined(separator: " · "), bytes: 512),
                 value: entry.pinned ? "Pinned" : entry.kind.rawValue.capitalized,
-                icon: "doc.on.clipboard", field: field,
+                icon: .clipboard, field: field,
                 actions: [
-                    .init("copy/" + entry.id, "Copy", "doc.on.doc", field: field),
+                    .init("copy/" + entry.id, "Copy", .copy, field: field),
                     .init(
                         "pin/" + entry.id, entry.pinned ? "Unpin" : "Pin",
-                        entry.pinned ? "pin.slash" : "pin", field: field),
+                        entry.pinned ? .pinOff : .pin, field: field),
                 ], thumbnail: previews[entry.id])
         }
         return .init(

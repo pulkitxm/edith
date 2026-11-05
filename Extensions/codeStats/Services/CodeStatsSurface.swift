@@ -78,7 +78,7 @@ import Foundation
         guard let (table, report, history) = value else {
             return .init(
                 providerID: "codeStats",
-                actions: [.init("open", "Open Code Stats", "arrow.up.right.square")],
+                actions: [.init("open", "Open Code Stats", .external)],
                 message: "No code statistics yet. Choose a mirror folder and refresh Code Stats.")
         }
         let totals = report.totals
@@ -95,7 +95,7 @@ import Foundation
                 title: repository.repository,
                 detail: tile.shows("languages") ? repository.topLanguage ?? "" : "",
                 value: "\(repository.commits) commits",
-                icon: "curlybraces", field: "repositories")
+                icon: .braces, field: "repositories")
         }
         let projection = CodeStatsProjection(report: history, calendar: calendar)
         let days = projection.heatWeeks.flatMap(\.cells).compactMap { cell -> SurfaceCalendarDay? in
@@ -105,7 +105,7 @@ import Foundation
                 day, date: day, level: surfaceLevel(cell.level),
                 value:
                     "\(CodeStatsNumberFormat.grouped(cell.commits)) commits, \(CodeStatsNumberFormat.compact(cell.lines)) lines",
-                action: .init("day:" + day, "Open Code Stats", "calendar"))
+                action: .init("day:" + day, "Open Code Stats", .calendar))
         }
         let points = report.daily.suffix(366).compactMap { day -> SurfaceChartPoint? in
             guard let date = SurfaceCalendarDay.parse(day.day) else { return nil }
@@ -116,8 +116,8 @@ import Foundation
         return .init(
             providerID: "codeStats", metrics: metrics, rows: rows,
             actions: [
-                .init("open", "Open Code Stats", "arrow.up.right.square"),
-                .init("refresh", "Refresh", "arrow.clockwise"),
+                .init("open", "Open Code Stats", .external),
+                .init("refresh", "Refresh", .refresh),
             ],
             charts: points.isEmpty
                 ? []

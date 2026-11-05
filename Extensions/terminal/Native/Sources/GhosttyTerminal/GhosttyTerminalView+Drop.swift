@@ -211,7 +211,7 @@ extension GhosttyTerminalView {
 
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
         guard TerminalDropPayload.canRead(sender.draggingPasteboard) else { return [] }
-        layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.8).cgColor
+        layer?.borderColor = themeAccent.withAlphaComponent(0.8).cgColor
         layer?.borderWidth = 2
         return .copy
     }

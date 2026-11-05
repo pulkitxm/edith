@@ -1,7 +1,7 @@
 {
   "id": "quinjet",
   "title": "Code Review",
-  "symbolName": "arrow.triangle.branch",
+  "icon": "quinjet",
   "category": "agents",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "quinjet",
       "title": "Code Review",
-      "symbolName": "arrow.triangle.branch",
+      "icon": "quinjet",
       "order": 3
     }
   ],
@@ -23,5 +23,36 @@
     "github",
     "extension:quinjet"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Review pull requests and code changes in a focused terminal workspace.",
+    "summary": "Code Review opens a Git project in the Quinjet terminal tool so you can read pull requests and follow live changes. It needs the quinjet command line tool and only reads your project until you act.",
+    "steps": [
+      {
+        "icon": "folder",
+        "title": "Choose a project",
+        "detail": "Pick a recent Git project, or choose any folder on this Mac or a connected machine."
+      },
+      {
+        "icon": "quinjet",
+        "title": "Pick a worktree",
+        "detail": "Each checkout of a project opens as its own review session."
+      },
+      {
+        "icon": "terminal",
+        "title": "Review in the terminal",
+        "detail": "Quinjet runs inside Edith, or in cmux if you prefer it. Switch in the toolbar."
+      },
+      {
+        "icon": "plus",
+        "title": "Keep several reviews open",
+        "detail": "Use the plus button to open another tab for a second project or branch."
+      }
+    ],
+    "examples": [
+      "ed quinjet projects",
+      "ed quinjet open /path/to/project",
+      "ed quinjet sessions"
+    ]
+  }
 }

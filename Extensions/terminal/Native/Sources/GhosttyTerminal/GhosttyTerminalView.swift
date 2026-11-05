@@ -128,7 +128,7 @@ public final class GhosttyTerminalView: NSView {
     public init(
         externalIO: GhosttyExternalIO, workingDirectory: String? = nil,
         allowsLocalFileLinks: Bool = true, resetTerminalAfterInterrupt: Bool = false,
-        theme: GhosttyTheme? = nil
+        theme: GhosttyTheme? = nil, overlayIcons: TerminalOverlayIcons? = nil
     ) {
         self.externalIO = externalIO
         self.theme = theme
@@ -136,6 +136,8 @@ public final class GhosttyTerminalView: NSView {
         self.allowsLocalFileLinks = allowsLocalFileLinks
         shouldResetTerminalAfterInterrupt = resetTerminalAfterInterrupt
         super.init(frame: .zero)
+        linkHoverView.icons = overlayIcons
+        searchBar.icons = overlayIcons
         registerForDraggedTypes(Array(Self.dropTypes))
         addSubview(linkHoverView)
         searchBar.translatesAutoresizingMaskIntoConstraints = false
@@ -144,6 +146,7 @@ public final class GhosttyTerminalView: NSView {
         addSubview(searchBar)
         addSubview(progressStrip)
         addSubview(copyConfirmation)
+        applyAccent()
         NSLayoutConstraint.activate([
             searchBar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             searchBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -282,10 +285,18 @@ public final class GhosttyTerminalView: NSView {
         onReady?()
     }
 
+    var themeAccent: NSColor { theme?.cursorColor ?? .labelColor }
+
     public func apply(theme newTheme: GhosttyTheme) {
         guard theme != newTheme else { return }
         theme = newTheme
+        applyAccent()
         applyTheme()
+    }
+
+    private func applyAccent() {
+        progressStrip.accent = themeAccent
+        copyConfirmation.accent = themeAccent
     }
 
     private func applyTheme() {

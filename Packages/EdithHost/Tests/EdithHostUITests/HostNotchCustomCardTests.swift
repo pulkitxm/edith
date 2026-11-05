@@ -304,24 +304,24 @@ private actor CustomCardGate {
                 actions: [
                     .init(
                         focus ? "focus.finish" : "focus.start.47", focus ? "Finish" : "Start focus",
-                        focus ? "stop.fill" : "play.fill")
+                        focus ? .stop : .play)
                 ])
         }
         var rows: [SurfaceDataRow] = [
             .init(
                 "synthetic-session", sourceID: "synthetic-source", title: "Synthetic worker",
-                detail: "Synthetic project", value: "Working", icon: "terminal", field: "sessions",
-                actions: [.init("session.open", "Open", "macwindow", field: "sessions")])
+                detail: "Synthetic project", value: "Working", icon: .terminal, field: "sessions",
+                actions: [.init("session.open", "Open", .window, field: "sessions")])
         ]
         if approval {
             rows.insert(
                 .init(
                     "synthetic-approval", sourceID: "synthetic-source",
                     title: "Synthetic tool request",
-                    value: "30s", icon: "hand.raised.fill", field: "approvals",
+                    value: "30s", icon: .hand, field: "approvals",
                     actions: [
-                        .init("approval.deny", "Deny", "xmark", field: "approvals"),
-                        .init("approval.allow-once", "Allow once", "checkmark", field: "approvals"),
+                        .init("approval.deny", "Deny", .close, field: "approvals"),
+                        .init("approval.allow-once", "Allow once", .check, field: "approvals"),
                     ]), at: 0)
         }
         return .init(
@@ -330,7 +330,7 @@ private actor CustomCardGate {
                 .init("running", "Working", "1"),
                 .init("waiting", "Needs you", approval ? "1" : "0"),
                 .init("quiet", "No signal", "0"),
-            ], rows: rows, actions: [.init("open", "Open Herdr", "macwindow")])
+            ], rows: rows, actions: [.init("open", "Open Herdr", .window)])
     }
 }
 

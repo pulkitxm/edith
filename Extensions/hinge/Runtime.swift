@@ -32,6 +32,7 @@ final class HingeService: ExtensionService {
                 roleBundle: Bundle(for: HingeService.self))
         } catch { return false }
         SharedDefaults.store.set(true, forKey: HingeState.enabledKey)
+        ControlPresentationContract.applyQueued(defaults: SharedDefaults.store)
         if fixture == nil {
             HotKeyRegistrar.configure(
                 ExtensionHotKeyBinding(

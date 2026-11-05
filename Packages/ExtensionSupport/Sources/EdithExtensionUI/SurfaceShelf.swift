@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionCore
 import SwiftUI
 
@@ -48,6 +49,8 @@ public struct SurfaceShelf<Content: View>: View {
         layout.visible.firstIndex { $0.id == focused } ?? 0
     }
 
+    var showsFooter: Bool { editing || layout.visible.count != 1 }
+
     public var body: some View {
         ScrollViewReader { reader in
             VStack(spacing: UIScale.pt(8)) {
@@ -83,7 +86,7 @@ public struct SurfaceShelf<Content: View>: View {
                             .id(tile.id)
                         }
                         if editing {
-                            Label("Drop a widget", systemImage: "plus.circle")
+                            Label("Drop a widget", edith: .addFilled)
                                 .font(.edithText(.caption))
                                 .foregroundStyle(.secondary)
                                 .frame(width: UIScale.pt(120), height: UIScale.pt(100))
@@ -120,33 +123,36 @@ public struct SurfaceShelf<Content: View>: View {
                 .onChange(of: layout.visible.count) { _, _ in
                     if let selected { reader.scrollTo(selected, anchor: .leading) }
                 }
-                HStack(spacing: UIScale.pt(10)) {
-                    Button {
-                        browse(-1, reader: reader)
-                    } label: {
-                        Image(systemName: "chevron.left")
+                if showsFooter {
+                    HStack(spacing: UIScale.pt(10)) {
+                        if layout.visible.count > 1 {
+                            Button {
+                                browse(-1, reader: reader)
+                            } label: {
+                                EdithIconView(.chevronLeft)
+                            }
+                            .disabled(index == 0).accessibilityLabel("Previous widget")
+                            Text("\(index + 1) / \(layout.visible.count)").monospacedDigit()
+                            Button {
+                                browse(1, reader: reader)
+                            } label: {
+                                EdithIconView(.chevronRight)
+                            }
+                            .disabled(index >= layout.visible.count - 1)
+                            .accessibilityLabel("Next widget")
+                        } else if layout.visible.isEmpty {
+                            Text("No widgets")
+                        }
+                        Spacer(minLength: 0)
+                        if editing {
+                            Text("Drag a handle to reorder. Resize from the corner.")
+                                .foregroundStyle(.secondary).lineLimit(1)
+                        } else if layout.visible.count > 1 {
+                            Text("Scroll to browse").foregroundStyle(.secondary).lineLimit(1)
+                        }
                     }
-                    .disabled(index == 0).accessibilityLabel("Previous widget")
-                    Text(
-                        layout.visible.isEmpty
-                            ? "No widgets" : "\(index + 1) / \(layout.visible.count)"
-                    )
-                    .monospacedDigit()
-                    Button {
-                        browse(1, reader: reader)
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
-                    .disabled(index >= layout.visible.count - 1).accessibilityLabel("Next widget")
-                    Spacer(minLength: 0)
-                    Text(
-                        editing
-                            ? "Drag a handle to reorder. Resize from the corner."
-                            : "Scroll to browse"
-                    )
-                    .foregroundStyle(.secondary).lineLimit(1)
+                    .font(.edithText(.caption)).buttonStyle(.edith(.borderless))
                 }
-                .font(.edithText(.caption)).buttonStyle(.edith(.borderless))
             }
             .onGeometryChange(for: Double.self) {
                 $0.size.height / UIScale.current
@@ -210,7 +216,7 @@ private struct SurfaceShelfTile<Content: View>: View {
         VStack(spacing: UIScale.pt(6)) {
             if editing {
                 HStack {
-                    Image(systemName: tile.locked ? "lock.fill" : "line.3.horizontal")
+                    EdithIconView(tile.locked ? .lock : .menu)
                     Text(tile.displayTitle).lineLimit(1)
                     Spacer(minLength: 0)
                     Text("\(Int(width)) pt").foregroundStyle(.secondary)
@@ -251,7 +257,7 @@ private struct SurfaceShelfTile<Content: View>: View {
                     Button("Configure", action: inspect)
                         .buttonStyle(.edith(.secondary))
                     Spacer(minLength: 0)
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    EdithIconView(.expand)
                         .padding(UIScale.pt(6)).contentShape(Rectangle())
                         .highPriorityGesture(
                             DragGesture(

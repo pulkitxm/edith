@@ -79,10 +79,14 @@ import HostWorkerFixtureSupport
             HostMarketplaceCatalog.filter(entries, query: "hinge", category: "all").map(\.id) == [
                 "hinge"
             ])
-        #expect(Set(entries.map(\.id)) == Set(HostMarketplaceCatalog.subtitles.keys))
+        #expect(entries.allSatisfy { !HostMarketplaceCatalog.tagline($0).isEmpty })
         #expect(
-            HostMarketplaceCatalog.filter(entries, query: "   clipboard  ", category: "media").map(
-                \.id) == ["clipboard"])
+            HostMarketplaceCatalog.filter(entries, query: "   clipboard  ", category: "media")
+                .first?
+                .id == "clipboard")
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "clipboard", category: "all").map(\.id)
+                == ["clipboard", "bifrost"])
         #expect(
             HostMarketplaceCatalog.filter(entries, query: "", category: "media").allSatisfy {
                 $0.category == "media"
@@ -106,17 +110,13 @@ import HostWorkerFixtureSupport
         defer { window.orderOut(nil) }
         await settle(window, host: host)
         #expect(find(host, label: "Extensions") != nil)
-        #expect(find(host, label: "Agents & Terminal suite enabled") != nil)
+        #expect(find(host, label: "Agents & Terminal suite enabled") == nil)
         #expect(
             find(host, label: "Search extensions") != nil
                 || find(host, label: "Find extensions") != nil)
-        #expect(
-            find(
-                host,
-                label:
-                    "See Claude, Codex and Cursor limits and usage, with alerts before you run out."
-            ) != nil)
-        #expect(find(host, label: "Download") != nil)
+        let usage = try #require(fixture.marketplace.entries.first { $0.id == "usage" })
+        #expect(find(host, label: HostMarketplaceCatalog.tagline(usage)) != nil)
+        #expect(find(host, label: "Get Usage") != nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
     }
@@ -142,7 +142,7 @@ import HostWorkerFixtureSupport
         #expect(find(host, label: "Keep Awake") != nil)
         #expect(find(host, label: "Calendar") == nil)
         #expect(find(host, label: "Usage") == nil)
-        #expect(find(host, label: "Download") != nil)
+        #expect(find(host, label: "Get Keep Awake") != nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
     }
@@ -818,14 +818,14 @@ import HostWorkerFixtureSupport
     @Test func sharedCardRendererShowsRealContractDataAndDispatchesOnlyItsActionID() async throws {
         let restore = try enableAccessibility()
         defer { restore() }
-        let action = SurfaceAction("join:synthetic-meeting", "Join", "video.fill", field: "join")
+        let action = SurfaceAction("join:synthetic-meeting", "Join", .video, field: "join")
         let snapshot = SurfaceSnapshot(
             providerID: "calendar",
             rows: [
                 .init(
                     "synthetic-meeting", sourceID: "synthetic-calendar",
                     title: "Synthetic design review", detail: "Synthetic calendar", value: "10:00",
-                    icon: "calendar", actions: [action])
+                    icon: .calendar, actions: [action])
             ])
         var performed: [String] = []
         let host = NSHostingView(
@@ -924,6 +924,7 @@ import HostWorkerFixtureSupport
             for variant in [
                 Variant("regular-light", 1200, 1, .light), Variant("regular-dark", 1200, 1, .dark),
                 Variant("compact", 620, 1, .light), Variant("zoomed", 1200, 1.5, .dark),
+                Variant("wide", 1600, 1, .light),
             ] {
                 UIScale.apply(variant.zoom)
                 let host = NSHostingView(
@@ -1045,7 +1046,7 @@ import HostWorkerFixtureSupport
                 != nil)
         #expect(find(host, label: "Not installed") == nil)
         #expect(find(host, label: "Enable") == nil)
-        #expect(find(host, label: state == "removal" ? "Remove" : "Update") != nil)
+        #expect(find(host, label: state == "removal" ? "Remove" : "Update Calendar") != nil)
         let bytes = fixture.marketplace.installedBytes
         #expect(bytes >= 128)
         fixture.heldLease?.close()
@@ -1073,9 +1074,9 @@ import HostWorkerFixtureSupport
         #expect(!fixture.marketplace.downloadedIDs.contains("calendar"))
         #expect(!fixture.marketplace.pendingRemovalIDs.contains("calendar"))
         #expect(fixture.marketplace.installedBytes < bytes)
-        #expect(find(host, label: "Not installed") != nil)
-        #expect(find(host, label: "Download") != nil)
-        #expect(find(review, label: "Download") != nil)
+        #expect(find(host, label: "128 bytes") != nil)
+        #expect(find(host, label: "Get Calendar") != nil)
+        #expect(find(review, label: "Get Calendar") != nil)
         #expect(find(review, label: "Remove") == nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(fixture.marketplace.error == nil)
@@ -1136,10 +1137,11 @@ import HostWorkerFixtureSupport
             await settle(window, host: host)
             #expect(abs(host.bounds.width - variant.width) < 1)
             #expect(
-                find(host, label: "1 extension needs an update for this version of Edith.") != nil)
+                find(host, label: "1 extension needs an update to work with this version of Edith.")
+                    != nil)
             let visible = window.convertToScreen(host.convert(host.bounds, to: nil))
             for label in [
-                "Update now", "Update required for this version of Edith", "Calendar enabled",
+                "Update Now", "Update required for this version of Edith", "Update Calendar",
             ] {
                 let control = try #require(find(host, label: label))
                 let frame = try #require((control as AnyObject).accessibilityFrame?())
@@ -1182,15 +1184,15 @@ import HostWorkerFixtureSupport
                 )
                 .environment(\.colorScheme, scheme)
                 .environment(\.automaticViewActionsEnabled, false))
-            host.frame = CGRect(x: 0, y: 0, width: 560, height: 620)
+            host.frame = CGRect(x: 0, y: 0, width: 640, height: 680)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host
             window.orderBack(nil)
             await settle(window, host: host)
             for label in [
-                "Calendar", "Update required for this version of Edith",
-                "Version 1.1.0 · 128 bytes download · 128 bytes unpacked", "Update", "Remove",
-                "Done",
+                "Calendar", "This version of Edith needs a newer package. Update to keep using it.",
+                "Version 1.1.0 · 128 bytes download · 128 bytes unpacked", "Update Calendar",
+                "Remove", "Close",
             ] {
                 #expect(find(host, label: label) != nil, "\(label)")
             }
@@ -1223,9 +1225,9 @@ import HostWorkerFixtureSupport
         ]
         for (utility, start, stop) in controls {
             let idle = SurfaceSnapshot(
-                providerID: utility.id, actions: [.init(start, "Start", "play")])
+                providerID: utility.id, actions: [.init(start, "Start", .play)])
             let active = SurfaceSnapshot(
-                providerID: utility.id, actions: [.init(stop, "Stop", "stop")])
+                providerID: utility.id, actions: [.init(stop, "Stop", .stop)])
             #expect(utility.action(in: idle)?.id == start)
             #expect(!utility.isOn(idle))
             #expect(utility.isOn(active))
@@ -1235,7 +1237,7 @@ import HostWorkerFixtureSupport
             #expect(
                 utility.action(
                     in: SurfaceSnapshot(
-                        providerID: utility.id, actions: [.init("open:/tmp", "Open", "folder")]))
+                        providerID: utility.id, actions: [.init("open:/tmp", "Open", .folder)]))
                     == nil)
         }
     }
@@ -1274,11 +1276,11 @@ import HostWorkerFixtureSupport
                         }
                     }
                     HostSidebarNotice(
-                        symbol: "arrow.down.circle.fill", title: "Update ready", detail: "v9.9.9",
+                        icon: .arrowDown, title: "Update ready", detail: "v9.9.9",
                         tint: DashSkin.sage
                     ) { actions.append("update") }
                     HostSidebarNotice(
-                        symbol: "exclamationmark.triangle.fill",
+                        icon: .warning,
                         title: "Permissions needed", tint: DashSkin.warn
                     ) { actions.append("permissions") }
                     HostAgentStatusBar(online: true, summary: "2 active") {
@@ -1654,6 +1656,6 @@ private enum SurfaceMicSnapshot {
         SurfaceSnapshot(
             providerID: "micMute",
             metrics: [.init("status", "Microphone", muted ? "Muted" : "On")],
-            actions: [.init("toggle", "Toggle mute", "mic.slash")])
+            actions: [.init("toggle", "Toggle mute", .micMute)])
     }
 }

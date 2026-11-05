@@ -1,3 +1,4 @@
+import AppKit
 import EdithExtensionUI
 import SwiftUI
 
@@ -6,15 +7,42 @@ struct CalendarSettingsScene: View {
 
     var body: some View {
         Form {
-            Section("Calendar") {
-                LabeledContent("Source", value: "macOS Calendar")
-                Text("Your agenda appears in Edith after Calendar access is granted.")
-                    .settingsCaption()
-                HStack {
-                    Button("Open Calendar app") { store.perform(.open) }
+            Section {
+                LabeledContent("Source", value: "macOS Calendar app")
+                LabeledContent("Access") {
+                    Label(
+                        store.authorized ? "Allowed" : "Not allowed yet",
+                        edith: store.authorized ? .success : .alert
+                    )
+                    .foregroundStyle(store.authorized ? Color.green : Color.orange)
                 }
+                Text(
+                    store.authorized
+                        ? "Edith reads events from every calendar that is turned on in the Calendar app. It never edits or deletes them. Add accounts such as iCloud or Google in System Settings, Internet Accounts."
+                        : "Edith cannot see your events yet. Allow access so your schedule can appear on the Calendar page, Home and the notch."
+                )
+                .settingsCaption()
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                    Spacer(minLength: 0)
+                    if store.authorized {
+                        Button("Open Calendar App") { store.perform(.open) }
+                            .buttonStyle(.edith(.secondary))
+                    } else {
+                        Button("Open System Settings") {
+                            if let url = CalendarUIEngine.privacySettingsURL {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.edith(.secondary))
+                        Button("Allow Calendar Access") { store.perform(.permission) }
+                            .buttonStyle(.edith(.primary))
+                    }
+                }
+            } header: {
+                Text("Calendar")
             }
         }
-        .formStyle(.grouped)
+        .settingsForm()
+        .pageTask(cancel: store.suspend) { await store.observe() }
     }
 }

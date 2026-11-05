@@ -1,7 +1,7 @@
 {
   "id": "notchShelf",
   "title": "Notch Shelf",
-  "symbolName": "tray.and.arrow.down",
+  "icon": "tray",
   "category": "desk",
   "background": true,
   "commands": [
@@ -19,5 +19,36 @@
     "browser",
     "files",
     "camera"
-  ]
+  ],
+  "guide": {
+    "tagline": "A tray, browser and alerts that live in your MacBook's notch.",
+    "summary": "Notch Shelf turns the notch into a hand-off tray. Drag files toward it to park copies, glance at agents, music and alerts, or browse the web. Originals are never touched, and parked files expire on their own.",
+    "steps": [
+      {
+        "icon": "signature",
+        "title": "Drag a file to the notch",
+        "detail": "The shelf slides out so you can drop a copy without clicking first."
+      },
+      {
+        "icon": "window",
+        "title": "Switch tabs",
+        "detail": "Open the notch to see agents, files, the browser and the camera in one place."
+      },
+      {
+        "icon": "bell",
+        "title": "Pick your alerts",
+        "detail": "Choose which power, audio and Bluetooth changes may drop a card from the notch."
+      },
+      {
+        "icon": "adjust",
+        "title": "Tune it in settings",
+        "detail": "Decide how long files stay and when the notch opens."
+      }
+    ],
+    "examples": [
+      "ed shelf ls",
+      "ed shelf add ./report.pdf",
+      "ed browser ls"
+    ]
+  }
 }

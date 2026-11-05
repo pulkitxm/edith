@@ -15,15 +15,18 @@ struct CodeStatsPage: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        PageScaffold(pinnedHeader: true, activity: model.activity) {
+        PageScaffold(
+            width: model.phase == .setup ? .readable : .fluid, pinnedHeader: true,
+            activity: model.activity
+        ) {
             VStack(spacing: 0) {
                 CodeStatsHeader(model: model)
                 if model.table != nil {
                     CodeStatsFilterBar(model: model, dark: dark)
                         .pageGutter(compact)
-                        .padding(.bottom, UIScale.pt(12))
+                        .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
                 }
-                Divider()
+                PageHeaderDivider()
             }
         } content: {
             if model.report != nil, let error = model.statusLoad.errorMessage {
@@ -70,23 +73,67 @@ struct CodeStatsPage: View {
 
     @ViewBuilder private var content: some View {
         switch model.phase {
-        case .loading, .firstRun:
+        case .loading:
             EmptyView()
+        case .firstRun:
+            PageEmptyState(
+                icon: .sync, title: "Your first sync is running",
+                message:
+                    "Edith is copying and reading your repositories in the background. You can leave this page or close the window; your stats appear here when it finishes.",
+                footnote: "The first run is the slowest. Later refreshes only fetch new commits."
+            )
+            .frame(minHeight: UIScale.pt(240))
         case .setup:
             CodeStatsSetupView(model: model)
         case .unavailable:
-            EmptyView()
+            PageEmptyState(
+                icon: .chartBar, title: "Your results could not be opened",
+                message:
+                    "The sync finished, but Code Stats could not read its saved results. Try again, or refresh to rebuild them.",
+                primary: PageAction("Try again", icon: .refresh) {
+                    Task { await model.loadReport() }
+                },
+                secondary: PageAction("Refresh from GitHub", icon: .cloudDownload) {
+                    Task { await model.start() }
+                }
+            )
+            .pageFillViewport()
         case .content:
             if model.table == nil {
-                CodeStatsRangePicker(range: model.range) { range in
-                    Task { await model.select(range) }
+                WrapHStack(
+                    spacing: UIScale.pt(PageMetrics.controlSpacing),
+                    lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
+                ) {
+                    CodeStatsDateFilter(model: model)
                 }
             }
-            if let report = model.report {
+            if model.reportIsEmpty {
+                if model.table == nil {
+                    noCommits.frame(minHeight: UIScale.pt(220))
+                } else {
+                    noCommits.pageFillViewport()
+                }
+            } else if let report = model.report {
                 sections(report)
                     .environment(\.codeStatsActions, actions)
             }
         }
+    }
+
+    private var noCommits: some View {
+        PageEmptyState(
+            icon: .search, title: "No commits in this range",
+            message: model.hasActiveFilter
+                ? "Nothing matches your current filters. Clear them or pick a longer range."
+                : "No commits by you were found here. Try a longer range, or check that your name or email is listed under Settings.",
+            primary: model.hasActiveFilter
+                ? PageAction("Clear filters", icon: .filter) {
+                    Task { await model.updateFilter { $0 = .default } }
+                }
+                : PageAction("Show all time", icon: .calendar) {
+                    Task { await model.select(.preset(.allTime)) }
+                }
+        )
     }
 
     private var actions: CodeStatsActions {
@@ -105,10 +152,14 @@ struct CodeStatsPage: View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsReportSections(report: report, projection: model.projection, dark: dark)
             if model.table != nil {
-                CodeStatsRepositoryStripCard(explorer: model.explorer, dark: dark)
+                if model.explorer.stripMonths.count >= CodeStatsExplorer.stripMinimumMonths {
+                    CodeStatsRepositoryStripCard(explorer: model.explorer, dark: dark)
+                }
                 CodeStatsShareCard(explorer: model.explorer, dark: dark)
                 CodeStatsYearOverYearCard(explorer: model.explorer, dark: dark)
-                CodeStatsRhythmCard(explorer: model.explorer, dark: dark)
+                if !model.projection.isSingleDay {
+                    CodeStatsRhythmCard(explorer: model.explorer, dark: dark)
+                }
                 CodeStatsNewRepositoriesCard(explorer: model.explorer, dark: dark)
             }
             if let audit = model.audit {
@@ -135,11 +186,27 @@ struct CodeStatsReportSections: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsKPIGrid(report: report, dark: dark)
-            CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
+            if !projection.showsContributions {
+                if !projection.isSingleDay {
+                    CodeStatsTopDaysCard(days: projection.topDays, dark: dark)
+                }
+            } else if sharesActivityRow {
+                CodeStatsActivityRow(projection: projection, dark: dark)
+            } else {
+                CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
+            }
             CodeStatsTrendCard(projection: projection, dark: dark)
             CodeStatsRepositoryCards(projection: projection, dark: dark)
             CodeStatsLanguageCards(projection: projection, dark: dark)
-            CodeStatsHabitCards(projection: projection, dark: dark)
+            if !projection.isSingleDay {
+                CodeStatsHabitCards(
+                    projection: projection, dark: dark,
+                    showsTopDays: projection.showsContributions && !sharesActivityRow)
+            }
         }
+    }
+
+    private var sharesActivityRow: Bool {
+        projection.heatWeeks.count <= CodeStatsActivityRow.sharedRowWeeks
     }
 }

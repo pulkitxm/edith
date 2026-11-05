@@ -100,7 +100,7 @@ struct ClipboardPanelView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
+            EdithIconView(.search)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.secondary)
             TextField("Type to search…", text: $filterText)
@@ -114,14 +114,14 @@ struct ClipboardPanelView: View {
                 Button {
                     filterText = ""
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    EdithIconView(.closeFilled)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.edith(.borderless))
                 .accessibilityLabel("Clear search")
             }
             if let error = store.captureError ?? store.refreshError {
-                Image(systemName: "exclamationmark.triangle")
+                EdithIconView(.warning)
                     .foregroundStyle(.orange)
                     .help("Clipboard synchronization is retrying. \(error)")
                     .accessibilityLabel("Clipboard synchronization is retrying")
@@ -130,7 +130,7 @@ struct ClipboardPanelView: View {
                 Button {
                     store.setCapturePaused(false)
                 } label: {
-                    Label("Paused", systemImage: "pause.fill")
+                    Label("Paused", edith: .pause)
                         .font(.system(size: 11, weight: .semibold))
                         .padding(.horizontal, 8)
                         .frame(height: 20)
@@ -146,7 +146,7 @@ struct ClipboardPanelView: View {
                 .foregroundStyle(.secondary)
             menu
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, ClipboardPanelLayout.contentInset)
         .frame(height: ClipboardPanelLayout.headerHeight)
     }
 
@@ -159,10 +159,10 @@ struct ClipboardPanelView: View {
             Divider()
             Button("Settings…") { openPreferences() }
         } label: {
-            Image(systemName: "ellipsis.circle")
+            EdithIcon.more.image()
                 .foregroundStyle(.secondary)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Clipboard options")
@@ -174,7 +174,7 @@ struct ClipboardPanelView: View {
                 chip(nil)
                 ForEach(palette.categories) { chip($0) }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, ClipboardPanelLayout.contentInset)
         }
         .frame(height: ClipboardPanelLayout.chipsHeight)
     }
@@ -193,7 +193,7 @@ struct ClipboardPanelView: View {
                     Capsule().fill(
                         active ? themeColor(themeName) : Color.secondary.opacity(0.12))
                 )
-                .foregroundStyle(active ? Color.white : Color.primary)
+                .foregroundStyle(active ? themeOnAccentColor(themeName) : Color.primary)
                 .contentShape(Capsule())
         }
         .buttonStyle(.edith(.borderless))
@@ -263,7 +263,7 @@ struct ClipboardPanelView: View {
             Spacer(minLength: 0)
             KeyHint(keys: "esc", label: "Close")
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, ClipboardPanelLayout.contentInset)
         .frame(height: ClipboardPanelLayout.footerHeight)
     }
 
@@ -457,7 +457,7 @@ struct ClipboardPanelList: View, Equatable {
         Text(title)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, ClipboardPanelLayout.contentInset)
             .frame(
                 maxWidth: .infinity, minHeight: ClipboardPanelLayout.sectionHeaderHeight,
                 maxHeight: ClipboardPanelLayout.sectionHeaderHeight, alignment: .bottomLeading
@@ -478,7 +478,7 @@ private struct ClipboardPanelRow: View {
     var body: some View {
         let entry = model.entry
         let selected = selection.id == entry.id
-        let secondary = selected ? Color.white.opacity(0.75) : Color.secondary
+        let secondary = selected ? themeOnAccentColor(themeName).opacity(0.75) : Color.secondary
         Button {
             activate(entry)
         } label: {
@@ -496,7 +496,7 @@ private struct ClipboardPanelRow: View {
                 }
                 Spacer(minLength: 8)
                 if entry.pinned {
-                    Image(systemName: "pin.fill")
+                    EdithIconView(.pin)
                         .font(.system(size: 10))
                         .foregroundStyle(secondary)
                         .accessibilityLabel("Pinned")
@@ -508,10 +508,10 @@ private struct ClipboardPanelRow: View {
                         .foregroundStyle(secondary)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, ClipboardPanelLayout.contentInset)
             .frame(height: ClipboardPanelLayout.rowHeight(for: entry))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(selected ? Color.white : Color.primary)
+            .foregroundStyle(selected ? themeOnAccentColor(themeName) : Color.primary)
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
@@ -552,22 +552,22 @@ private struct ClipboardPanelRow: View {
                         )
                         .frame(width: 22, height: 22)
                 } else {
-                    symbol(selected: selected)
+                    categoryIcon(selected: selected)
                 }
             case .image, .file:
                 ClipboardThumbnailView(entry: entry, maxHeight: side, client: client) {
-                    symbol(selected: selected)
+                    categoryIcon(selected: selected)
                 }
             default:
-                symbol(selected: selected)
+                categoryIcon(selected: selected)
             }
         }
         .frame(width: side, height: side)
     }
 
-    private func symbol(selected: Bool) -> some View {
-        Image(systemName: model.category.symbol)
+    private func categoryIcon(selected: Bool) -> some View {
+        EdithIconView(model.category.icon)
             .font(.system(size: 14))
-            .foregroundStyle(selected ? Color.white.opacity(0.85) : Color.secondary)
+            .foregroundStyle(selected ? Color.themeOnAccent.opacity(0.85) : Color.secondary)
     }
 }

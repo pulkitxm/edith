@@ -2,7 +2,7 @@
   {
     "id": "usage",
     "title": "Usage",
-    "symbolName": "chart.bar.fill",
+    "icon": "usage",
     "category": "agents",
     "background": true,
     "commands": [
@@ -12,7 +12,7 @@
       {
         "id": "dashboard",
         "title": "Usage",
-        "symbolName": "chart.bar.fill",
+        "icon": "usage",
         "order": 1,
         "detachable": true
       }
@@ -30,6 +30,38 @@
       "extension:usage"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "See what your coding agents cost and how close you are to their limits.",
+      "summary": "Usage reads the history that agents like Claude Code and Codex keep on this Mac, then shows tokens, cost and rate limits by day, model and project. Nothing is uploaded, and your prompts and code are never read.",
+      "steps": [
+        {
+          "icon": "refresh",
+          "title": "Collect your history",
+          "detail": "Open Usage and press Collect usage now. The first run can take a few minutes."
+        },
+        {
+          "icon": "chartBar",
+          "title": "Explore the numbers",
+          "detail": "Filter by range, model, project or machine to see where tokens and money go."
+        },
+        {
+          "icon": "gauge",
+          "title": "Watch your limits",
+          "detail": "Rate limits show how much of each plan you have used and when it resets."
+        },
+        {
+          "icon": "bell",
+          "title": "Get warned early",
+          "detail": "Turn on limit alerts in settings to hear about it before you run out."
+        }
+      ],
+      "examples": [
+        "ed usage summary",
+        "ed usage limits",
+        "ed usage daily",
+        "ed usage refresh"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -37,7 +69,7 @@
   {
     "id": "herdr",
     "title": "Agents",
-    "symbolName": "rectangle.split.3x1.fill",
+    "icon": "columns",
     "category": "agents",
     "background": true,
     "commands": [
@@ -47,7 +79,7 @@
       {
         "id": "herdr",
         "title": "Agents",
-        "symbolName": "rectangle.split.3x1.fill",
+        "icon": "columns",
         "order": 2,
         "logoName": "herdr",
         "detachable": true
@@ -62,6 +94,38 @@
       "extension:herdr"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "See every coding agent on your Macs in one board, and step in when one needs you.",
+      "summary": "Agents shows the coding agents running in Herdr on this Mac and your SSH machines, grouped by what they are doing. Open any agent to watch or type to it, start new ones, and get told when one is blocked. Nothing runs until you start it.",
+      "steps": [
+        {
+          "icon": "refresh",
+          "title": "Find your agents",
+          "detail": "Edith looks for the herdr command on this Mac and your SSH machines and lists every live session."
+        },
+        {
+          "icon": "plus",
+          "title": "Start an agent",
+          "detail": "Press New Agent, then choose a coding agent, a machine and a space. It opens in its own pane."
+        },
+        {
+          "icon": "columns",
+          "title": "Watch the board",
+          "detail": "Agents are grouped as blocked, working, done or idle so you see who needs you."
+        },
+        {
+          "icon": "message",
+          "title": "Step in",
+          "detail": "Open an agent to read its terminal, answer a question, or send it a message."
+        }
+      ],
+      "examples": [
+        "ed herdr ls",
+        "ed herdr models",
+        "ed herdr defaults ls",
+        "ed herdr layout ls"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -69,7 +133,7 @@
   {
     "id": "quinjet",
     "title": "Code Review",
-    "symbolName": "arrow.triangle.branch",
+    "icon": "quinjet",
     "category": "agents",
     "background": false,
     "commands": [
@@ -79,7 +143,7 @@
       {
         "id": "quinjet",
         "title": "Code Review",
-        "symbolName": "arrow.triangle.branch",
+        "icon": "quinjet",
         "order": 3,
         "detachable": true
       }
@@ -93,6 +157,37 @@
       "extension:quinjet"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Review pull requests and code changes in a focused terminal workspace.",
+      "summary": "Code Review opens a Git project in the Quinjet terminal tool so you can read pull requests and follow live changes. It needs the quinjet command line tool and only reads your project until you act.",
+      "steps": [
+        {
+          "icon": "folder",
+          "title": "Choose a project",
+          "detail": "Pick a recent Git project, or choose any folder on this Mac or a connected machine."
+        },
+        {
+          "icon": "quinjet",
+          "title": "Pick a worktree",
+          "detail": "Each checkout of a project opens as its own review session."
+        },
+        {
+          "icon": "terminal",
+          "title": "Review in the terminal",
+          "detail": "Quinjet runs inside Edith, or in cmux if you prefer it. Switch in the toolbar."
+        },
+        {
+          "icon": "plus",
+          "title": "Keep several reviews open",
+          "detail": "Use the plus button to open another tab for a second project or branch."
+        }
+      ],
+      "examples": [
+        "ed quinjet projects",
+        "ed quinjet open /path/to/project",
+        "ed quinjet sessions"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -100,7 +195,7 @@
   {
     "id": "companion",
     "title": "Memory",
-    "symbolName": "brain.head.profile",
+    "icon": "companion",
     "category": "agents",
     "background": true,
     "commands": [
@@ -110,7 +205,7 @@
       {
         "id": "companion",
         "title": "Memory",
-        "symbolName": "brain.head.profile",
+        "icon": "companion",
         "order": 4,
         "detachable": true
       }
@@ -122,6 +217,37 @@
       "extension:companion"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "A private memory of your notes and voice memos that you can ask questions.",
+      "summary": "Memory keeps your notes, recordings and files in a searchable store that runs on a machine you choose. Ask it questions and it answers from what you saved, with sources. Setup takes a few minutes and runs a small set of containers on that machine.",
+      "steps": [
+        {
+          "icon": "server",
+          "title": "Choose where it runs",
+          "detail": "Pick this Mac or one of your machines to host the memory service."
+        },
+        {
+          "icon": "tray",
+          "title": "Add something to remember",
+          "detail": "Drop in notes, PDFs, photos or recordings, or capture a voice memo."
+        },
+        {
+          "icon": "messages",
+          "title": "Ask a question",
+          "detail": "Chat answers from your own memory and shows the notes it used."
+        },
+        {
+          "icon": "jev",
+          "title": "See what it learned",
+          "detail": "Mind shows beliefs and patterns it formed, which you can correct or forget."
+        }
+      ],
+      "examples": [
+        "ed companion status",
+        "ed companion ask what did I decide yesterday?",
+        "ed companion search roadmap"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -129,7 +255,7 @@
   {
     "id": "plugins",
     "title": "Plugins",
-    "symbolName": "square.stack.3d.up",
+    "icon": "layers",
     "category": "agents",
     "background": false,
     "commands": [
@@ -139,7 +265,7 @@
       {
         "id": "plugins",
         "title": "Plugins",
-        "symbolName": "square.stack.3d.up",
+        "icon": "layers",
         "order": 5,
         "detachable": true
       }
@@ -151,6 +277,32 @@
       "extension:plugins"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Teach your coding agents how to use Edith with one-click skills.",
+      "summary": "Plugins are skills: short instruction files that show agents like Claude Code, Cursor or Codex how to drive Edith. You can read each skill first, then install it for the agents you choose.",
+      "steps": [
+        {
+          "icon": "seoAudit",
+          "title": "Read a skill",
+          "detail": "Click Preview to see exactly what the skill tells your agent, and copy the Markdown if you prefer."
+        },
+        {
+          "icon": "person",
+          "title": "Choose your agents",
+          "detail": "Edith finds the coding agents installed on this Mac and remembers which ones you pick."
+        },
+        {
+          "icon": "saveTo",
+          "title": "Install",
+          "detail": "The skill is added to each agent for all your projects. Nothing else on your Mac is touched."
+        }
+      ],
+      "examples": [
+        "ed skills ls",
+        "ed skills preview edith-remote-work",
+        "ed skills install edith-remote-work --agent cursor --yes"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -158,7 +310,7 @@
   {
     "id": "machines",
     "title": "Machines",
-    "symbolName": "desktopcomputer",
+    "icon": "display",
     "category": "agents",
     "background": true,
     "commands": [
@@ -168,7 +320,7 @@
       {
         "id": "machines",
         "title": "Machines",
-        "symbolName": "server.rack",
+        "icon": "server",
         "order": 6,
         "detachable": true
       }
@@ -182,6 +334,38 @@
       "extension:machines"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Watch, browse and run your servers and containers from one place.",
+      "summary": "Add any computer you can reach over SSH. Edith shows its CPU, memory and disk, opens a terminal, browses files and manages Docker containers. Your Mac is already listed. Removing a machine only forgets it; nothing on the machine changes.",
+      "steps": [
+        {
+          "icon": "addFilled",
+          "title": "Add a machine",
+          "detail": "Enter its address and username, or pick a host from your SSH config."
+        },
+        {
+          "icon": "gauge",
+          "title": "Watch its health",
+          "detail": "See CPU, memory, disk and running containers for every machine at a glance."
+        },
+        {
+          "icon": "terminal",
+          "title": "Open a terminal or files",
+          "detail": "Pick a machine to run commands, browse and transfer files, or manage Docker."
+        },
+        {
+          "icon": "layoutLeft",
+          "title": "Build a workspace",
+          "detail": "Arrange terminals from several machines side by side in split panes."
+        }
+      ],
+      "examples": [
+        "ed machines ls",
+        "ed machines add box --host 10.0.0.4",
+        "ed machines show box",
+        "ed machines exec box uptime"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -189,7 +373,7 @@
   {
     "id": "terminal",
     "title": "Terminal",
-    "symbolName": "terminal",
+    "icon": "terminal",
     "category": "agents",
     "background": false,
     "commands": [],
@@ -200,6 +384,28 @@
       "extension:terminal"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "A fast built-in terminal with tabs that keeps your shells in one place.",
+      "summary": "Terminal opens a real shell in a tab inside Edith. Open as many tabs as you need, send one command to all of them with Broadcast, and adjust the font in settings. Closing a tab ends only that shell.",
+      "steps": [
+        {
+          "icon": "terminal",
+          "title": "Start typing",
+          "detail": "A shell opens in your home folder as soon as you visit the page."
+        },
+        {
+          "icon": "plus",
+          "title": "Add tabs",
+          "detail": "Press plus or Command T to open another shell, and Command W to close the current one."
+        },
+        {
+          "icon": "signal",
+          "title": "Broadcast a command",
+          "detail": "Turn on Broadcast to run one command in every open tab at once."
+        }
+      ],
+      "examples": []
+    },
     "launchWhen": [],
     "pages": [],
     "sections": [],
@@ -208,7 +414,7 @@
   {
     "id": "docs",
     "title": "Docs",
-    "symbolName": "book.closed",
+    "icon": "docs",
     "category": "agents",
     "background": false,
     "commands": [
@@ -218,7 +424,7 @@
       {
         "id": "docs",
         "title": "Docs",
-        "symbolName": "book.closed",
+        "icon": "docs",
         "order": 7,
         "detachable": true
       }
@@ -230,6 +436,37 @@
       "extension:docs"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Find the right Edith command by describing what you want to do.",
+      "summary": "A searchable, offline reference for every ed command. Type a goal in plain words and Docs ranks the commands that fit. Nothing you read here changes your settings or your machine.",
+      "steps": [
+        {
+          "icon": "search",
+          "title": "Describe your goal",
+          "detail": "Type something like \"free up docker space\" in the ask bar at the top, or press Command K."
+        },
+        {
+          "icon": "list",
+          "title": "Pick a match",
+          "detail": "Use the arrow keys to move through the ranked commands and press Return to open one."
+        },
+        {
+          "icon": "docs",
+          "title": "Read the page",
+          "detail": "Every page explains the command, shows examples, and links to related commands."
+        },
+        {
+          "icon": "filter",
+          "title": "Browse or filter",
+          "detail": "Use the list on the left, or press Command F to filter pages by name."
+        }
+      ],
+      "examples": [
+        "ed docs ls",
+        "ed docs ask \"restart the background agent\"",
+        "ed docs show herdr ls"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -237,7 +474,7 @@
   {
     "id": "appMaintenance",
     "title": "App Updates",
-    "symbolName": "shippingbox.and.arrow.backward",
+    "icon": "appMaintenance",
     "category": "utilities",
     "background": true,
     "commands": [
@@ -248,7 +485,7 @@
         "page": "appMaintenance",
         "id": "Updates",
         "title": "Updates",
-        "symbolName": "arrow.up.circle",
+        "icon": "arrowUp",
         "summary": "Review and run available application updates.",
         "order": 1
       },
@@ -256,7 +493,7 @@
         "page": "appMaintenance",
         "id": "Remove",
         "title": "Remove",
-        "symbolName": "trash",
+        "icon": "trash",
         "summary": "Review applications and their related files before removal.",
         "order": 3
       },
@@ -264,7 +501,7 @@
         "page": "appMaintenance",
         "id": "History",
         "title": "History",
-        "symbolName": "clock.arrow.circlepath",
+        "icon": "history",
         "summary": "Review completed maintenance operations.",
         "order": 5
       }
@@ -276,6 +513,33 @@
       "extension:appMaintenance"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Keep your apps current and remove them cleanly.",
+      "summary": "App Updates checks your apps and Homebrew for newer versions, lets you review and run them together, installs apps from disk images after verifying them, and removes apps along with the files they leave behind.",
+      "steps": [
+        {
+          "icon": "refresh",
+          "title": "Check for updates",
+          "detail": "Edith lists apps with a newer version. Checking never installs anything."
+        },
+        {
+          "icon": "stepTools",
+          "title": "Review and update",
+          "detail": "Read release notes and the exact command, then update the ones you tick."
+        },
+        {
+          "icon": "trash",
+          "title": "Remove apps fully",
+          "detail": "Pick an app, untick any file to keep, and move the rest to the Trash."
+        }
+      ],
+      "examples": [
+        "ed maintenance updates",
+        "ed maintenance update",
+        "ed maintenance scan Safari",
+        "ed maintenance history"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "hotkeys": []
@@ -283,7 +547,7 @@
   {
     "id": "homebrew",
     "title": "Homebrew",
-    "symbolName": "cube.box",
+    "icon": "box",
     "category": "utilities",
     "background": false,
     "commands": [
@@ -294,7 +558,7 @@
         "page": "appMaintenance",
         "id": "Packages",
         "title": "Packages",
-        "symbolName": "shippingbox",
+        "icon": "box",
         "summary": "Manage installed and discoverable Homebrew packages.",
         "order": 2
       }
@@ -306,6 +570,33 @@
       "extension:homebrew"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Install, update and remove Homebrew packages without the terminal.",
+      "summary": "Browse the command line tools (formulae) and Mac apps (casks) Homebrew offers, see what you have installed, and update or uninstall them in one click. Edith needs Homebrew already installed on this Mac.",
+      "steps": [
+        {
+          "icon": "list",
+          "title": "See what is installed",
+          "detail": "Switch between Formulae and Casks. Updates show up as soon as they exist."
+        },
+        {
+          "icon": "search",
+          "title": "Discover packages",
+          "detail": "Search by name, look at a package, then install it."
+        },
+        {
+          "icon": "arrowUp",
+          "title": "Upgrade or uninstall",
+          "detail": "Use the buttons beside a package. Uninstalling asks you to confirm first."
+        }
+      ],
+      "examples": [
+        "ed brew ls",
+        "ed brew ls --outdated",
+        "ed brew search ripgrep",
+        "ed brew install ripgrep"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "hotkeys": []
@@ -313,7 +604,7 @@
   {
     "id": "cleaner",
     "title": "Cleaner",
-    "symbolName": "sparkles.rectangle.stack",
+    "icon": "broom",
     "category": "utilities",
     "background": false,
     "commands": [
@@ -324,7 +615,7 @@
         "page": "appMaintenance",
         "id": "Cleaner",
         "title": "Cleaner",
-        "symbolName": "sparkles.rectangle.stack",
+        "icon": "broom",
         "summary": "Find reclaimable space and remove it after review.",
         "order": 4
       }
@@ -336,6 +627,33 @@
       "extension:cleaner"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Get back disk space from caches and leftovers, safely.",
+      "summary": "Cleaner finds build caches, package downloads, old Xcode data and unused git worktrees. You review the list first, and everything you clean goes to the Trash so you can undo it.",
+      "steps": [
+        {
+          "icon": "search",
+          "title": "Scan your Mac",
+          "detail": "Pick where to search. A scan only reads folders and never changes anything."
+        },
+        {
+          "icon": "stepTools",
+          "title": "Review what it found",
+          "detail": "Open a category to see every item, and untick anything you want to keep."
+        },
+        {
+          "icon": "trash",
+          "title": "Move it to the Trash",
+          "detail": "Confirm once, then restore anything from the Trash until you empty it."
+        }
+      ],
+      "examples": [
+        "ed cleaner scan",
+        "ed cleaner categories",
+        "ed cleaner drives",
+        "ed cleaner clean --yes"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "hotkeys": []
@@ -343,7 +661,7 @@
   {
     "id": "blitztree",
     "title": "Disk Map",
-    "symbolName": "square.grid.3x3.fill",
+    "icon": "blitztree",
     "category": "utilities",
     "background": false,
     "commands": [],
@@ -351,7 +669,7 @@
       {
         "id": "blitztree",
         "title": "Disk Map",
-        "symbolName": "square.grid.3x3.fill",
+        "icon": "blitztree",
         "order": 2,
         "detachable": true
       }
@@ -363,6 +681,28 @@
       "extension:blitztree"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "See what is using your disk space, then free it up.",
+      "summary": "Disk Map measures any folder and draws it as blocks sized by space used. Click to dig into folders, spot large files and cleanup candidates, and move anything you choose to the Trash.",
+      "steps": [
+        {
+          "icon": "folder",
+          "title": "Choose a folder",
+          "detail": "Start with your home folder or a drive. Scanning only reads and never changes files."
+        },
+        {
+          "icon": "blitztree",
+          "title": "Explore the map",
+          "detail": "Bigger blocks use more space. Click a folder to look inside it."
+        },
+        {
+          "icon": "trash",
+          "title": "Move items to the Trash",
+          "detail": "Reveal an item in Finder to check it, then move it to the Trash. You can put it back."
+        }
+      ],
+      "examples": []
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -370,7 +710,7 @@
   {
     "id": "system",
     "title": "Running Apps",
-    "symbolName": "switch.2",
+    "icon": "toolbox",
     "category": "utilities",
     "background": false,
     "commands": [
@@ -382,7 +722,7 @@
       {
         "id": "runningApps",
         "title": "Running Apps",
-        "symbolName": "cpu",
+        "icon": "cpu",
         "order": 1,
         "detachable": true
       }
@@ -396,6 +736,32 @@
       "extension:system"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "See what is running and quit what you do not need.",
+      "summary": "Running Apps lists every open app with its processor and memory use, so you can spot what slows your Mac. Quit one app or all of them, and lock the keyboard for a few seconds while you wipe it clean.",
+      "steps": [
+        {
+          "icon": "cpu",
+          "title": "See what is using resources",
+          "detail": "Sort by CPU or memory to find the heaviest apps."
+        },
+        {
+          "icon": "closeFilled",
+          "title": "Quit what you do not need",
+          "detail": "Apps with unsaved work ask before closing. Finder and Edith always stay open."
+        },
+        {
+          "icon": "keyboard",
+          "title": "Clean your keyboard",
+          "detail": "Start cleaning mode in settings to lock the keys, then wipe away."
+        }
+      ],
+      "examples": [
+        "ed apps ls",
+        "ed apps quit Safari",
+        "ed apps quit --all --yes"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -403,7 +769,7 @@
   {
     "id": "keepAwake",
     "title": "Keep Awake",
-    "symbolName": "moon.zzz",
+    "icon": "moon",
     "category": "utilities",
     "background": false,
     "commands": [],
@@ -422,6 +788,28 @@
       "extension:keepAwake"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Stop your Mac and display from going to sleep while you work.",
+      "summary": "Keep Awake blocks idle sleep for the Mac and its display until you turn it off. It changes nothing permanent: turn it off, or quit Edith, and your normal sleep settings return. Closing the lid still sleeps the Mac.",
+      "steps": [
+        {
+          "icon": "toolbox",
+          "title": "Turn it on",
+          "detail": "Use the Keep Awake card on Home or the notch, or the toggle in settings."
+        },
+        {
+          "icon": "display",
+          "title": "Work without interruptions",
+          "detail": "Your Mac and display stay awake while it is on."
+        },
+        {
+          "icon": "moon",
+          "title": "Turn it off when done",
+          "detail": "Normal sleep settings come back right away."
+        }
+      ],
+      "examples": []
+    },
     "pages": [],
     "sections": [],
     "hotkeys": []
@@ -429,7 +817,7 @@
   {
     "id": "lidAwake",
     "title": "Lid Awake",
-    "symbolName": "laptopcomputer",
+    "icon": "laptop",
     "category": "utilities",
     "background": false,
     "commands": [
@@ -450,6 +838,32 @@
       "extension:lidAwake"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Keep your Mac running with the lid closed.",
+      "summary": "Lid Awake stops the Mac from sleeping when you close the lid, so downloads, builds and agents keep going. It can stop on a timer or when the battery runs low. The first use asks you to approve Edith's helper in Login Items.",
+      "steps": [
+        {
+          "icon": "shield",
+          "title": "Approve the helper once",
+          "detail": "macOS asks you to allow Edith's background helper in Login Items."
+        },
+        {
+          "icon": "timer",
+          "title": "Choose how long",
+          "detail": "Pick a session: until you turn it off, a set time, or until the lid reopens."
+        },
+        {
+          "icon": "batteryHalf",
+          "title": "Stay safe on battery",
+          "detail": "Set a battery floor so it pauses before the battery runs flat."
+        }
+      ],
+      "examples": [
+        "ed lid-awake status",
+        "ed lid-awake on --for 1h",
+        "ed lid-awake off"
+      ]
+    },
     "pages": [],
     "sections": [],
     "hotkeys": []
@@ -457,7 +871,7 @@
   {
     "id": "systemStats",
     "title": "Menu Bar Stats",
-    "symbolName": "gauge.with.needle",
+    "icon": "gauge",
     "category": "utilities",
     "background": true,
     "commands": [
@@ -470,6 +884,31 @@
       "extension:systemStats"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "See how busy your Mac is, right in the menu bar.",
+      "summary": "Menu Bar Stats puts live CPU and memory percentages in your menu bar so you can tell at a glance when your Mac is working hard. Click it for a quick panel. It updates every couple of seconds and pauses while your Mac sleeps or is locked.",
+      "steps": [
+        {
+          "icon": "menuBar",
+          "title": "Look at the menu bar",
+          "detail": "CPU and memory percentages appear next to your other menu bar items."
+        },
+        {
+          "icon": "cursor",
+          "title": "Click for details",
+          "detail": "A small panel shows CPU and memory bars and a button to open Edith."
+        },
+        {
+          "icon": "palette",
+          "title": "Match your menu bar",
+          "detail": "Choose an automatic or custom color in settings."
+        }
+      ],
+      "examples": [
+        "ed system stats",
+        "ed system disks"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": [],
@@ -478,7 +917,7 @@
   {
     "id": "micMute",
     "title": "Mic Mute",
-    "symbolName": "mic.slash.fill",
+    "icon": "micMute",
     "category": "utilities",
     "background": true,
     "commands": [],
@@ -502,6 +941,28 @@
       "extension:micMute"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Mute every microphone on your Mac with one shortcut.",
+      "summary": "Mic Mute turns all microphones off or on system-wide with a keyboard shortcut or the menu bar icon, in any app and on any call. Nothing is recorded or sent anywhere.",
+      "steps": [
+        {
+          "icon": "keyboard",
+          "title": "Press the shortcut",
+          "detail": "Press Shift Command M in any app to mute or unmute."
+        },
+        {
+          "icon": "menuBar",
+          "title": "Check the menu bar",
+          "detail": "The menu bar icon shows whether your microphones are muted. Click it to toggle."
+        },
+        {
+          "icon": "gear",
+          "title": "Change the shortcut",
+          "detail": "Record a different shortcut in Mic Mute settings."
+        }
+      ],
+      "examples": []
+    },
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -509,7 +970,7 @@
   {
     "id": "presenter",
     "title": "Presenter",
-    "symbolName": "theatermasks.fill",
+    "icon": "presenter",
     "category": "utilities",
     "background": true,
     "commands": [
@@ -535,6 +996,32 @@
       "extension:presenter"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Blur private details in Edith while you share your screen.",
+      "summary": "Presenter hides things like music, cost figures, calendar events and agents inside Edith while you present or record. It can turn on by itself when it sees screen sharing, or you switch it by hand with a shortcut. Turn it off and everything is shown again.",
+      "steps": [
+        {
+          "icon": "toolbox",
+          "title": "Choose what to blur",
+          "detail": "Pick the kinds of private details to hide in Presenter settings."
+        },
+        {
+          "icon": "windows",
+          "title": "Let it detect sharing",
+          "detail": "Turn on auto detection and it blurs when a screen share or recording starts."
+        },
+        {
+          "icon": "keyboard",
+          "title": "Force it on or off",
+          "detail": "Use the shortcut or the Presenter card any time, for example when detection guesses wrong."
+        }
+      ],
+      "examples": [
+        "ed presenter status",
+        "ed presenter start",
+        "ed presenter stop"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -542,7 +1029,7 @@
   {
     "id": "calendar",
     "title": "Calendar",
-    "symbolName": "calendar",
+    "icon": "calendar",
     "category": "utilities",
     "background": false,
     "commands": [
@@ -552,7 +1039,7 @@
       {
         "id": "calendar",
         "title": "Calendar",
-        "symbolName": "calendar",
+        "icon": "calendar",
         "order": 3,
         "detachable": true
       }
@@ -566,6 +1053,32 @@
       "extension:calendar"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Your next meetings at a glance, with one-click join.",
+      "summary": "Calendar shows your upcoming events from the macOS Calendar app on its page, on Home and in the notch. It only reads events and never changes them. Allow access once and it keeps itself up to date.",
+      "steps": [
+        {
+          "icon": "hand",
+          "title": "Allow calendar access",
+          "detail": "Click Allow Calendar Access and choose Allow Full Access when macOS asks."
+        },
+        {
+          "icon": "calendar",
+          "title": "See what is next",
+          "detail": "Events from every calendar in the Calendar app are grouped by day."
+        },
+        {
+          "icon": "video",
+          "title": "Join or get directions",
+          "detail": "Meetings with a call link show Join, and events with a place show Directions."
+        }
+      ],
+      "examples": [
+        "ed calendar ls",
+        "ed calendar join <event>",
+        "ed calendar directions <event>"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -573,7 +1086,7 @@
   {
     "id": "bifrost",
     "title": "Launcher",
-    "symbolName": "rainbow",
+    "icon": "bifrost",
     "category": "desk",
     "background": true,
     "commands": [
@@ -597,6 +1110,38 @@
       "extension:bifrost"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Open apps, do quick math and find files from one bar.",
+      "summary": "Press the shortcut anywhere to open a search bar. Type an app name to launch it, a sum or unit conversion to get the answer, or a word to search files, clipboard history, snippets and quicklinks. Nothing is changed until you pick a result.",
+      "steps": [
+        {
+          "icon": "keyboard",
+          "title": "Press Option+Space",
+          "detail": "The bar opens over whatever you are doing. Change the shortcut in settings."
+        },
+        {
+          "icon": "textCursor",
+          "title": "Type what you want",
+          "detail": "An app name, 12 * 8, 5 km in miles, or part of a file name."
+        },
+        {
+          "icon": "enter",
+          "title": "Press Return",
+          "detail": "The top result opens or copies. Use the arrow keys to pick another."
+        },
+        {
+          "icon": "adjust",
+          "title": "Add your own",
+          "detail": "Create quicklinks, snippets and shell commands in the extension settings."
+        }
+      ],
+      "examples": [
+        "ed bifrost open",
+        "ed bifrost calc \"12 * 8 + 4%\"",
+        "ed bifrost convert \"12 km in miles\"",
+        "ed bifrost ls"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -604,7 +1149,7 @@
   {
     "id": "clipboard",
     "title": "Clipboard",
-    "symbolName": "doc.on.clipboard",
+    "icon": "clipboard",
     "category": "desk",
     "background": true,
     "commands": [
@@ -632,6 +1177,38 @@
     "notchTabs": [
       "clipboard"
     ],
+    "guide": {
+      "tagline": "Everything you copy, searchable and one shortcut away.",
+      "summary": "Keeps a history of text, links, images and files you copy so you can paste an older item again. Pin what you reuse. History stays on this Mac, and password managers are ignored by default.",
+      "steps": [
+        {
+          "icon": "copy",
+          "title": "Copy as usual",
+          "detail": "Edith records each copy in the background. Pause recording any time in settings."
+        },
+        {
+          "icon": "keyboard",
+          "title": "Press Control+Shift+C",
+          "detail": "The history popup opens. Search it, or use the arrow keys."
+        },
+        {
+          "icon": "enter",
+          "title": "Pick an item",
+          "detail": "It is copied back, or pasted straight into your app if you allow Accessibility."
+        },
+        {
+          "icon": "pin",
+          "title": "Pin favourites",
+          "detail": "Pinned items stay at the edge and never age out."
+        }
+      ],
+      "examples": [
+        "ed clipboard ls",
+        "ed clipboard ls --category link --limit 5",
+        "ed clipboard copy 1",
+        "ed clipboard stats"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -639,7 +1216,7 @@
   {
     "id": "emoji",
     "title": "Emoji Picker",
-    "symbolName": "face.smiling",
+    "icon": "emoji",
     "category": "desk",
     "background": false,
     "commands": [
@@ -665,6 +1242,38 @@
       "extension:emoji"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Find and type any emoji without leaving what you are writing.",
+      "summary": "Press the shortcut in any app to open a searchable emoji picker. Pick one and it is typed right where your cursor is. Your most used emoji appear first and you can set a default skin tone.",
+      "steps": [
+        {
+          "icon": "keyboard",
+          "title": "Press Control+Shift+E",
+          "detail": "The picker opens next to your cursor, in any app."
+        },
+        {
+          "icon": "search",
+          "title": "Search by name",
+          "detail": "Type happy, thumbs or a shortcode to narrow down the list."
+        },
+        {
+          "icon": "enter",
+          "title": "Press Return",
+          "detail": "The emoji is typed into the app you were using."
+        },
+        {
+          "icon": "hand",
+          "title": "Set a skin tone",
+          "detail": "Choose a default tone in settings for emoji that support one."
+        }
+      ],
+      "examples": [
+        "ed emoji pick",
+        "ed emoji ls --search heart --limit 10",
+        "ed emoji insert tada",
+        "ed emoji tone medium"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -672,7 +1281,7 @@
   {
     "id": "colorPicker",
     "title": "Color Picker",
-    "symbolName": "eyedropper",
+    "icon": "eyedropper",
     "category": "desk",
     "background": false,
     "commands": [
@@ -699,6 +1308,37 @@
       "extension:colorPicker"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Pick any color on your screen and copy it in the format you need.",
+      "summary": "Press the shortcut to get a magnifier you can move over anything on screen. Click to copy the exact color as hex, RGB, HSL or code. Recent colors are kept so you can copy them again later.",
+      "steps": [
+        {
+          "icon": "keyboard",
+          "title": "Press the shortcut",
+          "detail": "A magnifier appears. You can also choose Pick Color in settings."
+        },
+        {
+          "icon": "eyedropper",
+          "title": "Click a color",
+          "detail": "Move over any pixel on screen and click to sample it."
+        },
+        {
+          "icon": "clipboard",
+          "title": "Paste it anywhere",
+          "detail": "The color is copied in your chosen format, such as #1A73E8."
+        },
+        {
+          "icon": "history",
+          "title": "Reuse recent colors",
+          "detail": "Click a swatch in settings to copy it again."
+        }
+      ],
+      "examples": [
+        "ed color pick",
+        "ed color ls --limit 5",
+        "ed color copy 1 --format rgb"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -706,7 +1346,7 @@
   {
     "id": "keystrokeHighlight",
     "title": "Keystroke Highlight",
-    "symbolName": "keyboard.badge.ellipsis",
+    "icon": "keystrokeHighlight",
     "category": "desk",
     "background": true,
     "commands": [],
@@ -730,6 +1370,33 @@
       "extension:keystrokeHighlight"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Show the keys you press on screen for demos and recordings.",
+      "summary": "Displays each shortcut and key press as a keycap overlay so viewers can follow along. It only shows keys while turned on, ignores secure password fields, and needs Input Monitoring permission.",
+      "steps": [
+        {
+          "icon": "shield",
+          "title": "Allow Input Monitoring",
+          "detail": "macOS asks once. Edith only reads key presses to draw the keycaps."
+        },
+        {
+          "icon": "keyboard",
+          "title": "Press Control+Option+Command+K",
+          "detail": "Starts or pauses the overlay from any app."
+        },
+        {
+          "icon": "windows",
+          "title": "Type as normal",
+          "detail": "Keycaps appear at the edge of the screen and fade away."
+        },
+        {
+          "icon": "adjust",
+          "title": "Adjust it",
+          "detail": "Choose the position and how long keys stay visible."
+        }
+      ],
+      "examples": []
+    },
     "launchWhen": [],
     "pages": [],
     "sections": []
@@ -737,7 +1404,7 @@
   {
     "id": "focusDim",
     "title": "Focus Dim",
-    "symbolName": "circle.lefthalf.filled",
+    "icon": "contrast",
     "category": "desk",
     "background": false,
     "commands": [],
@@ -765,13 +1432,40 @@
       "extension:focusDim"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Dim everything except the window you are working in.",
+      "summary": "Darkens the background behind your front window so you can focus. Turn it on with the shortcut or the switch in settings, and it follows you as you switch apps. Needs Screen Recording permission to find windows.",
+      "steps": [
+        {
+          "icon": "layoutCenter",
+          "title": "Turn it on",
+          "detail": "Press Option+Command+F or use the Dim background windows switch in settings."
+        },
+        {
+          "icon": "shield",
+          "title": "Allow Screen Recording",
+          "detail": "macOS asks once so Edith can tell which windows are open. No video is saved."
+        },
+        {
+          "icon": "contrast",
+          "title": "Work as usual",
+          "detail": "Other windows fade back and the dimming follows the app you switch to."
+        },
+        {
+          "icon": "adjust",
+          "title": "Set the strength",
+          "detail": "Change how dark it gets and how fast it fades in settings."
+        }
+      ],
+      "examples": []
+    },
     "pages": [],
     "sections": []
   },
   {
     "id": "notchShelf",
     "title": "Notch Shelf",
-    "symbolName": "tray.and.arrow.down",
+    "icon": "tray",
     "category": "desk",
     "background": true,
     "commands": [
@@ -790,6 +1484,37 @@
       "files",
       "camera"
     ],
+    "guide": {
+      "tagline": "A tray, browser and alerts that live in your MacBook's notch.",
+      "summary": "Notch Shelf turns the notch into a hand-off tray. Drag files toward it to park copies, glance at agents, music and alerts, or browse the web. Originals are never touched, and parked files expire on their own.",
+      "steps": [
+        {
+          "icon": "signature",
+          "title": "Drag a file to the notch",
+          "detail": "The shelf slides out so you can drop a copy without clicking first."
+        },
+        {
+          "icon": "window",
+          "title": "Switch tabs",
+          "detail": "Open the notch to see agents, files, the browser and the camera in one place."
+        },
+        {
+          "icon": "bell",
+          "title": "Pick your alerts",
+          "detail": "Choose which power, audio and Bluetooth changes may drop a card from the notch."
+        },
+        {
+          "icon": "adjust",
+          "title": "Tune it in settings",
+          "detail": "Decide how long files stay and when the notch opens."
+        }
+      ],
+      "examples": [
+        "ed shelf ls",
+        "ed shelf add ./report.pdf",
+        "ed browser ls"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": [],
@@ -798,7 +1523,7 @@
   {
     "id": "audioMixer",
     "title": "Audio Mixer",
-    "symbolName": "slider.horizontal.3",
+    "icon": "adjust",
     "category": "desk",
     "background": false,
     "commands": [
@@ -813,6 +1538,33 @@
     "notchTabs": [
       "audio"
     ],
+    "guide": {
+      "tagline": "Set the volume of each app separately.",
+      "summary": "Audio Mixer adds a volume slider for every app that is playing sound, in the notch's Audio tab. Turn one app down without touching the rest. macOS asks for audio access the first time, and it needs macOS 14.4 or later.",
+      "steps": [
+        {
+          "icon": "play",
+          "title": "Play something",
+          "detail": "Apps appear in the mixer only while they are making sound."
+        },
+        {
+          "icon": "adjust",
+          "title": "Open the Audio tab",
+          "detail": "Open the notch and choose Audio to see one slider per app."
+        },
+        {
+          "icon": "speakerOff",
+          "title": "Drag or mute",
+          "detail": "Slide to lower an app, or drag to zero to mute it. Full volume restores it."
+        }
+      ],
+      "examples": [
+        "ed audio ls",
+        "ed audio volume Music 40",
+        "ed audio mute Music",
+        "ed audio unmute Music"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": [],
@@ -821,7 +1573,7 @@
   {
     "id": "studio",
     "title": "Studio",
-    "symbolName": "wand.and.stars",
+    "icon": "studio",
     "category": "media",
     "background": false,
     "commands": [
@@ -831,7 +1583,7 @@
       {
         "id": "studio",
         "title": "Studio",
-        "symbolName": "wand.and.stars",
+        "icon": "studio",
         "order": 1,
         "detachable": true
       }
@@ -845,6 +1597,37 @@
       "extension:studio"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Edit, compress and convert PDFs, images, video and audio on your Mac.",
+      "summary": "Studio bundles dozens of tools in one place: merge or sign PDFs, remove image backgrounds, compress video, convert audio and edit video on a timeline. Everything runs on this Mac and nothing is uploaded.",
+      "steps": [
+        {
+          "icon": "addFilled",
+          "title": "Add your files",
+          "detail": "Drop them in, choose them, paste, or scan with an iPhone."
+        },
+        {
+          "icon": "studio",
+          "title": "Pick a tool",
+          "detail": "Browse Tools or search, then open the one you need."
+        },
+        {
+          "icon": "adjust",
+          "title": "Adjust and run",
+          "detail": "Set options on the right and run it."
+        },
+        {
+          "icon": "folder",
+          "title": "Find the result",
+          "detail": "Results are listed under Projects with Show in Finder."
+        }
+      ],
+      "examples": [
+        "ed studio tools",
+        "ed studio info pdf.merge",
+        "ed studio run pdf.merge a.pdf b.pdf"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -852,7 +1635,7 @@
   {
     "id": "timeLapse",
     "title": "Screen Recorder",
-    "symbolName": "record.circle",
+    "icon": "record",
     "category": "media",
     "background": false,
     "commands": [],
@@ -860,7 +1643,7 @@
       {
         "id": "timeLapse",
         "title": "Screen Recorder",
-        "symbolName": "record.circle",
+        "icon": "record",
         "order": 3,
         "detachable": true
       }
@@ -874,6 +1657,28 @@
       "extension:timeLapse"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Record your screen, or speed up a long session into a short time-lapse.",
+      "summary": "Record a display or chosen windows at normal speed, or as a time-lapse that captures a frame every few seconds. Recording keeps running if you leave the page. Export a video when you are done. Everything stays on your Mac.",
+      "steps": [
+        {
+          "icon": "display",
+          "title": "Choose what to record",
+          "detail": "Pick a display or specific windows. macOS asks for Screen Recording access the first time."
+        },
+        {
+          "icon": "record",
+          "title": "Press Record",
+          "detail": "Add audio or the cursor under Audio & options, then stop whenever you are done."
+        },
+        {
+          "icon": "share",
+          "title": "Export a video",
+          "detail": "Select a recording, choose a quality and save it as a video file."
+        }
+      ],
+      "examples": []
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -881,7 +1686,7 @@
   {
     "id": "virtualCamera",
     "title": "Virtual Camera",
-    "symbolName": "web.camera",
+    "icon": "virtualCamera",
     "category": "media",
     "background": true,
     "commands": [
@@ -902,7 +1707,7 @@
       {
         "id": "virtualCamera",
         "title": "Virtual Camera",
-        "symbolName": "web.camera",
+        "icon": "virtualCamera",
         "order": 6,
         "detachable": true
       }
@@ -916,13 +1721,45 @@
       "extension:virtualCamera"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Look your best in every video call, with one camera that works everywhere.",
+      "summary": "Edith adds a virtual camera you can pick in Zoom, Meet or FaceTime. Frame your shot, change your look or background, play a video or share a window, and step away behind a card. Nothing leaves your Mac.",
+      "steps": [
+        {
+          "icon": "virtualCamera",
+          "title": "Check your preview",
+          "detail": "Allow camera access and pick a camera, a video or a window as your source."
+        },
+        {
+          "icon": "adjust",
+          "title": "Frame and style it",
+          "detail": "Zoom, pan, change the look or background, and save the result as a scene."
+        },
+        {
+          "icon": "video",
+          "title": "Choose it in your meeting app",
+          "detail": "Select Edith Camera as the camera in Zoom, Meet or FaceTime."
+        },
+        {
+          "icon": "pause",
+          "title": "Step away privately",
+          "detail": "Pause behind a card, a blank screen or a frozen frame, then go live again."
+        }
+      ],
+      "examples": [
+        "ed camera status",
+        "ed camera scene list",
+        "ed camera scene next",
+        "ed camera pause --style card"
+      ]
+    },
     "launchWhen": [],
     "sections": []
   },
   {
     "id": "music",
     "title": "Music",
-    "symbolName": "music.note",
+    "icon": "music",
     "category": "media",
     "background": true,
     "commands": [
@@ -932,7 +1769,7 @@
       {
         "id": "music",
         "title": "Music",
-        "symbolName": "music.note",
+        "icon": "music",
         "order": 5,
         "detachable": true
       }
@@ -948,6 +1785,33 @@
       "extension:music"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Your music in one place, with playback that never gets in your way.",
+      "summary": "Play the songs in your music folder, save audio from YouTube links, or connect Spotify or YouTube Music. Playback keeps going when you close the window, and you control it from the menu bar, the notch or the terminal.",
+      "steps": [
+        {
+          "icon": "music",
+          "title": "Pick your music source",
+          "detail": "Use your local library, or connect Spotify or YouTube Music."
+        },
+        {
+          "icon": "arrowDown",
+          "title": "Add songs",
+          "detail": "Download audio from a YouTube link, or copy files into your music folder."
+        },
+        {
+          "icon": "play",
+          "title": "Press play",
+          "detail": "Open a folder or favourites and play it. Control it from the menu bar too."
+        }
+      ],
+      "examples": [
+        "ed music status",
+        "ed music play",
+        "ed music next",
+        "ed music volume 0.5"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -955,7 +1819,7 @@
   {
     "id": "downloads",
     "title": "Downloads",
-    "symbolName": "arrow.down.circle",
+    "icon": "arrowDown",
     "category": "media",
     "background": true,
     "commands": [
@@ -967,7 +1831,7 @@
       {
         "id": "downloads",
         "title": "Downloads",
-        "symbolName": "arrow.down.circle",
+        "icon": "arrowDown",
         "order": 4,
         "detachable": true
       }
@@ -981,6 +1845,33 @@
       "extension:downloads"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Save videos, audio, photos and posts from links to your Mac.",
+      "summary": "Paste a link from YouTube, Instagram, TikTok, X or Reddit and Edith saves the file for you. Downloads run in the background, so you can close the window and keep working.",
+      "steps": [
+        {
+          "icon": "link",
+          "title": "Paste a link",
+          "detail": "Add one or several links, one per line."
+        },
+        {
+          "icon": "layers",
+          "title": "Choose what to save",
+          "detail": "Pick post, images, audio or video, and the folder to save into."
+        },
+        {
+          "icon": "arrowDown",
+          "title": "Press Download",
+          "detail": "Watch progress in the list, then open or reveal the finished file."
+        }
+      ],
+      "examples": [
+        "ed download add <url>",
+        "ed download ls",
+        "ed download status",
+        "ed download retry --all"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -988,7 +1879,7 @@
   {
     "id": "socialManager",
     "title": "Social Manager",
-    "symbolName": "person.crop.rectangle.stack",
+    "icon": "people",
     "category": "media",
     "background": false,
     "commands": [],
@@ -996,7 +1887,7 @@
       {
         "id": "socialManager",
         "title": "Social Manager",
-        "symbolName": "person.crop.rectangle.stack",
+        "icon": "people",
         "order": 2,
         "detachable": false
       }
@@ -1008,6 +1899,28 @@
       "extension:socialManager"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "All your social accounts, signed in and side by side.",
+      "summary": "Group the accounts for each person, brand or client into a profile. Every account keeps its own login on this Mac, so you can open several at once without signing in and out.",
+      "steps": [
+        {
+          "icon": "personAdd",
+          "title": "Create a profile",
+          "detail": "Name it after a person, brand or client."
+        },
+        {
+          "icon": "plus",
+          "title": "Add accounts",
+          "detail": "Pick Instagram, YouTube, X, LinkedIn or any website and sign in once."
+        },
+        {
+          "icon": "layoutLeft",
+          "title": "Open them side by side",
+          "detail": "Use tabs or resizable panes to work across platforms."
+        }
+      ],
+      "examples": []
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -1015,7 +1928,7 @@
   {
     "id": "database",
     "title": "Database",
-    "symbolName": "cylinder.fill",
+    "icon": "database",
     "category": "developer",
     "background": false,
     "commands": [
@@ -1025,7 +1938,7 @@
       {
         "id": "database",
         "title": "Database",
-        "symbolName": "cylinder.fill",
+        "icon": "database",
         "order": 1,
         "detachable": true
       }
@@ -1039,6 +1952,37 @@
       "extension:database"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Browse and safely edit your databases without leaving your Mac.",
+      "summary": "Save a connection to PostgreSQL, MySQL, SQLite, MongoDB, Redis and more, then browse tables, run queries and edit rows. Risky changes are previewed and need your confirmation first. Passwords stay in your Keychain.",
+      "steps": [
+        {
+          "icon": "addFilled",
+          "title": "Add a connection",
+          "detail": "Pick your database type and enter its host, or choose a file for SQLite."
+        },
+        {
+          "icon": "bolt",
+          "title": "Open it",
+          "detail": "Edith connects and shows the tables, collections or keys inside."
+        },
+        {
+          "icon": "table",
+          "title": "Browse and filter",
+          "detail": "Look through records, search, sort and filter without writing a query."
+        },
+        {
+          "icon": "shield",
+          "title": "Review before changing",
+          "detail": "Edits show exactly what will change and wait for your confirmation."
+        }
+      ],
+      "examples": [
+        "ed database connections list",
+        "ed database connections add notes --product postgresql",
+        "ed database connect <connection-id>"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -1046,7 +1990,7 @@
   {
     "id": "codeStats",
     "title": "Code Stats",
-    "symbolName": "chart.line.uptrend.xyaxis",
+    "icon": "chartLine",
     "category": "developer",
     "background": true,
     "commands": [
@@ -1056,7 +2000,7 @@
       {
         "id": "codeStats",
         "title": "Code Stats",
-        "symbolName": "chart.line.uptrend.xyaxis",
+        "icon": "chartLine",
         "order": 2,
         "detachable": true
       }
@@ -1070,6 +2014,38 @@
       "extension:codeStats"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "See how much code you write, across every GitHub repository you own.",
+      "summary": "Code Stats keeps a read-only copy of your GitHub repositories on a folder you choose, counts your commits and lines, and turns them into streaks, languages and a daily heatmap. Nothing is changed on GitHub.",
+      "steps": [
+        {
+          "icon": "folder",
+          "title": "Choose a storage folder",
+          "detail": "Pick where repository copies are kept; an external drive works."
+        },
+        {
+          "icon": "person",
+          "title": "Confirm it is you",
+          "detail": "Sign in with the GitHub CLI and confirm which emails count as your commits."
+        },
+        {
+          "icon": "sync",
+          "title": "Run the first sync",
+          "detail": "Edith copies and reads your repositories in the background; the first run takes the longest."
+        },
+        {
+          "icon": "chartLine",
+          "title": "Explore your stats",
+          "detail": "Filter by range, repository or language, and share cards as images."
+        }
+      ],
+      "examples": [
+        "ed code-stats status",
+        "ed code-stats run --wait",
+        "ed code-stats report --range 30d",
+        "ed code-stats audit"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -1077,7 +2053,7 @@
   {
     "id": "seoAudit",
     "title": "Site Audit",
-    "symbolName": "doc.text.magnifyingglass",
+    "icon": "seoAudit",
     "category": "developer",
     "background": false,
     "commands": [
@@ -1087,7 +2063,7 @@
       {
         "id": "seoAudit",
         "title": "Site Audit",
-        "symbolName": "doc.text.magnifyingglass",
+        "icon": "seoAudit",
         "order": 3,
         "detachable": true
       }
@@ -1099,6 +2075,38 @@
       "extension:seoAudit"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Find SEO problems on your website, page by page.",
+      "summary": "Add your site's address and Edith lists its pages from the sitemap, then checks titles, descriptions, headings and share cards. Add Lighthouse for performance scores. Reports are saved on this Mac so you can compare runs. Your site is only read, never changed.",
+      "steps": [
+        {
+          "icon": "link",
+          "title": "Add your site",
+          "detail": "Enter a URL like example.com or localhost:3000."
+        },
+        {
+          "icon": "nodes",
+          "title": "Find pages",
+          "detail": "Edith reads your sitemap and lists what it finds."
+        },
+        {
+          "icon": "stepTools",
+          "title": "Choose and run",
+          "detail": "Pick the pages to check and start the audit."
+        },
+        {
+          "icon": "clipboard",
+          "title": "Read the report",
+          "detail": "Open a page to see its issues and how it looks when shared."
+        }
+      ],
+      "examples": [
+        "ed seo create https://example.com --name Example --json",
+        "ed seo start PROJECT --json",
+        "ed seo ls --json",
+        "ed seo pages PROJECT --json"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -1106,7 +2114,7 @@
   {
     "id": "latex",
     "title": "LaTeX",
-    "symbolName": "doc.richtext",
+    "icon": "docText",
     "category": "developer",
     "background": false,
     "commands": [
@@ -1116,7 +2124,7 @@
       {
         "id": "latex",
         "title": "LaTeX",
-        "symbolName": "doc.richtext",
+        "icon": "docText",
         "order": 4,
         "detachable": true
       }
@@ -1128,6 +2136,38 @@
       "extension:latex"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Write LaTeX documents and see the PDF next to your source.",
+      "summary": "Edit .tex files in a built-in editor with a live PDF preview. Keep documents on your Mac, or work on a file in a GitHub repository and let GitHub build the PDF. Your files are never moved, and nothing is uploaded until you choose GitHub.",
+      "steps": [
+        {
+          "icon": "docAdd",
+          "title": "Add a document",
+          "detail": "Choose a .tex file on this Mac, or a source path in a GitHub repository."
+        },
+        {
+          "icon": "edit",
+          "title": "Edit the source",
+          "detail": "Write in the editor with find, undo and insert helpers."
+        },
+        {
+          "icon": "hammer",
+          "title": "Compile",
+          "detail": "Press Command-S to save and build the PDF."
+        },
+        {
+          "icon": "eye",
+          "title": "Preview the PDF",
+          "detail": "The result appears beside your source, with the build log if something fails."
+        }
+      ],
+      "examples": [
+        "ed latex ls --json",
+        "ed latex add --name Paper --file /tmp/main.tex --json",
+        "ed latex compile PROJECT --json",
+        "ed latex preview PROJECT --data --json"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -1135,7 +2175,7 @@
   {
     "id": "attention",
     "title": "Attention",
-    "symbolName": "hourglass",
+    "icon": "hourglass",
     "category": "developer",
     "background": true,
     "commands": [
@@ -1145,7 +2185,7 @@
       {
         "id": "attention",
         "title": "Attention",
-        "symbolName": "hourglass",
+        "icon": "hourglass",
         "order": 5,
         "detachable": true
       }
@@ -1159,6 +2199,38 @@
       "extension:attention"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "See which apps and sites really get your time, and protect your focus.",
+      "summary": "Attention quietly records which app or website is in front of you, then shows where your day went, your focus time and how much your AI agents worked. Everything stays on this Mac unless you turn on iCloud backup.",
+      "steps": [
+        {
+          "icon": "stepTools",
+          "title": "Pick what to track",
+          "detail": "Choose apps, and optionally browser sites, on the setup screen."
+        },
+        {
+          "icon": "shield",
+          "title": "Set your privacy level",
+          "detail": "Store only app names, domains, or more detail; you can change it later."
+        },
+        {
+          "icon": "hourglass",
+          "title": "Use your Mac as usual",
+          "detail": "Charts appear within a few minutes; no need to keep this page open."
+        },
+        {
+          "icon": "timer",
+          "title": "Start a focus session",
+          "detail": "Name a task and a duration to see how much of it was undistracted."
+        }
+      ],
+      "examples": [
+        "ed attention status",
+        "ed attention summary",
+        "ed attention focus status",
+        "ed attention doctor"
+      ]
+    },
     "launchWhen": [],
     "sections": [],
     "hotkeys": []
@@ -1166,7 +2238,7 @@
   {
     "id": "hinge",
     "title": "Hinge",
-    "symbolName": "laptopcomputer.and.arrow.down",
+    "icon": "lidAwake",
     "category": "labs",
     "background": false,
     "commands": [],
@@ -1194,13 +2266,35 @@
       "extension:hinge"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Fold your desktop as you close the lid.",
+      "summary": "Hinge bends your desktop like a hinge when you close the laptop lid, using the lid angle sensor. It is a visual effect only: nothing on your Mac changes. Turn it on with the switch or the shortcut, and turn it off the same way.",
+      "steps": [
+        {
+          "icon": "power",
+          "title": "Turn on the fold",
+          "detail": "Use the switch in settings or press Control Option H."
+        },
+        {
+          "icon": "laptop",
+          "title": "Set your open angle",
+          "detail": "Open the lid the way you normally work and press Use current angle so Hinge knows what open means."
+        },
+        {
+          "icon": "adjust",
+          "title": "Shape the effect",
+          "detail": "Adjust strength, side fill and blur until the fold looks right."
+        }
+      ],
+      "examples": []
+    },
     "pages": [],
     "sections": []
   },
   {
     "id": "windowSweaters",
     "title": "Window Sweaters",
-    "symbolName": "square.dashed",
+    "icon": "selection",
     "category": "labs",
     "background": false,
     "commands": [],
@@ -1217,6 +2311,33 @@
       "extension:windowSweaters"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Knit a colourful sweater around every window.",
+      "summary": "Window Sweaters draws a knitted border around your windows so each app is easy to tell apart at a glance. It is purely visual and never changes your windows. Switch it off any time and your colours are kept.",
+      "steps": [
+        {
+          "icon": "toolbox",
+          "title": "Keep sweaters on",
+          "detail": "The toggle in settings adds or removes the knitting on every window."
+        },
+        {
+          "icon": "palette",
+          "title": "Choose a pattern",
+          "detail": "Give each app its own knitting, or use one pattern and colour for all windows."
+        },
+        {
+          "icon": "adjust",
+          "title": "Adjust the fit",
+          "detail": "Set band width, stitch size and how much unfocused windows dim."
+        },
+        {
+          "icon": "blocked",
+          "title": "Skip some apps",
+          "detail": "List apps that should keep their plain window edges."
+        }
+      ],
+      "examples": []
+    },
     "pages": [],
     "sections": [],
     "hotkeys": []
@@ -1224,7 +2345,7 @@
   {
     "id": "jev",
     "title": "Jev",
-    "symbolName": "sparkles",
+    "icon": "jev",
     "category": "labs",
     "background": false,
     "commands": [
@@ -1237,6 +2358,32 @@
       "extension:jev"
     ],
     "notchTabs": [],
+    "guide": {
+      "tagline": "Faster, smarter decisions behind Edith's smart features.",
+      "summary": "Jev is a fast decision service from TypeSafe. With your own API key saved, Edith uses it for agent attention, docs search, usage matching and alerts. Without a key, every feature keeps working with its built-in rules.",
+      "steps": [
+        {
+          "icon": "key",
+          "title": "Get a TypeSafe key",
+          "detail": "Create an API key at console.typesafe.ai. It is optional."
+        },
+        {
+          "icon": "shield",
+          "title": "Save it in Edith",
+          "detail": "Paste the key into settings. It is stored in your Keychain on this Mac."
+        },
+        {
+          "icon": "success",
+          "title": "Check the key",
+          "detail": "Run a tiny test to confirm it works and has credits."
+        }
+      ],
+      "examples": [
+        "ed jev status",
+        "ed jev status --probe",
+        "ed jev key show"
+      ]
+    },
     "launchWhen": [],
     "pages": [],
     "sections": [],

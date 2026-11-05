@@ -179,7 +179,7 @@ struct HerdrPaneHeader: View {
                             agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                     Text(agent.title)
                         .font(
-                            .system(size: UIScale.pt(11), weight: focused ? .semibold : .medium)
+                            .edithText(.subheadline).weight(focused ? .semibold : .medium)
                         )
                         .foregroundStyle(focused ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                         .lineLimit(1)
@@ -197,8 +197,7 @@ struct HerdrPaneHeader: View {
             .help("Focus \(agent.title). ⌥` moves to the next agent, ⌥⌘ arrows move by direction.")
             viewPicker
             iconButton(
-                zoomed
-                    ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                zoomed ? .collapse : .expand,
                 help: zoomed ? "Restore the layout (⇧⌘↩)" : "Zoom this agent (⇧⌘↩)"
             ) {
                 withAnimation(store.layoutAnimation) {
@@ -206,7 +205,7 @@ struct HerdrPaneHeader: View {
                 }
             }
             menu
-            iconButton("xmark", help: "Close \(agent.title)") {
+            iconButton(.close, help: "Close \(agent.title)") {
                 withAnimation(store.layoutAnimation) {
                     store.close(session.id)
                 }
@@ -237,7 +236,7 @@ struct HerdrPaneHeader: View {
                         store.setView(mode, for: session.id)
                         store.focus(session.id)
                     } label: {
-                        Image(systemName: mode.icon)
+                        EdithIconView(mode.icon)
                             .font(.system(size: UIScale.pt(9.5), weight: .semibold))
                             .foregroundStyle(
                                 shown == mode ? DashSkin.ink(dark) : DashSkin.inkFaint(dark)
@@ -262,12 +261,10 @@ struct HerdrPaneHeader: View {
             Divider()
             menuItems
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+            EdithIcon.more.image(size: 12)
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(20), height: UIScale.pt(20))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .help("More for this agent")
@@ -309,11 +306,11 @@ struct HerdrPaneHeader: View {
         }
     }
 
-    private func iconButton(_ systemImage: String, help: String, action: @escaping () -> Void)
+    private func iconButton(_ icon: EdithIcon, help: String, action: @escaping () -> Void)
         -> some View
     {
         Button(action: action) {
-            Image(systemName: systemImage)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(9.5), weight: .semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(20), height: UIScale.pt(20))

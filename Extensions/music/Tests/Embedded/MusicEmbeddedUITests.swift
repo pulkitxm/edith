@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -342,6 +343,10 @@ import Testing
     }
 
     @Test func originalEmbeddedControllersRenderAtBothWidthsThemesAndZoom() async throws {
+        try await RenderCapture.exclusiveScale { try await renderEmbeddedControllers() }
+    }
+
+    private func renderEmbeddedControllers() async throws {
         let application = NSApplication.shared
         let priorPolicy = application.activationPolicy()
         let priorAppearance = application.appearance
@@ -557,4 +562,25 @@ private final class MusicRenderFixtureView: NSView {
     }
 
     @objc func cancel(_ token: NSString) {}
+}
+
+struct MusicLocalEmptyStateTests {
+    @Test func emptyStateFollowsSearchFavouritesAndFolderDepth() {
+        #expect(
+            EmbeddedMusicLocalEmpty.resolve(search: "", showingFavourites: true, folderPath: "")
+                == .favourites)
+        #expect(
+            EmbeddedMusicLocalEmpty.resolve(
+                search: " jazz ", showingFavourites: true, folderPath: "")
+                == .search("jazz"))
+        #expect(
+            EmbeddedMusicLocalEmpty.resolve(search: "x", showingFavourites: false, folderPath: "A")
+                == .search("x"))
+        #expect(
+            EmbeddedMusicLocalEmpty.resolve(search: "  ", showingFavourites: false, folderPath: "")
+                == .emptyLibrary)
+        #expect(
+            EmbeddedMusicLocalEmpty.resolve(search: "", showingFavourites: false, folderPath: "A/B")
+                == .emptyFolder)
+    }
 }

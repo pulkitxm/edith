@@ -49,7 +49,6 @@ enum MachineProcessModels {
 final class MachineProcessListModel {
     var query = ""
     var sortByMemory = false
-    var selectedPID: Int?
     private(set) var rows: [MachineProcess] = []
     private(set) var totalCount = 0
     let loading = ContentLoad()
@@ -64,9 +63,6 @@ final class MachineProcessListModel {
         }) { rows in
             self.rows = rows
             totalCount = processes.count
-            if let selectedPID, !rows.contains(where: { $0.pid == selectedPID }) {
-                self.selectedPID = nil
-            }
         }
     }
 }

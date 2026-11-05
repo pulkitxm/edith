@@ -7,9 +7,9 @@ struct BifrostGuideOverlay: View {
     let size: CGSize
 
     var body: some View {
-        Canvas { context, canvasSize in
+        let color = DashSkin.accent(true).opacity(0.6)
+        return Canvas { context, canvasSize in
             let style = StrokeStyle(lineWidth: 1, dash: [5, 6])
-            let color = Color.white.opacity(0.35)
             let lines = BifrostGuideLines.fractions(
                 in: CGRect(origin: .zero, size: canvasSize))
             for fraction in lines.vertical {

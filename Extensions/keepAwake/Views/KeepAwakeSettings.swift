@@ -13,18 +13,30 @@ struct KeepAwakeSettings: View {
 
     var body: some View {
         Form {
+            SettingsIssueSection()
             Section {
-                Toggle("Keep awake", isOn: $preventSleep)
-                    .accessibilityLabel("Keep awake")
-                    .accessibilityIdentifier("keepAwake.preventSleep")
-                    .accessibilityAction(.default) { preventSleep.toggle() }
+                Toggle(isOn: $preventSleep.notifyingSettingsChange()) {
+                    Text("Keep awake")
+                    Text(
+                        preventSleep
+                            ? "On. Your Mac and display stay awake until you turn this off."
+                            : "Off. Your Mac follows its normal sleep settings.")
+                }
+                .accessibilityLabel("Keep awake")
+                .accessibilityIdentifier("keepAwake.preventSleep")
+                .accessibilityAction(.default) {
+                    $preventSleep.notifyingSettingsChange().wrappedValue.toggle()
+                }
+            } header: {
+                Text("Stay awake")
+            } footer: {
                 Text(
-                    "Keeps the Mac and display awake until turned off. Closing the lid still sleeps the Mac; use Lid Awake for that."
+                    "Turn this on before a long download, build or presentation. Closing the lid still puts the Mac to sleep; use Lid Awake to keep it running with the lid closed."
                 )
                 .settingsCaption()
             }
         }
-        .edithForm()
+        .settingsForm()
         .onChange(of: preventSleep) { synchronize() }
     }
 }

@@ -2,67 +2,140 @@ import EdithExtensionUI
 import EdithHostCore
 import SwiftUI
 
+struct HostExtensionIcon: View {
+    let entry: HostExtension
+    var size: CGFloat = 40
+    var tint: Color?
+
+    var body: some View {
+        PageGuideBadge(
+            extensionID: entry.id, icon: entry.icon, size: size, tint: tint)
+    }
+}
+
+struct HostInstallControl: View {
+    let title: String
+    let state: HostExtensionRowState
+    var large = false
+    var prominent = true
+    var canCancel = false
+    let perform: (HostExtensionRowState.Action) -> Void
+    let cancel: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        if let progress = state.progress {
+            VStack(alignment: .leading, spacing: UIScale.pt(large ? 8 : 6)) {
+                LoadingProgress(value: progress)
+                    .accessibilityLabel("Installing \(title)")
+                HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                    Text(state.status).font(.edithText(.caption))
+                        .foregroundStyle(DashSkin.inkSoft(scheme == .dark)).monospacedDigit()
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: UIScale.pt(4))
+                    if canCancel {
+                        Button("Cancel", action: cancel).buttonStyle(.edith(.borderless))
+                            .font(.edithText(.caption))
+                            .accessibilityLabel("Cancel installing \(title)")
+                    }
+                }
+            }
+            .frame(
+                minWidth: UIScale.pt(large ? HostExtensionRowMetrics.heroProgressWidth : 120),
+                maxWidth: large ? UIScale.pt(HostExtensionRowMetrics.heroProgressWidth) : .infinity
+            )
+        } else if let action = state.action {
+            Button {
+                perform(action)
+            } label: {
+                Text(label(action)).lineLimit(1)
+            }
+            .buttonStyle(.edith(prominent && state.emphasizesAction ? .primary : .secondary))
+            .controlSize(large ? .large : .small)
+            .fixedSize()
+            .accessibilityLabel(accessibilityLabel(action))
+        }
+    }
+
+    private func label(_ action: HostExtensionRowState.Action) -> String {
+        large && action == .open ? "Open \(title)" : action.title
+    }
+
+    private func accessibilityLabel(_ action: HostExtensionRowState.Action) -> String {
+        switch action {
+        case .download, .update, .retry, .open: "\(action.title) \(title)"
+        default: action.title
+        }
+    }
+}
+
+enum HostExtensionRowMetrics {
+    static let icon = 32.0
+    static let horizontalPadding = PageMetrics.cardPadding
+    static let verticalPadding = 10.0
+    static let contentSpacing = 12.0
+    static let contentHeight = 32.0
+    static let actionWidth = 76.0
+    static let progressWidth = 160.0
+    static let heroProgressWidth = 220.0
+    static let cornerRadius = 12.0
+    static var dividerInset: Double { horizontalPadding + icon + contentSpacing }
+}
+
 struct HostExtensionRow: View {
     let entry: HostExtension
     let state: HostExtensionRowState
-    let subtitle: String
+    let tagline: String
+    var note: String? = nil
+    var canCancel = false
     let details: () -> Void
     let perform: (HostExtensionRowState.Action) -> Void
+    let cancel: () -> Void
     let toggle: (Bool) -> Void
-    @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @State private var hovering = false
 
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            icon
+        HStack(spacing: UIScale.pt(HostExtensionRowMetrics.contentSpacing)) {
+            HostExtensionIcon(
+                entry: entry, size: HostExtensionRowMetrics.icon, tint: DashSkin.inkSoft(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(entry.title).font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark)).lineLimit(1)
                     .accessibilityAddTraits(.isButton)
                     .accessibilityHint("Shows details")
                     .accessibilityAction { details() }
-                if compact {
+                if compact, state.progress == nil {
                     status
                 } else {
-                    Text(subtitle).font(.edithText(.caption))
+                    Text(tagline).font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
                 }
             }
             Spacer(minLength: UIScale.pt(8))
-            if !compact { status.layoutPriority(1) }
-            trailing
+            if !compact, state.progress == nil { status.layoutPriority(1) }
+            action
             Toggle("", isOn: Binding(get: { state.on }, set: toggle))
-                .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                .tint(DashSkin.accent(dark)).disabled(!state.canToggle)
+                .labelsHidden().toggleStyle(.edithSwitch).controlSize(.small)
+                .disabled(!state.canToggle)
                 .accessibilityLabel("\(entry.title) enabled")
         }
-        .padding(.horizontal, UIScale.pt(14))
-        .padding(.vertical, UIScale.pt(10))
+        .frame(minHeight: UIScale.pt(HostExtensionRowMetrics.contentHeight))
+        .padding(.horizontal, UIScale.pt(HostExtensionRowMetrics.horizontalPadding))
+        .padding(.vertical, UIScale.pt(HostExtensionRowMetrics.verticalPadding))
         .background(hovering ? Color.primary.opacity(0.04) : .clear)
         .contentShape(Rectangle())
         .onTapGesture(perform: details)
         .onHover { hovering = $0 }
-        .help(subtitle)
+        .help(tagline)
         .accessibilityElement(children: .contain)
     }
 
-    private var icon: some View {
-        Image(systemName: entry.symbolName)
-            .font(.system(size: UIScale.pt(14), weight: .semibold))
-            .foregroundStyle(state.on ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
-            .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-            .background(
-                state.on ? DashSkin.accent(dark).opacity(0.14) : Color.primary.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(7))
-            )
-            .accessibilityHidden(true)
-    }
-
     private var status: some View {
-        Text(state.status).font(.edithText(.caption)).foregroundStyle(tone)
+        Text(note ?? state.status).font(.edithText(.caption)).foregroundStyle(tone)
             .monospacedDigit().lineLimit(1).truncationMode(.tail)
     }
 
@@ -75,18 +148,72 @@ struct HostExtensionRow: View {
         }
     }
 
-    private var trailing: some View {
-        action.frame(minWidth: UIScale.pt(76), alignment: .trailing)
-    }
-
     @ViewBuilder private var action: some View {
-        if let progress = state.progress {
-            LoadingProgress(value: progress).frame(width: UIScale.pt(64))
-                .accessibilityLabel("Working on \(entry.title)")
-        } else if let action = state.action {
-            Button(action.title) { perform(action) }
-                .buttonStyle(.edith(action == .update ? .primary : .secondary))
-                .controlSize(.small)
+        if state.progress != nil {
+            HostInstallControl(
+                title: entry.title, state: state, canCancel: canCancel, perform: perform,
+                cancel: cancel
+            )
+            .frame(width: UIScale.pt(HostExtensionRowMetrics.progressWidth))
+        } else {
+            ZStack(alignment: .trailing) {
+                Color.clear.frame(width: UIScale.pt(HostExtensionRowMetrics.actionWidth), height: 1)
+                HostInstallControl(
+                    title: entry.title, state: state, prominent: state.stage == .ready,
+                    canCancel: false, perform: perform, cancel: cancel)
+            }
+        }
+    }
+}
+
+struct HostExtensionList: View {
+    let entries: [HostExtension]
+    let row: (HostExtension) -> HostExtensionRow
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                if index > 0 {
+                    Divider().padding(.leading, UIScale.pt(HostExtensionRowMetrics.dividerInset))
+                }
+                row(entry).id(entry.id)
+            }
+        }
+        .edithSurface(cornerRadius: HostExtensionRowMetrics.cornerRadius)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: UIScale.pt(HostExtensionRowMetrics.cornerRadius), style: .continuous))
+    }
+}
+
+struct HostExtensionListSkeleton: View {
+    let rows: Int
+
+    var body: some View {
+        SkeletonReplica("Loading extensions") {
+            VStack(spacing: 0) {
+                ForEach(0..<rows, id: \.self) { index in
+                    if index > 0 {
+                        Divider()
+                            .padding(.leading, UIScale.pt(HostExtensionRowMetrics.dividerInset))
+                    }
+                    HStack(spacing: UIScale.pt(HostExtensionRowMetrics.contentSpacing)) {
+                        SkeletonBlock(
+                            width: HostExtensionRowMetrics.icon,
+                            height: HostExtensionRowMetrics.icon, corner: 7)
+                        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                            SkeletonBlock(width: 120, height: 12)
+                            SkeletonBlock(width: 240, height: 9)
+                        }
+                        Spacer(minLength: 0)
+                        SkeletonBlock(width: 52, height: 24, corner: 7)
+                    }
+                    .padding(.horizontal, UIScale.pt(HostExtensionRowMetrics.horizontalPadding))
+                    .padding(.vertical, UIScale.pt(HostExtensionRowMetrics.verticalPadding))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .edithSurface(cornerRadius: HostExtensionRowMetrics.cornerRadius)
         }
     }
 }

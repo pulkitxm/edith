@@ -8,7 +8,7 @@ import Testing
     private func result(_ kind: BifrostResultKind, _ title: String) -> BifrostResult {
         BifrostResult(
             id: kind.rawValue + ":" + title, kind: kind, title: title, subtitle: "",
-            symbolName: "circle", action: .copy(text: title), score: 1)
+            icon: .ring, action: .copy(text: title), score: 1)
     }
 
     @Test func consecutiveKindsBecomeOneSectionEach() {

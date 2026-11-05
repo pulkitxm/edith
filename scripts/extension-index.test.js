@@ -11,7 +11,7 @@ import {
 const declaration = {
   id: "sample",
   title: "Sample",
-  symbolName: "square",
+  icon: "appTile",
   category: "desk",
   background: false,
   commands: ["sample"],
@@ -95,15 +95,13 @@ test("pages default to detachable and sections name a known page", () => {
   const paged = {
     ...declaration,
     category: "agents",
-    pages: [
-      { id: "samplePage", title: "Sample", symbolName: "star", order: 1 },
-    ],
+    pages: [{ id: "samplePage", title: "Sample", icon: "bookmark", order: 1 }],
     sections: [
       {
         page: "appMaintenance",
         id: "Sample",
         title: "Sample",
-        symbolName: "star",
+        icon: "bookmark",
         summary: "A synthetic section.",
         order: 1,
       },
@@ -114,20 +112,20 @@ test("pages default to detachable and sections name a known page", () => {
     {
       id: "samplePage",
       title: "Sample",
-      symbolName: "star",
+      icon: "bookmark",
       order: 1,
       detachable: true,
     },
   ]);
   expect(validated.sections).toEqual(paged.sections);
   for (const pages of [
-    [{ id: "samplePage", title: "Sample", symbolName: "star" }],
-    [{ id: "samplePage", title: "Sample", symbolName: "star", order: 1.5 }],
+    [{ id: "samplePage", title: "Sample", icon: "bookmark" }],
+    [{ id: "samplePage", title: "Sample", icon: "bookmark", order: 1.5 }],
     [
       {
         id: "samplePage",
         title: "Sample",
-        symbolName: "star",
+        icon: "bookmark",
         order: 1,
         extra: 1,
       },
@@ -136,7 +134,7 @@ test("pages default to detachable and sections name a known page", () => {
       {
         id: "samplePage",
         title: "Sample",
-        symbolName: "star",
+        icon: "bookmark",
         order: 1,
         detachable: "no",
       },

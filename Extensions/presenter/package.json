@@ -1,7 +1,7 @@
 {
   "id": "presenter",
   "title": "Presenter",
-  "symbolName": "theatermasks.fill",
+  "icon": "presenter",
   "category": "utilities",
   "background": true,
   "commands": [
@@ -24,5 +24,31 @@
     "actions",
     "extension:presenter"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Blur private details in Edith while you share your screen.",
+    "summary": "Presenter hides things like music, cost figures, calendar events and agents inside Edith while you present or record. It can turn on by itself when it sees screen sharing, or you switch it by hand with a shortcut. Turn it off and everything is shown again.",
+    "steps": [
+      {
+        "icon": "toolbox",
+        "title": "Choose what to blur",
+        "detail": "Pick the kinds of private details to hide in Presenter settings."
+      },
+      {
+        "icon": "windows",
+        "title": "Let it detect sharing",
+        "detail": "Turn on auto detection and it blurs when a screen share or recording starts."
+      },
+      {
+        "icon": "keyboard",
+        "title": "Force it on or off",
+        "detail": "Use the shortcut or the Presenter card any time, for example when detection guesses wrong."
+      }
+    ],
+    "examples": [
+      "ed presenter status",
+      "ed presenter start",
+      "ed presenter stop"
+    ]
+  }
 }

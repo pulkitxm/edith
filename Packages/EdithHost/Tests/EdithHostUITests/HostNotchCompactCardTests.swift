@@ -388,8 +388,8 @@ private func compactFixtureSnapshot(providerID: String, value: String) throws ->
         rows: [
             .init(
                 "row", sourceID: "synthetic-source", title: "Synthetic original item", value: value,
-                actions: [.init("change", "Change", "checkmark")])
-        ], actions: providerID == "terminal" ? [.init("new", "New terminal", "plus")] : []
+                actions: [.init("change", "Change", .check)])
+        ], actions: providerID == "terminal" ? [.init("new", "New terminal", .plus)] : []
     ).encoded()
 }
 

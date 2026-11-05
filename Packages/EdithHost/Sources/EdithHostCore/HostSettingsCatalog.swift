@@ -6,6 +6,11 @@ public enum HostSettingsCatalog {
     public static let workflowKey = "onboardingWorkflow"
     public static let workflowSelectionKey = "onboardingWorkflowSelection"
     public static let onboardingReviewPendingKey = "onboardingReviewPending"
+    public static let introductionsEnabledKey = "introductionsEnabled"
+    public static let introductionsSeenKey = "introductionsSeen"
+    public static let getStartedDismissedKey = "getStartedDismissed"
+    public static let getStartedTriedKey = "getStartedTriedTool"
+    public static let getStartedAgentKey = "getStartedAgentConnected"
     public static let keys: Set<String> = [
         "SUAutomaticallyUpdate",
         "SUEnableAutomaticChecks",
@@ -72,6 +77,8 @@ public enum HostSettingsCatalog {
         "musicLastTrack",
         "musicWasPlaying",
         onboardingCompletedKey, workflowKey, workflowSelectionKey,
+        introductionsEnabledKey, introductionsSeenKey, getStartedDismissedKey,
+        getStartedTriedKey, getStartedAgentKey,
         "presenterHotKeyCode",
         "presenterHotKeyLabel",
         "presenterHotKeyMods",

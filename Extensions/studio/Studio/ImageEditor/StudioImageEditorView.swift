@@ -24,12 +24,12 @@ struct StudioImageEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             StudioBackBar(
-                title: editor.url.lastPathComponent, subtitle: sizeText, symbol: "photo",
+                title: editor.url.lastPathComponent, subtitle: sizeText, icon: .photo,
                 back: leave
             ) {
                 HStack(spacing: UIScale.pt(6)) {
                     if compact {
-                        Button("Inspector", systemImage: "sidebar.right") {
+                        Button("Inspector", edith: .sidebarRight) {
                             showsInspector.toggle()
                         }
                         .labelStyle(.iconOnly)
@@ -42,7 +42,7 @@ struct StudioImageEditorView: View {
                     Button {
                         editor.undo()
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        EdithIconView(.undo)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .keyboardShortcut("z", modifiers: .command)
@@ -51,7 +51,7 @@ struct StudioImageEditorView: View {
                     Button {
                         editor.redo()
                     } label: {
-                        Image(systemName: "arrow.uturn.forward")
+                        EdithIconView(.redo)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -66,7 +66,7 @@ struct StudioImageEditorView: View {
                     Button {
                         editor.save(studio: model)
                     } label: {
-                        Label("Save", systemImage: "square.and.arrow.down")
+                        Label("Save", edith: .saveTo)
                     }
                     .buttonStyle(.edith(.primary))
                     .keyboardShortcut("s", modifiers: .command)
@@ -95,7 +95,7 @@ struct StudioImageEditorView: View {
             }
             if let status = editor.status {
                 HStack {
-                    Text(status).font(.system(size: UIScale.pt(11.5))).foregroundStyle(.secondary)
+                    Text(status).font(.edithText(.subheadline)).foregroundStyle(.secondary)
                     Spacer()
                     if let saved = editor.lastSaved {
                         Button("Show in Finder") { StudioFileActions.reveal([saved]) }
@@ -163,17 +163,17 @@ struct StudioImageToolRail: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical) {
             VStack(spacing: UIScale.pt(4)) {
                 ForEach(StudioImagePanel.allCases) { panel in
                     Button {
                         editor.switchPanel(panel)
                     } label: {
                         VStack(spacing: UIScale.pt(3)) {
-                            Image(systemName: panel.symbol)
+                            EdithIconView(panel.icon)
                                 .font(.system(size: UIScale.pt(15)))
                             Text(panel.title.components(separatedBy: " ").first ?? panel.title)
-                                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                                .font(.edithText(.caption).weight(.medium))
                                 .lineLimit(1)
                         }
                         .frame(width: UIScale.pt(60), height: UIScale.pt(46))

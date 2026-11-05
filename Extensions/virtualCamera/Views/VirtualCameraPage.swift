@@ -27,6 +27,7 @@ struct VirtualCameraPage: View {
     @StateObject private var model: VirtualCameraPageModel
     @State private var attachment = VirtualCameraPageAttachment()
     @State private var showingInspector = false
+    @State private var stageWidth: CGFloat?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
@@ -36,6 +37,11 @@ struct VirtualCameraPage: View {
     }
 
     private var dark: Bool { scheme == .dark }
+    private var inspectorVisible: Bool { !compact && showingInspector }
+    private var headerColumn: CGFloat? {
+        guard !compact, !showingInspector, let stageWidth else { return nil }
+        return stageWidth + PageMetrics.gutter(compact) * 2
+    }
     private var sceneBinding: Binding<String> {
         Binding(
             get: { model.state.activeSceneID?.uuidString ?? "" },
@@ -55,7 +61,7 @@ struct VirtualCameraPage: View {
     var body: some View {
         PageWorkspace {
             PageHeader(
-                "Virtual Camera",
+                "Virtual Camera", subtitle: model.meetingAppHint,
                 trailing: {
                     HStack(spacing: UIScale.pt(12)) {
                         VirtualCameraStatusPill(model: model, dark: dark)
@@ -64,16 +70,19 @@ struct VirtualCameraPage: View {
                         } label: {
                             Label(
                                 showingInspector ? "Hide controls" : "Show controls",
-                                systemImage: "slider.horizontal.3")
+                                edith: .adjust)
                         }
                         .buttonStyle(.edith(.secondary))
+                        .help("Frame, look, background, overlays and output settings")
                     }
-                })
+                }
+            )
+            .environment(\.pageColumnWidth, headerColumn)
         } content: {
             GeometryReader { geometry in
                 HStack(spacing: UIScale.pt(16)) {
                     meetingStage
-                    if !compact && showingInspector {
+                    if inspectorVisible {
                         VirtualCameraInspector(model: model, dark: dark)
                             .frame(width: min(UIScale.pt(400), geometry.size.width * 0.4))
                     }
@@ -122,18 +131,23 @@ struct VirtualCameraPage: View {
     }
 
     private var meetingStage: some View {
-        VStack(spacing: UIScale.pt(12)) {
-            GeometryReader { geometry in
-                let width = min(geometry.size.width, geometry.size.height * 16 / 9)
-                let height = width * 9 / 16
-                VirtualCameraStage(model: model, dark: dark)
-                    .frame(width: max(0, width), height: max(0, height))
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-            }
+        VStack(alignment: inspectorVisible ? .leading : .center, spacing: UIScale.pt(12)) {
+            VirtualCameraStage(model: model, dark: dark)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .onGeometryChange(for: CGFloat.self) {
+                    $0.size.width
+                } action: {
+                    stageWidth = $0
+                }
+                .frame(
+                    maxWidth: .infinity, alignment: inspectorVisible ? .leading : .center)
             VirtualCameraMeetingControls(model: model, dark: dark)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: stageWidth)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(
+            maxWidth: .infinity, maxHeight: .infinity,
+            alignment: inspectorVisible ? .topLeading : .top)
     }
 }
 
@@ -153,7 +167,7 @@ struct VirtualCameraStatusPill: View {
                 .fill(tint)
                 .frame(width: UIScale.pt(8), height: UIScale.pt(8))
             Text(model.statusHeadline)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(1)
         }
@@ -189,38 +203,44 @@ struct VirtualCameraStage: View {
             }
             if model.state.privacy == .stopped {
                 VStack(spacing: UIScale.pt(12)) {
-                    Image(systemName: "video.slash")
+                    EdithIconView(.videoOff)
                         .font(.system(size: UIScale.pt(32)))
                     Text("Camera stopped")
-                        .font(.system(size: UIScale.pt(18), weight: .semibold))
-                    Text("Capture is off. Press Play to resume.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.title2).weight(.semibold))
+                    Text("Capture is off and meeting apps see no video. Press Play to start again.")
+                        .font(.edithText(.callout))
                 }
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, UIScale.pt(16))
             } else if model.hasNoCameraSource {
                 VStack(spacing: UIScale.pt(12)) {
-                    Image(systemName: "video.slash")
+                    EdithIconView(.videoOff)
                         .font(.system(size: UIScale.pt(32)))
                     Text("No camera connected")
-                        .font(.system(size: UIScale.pt(18), weight: .semibold))
-                    Text("Connect a camera, then refresh the camera list.")
-                        .font(.system(size: UIScale.pt(12)))
-                    Button("Refresh cameras") { model.refreshSources() }
-                        .buttonStyle(.edith(.secondary))
+                        .font(.edithText(.title2).weight(.semibold))
+                    Text(
+                        "Plug in a webcam, or use a video file or a window instead. Then refresh the camera list."
+                    )
+                    .font(.edithText(.callout))
+                    HStack(spacing: UIScale.pt(8)) {
+                        Button("Choose video…") { model.chooseVideo() }
+                            .buttonStyle(.edith(.secondary))
+                        Button("Refresh cameras") { model.refreshSources() }
+                            .buttonStyle(.edith(.primary))
+                    }
                 }
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, UIScale.pt(16))
             } else if let failure = model.previewFailure {
                 VStack(spacing: UIScale.pt(12)) {
-                    Image(systemName: "exclamationmark.triangle")
+                    EdithIconView(.warning)
                         .font(.system(size: UIScale.pt(28)))
                     Text("Camera preview unavailable")
-                        .font(.system(size: UIScale.pt(16), weight: .semibold))
+                        .font(.edithText(.title2).weight(.semibold))
                     Text(failure)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                     Button("Retry camera") { model.retryPreview() }
                         .buttonStyle(.edith(.secondary))
                 }
@@ -228,19 +248,22 @@ struct VirtualCameraStage: View {
                 .multilineTextAlignment(.center)
                 .padding(UIScale.pt(16))
             } else if let title = model.previewLoadingTitle {
-                LoadingContainer(state: .loading) {
-                    EmptyView()
-                } placeholder: {
-                    LoadingIndicator(title).foregroundStyle(.white.opacity(0.7))
+                VStack(spacing: UIScale.pt(10)) {
+                    SkeletonBlock(width: 56, height: 56, corner: 14)
+                    SkeletonBlock(width: 160, height: 12)
+                    Text(title)
+                        .font(.edithText(.callout))
+                        .foregroundStyle(.white.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityElement(children: .combine)
             } else if model.needsCameraAccess && !model.hasPreviewFrame {
                 VirtualCameraAccessPrompt(model: model)
             }
             if CameraPrivacy.shared.hides(.camera), model.state.privacy != .stopped {
                 Color.black
                     .overlay {
-                        Label("Hidden in Presenter Mode", systemImage: "lock.fill")
+                        Label("Hidden in Presenter Mode", edith: .lock)
                             .foregroundStyle(.white.opacity(0.7))
                     }
                     .allowsHitTesting(false)
@@ -268,7 +291,8 @@ struct VirtualCameraStage: View {
                     HStack {
                         Spacer()
                         Text(String(format: "%.1fx", model.composition.framing.zoom))
-                            .font(DashSkin.mono(12, weight: .medium))
+                            .font(.edithText(.callout).weight(.medium))
+                            .monospacedDigit()
                             .foregroundStyle(.white)
                             .padding(.horizontal, UIScale.pt(8))
                             .padding(.vertical, UIScale.pt(4))
@@ -282,6 +306,7 @@ struct VirtualCameraStage: View {
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous))
+        .environment(\.colorScheme, .dark)
         .help("Drag to move the picture. Command-scroll or pinch to zoom. Double-click to reset.")
     }
 }
@@ -292,7 +317,7 @@ struct VirtualCameraBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: UIScale.pt(10), weight: .bold))
+            .font(.edithText(.caption).weight(.bold))
             .tracking(0.6)
             .foregroundStyle(.white)
             .padding(.horizontal, UIScale.pt(7))
@@ -322,18 +347,23 @@ struct VirtualCameraAccessPrompt: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "web.camera")
+            EdithIconView(.virtualCamera)
                 .font(.system(size: UIScale.pt(30)))
                 .foregroundStyle(.white.opacity(0.8))
             Text(
                 model.cameraAccess == .notDetermined
                     ? "Edith needs your camera" : "Camera access is off"
             )
-            .font(.system(size: UIScale.pt(15), weight: .semibold))
+            .font(.edithText(.title3).weight(.semibold))
             .foregroundStyle(.white)
-            Text("Allow camera access to see the preview and frame your shot.")
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(.white.opacity(0.7))
+            Text(
+                model.cameraAccess == .notDetermined
+                    ? "Edith uses your camera only to show this preview and to send it to your meeting apps. Nothing is uploaded."
+                    : "Camera access was turned off for Edith. Turn it back on in System Settings, under Privacy & Security, Camera."
+            )
+            .padding(.horizontal, UIScale.pt(16))
+            .font(.edithText(.callout))
+            .foregroundStyle(.white.opacity(0.7))
             Button(model.cameraAccess == .notDetermined ? "Allow camera" : "Open System Settings") {
                 model.requestCameraAccess()
             }
@@ -354,15 +384,17 @@ struct VirtualCameraSceneStrip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack {
-                Text("Scenes")
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text("Switch with ⌘1 to ⌘9 or ed camera scene apply")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
-                Spacer()
+            HStack(alignment: .top, spacing: UIScale.pt(8)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text("Scenes")
+                        .font(.edithText(.body).weight(.semibold))
+                        .foregroundStyle(DashSkin.ink(dark))
+                    Text("Save your framing, look and overlays. Switch with ⌘1 to ⌘9.")
+                        .font(.edithText(.subheadline))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: UIScale.pt(8))
                 if let active = model.state.activeScene, model.state.activeSceneIsModified {
                     Button(
                         CameraPrivacy.shared.hides(.camera)
@@ -374,7 +406,7 @@ struct VirtualCameraSceneStrip: View {
                     newName = model.suggestedSceneName()
                     naming = true
                 } label: {
-                    Label("Save scene", systemImage: "plus")
+                    Label("Save scene", edith: .plus)
                 }
                 .buttonStyle(.edith(.secondary))
                 .popover(isPresented: $naming, arrowEdge: .bottom) {
@@ -467,7 +499,7 @@ struct VirtualCameraNamePrompt: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text(title)
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .font(.edithText(.body).weight(.semibold))
             TextField("Name", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: UIScale.pt(240))

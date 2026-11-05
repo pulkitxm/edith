@@ -100,28 +100,31 @@ struct MachinesPage: View {
 
     private var header: some View {
         PageHeader(
-            "Machines",
+            "Machines", divider: connectionsEnabled && mode == .fleet,
             trailing: {
                 Button {
                     addSheetPresented = true
                 } label: {
-                    Label("Add machine", systemImage: "plus")
+                    Label("Add machine", edith: .plus)
                 }
+                .help("Connect a computer over SSH")
             },
             accessory: { machineStrip })
     }
 
     private var machineStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(10)) {
-                FleetChip(
-                    title: "All machines", subtitle: "Summary", symbol: "square.grid.2x2",
-                    selected: mode == .fleet, dark: dark
-                ) { modeRaw = MachinesMode.fleet.rawValue }
-                FleetChip(
-                    title: "Workspace", subtitle: "Split panes",
-                    symbol: "rectangle.split.2x1", selected: mode == .workspace, dark: dark
-                ) { modeRaw = MachinesMode.workspace.rawValue }
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                PageChip("All machines", icon: .grid, active: mode == .fleet) {
+                    modeRaw = MachinesMode.fleet.rawValue
+                }
+                .help("A summary of every machine")
+                PageChip(
+                    "Workspace", icon: .layoutLeft, active: mode == .workspace
+                ) {
+                    modeRaw = MachinesMode.workspace.rawValue
+                }
+                .help("Terminals, files and logs in split panes across your machines")
                 if connectionsEnabled {
                     ForEach(model.allMachines) { machine in
                         MachineChip(
@@ -190,10 +193,13 @@ struct MachinesPage: View {
         if !connectionsEnabled {
             Color.clear
         } else if mode == .fleet {
-            FleetHomeView(model: model) { id in
-                modeRaw = MachinesMode.machine.rawValue
-                model.selection = id
-            }
+            FleetHomeView(
+                model: model,
+                onSelect: { id in
+                    modeRaw = MachinesMode.machine.rawValue
+                    model.selection = id
+                },
+                onAddMachine: { addSheetPresented = true })
         } else if mode == .workspace {
             WorkspaceView(machines: model, model: workspace)
         } else if let session = model.selectedSession() {
@@ -201,30 +207,22 @@ struct MachinesPage: View {
                 session: session, model: model,
                 tab: Binding(
                     get: { tab },
-                    set: { storedTab = $0.rawValue }))
+                    set: { storedTab = $0.rawValue }),
+                editConnection: session.isLocal ? nil : { editingMachine = session.machine })
         } else {
             emptyState
         }
     }
 
     private var emptyState: some View {
-        VStack(spacing: UIScale.pt(12)) {
-            Image(systemName: "server.rack")
-                .font(.system(size: UIScale.pt(38)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text("No machines yet")
-                .font(DashSkin.heading(20))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text(
-                "Add a computer you can reach over SSH to watch its resources, browse its files, and run its containers."
-            )
-            .font(.system(size: UIScale.pt(12.5)))
-            .foregroundStyle(DashSkin.inkFaint(dark))
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: UIScale.pt(420))
-            Button("Add machine") { addSheetPresented = true }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        PageEmptyState(
+            icon: .server, title: "No machine selected",
+            message:
+                "Pick a machine from the strip above, or add a computer you can reach over SSH to watch its resources, browse its files and run its containers.",
+            primary: PageAction("Add machine", icon: .plus) { addSheetPresented = true },
+            secondary: PageAction("Show all machines") {
+                modeRaw = MachinesMode.fleet.rawValue
+            })
     }
 
     private func changes(_ secrets: AddMachineSheet.Secrets) -> MachineSecretChanges {
@@ -247,32 +245,28 @@ private struct MachineChip: View {
     let onRemove: () -> Void
 
     var body: some View {
-        SelectableChipRow(
-            icon: isLocal ? "laptopcomputer" : "server.rack",
-            title: machine.name,
-            subtitle: isLocal ? "Local" : machine.subtitle,
-            selected: selected, dark: dark,
-            onSelect: {
-                if NSEvent.modifierFlags.contains(.command) {
-                    onDetach()
-                } else {
-                    onSelect()
-                }
+        Button {
+            if NSEvent.modifierFlags.contains(.command) {
+                onDetach()
+            } else {
+                onSelect()
             }
-        ) {
+        } label: {
             HStack(spacing: UIScale.pt(6)) {
+                PageChipLabel(
+                    machine.name, dot: MachineStatusStyle.color(session.state, dark: dark))
                 if machine.sshClipboardEnabled {
-                    Image(systemName: sshClipboardState.symbol)
+                    EdithIconView(sshClipboardState.icon)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(sshClipboardColor)
                         .help(sshClipboardState.label)
                 }
-                Circle()
-                    .fill(MachineStatusStyle.color(session.state, dark: dark))
-                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
             }
         }
-        .help("\(machine.name) (⌘-click to open in its own window)")
+        .buttonStyle(.pageChip(active: selected))
+        .fixedSize()
+        .help("\(isLocal ? "This Mac" : machine.subtitle) (⌘-click to open in its own window)")
+        .accessibilityLabel(machine.name)
         .contextMenu {
             Button("Open in New Window", action: onDetach)
             if !isLocal {

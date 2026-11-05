@@ -1,3 +1,4 @@
+import AppKit
 import EdithExtensionUI
 import EdithHostCore
 import SwiftUI
@@ -7,14 +8,15 @@ struct HostWorkflowOnboardingView: View {
     let progress: (String) -> Double
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @State private var permissions = HostPermissions()
-    @State private var permissionTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-            PageSectionHeader(title, subtitle: detail)
+        VStack(alignment: .leading, spacing: UIScale.pt(24)) {
+            if model.stage != .finished { stepper }
+            if let failure = model.failure, ![.tools, .installing].contains(model.stage) {
+                PageNotice(failure, tone: .warning)
+            }
             ZStack(alignment: .topLeading) {
                 stageContent
                     .id(model.stage)
@@ -29,253 +31,408 @@ struct HostWorkflowOnboardingView: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .clipped()
-            if let failure = model.failure {
-                Text(failure).font(.edithText(.callout)).foregroundStyle(.orange).textSelection(
-                    .enabled)
-            }
         }
         .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: model.stage)
-        .padding(UIScale.pt(20))
+        .padding(UIScale.pt(compact ? 20 : 24))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(DashSkin.line(dark)))
-        .pageTask {
-            if [.workflows, .review].contains(model.stage), !model.busy { model.refreshCatalog() }
-            await permissions.refresh()
+        .pageTask(id: model.stage) {
+            if model.stage == .permissions {
+                await model.watchPermissions()
+            } else if [.welcome, .workflows, .tools].contains(model.stage),
+                model.catalogRevision == 0, !model.busy
+            {
+                model.refreshCatalog()
+            }
         }
-        .onDisappear {
-            permissionTask?.cancel(); permissionTask = nil; model.cancel()
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            if model.stage == .permissions { model.refreshPermissions() }
         }
     }
 
     @ViewBuilder private var stageContent: some View {
         switch model.stage {
-        case .workflows: workflowChoices
-        case .review: selectionReview
-        case .installing: installProgress
-        case .finished: finished
+        case .welcome: HostOnboardingWelcomeView(model: model)
+        case .workflows: HostOnboardingWorkflowsView(model: model)
+        case .tools: HostOnboardingToolsView(model: model)
+        case .permissions: HostOnboardingPermissionsView(model: model)
+        case .installing: HostOnboardingInstallView(model: model, progress: progress)
+        case .finished: HostOnboardingFinishView(model: model)
         }
     }
 
-    private var title: String {
-        switch model.stage {
-        case .workflows: "Make Edith work for you"
-        case .review: "Choose your tools"
-        case .installing: "Setting up your workflow"
-        case .finished: "Your workflow is ready"
-        }
-    }
-    private var detail: String {
-        switch model.stage {
-        case .workflows:
-            "What do you use your Mac for? Pick a starting point and choose the tools you want."
-        case .review:
-            "Every extension is optional. Review the download and storage sizes before installing."
-        case .installing: "Edith downloads, verifies and starts only the extensions you selected."
-        case .finished:
-            "Your tools are ready. Open feature pages from the sidebar and manage helper tools in Extensions."
-        }
-    }
+    static let stepTitles = ["Welcome", "Workflow", "Tools", "Permissions", "Install"]
 
-    private var workflowChoices: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            LazyVGrid(
-                columns: [
-                    GridItem(.adaptive(minimum: compact ? 200 : 240), spacing: UIScale.pt(12))
-                ], spacing: UIScale.pt(12)
+    private var stepper: some View {
+        let current = min(model.stage.position, Self.stepTitles.count - 1)
+        return VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(4)) {
+                Text("Step \(current + 1) of \(Self.stepTitles.count)")
+                    .foregroundStyle(.secondary).monospacedDigit()
+                Text("·").foregroundStyle(.tertiary)
+                Text(Self.stepTitles[current]).fontWeight(.medium)
+            }
+            .font(.edithText(.caption))
+            HStack(spacing: UIScale.pt(4)) {
+                ForEach(Self.stepTitles.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(index <= current ? DashSkin.accent(dark) : DashSkin.line(dark))
+                        .frame(height: UIScale.pt(4))
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            Text(
+                verbatim:
+                    "Setup step \(current + 1) of \(Self.stepTitles.count): \(Self.stepTitles[current])"
+            ))
+    }
+}
+
+struct HostOnboardingWelcomeView: View {
+    @Bindable var model: HostWorkflowOnboardingModel
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    private var dark: Bool { scheme == .dark }
+
+    static let steps = [
+        PageGuideStep(
+            icon: .stepWorkflow, title: "Pick a workflow",
+            detail: "Tell Edith what you do and it suggests the tools that fit."),
+        PageGuideStep(
+            icon: .stepTools, title: "Choose your tools",
+            detail: "Each tool is a small download. Add or remove any of them later."),
+        PageGuideStep(
+            icon: .stepAccess, title: "Allow what they need",
+            detail: "Approve macOS permissions once, in one place, before you start."),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(24)) {
+            HStack(alignment: .center, spacing: UIScale.pt(16)) {
+                PageGuideBadge(icon: .brand, size: compact ? 40 : 60).flushLeading()
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text("Welcome to Edith").font(.edithText(.title2)).fontWeight(.bold)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Small, native tools for your Mac. Pick only the ones you need.")
+                        .font(.edithText(.callout)).foregroundStyle(DashSkin.inkSoft(dark))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                Text("Setup takes about a minute").font(.edithText(.headline))
+                PageGuideSteps(steps: Self.steps, columns: compact ? 1 : 3)
+                Label(
+                    "Your coding agents can use every tool too, through the ed command line and MCP.",
+                    edith: .terminal
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            HostOnboardingFooter(
+                skip: PageAction(model.skipTitle, identifier: "onboarding.skip-all") {
+                    model.skip()
+                },
+                primary: PageAction(
+                    "Get started", icon: .arrowRight, identifier: "onboarding.start"
+                ) { model.start() },
+                busy: model.busy
             ) {
-                ForEach(HostWorkflow.allCases) { workflow in
-                    Button {
-                        model.choose(workflow)
-                    } label: {
-                        HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                            Image(systemName: workflow.symbol).font(.system(size: UIScale.pt(21)))
-                                .foregroundStyle(DashSkin.accent(dark)).frame(width: UIScale.pt(28))
-                            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                                Text(workflow.title).font(.edithText(.headline))
-                                Text(workflow.detail).font(.edithText(.callout)).foregroundStyle(
-                                    .secondary
-                                ).multilineTextAlignment(.leading)
-                            }
-                            Spacer(minLength: 0)
-                        }.frame(
-                            maxWidth: .infinity, minHeight: UIScale.pt(72), alignment: .topLeading
-                        ).padding(UIScale.pt(12))
-                    }.buttonStyle(.edith(.secondary)).disabled(model.busy)
-                        .accessibilityLabel(workflow.title)
-                        .accessibilityHint(workflow.detail)
+                Button {
+                    model.restoreSelection()
+                } label: {
+                    Label(
+                        model.restoring ? "Restoring from iCloud" : "Restore from iCloud",
+                        edith: .cloudDownload)
                 }
-            }
-            HStack {
-                Button("Restore my iCloud selection") { model.restoreSelection() }.disabled(
-                    model.busy)
-                if model.busy {
-                    LoadingIndicator().frame(width: UIScale.pt(16), height: UIScale.pt(16))
-                }
-                Spacer()
-                Button(model.skipTitle) { model.skip() }.disabled(model.busy)
+                .buttonStyle(.edith(.borderless))
+                .foregroundStyle(DashSkin.accentDeep(dark))
+                .disabled(model.busy)
+                .help("Bring back the tools and settings you backed up from another Mac.")
+                .accessibilityIdentifier("onboarding.restore")
             }
         }
     }
+}
 
-    private var selectionReview: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            costSummary
-            permissionReview
-            Toggle(
-                "Back up my settings to iCloud",
-                isOn: Binding(get: { model.icloudBackup }, set: { model.setICloudBackup($0) })
-            ).disabled(model.busy)
-            ForEach(model.visibleEntries) { entry in
-                HStack(spacing: UIScale.pt(12)) {
-                    Image(systemName: entry.symbolName).foregroundStyle(DashSkin.accent(dark))
-                        .frame(width: UIScale.pt(24))
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        Text(entry.title).font(.edithText(.body))
-                        Text(HostMarketplaceCatalog.subtitles[entry.id] ?? entry.category).font(
-                            .edithText(.caption)
-                        ).foregroundStyle(.secondary).lineLimit(1)
+struct HostOnboardingWorkflowsView: View {
+    @Bindable var model: HostWorkflowOnboardingModel
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(20)) {
+            HostOnboardingStepHeader(
+                "What do you mostly do on your Mac?",
+                subtitle: "Pick the closest fit. You can add or remove tools on the next step.")
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: UIScale.pt(12), alignment: .top),
+                    count: compact ? 2 : 3),
+                alignment: .leading, spacing: UIScale.pt(12)
+            ) {
+                ForEach(HostWorkflow.allCases) { workflow in tile(workflow) }
+            }
+            HostOnboardingFooter(
+                back: { model.back() },
+                skip: PageAction("Skip", identifier: "onboarding.skip-step") { model.skipStep() },
+                busy: model.busy)
+        }
+    }
+
+    private func tile(_ workflow: HostWorkflow) -> some View {
+        let selected = model.workflow == workflow && !model.selected.isEmpty
+        let count = workflow.suggestions(in: model.entries).intersection(model.offeredIDs).count
+        return Button {
+            model.choose(workflow)
+        } label: {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                HStack(alignment: .center) {
+                    PageGuideBadge(icon: workflow.icon, size: 32).flushLeading()
+                    Spacer(minLength: 0)
+                    if selected {
+                        EdithIconView(.success)
+                            .font(.system(size: UIScale.pt(16)))
+                            .foregroundStyle(DashSkin.accent(dark))
+                    } else if workflow != .custom, count > 0 {
+                        Text("\(count) tools").font(.edithText(.caption))
+                            .foregroundStyle(.secondary).monospacedDigit()
                     }
-                    Spacer()
-                    Text(packageNote(entry.id)).font(.edithText(.caption))
-                        .foregroundStyle(.secondary).monospacedDigit()
-                        .help(model.reviewMetadata(for: entry.id).summary)
-                        .accessibilityIdentifier("workflow.package-review.\(entry.id)")
-                    Toggle(
-                        entry.title,
-                        isOn: Binding(
-                            get: { model.selected.contains(entry.id) },
-                            set: { _ in model.toggle(entry.id) })
-                    ).labelsHidden().toggleStyle(.checkbox).disabled(model.busy)
-                }.padding(.vertical, UIScale.pt(4))
-            }
-            HStack {
-                Button("Back") { model.back() }.disabled(model.busy)
-                Button("Refresh sizes") { model.refreshCatalog() }.disabled(model.busy)
-                Spacer()
-                Button("Install \(model.selected.count) extensions") { model.installSelection() }
-                    .buttonStyle(.edith(.primary)).disabled(!model.canInstall)
-                    .accessibilityIdentifier("workflow.install-selection")
-                    .accessibilityLabel(
-                        Text(verbatim: "Install \(model.selected.count) extensions"))
-            }
-        }
-    }
-
-    private var permissionReview: some View {
-        let selected = model.entries.filter { model.selected.contains($0.id) }
-        let required = Set(selected.flatMap(\.requiredPermissions))
-        let optional = Set(selected.flatMap(\.optionalPermissions)).subtracting(required)
-        return Group {
-            if !required.isEmpty || !optional.isEmpty {
-                DisclosureGroup("Permissions for your selection") {
-                    ForEach(
-                        HostPermission.allCases.filter {
-                            required.contains($0) || optional.contains($0)
-                        }, id: \.self
-                    ) { permission in
-                        HStack {
-                            Text(permission.displayName)
-                            HostPermissionInfoButton(permission)
-                            Text(required.contains(permission) ? "Required" : "Optional")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            if permissions.granted[permission] == true {
-                                Label("Granted", systemImage: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            } else if permission.grantsOnFirstUse {
-                                Text("Asked when needed").foregroundStyle(.secondary)
-                            } else {
-                                Button("Grant") {
-                                    permissionTask?.cancel()
-                                    permissionTask = Task { await permissions.request(permission) }
-                                }.disabled(model.busy || permissions.requesting != nil)
-                            }
-                        }.font(.edithText(.callout)).padding(.vertical, UIScale.pt(4))
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text(workflow.title).font(.edithText(.headline))
+                    ZStack(alignment: .topLeading) {
+                        Text(verbatim: " ").lineLimit(2, reservesSpace: true).hidden()
+                        Text(
+                            workflow == .custom
+                                ? "Start with nothing ticked and pick each tool yourself."
+                                : workflow.detail
+                        )
+                        .foregroundStyle(.secondary).multilineTextAlignment(.leading)
+                        .lineLimit(3)
                     }
-                    Text(
-                        "Grant what you are comfortable with. Some tools need permission before they can start."
-                    ).font(.edithText(.caption)).foregroundStyle(.secondary)
+                    .font(.edithText(.caption))
                 }
             }
+            .padding(UIScale.pt(16))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .hostOnboardingTile(highlighted: selected)
+            .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
         }
+        .buttonStyle(HostOnboardingTileButtonStyle())
+        .disabled(model.busy)
+        .accessibilityLabel(workflow.title)
+        .accessibilityHint(workflow.detail)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier("onboarding.workflow.\(workflow.rawValue)")
+    }
+}
+
+struct HostOnboardingStepHeader: View {
+    let title: String
+    let subtitle: String
+
+    init(_ title: String, subtitle: String) {
+        self.title = title
+        self.subtitle = subtitle
     }
 
-    private var costSummary: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            if model.cost.complete {
-                Text(
-                    "\(bytes(model.cost.downloadBytes)) to download · about \(bytes(model.cost.installedBytes)) on disk"
-                ).font(.edithText(.headline)).monospacedDigit()
-                if model.cost.packageIDs.subtracting(model.selected).isEmpty == false {
-                    Text("Includes required dependencies.").font(.edithText(.caption))
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                Text(
-                    "Download sizes are unavailable for \(model.cost.unknownIDs.sorted().joined(separator: ", ")). Refresh before installing."
-                ).font(.edithText(.callout)).foregroundStyle(DashSkin.warn)
-            }
-        }.padding(UIScale.pt(12)).frame(maxWidth: .infinity, alignment: .leading).background(
-            DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            Text(title).font(.edithText(.title3)).fontWeight(.semibold)
+                .accessibilityAddTraits(.isHeader)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(subtitle).font(.edithText(.callout)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct HostOnboardingBadge: View {
+    let text: String
+    let color: Color
+
+    init(_ text: String, _ color: Color) {
+        self.text = text
+        self.color = color
     }
 
-    private var installProgress: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            ForEach(model.entries.filter { model.selected.contains($0.id) }) { entry in
-                HStack {
-                    Text(entry.title)
-                    Spacer()
-                    switch model.states[entry.id] ?? .waiting {
-                    case .waiting: Text("Waiting").foregroundStyle(.secondary)
-                    case .installing: Text("Downloading and starting").foregroundStyle(.secondary)
-                    case .ready:
-                        Label("Ready", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                    case .failed:
-                        Label("Needs retry", systemImage: "exclamationmark.circle").foregroundStyle(
-                            .orange)
+    var body: some View {
+        Text(text).lineLimit(1).fixedSize()
+            .font(.edithText(.caption2)).fontWeight(.semibold)
+            .foregroundStyle(color)
+            .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(2))
+            .background(color.opacity(0.14), in: Capsule())
+    }
+}
+
+struct HostOnboardingTileButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HostOnboardingTileButton(configuration: configuration)
+    }
+}
+
+private struct HostOnboardingTileButton: View {
+    let configuration: ButtonStyle.Configuration
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.isFocused) private var focused
+    @Environment(\.colorScheme) private var scheme
+    @State private var hovering = false
+
+    var body: some View {
+        configuration.label
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(12))
+                    .fill(
+                        Color.primary.opacity(configuration.isPressed ? 0.06 : hovering ? 0.03 : 0)
+                    )
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                if focused {
+                    RoundedRectangle(cornerRadius: UIScale.pt(12))
+                        .strokeBorder(DashSkin.accent(scheme == .dark), lineWidth: 2)
+                        .allowsHitTesting(false)
+                }
+            }
+            .opacity(enabled ? 1 : 0.5)
+            .onHover { hovering = enabled && $0 }
+    }
+}
+
+extension View {
+    func hostOnboardingTile(highlighted: Bool = false) -> some View {
+        modifier(HostOnboardingTile(highlighted: highlighted))
+    }
+}
+
+private struct HostOnboardingTile: ViewModifier {
+    let highlighted: Bool
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        let dark = scheme == .dark
+        let shape = RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
+        content
+            .background {
+                shape.fill(DashSkin.paper(dark))
+                if highlighted { shape.fill(DashSkin.accent(dark).opacity(0.08)) }
+            }
+            .overlay {
+                shape.strokeBorder(
+                    highlighted ? DashSkin.accent(dark).opacity(0.7) : DashSkin.line(dark),
+                    lineWidth: highlighted ? 1.5 : 1)
+            }
+    }
+}
+
+struct HostOnboardingFooter<Leading: View>: View {
+    let back: (() -> Void)?
+    let skip: PageAction?
+    var primary: PageAction?
+    var primaryRole: EdithButtonRole
+    var primaryEnabled: Bool
+    var busy: Bool
+    @ViewBuilder var leading: () -> Leading
+    @Environment(\.compactLayout) private var compact
+
+    init(
+        back: (() -> Void)? = nil, skip: PageAction? = nil, primary: PageAction? = nil,
+        primaryRole: EdithButtonRole = .primary, primaryEnabled: Bool = true, busy: Bool = false,
+        @ViewBuilder leading: @escaping () -> Leading
+    ) {
+        self.back = back
+        self.skip = skip
+        self.primary = primary
+        self.primaryRole = primaryRole
+        self.primaryEnabled = primaryEnabled
+        self.busy = busy
+        self.leading = leading
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            Divider()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: UIScale.pt(12)) {
+                    backButton
+                    leading()
+                    Spacer(minLength: UIScale.pt(12))
+                    trailing
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    HStack(spacing: UIScale.pt(12)) {
+                        Spacer(minLength: 0)
+                        trailing
                     }
-                }.font(.edithText(.callout))
-                if case .installing = model.states[entry.id] {
-                    ProgressView(value: min(1, max(0, progress(entry.id))))
-                }
-                if case .failed(let failure) = model.states[entry.id] {
-                    Text(failure).font(.edithText(.caption)).foregroundStyle(.orange)
-                }
-            }
-            HStack {
-                if model.busy {
-                    Button("Cancel setup") { model.cancel() }
-                } else {
-                    Button("Change selection") { model.back() }
-                    Spacer()
-                    Button("Retry setup") { model.installSelection() }.buttonStyle(.edith(.primary))
-                        .disabled(!model.canInstall)
+                    HStack(spacing: UIScale.pt(12)) {
+                        backButton
+                        leading()
+                        Spacer(minLength: 0)
+                    }
                 }
             }
         }
     }
 
-    private var finished: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Label(
-                model.selected.isEmpty
-                    ? "Start with Home. Add tools whenever you need them."
-                    : "\(model.selected.count) selected extensions are ready.",
-                systemImage: "checkmark.circle.fill"
-            ).foregroundStyle(.green)
-            HStack {
-                Button("Go to Home") { model.dismiss() }.buttonStyle(.edith(.primary))
-                Button("View Storage") { model.openStorage() }
+    @ViewBuilder private var backButton: some View {
+        if let back {
+            Button(action: back) {
+                Label("Back", edith: .chevronLeft)
             }
+            .buttonStyle(.edith(.secondary))
+            .accessibilityIdentifier("onboarding.back").disabled(busy)
         }
     }
-    private func packageNote(_ id: String) -> String {
-        if model.installedIDs.contains(id) { return "Downloaded" }
-        return model.reviewMetadata(for: id).downloadBytes.map(bytes) ?? ""
-    }
 
-    private func bytes(_ count: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
+    @ViewBuilder private var trailing: some View {
+        HStack(spacing: UIScale.pt(16)) {
+            if let skip {
+                Button(skip.title, action: skip.perform).buttonStyle(.edith(.borderless))
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier(skip.identifier ?? "onboarding.skip").disabled(busy)
+            }
+            if let primary {
+                Button(action: primary.perform) {
+                    if let icon = primary.icon {
+                        Label(primary.title, edith: icon)
+                            .labelStyle(HostOnboardingTrailingIconLabelStyle())
+                    } else {
+                        Text(primary.title)
+                    }
+                }
+                .buttonStyle(.edith(primaryRole))
+                .keyboardShortcut(primaryRole == .primary ? .defaultAction : nil)
+                .disabled(!primaryEnabled || busy)
+                .accessibilityIdentifier(primary.identifier ?? "onboarding.primary")
+            }
+        }
+        .fixedSize()
+    }
+}
+
+struct HostOnboardingTrailingIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: UIScale.pt(6)) {
+            configuration.title
+            configuration.icon.imageScale(.small)
+        }
+    }
+}
+
+extension HostOnboardingFooter where Leading == EmptyView {
+    init(
+        back: (() -> Void)? = nil, skip: PageAction? = nil, primary: PageAction? = nil,
+        primaryRole: EdithButtonRole = .primary, primaryEnabled: Bool = true, busy: Bool = false
+    ) {
+        self.init(
+            back: back, skip: skip, primary: primary, primaryRole: primaryRole,
+            primaryEnabled: primaryEnabled, busy: busy, leading: { EmptyView() })
     }
 }

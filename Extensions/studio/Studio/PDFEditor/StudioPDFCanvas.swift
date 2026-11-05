@@ -7,6 +7,7 @@ import SwiftUI
 struct StudioPDFCanvas: NSViewRepresentable {
     let editor: StudioPDFEditorModel
     let showsThumbnails: Bool
+    let theme: AppTheme
 
     func makeCoordinator() -> Coordinator { Coordinator(editor: editor) }
 
@@ -370,7 +371,6 @@ final class StudioPDFCanvasView: PDFView {
                     for point in points.dropFirst() { path.line(to: point) }
                 }
                 path.lineWidth = 2
-                NSColor.systemRed.setStroke()
             case .line, .arrow:
                 path.move(to: a)
                 path.line(to: b)

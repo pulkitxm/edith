@@ -31,7 +31,7 @@ struct StudioSettingsScene: View {
                 }
             }
         }
-        .formStyle(.grouped)
+        .edithForm()
         .pageRefresh(interval: { .seconds(1) }) { model.facade?.refresh() }
     }
 }

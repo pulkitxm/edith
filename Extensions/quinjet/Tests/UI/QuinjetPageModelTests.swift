@@ -208,11 +208,25 @@ import Testing
                 as? [String: [String: String]])
 
         #expect(!request.arguments.contains("--theme"))
-        #expect(payload["light"]?["background"] == "#f7f3ec")
+        #expect(payload["light"]?["background"] != "#f7f3ec")
         #expect(payload["light"]?["accent"] == "#c93400")
-        #expect(payload["dark"]?["background"] == "#1a1714")
+        #expect(payload["dark"]?["background"] != "#1a1714")
         #expect(payload["dark"]?["accent"] == "#ff9f0a")
         #expect(request.arguments.suffix(2) == ["--appearance", "dark"])
+    }
+
+    @Test func hostPaletteKeepsWarmNeutralsOnlyForTheDefaultTheme() {
+        let warm = QuinjetHostTheme.edith(appTheme: .accent)
+        #expect(warm.light.background == 0xf7f3ec)
+        #expect(warm.dark.background == 0x1a1714)
+        for theme in AppTheme.allCases where theme != .accent {
+            let palette = QuinjetHostTheme.edith(appTheme: theme)
+            #expect(palette.light.background != warm.light.background)
+            #expect(palette.light.panel != warm.light.panel)
+            #expect(palette.dark.background != warm.dark.background)
+            #expect(palette.dark.text != warm.dark.text)
+            #expect(palette.dark.accent != warm.dark.accent)
+        }
     }
 
     @Test func persistedAppThemeAndAppearanceRestoreAHostPalette() throws {

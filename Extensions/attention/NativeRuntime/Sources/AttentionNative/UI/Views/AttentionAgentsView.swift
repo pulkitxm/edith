@@ -4,7 +4,6 @@ import SwiftUI
 
 struct AttentionAgentsView: View {
     @Bindable var model: AttentionPageModel
-    @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -12,44 +11,37 @@ struct AttentionAgentsView: View {
         let dark = scheme == .dark
         let violet = AttentionPalette.accent(dark)
         let interval = model.period.interval()
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             if model.spanFilter.classifies {
                 PageNotice(
                     "Agent sessions have no productivity, context or category, so those filters hide them. Search still applies to agents, projects and machines.",
-                    symbol: "sparkles",
+                    icon: .herdr,
                     actions: {
                         Button("Clear filters") { model.clearFilters() }
                     })
             }
-            LazyVGrid(
-                columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
-                spacing: UIScale.pt(12)
-            ) {
-                AttentionTile(
-                    label: "Agent work", value: AttentionFormat.duration(agents.working),
+            PageMetricGrid {
+                PageMetric(
+                    title: "Agent work", value: AttentionFormat.duration(agents.working),
                     detail: AttentionFormat.delta(
-                        agents.working, model.summary.previous?.agentWorking),
-                    tint: violet, symbol: "sparkles")
-                AttentionTile(
-                    label: "Waiting on you", value: AttentionFormat.duration(agents.blocked),
-                    detail: "blocked for input or approval",
-                    tint: DashSkin.inkSoft(dark),
-                    symbol: "hand.raised")
-                AttentionTile(
-                    label: "Peak at once", value: "\(agents.peakConcurrent)",
-                    detail: "agents working together", tint: violet,
-                    symbol: "square.stack.3d.up")
-                AttentionTile(
-                    label: "Sessions", value: "\(agents.sessions.count)",
+                        agents.working, model.summary.previous?.agentWorking), icon: .herdr,
+                    tint: violet)
+                PageMetric(
+                    title: "Waiting on you", value: AttentionFormat.duration(agents.blocked),
+                    detail: "blocked for input or approval", icon: .hand,
+                    tint: DashSkin.inkSoft(dark))
+                PageMetric(
+                    title: "Peak at once", value: "\(agents.peakConcurrent)",
+                    detail: "agents working together", icon: .layers, tint: violet)
+                PageMetric(
+                    title: "Sessions", value: "\(agents.sessions.count)",
                     detail: "\(agents.machines.count) machines · \(agents.kinds.count) kinds",
-                    tint: violet, symbol: "terminal")
-                AttentionTile(
-                    label: "Leverage",
+                    icon: .terminal, tint: violet)
+                PageMetric(
+                    title: "Leverage",
                     value: agents.attended > 0
                         ? String(format: "%.1f×", agents.working / agents.attended) : "n/a",
-                    detail:
-                        "agent time per minute you watched \(AttentionFormat.duration(agents.attended))",
-                    tint: violet, symbol: "arrow.up.right")
+                    detail: "agent time per minute watched", icon: .arrowUpRight, tint: violet)
             }
             if agents.isEmpty {
                 AttentionPanel("Agents") {
@@ -57,7 +49,7 @@ struct AttentionAgentsView: View {
                         text: model.settings.agentTrackingEnabled
                             ? "Edith records every Herdr agent that is working or waiting, on every machine. Activity appears here as sessions run."
                             : "Agent tracking is off. Turn it on in Attention settings.",
-                        symbol: "sparkles")
+                        icon: .herdr)
                 }
             } else {
                 AttentionPanel(
@@ -131,6 +123,7 @@ struct AttentionAgentTable: View {
             }.width(UIScale.pt(60)).customizationID("sessions")
                 .defaultVisibility(compact ? .hidden : .visible)
         }
+        .themedSelection()
         .tableStyle(.inset)
         .font(.edithText(.body))
         .accessibilityLabel("All agent groups")
@@ -175,6 +168,7 @@ struct AttentionAgentSessions: View {
                 }.width(UIScale.pt(100)).customizationID("lastSeen")
                     .defaultVisibility(compact ? .hidden : .visible)
             }
+            .themedSelection()
             .tableStyle(.inset)
             .font(.edithText(.body))
             .accessibilityLabel("All agent sessions")

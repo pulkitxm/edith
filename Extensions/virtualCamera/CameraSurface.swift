@@ -40,15 +40,15 @@ final class CameraSurface {
                 identifier, sourceID: identifier, title: Self.text(camera.name),
                 detail: "Camera source",
                 value: current.state.sourceID == camera.id ? "Selected" : "Available",
-                icon: "camera.fill",
-                actions: [.init("source:" + identifier, "Use camera", "camera.fill")])
+                icon: .camera,
+                actions: [.init("source:" + identifier, "Use camera", .camera)])
         }
         rows += scenes.map { scene in
             let identifier = Self.identity("scene:" + scene.id.uuidString)
             return SurfaceDataRow(
                 identifier, sourceID: identifier, title: Self.text(scene.name),
-                detail: "Camera scene", icon: "rectangle.stack.fill",
-                actions: [.init("scene:" + identifier, "Apply scene", "rectangle.stack.fill")])
+                detail: "Camera scene", icon: .layers,
+                actions: [.init("scene:" + identifier, "Apply scene", .layers)])
         }
         let selected = tile.sourceIDs ?? []
         rows = Array(
@@ -56,15 +56,15 @@ final class CameraSurface {
                 + rows.filter { !selected.contains($0.sourceID) }).prefix(100))
         var actions: [SurfaceAction] = []
         if current.state.privacy != .live {
-            actions.append(.init("resume", "Go live", "video.fill"))
+            actions.append(.init("resume", "Go live", .video))
         } else {
-            actions.append(.init("pause", "Pause camera", "pause.fill"))
+            actions.append(.init("pause", "Pause camera", .pause))
         }
         if current.state.privacy != .stopped, current.recordingPath == nil {
-            actions.append(.init("stop", "Stop camera", "stop.fill"))
+            actions.append(.init("stop", "Stop camera", .stop))
         }
         if current.recordingPath != nil {
-            actions.append(.init("record-stop", "Finish recording", "record.circle"))
+            actions.append(.init("record-stop", "Finish recording", .record))
         }
         let zoom = VirtualCameraFraming.zoomRange
         return .init(
@@ -75,7 +75,7 @@ final class CameraSurface {
             ], rows: rows, actions: actions,
             sliders: [
                 .init(
-                    "zoom", "Zoom", "plus.magnifyingglass",
+                    "zoom", "Zoom", .zoomIn,
                     value: (current.state.composition.framing.zoom - zoom.lowerBound)
                         / (zoom.upperBound - zoom.lowerBound))
             ], sources: rows.map { .init($0.sourceID, $0.title) },

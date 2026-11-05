@@ -29,7 +29,7 @@ struct StudioPDFEditorView: View {
             StudioBackBar(
                 title: editor.url.lastPathComponent,
                 subtitle: editor.pageCount > 0 ? "\(editor.pageCount) pages" : nil,
-                symbol: "doc.richtext", back: leave
+                icon: .docText, back: leave
             ) {
                 trailing
             }
@@ -44,7 +44,8 @@ struct StudioPDFEditorView: View {
                         StudioPDFOrganizeGrid(editor: editor)
                     } else {
                         StudioPDFCanvas(
-                            editor: editor, showsThumbnails: showsThumbnails && !compact)
+                            editor: editor, showsThumbnails: showsThumbnails && !compact,
+                            theme: ThemeStore.current)
                     }
                     if !compact {
                         Divider()
@@ -57,7 +58,7 @@ struct StudioPDFEditorView: View {
                 if let status = editor.status {
                     HStack {
                         Text(status)
-                            .font(.system(size: UIScale.pt(11.5)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(.secondary)
                         Spacer()
                         if let saved = editor.lastSaved {
@@ -124,7 +125,7 @@ struct StudioPDFEditorView: View {
     @ViewBuilder private var trailing: some View {
         HStack(spacing: UIScale.pt(6)) {
             if compact {
-                Button("Inspector", systemImage: "sidebar.right") { showsInspector.toggle() }
+                Button("Inspector", edith: .sidebarRight) { showsInspector.toggle() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.edith(.iconOnly))
                     .popover(isPresented: $showsInspector) {
@@ -137,7 +138,7 @@ struct StudioPDFEditorView: View {
             Button {
                 editor.undo()
             } label: {
-                Image(systemName: "arrow.uturn.backward")
+                EdithIconView(.undo)
             }
             .buttonStyle(.edith(.iconOnly))
             .keyboardShortcut("z", modifiers: .command)
@@ -146,7 +147,7 @@ struct StudioPDFEditorView: View {
             Button {
                 editor.redo()
             } label: {
-                Image(systemName: "arrow.uturn.forward")
+                EdithIconView(.redo)
             }
             .buttonStyle(.edith(.iconOnly))
             .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -157,28 +158,31 @@ struct StudioPDFEditorView: View {
                 Button {
                     editor.zoom(0.8)
                 } label: {
-                    Image(systemName: "minus.magnifyingglass")
+                    EdithIconView(.zoomOut)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut("-", modifiers: .command)
+                .accessibilityLabel("Zoom out")
                 Button {
                     editor.zoomToFit()
                 } label: {
-                    Image(systemName: "arrow.up.left.and.down.right.magnifyingglass")
+                    EdithIconView(.expand)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut("0", modifiers: .command)
+                .accessibilityLabel("Zoom to fit")
                 Button {
                     editor.zoom(1.25)
                 } label: {
-                    Image(systemName: "plus.magnifyingglass")
+                    EdithIconView(.zoomIn)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut("=", modifiers: .command)
+                .accessibilityLabel("Zoom in")
                 Button {
                     showsThumbnails.toggle()
                 } label: {
-                    Image(systemName: "sidebar.left")
+                    EdithIconView(.sidebarLeft)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .help("Show or hide page thumbnails")
@@ -191,7 +195,7 @@ struct StudioPDFEditorView: View {
             } label: {
                 Label(
                     editor.mode == .redact ? "Apply & save" : "Save",
-                    systemImage: "square.and.arrow.down")
+                    edith: .saveTo)
             }
             .buttonStyle(.edith(.primary))
             .keyboardShortcut("s", modifiers: .command)
@@ -206,7 +210,7 @@ struct StudioPDFPasswordPrompt: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
-            Image(systemName: "lock.doc")
+            EdithIconView(.doc)
                 .font(.system(size: UIScale.pt(34), weight: .light))
             Text("This PDF is protected").font(.system(size: UIScale.pt(15), weight: .semibold))
             SecureField(
@@ -216,7 +220,7 @@ struct StudioPDFPasswordPrompt: View {
             .frame(width: UIScale.pt(240))
             .onSubmit { editor.load() }
             if let status = editor.status {
-                Text(status).font(.system(size: UIScale.pt(11.5))).foregroundStyle(DashSkin.danger)
+                Text(status).font(.edithText(.subheadline)).foregroundStyle(DashSkin.danger)
             }
             Button("Unlock") { editor.load() }
                 .buttonStyle(.edith(.primary))
@@ -228,9 +232,40 @@ struct StudioPDFPasswordPrompt: View {
 struct StudioPDFModeBar: View {
     let editor: StudioPDFEditorModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
+            modes
+            let tools = StudioPDFTool.tools(for: editor.mode)
+            if !tools.isEmpty {
+                Divider().frame(height: UIScale.pt(18))
+                ScrollView(.horizontal) { toolButtons(tools) }
+                    .scrollIndicators(.hidden)
+            }
+            Spacer(minLength: 0)
+            if editor.mode != .organize, editor.pageCount > 0 {
+                Text("Page \(editor.currentPage + 1) of \(editor.pageCount)")
+                    .font(.edithText(.caption))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .padding(.horizontal, UIScale.pt(14))
+        .padding(.vertical, UIScale.pt(7))
+    }
+
+    @ViewBuilder private var modes: some View {
+        if compact {
+            PageTabPicker(
+                "PDF mode",
+                selection: Binding(get: { editor.mode }, set: { editor.switchMode($0) }),
+                options: StudioPDFEditorMode.allCases, label: { $0.title }
+            )
+            .fixedSize()
+        } else {
             HStack(spacing: UIScale.pt(2)) {
                 ForEach(StudioPDFEditorMode.allCases, id: \.self) { mode in
                     Button {
@@ -258,40 +293,34 @@ struct StudioPDFModeBar: View {
             .padding(UIScale.pt(3))
             .background(
                 DashSkin.grid(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-            Divider().frame(height: UIScale.pt(18))
-            HStack(spacing: UIScale.pt(2)) {
-                ForEach(StudioPDFTool.tools(for: editor.mode)) { tool in
-                    Button {
-                        editor.tool = tool
-                    } label: {
-                        Image(systemName: tool.symbol)
-                            .font(.system(size: UIScale.pt(13)))
-                            .frame(width: UIScale.pt(30), height: UIScale.pt(26))
-                            .background(
-                                editor.tool == tool
-                                    ? DashSkin.accent(scheme == .dark).opacity(0.18) : Color.clear,
-                                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                            )
-                            .foregroundStyle(
-                                editor.tool == tool
-                                    ? DashSkin.accent(scheme == .dark) : Color.primary
-                            )
-                            .edithButtonTarget(.borderless)
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .help(tool.title)
-                    .accessibilityLabel(tool.title)
+        }
+    }
+
+    private func toolButtons(_ tools: [StudioPDFTool]) -> some View {
+        HStack(spacing: UIScale.pt(2)) {
+            ForEach(tools) { tool in
+                Button {
+                    editor.tool = tool
+                } label: {
+                    EdithIconView(tool.icon)
+                        .font(.system(size: UIScale.pt(13)))
+                        .frame(width: UIScale.pt(30), height: UIScale.pt(26))
+                        .background(
+                            editor.tool == tool
+                                ? DashSkin.accent(scheme == .dark).opacity(0.18) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        )
+                        .foregroundStyle(
+                            editor.tool == tool
+                                ? DashSkin.accent(scheme == .dark) : Color.primary
+                        )
+                        .edithButtonTarget(.borderless)
                 }
-            }
-            Spacer()
-            if editor.mode != .organize, editor.pageCount > 0 {
-                Text("Page \(editor.currentPage + 1) of \(editor.pageCount)")
-                    .font(DashSkin.mono(11))
-                    .foregroundStyle(.secondary)
+                .buttonStyle(.edith(.borderless))
+                .help(tool.title)
+                .accessibilityLabel(tool.title)
             }
         }
-        .padding(.horizontal, UIScale.pt(14))
-        .padding(.vertical, UIScale.pt(7))
     }
 }
 
@@ -304,7 +333,7 @@ struct StudioPDFInspector: View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 Text(StudioPDFHelp.text(for: editor.mode, tool: editor.tool))
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 switch editor.mode {
@@ -353,12 +382,12 @@ struct StudioPDFInspector: View {
             Button {
                 showsSignaturePad = true
             } label: {
-                Label("New signature", systemImage: "plus")
+                Label("New signature", edith: .plus)
             }
             .buttonStyle(.edith(.primary))
             if editor.signatures.isEmpty {
                 Text("Draw, type or import your signature once and reuse it.")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
             }
             ForEach(editor.signatures) { signature in
@@ -388,7 +417,7 @@ struct StudioPDFInspector: View {
                     Button {
                         editor.deleteSignature(signature)
                     } label: {
-                        Image(systemName: "trash")
+                        EdithIconView(.trash)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .help("Delete this signature")
@@ -431,12 +460,12 @@ struct StudioPDFInspector: View {
         }
         StudioInspectorGroup("Marked") {
             Text("\(editor.redactionCount) areas will be removed when you save.")
-                .font(.system(size: UIScale.pt(11.5)))
+                .font(.edithText(.subheadline))
             Text(
                 "Drag on the page to mark an area. Click a mark to select it, drag it to move it, "
                     + "drag its handles to resize it, and use the arrow keys to nudge it."
             )
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             if editor.selectedRedaction != nil {
@@ -482,7 +511,7 @@ struct StudioPDFInspector: View {
         StudioInspectorGroup("Selected pages") {
             let pages = editor.pageSelection
             Text(pages.isEmpty ? "Select pages with their checkboxes." : "\(pages.count) selected")
-                .font(.system(size: UIScale.pt(11.5)))
+                .font(.edithText(.subheadline))
             Button("Rotate right") { editor.rotate(Array(pages), by: 90) }
                 .buttonStyle(.edith(.secondary)).disabled(pages.isEmpty)
             Button("Rotate left") { editor.rotate(Array(pages), by: -90) }
@@ -535,7 +564,7 @@ struct StudioInspectorGroup<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             Text(title.uppercased())
-                .font(DashSkin.mono(9.5, weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold)).monospacedDigit()
                 .foregroundStyle(.secondary)
             content()
         }
@@ -575,10 +604,11 @@ struct StudioPDFStyleControls: View {
                 }
             }
             HStack {
-                Text("Line").font(.system(size: UIScale.pt(11)))
+                Text("Line").font(.edithText(.subheadline))
                 Slider(value: $style.lineWidth, in: 0.5...12, step: 0.5)
-                Text(String(format: "%.1f", style.lineWidth)).font(DashSkin.mono(10)).frame(
-                    width: UIScale.pt(30))
+                Text(String(format: "%.1f", style.lineWidth))
+                    .font(.edithText(.caption)).monospacedDigit()
+                    .frame(width: UIScale.pt(30))
             }
             Toggle(
                 "Fill shapes",
@@ -595,10 +625,11 @@ struct StudioPDFStyleControls: View {
             if showsFont {
                 StudioFontField(family: $style.fontName)
                 HStack {
-                    Text("Size").font(.system(size: UIScale.pt(11)))
+                    Text("Size").font(.edithText(.subheadline))
                     Slider(value: $style.fontSize, in: 6...72, step: 1)
-                    Text("\(Int(style.fontSize))").font(DashSkin.mono(10)).frame(
-                        width: UIScale.pt(30))
+                    Text("\(Int(style.fontSize))")
+                        .font(.edithText(.caption)).monospacedDigit()
+                        .frame(width: UIScale.pt(30))
                 }
             }
         }

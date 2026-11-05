@@ -13,6 +13,8 @@ typealias AppMaintenanceDiscover =
         [InstalledApplication], Data?, Bool,
         @escaping @Sendable (AppUpdateDiscoveryBatch) async -> Void
     ) async -> [AppUpdateItem]
+typealias AppMaintenanceScan =
+    @Sendable (URL, @escaping @Sendable () -> Bool) throws -> AppMaintenancePlan
 
 @MainActor
 final class AppMaintenanceUIMemory {
@@ -72,6 +74,7 @@ final class AppMaintenanceModel {
     private let snapshots: AppMaintenanceSnapshotStore
     private let inventory: AppMaintenanceInventoryLoad
     private let discover: AppMaintenanceDiscover
+    private let scan: AppMaintenanceScan
     private let now: @Sendable () -> Date
     private var backgroundDiscovery: Task<Void, Never>?
     private var loadedBackgroundSnapshot = false
@@ -102,6 +105,9 @@ final class AppMaintenanceModel {
             await AppUpdateDiscovery.discoverChannels(
                 applications: applications, brewData: brewData, brewFresh: brewFresh,
                 onBatch: onBatch)
+        },
+        scan: @escaping AppMaintenanceScan = { url, isCancelled in
+            try AppMaintenanceExecution.plan(applicationURL: url, isCancelled: isCancelled)
         }
     ) {
         preferenceDefaults = defaults
@@ -110,6 +116,7 @@ final class AppMaintenanceModel {
         self.snapshots = snapshots
         self.inventory = inventory
         self.discover = discover
+        self.scan = scan
         self.now = now
     }
     private var securityScopedURL: URL?
@@ -636,9 +643,8 @@ final class AppMaintenanceModel {
         phase = .scanning
         launch { [self] cancellation in
             do {
-                let loaded = try await BlockingWork.perform {
-                    try AppMaintenanceExecution.plan(
-                        applicationURL: application.url, isCancelled: { cancellation.isCancelled })
+                let loaded = try await BlockingWork.perform { [scan] in
+                    try scan(application.url, { cancellation.isCancelled })
                 }
                 guard !stopped, !suspending, !Task.isCancelled,
                     selectedApplicationID == application.id

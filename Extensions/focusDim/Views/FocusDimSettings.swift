@@ -12,65 +12,77 @@ struct FocusDimSettings: View {
     @AppStorage(AppStorageKeys.FocusDim.otherDisplaysMode, store: SharedDefaults.store) private
         var mode = FocusDimDisplayMode.perScreenFront.rawValue
 
+    private var displayMode: FocusDimDisplayMode { FocusDimDisplayMode.from(mode) }
+
     var body: some View {
         Form {
-            Section {
-                Toggle("Dim now", isOn: $active.notifyingSettingsChange())
-                Text(
-                    "Turns the dimming on and off. The shortcut keeps working either way; removing the extension is a separate switch."
-                )
-                .settingsCaption()
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    LabeledContent("Intensity") {
-                        Text("\(Int(intensity * 100))%")
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+            if !presentation.active {
+                Section {
+                    SettingsNoticeRow(
+                        "Focus Dim is off",
+                        message: "Turn it on to dim background windows and change these settings.",
+                        icon: .power)
+                }
+            } else if presentation.ready, let error = presentation.error {
+                Section {
+                    SettingsErrorRow(
+                        "Focus Dim is not responding", message: error,
+                        retry: presentation.retry)
+                }
+            }
+            Group {
+                Section {
+                    Toggle(isOn: $active.notifyingSettingsChange()) {
+                        Text("Dim background windows")
+                        Text(
+                            "Darkens everything behind the window you are working in. Nothing is closed or moved."
+                        )
                     }
-                    Slider(
+                    SettingsShortcutRow(
+                        keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F",
+                        purpose: "Turns dimming on or off from any app.")
+                }
+                Section("Appearance") {
+                    SettingsSliderRow(
+                        "Strength", subtitle: "How dark the background gets.",
                         value: $intensity.notifyingSettingsChange(),
-                        in: FocusDimMath.intensityRange)
-                    Text("How dark the background gets.")
-                        .settingsCaption()
-                }
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    LabeledContent("Animation") {
-                        Text(String(format: "%.2fs", animationDuration))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    Slider(
+                        in: FocusDimMath.intensityRange,
+                        readout: "\(Int((intensity * 100).rounded()))%")
+                    SettingsSliderRow(
+                        "Fade speed",
+                        subtitle: "How quickly the dimming follows you to another app.",
                         value: $animationDuration.notifyingSettingsChange(),
-                        in: FocusDimMath.animationDurationRange)
-                    Text("How quickly the dim follows you when switching apps.")
-                        .settingsCaption()
+                        in: FocusDimMath.animationDurationRange,
+                        readout: String(format: "%.2f s", animationDuration))
+                    Picker(selection: $mode.notifyingSettingsChange()) {
+                        Text("Keep front windows bright")
+                            .tag(FocusDimDisplayMode.perScreenFront.rawValue)
+                        Text("Dim them completely").tag(FocusDimDisplayMode.dimUnfocused.rawValue)
+                    } label: {
+                        Text("Other displays")
+                        Text(
+                            displayMode == .perScreenFront
+                                ? "Each display keeps its front window bright."
+                                : "Displays you are not typing on go fully dark, so you can see where your keyboard is."
+                        )
+                    }
+                    .pickerStyle(.menu)
                 }
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    EdithSegmentedPicker(
-                        "Other displays", selection: $mode.notifyingSettingsChange(),
-                        options: FocusDimDisplayMode.allCases.map(\.rawValue),
-                        label: {
-                            $0 == FocusDimDisplayMode.perScreenFront.rawValue
-                                ? "Highlight front window" : "Dim unfocused fully"
-                        })
-                    Text(
-                        "Highlight the front window on each screen, or fully dim displays without keyboard focus so you can tell where you're typing."
-                    )
-                    .settingsCaption()
-                }
-                LabeledContent {
-                    HotKeyRecorderControl(keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F")
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Toggle hotkey")
-                        InfoDot("Flip dimming on or off from anywhere.")
+                Section("Permission") {
+                    LabeledContent {
+                        Button("Allow Access") { presentation.perform("screenRecording") }
+                            .buttonStyle(.edith(.secondary))
+                    } label: {
+                        Text("Screen Recording")
+                        Text(
+                            "macOS asks once so Focus Dim can see where your windows are. Nothing is recorded or saved."
+                        )
                     }
                 }
-                Button("Allow Screen Recording") { presentation.perform("screenRecording") }
-                    .disabled(!presentation.active)
             }
             .disabled(!presentation.active)
             .opacity(presentation.active ? 1 : 0.5)
         }
-        .edithForm()
+        .settingsForm()
     }
 }

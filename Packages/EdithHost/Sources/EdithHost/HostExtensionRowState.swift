@@ -6,13 +6,18 @@ struct HostExtensionRowState: Equatable {
         case neutral, positive, attention, failure
     }
 
+    enum Stage: Equatable {
+        case notInstalled, downloading, verifying, starting, ready, installed, updateAvailable,
+            failed, pending, unavailable
+    }
+
     enum Action: Equatable {
         case open, download, update, retry, retryDisable, remove
 
         var title: String {
             switch self {
             case .open: "Open"
-            case .download: "Download"
+            case .download: "Get"
             case .update: "Update"
             case .retry: "Retry"
             case .retryDisable: "Retry disable"
@@ -21,11 +26,13 @@ struct HostExtensionRowState: Equatable {
         }
     }
 
+    let stage: Stage
     let status: String
     let tone: Tone
     let action: Action?
     let on: Bool
     let canToggle: Bool
+    let isInstalled: Bool
     let progress: Double?
 
     @MainActor init(_ entry: HostExtension, marketplace: HostMarketplace) {
@@ -38,13 +45,25 @@ struct HostExtensionRowState: Equatable {
         let operation = marketplace.operations[id]
         let failure = marketplace.failures[id] ?? marketplace.sessions.failureReasons[id]
         on = marketplace.surfaceAvailability.activeIDs.contains(id) || state == .starting
-        progress = operation.map(\.fraction) ?? (marketplace.isBusy(id) ? 0 : nil)
+        isInstalled = installed != nil
+        let starting = operation == nil && state == .starting
+        progress =
+            operation.map(\.fraction) ?? (starting ? 0.97 : (marketplace.isBusy(id) ? 0 : nil))
         canToggle = progress == nil && !removing && (installed != nil || available != nil)
+        let pendingDisable = marketplace.sessions.pendingDisableIDs.contains(id)
+        let ready = marketplace.readyIDs.contains(id)
+        stage = Self.resolveStage(
+            removing: removing, pendingDisable: pendingDisable, operation: operation,
+            starting: starting, installed: installed != nil, downloaded: downloaded,
+            available: available != nil, updateAvailable: marketplace.updateAvailable(id: id),
+            failed: state == .failed || failure != nil, on: on, ready: ready)
         if removing {
             (status, tone, action) = ("Removal pending", .attention, .remove)
         } else if let operation {
             (status, tone, action) = (operation.summary, .neutral, nil)
-        } else if marketplace.sessions.pendingDisableIDs.contains(id) {
+        } else if starting {
+            (status, tone, action) = ("Starting", .neutral, nil)
+        } else if pendingDisable {
             (status, tone, action) = (
                 "Disable pending · \(installed?.version ?? "Update required")", .attention,
                 .retryDisable
@@ -62,9 +81,10 @@ struct HostExtensionRowState: Equatable {
                     "Update available · \(available.version)", .attention, .update
                 )
             } else if on {
+                let route = HostExtensionActions.openTarget(extensionID: id) != nil
                 (status, tone, action) = (
-                    "On · \(installed.version)", .positive,
-                    HostNavigationCatalog.route(extensionID: id) == nil ? nil : .open
+                    ready ? "Ready" : "On · \(installed.version)", .positive,
+                    route ? .open : nil
                 )
             } else {
                 (status, tone, action) = ("Off · \(installed.version)", .neutral, nil)
@@ -80,10 +100,37 @@ struct HostExtensionRowState: Equatable {
             )
         } else if available != nil {
             (status, tone, action) = (
-                failure ?? "Not installed", failure == nil ? .neutral : .failure, .download
+                failure ?? "Not installed", failure == nil ? .neutral : .failure,
+                failure == nil ? .download : .retry
             )
         } else {
             (status, tone, action) = ("Not available", .neutral, nil)
         }
+    }
+
+    var emphasizesAction: Bool { stage != .installed }
+
+    static func resolveStage(
+        removing: Bool, pendingDisable: Bool, operation: HostExtensionOperation?, starting: Bool,
+        installed: Bool, downloaded: Bool, available: Bool, updateAvailable: Bool, failed: Bool,
+        on: Bool, ready: Bool
+    ) -> Stage {
+        if removing || pendingDisable { return .pending }
+        if let operation {
+            switch operation.phase {
+            case .verifying: return .verifying
+            case .starting: return .starting
+            case .working, .queued, .downloading, .installing: return .downloading
+            }
+        }
+        if starting { return .starting }
+        if installed {
+            if failed { return .failed }
+            if updateAvailable { return .updateAvailable }
+            return on && ready ? .ready : .installed
+        }
+        if downloaded { return available ? (failed ? .failed : .updateAvailable) : .unavailable }
+        if available { return failed ? .failed : .notInstalled }
+        return .unavailable
     }
 }

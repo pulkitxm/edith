@@ -51,7 +51,7 @@ struct UsageMachineSettingsRows: View {
                 "Edith runs its collector on a ticked machine over SSH and installs what it "
                     + "is missing there. Each agent it finds arrives as its own usage source."
             )
-            .font(.system(size: UIScale.pt(10)))
+            .font(.edithText(.caption))
         }
         .pageTask { await reload() }
         .onChange(of: collecting) { was, now in
@@ -88,7 +88,7 @@ struct UsageMachineSettingsRows: View {
                 Button {
                     forget(machine)
                 } label: {
-                    Image(systemName: "trash")
+                    EdithIconView(.trash)
                 }
                 .buttonStyle(.edith(.borderless))
                 .help("Drop what \(machine.name) gave and stop counting it")

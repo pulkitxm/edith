@@ -152,6 +152,27 @@ import Testing
         #expect(!TerminalSearchBar.shouldDebounce("abc"))
     }
 
+    @Test @MainActor func overlaysShowTheInjectedIcons() {
+        let link = NSImage(size: NSSize(width: 12, height: 12))
+        let file = NSImage(size: NSSize(width: 12, height: 12))
+        let previous = NSImage(size: NSSize(width: 16, height: 16))
+        let next = NSImage(size: NSSize(width: 16, height: 16))
+        let close = NSImage(size: NSSize(width: 16, height: 16))
+        let icons = TerminalOverlayIcons(
+            link: link, file: file, previous: previous, next: next, close: close)
+        let hover = TerminalLinkHoverView(frame: .zero)
+        hover.icons = icons
+        hover.show("https://example.com")
+        #expect(hover.icon.image === link)
+        hover.show("/tmp/report.txt", revealsFile: true)
+        #expect(hover.icon.image === file)
+        let search = TerminalSearchBar(frame: .zero)
+        search.icons = icons
+        #expect(search.previousButton.image === previous)
+        #expect(search.nextButton.image === next)
+        #expect(search.closeButton.image === close)
+    }
+
     @Test func modifierTransitionsSendPressAndRelease() throws {
         let pressed = try #require(
             NSEvent.keyEvent(

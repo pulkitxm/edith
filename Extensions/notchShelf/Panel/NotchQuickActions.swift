@@ -102,7 +102,7 @@ extension NotchPanelEngine {
         }
         return NotchAlert(
             id: providerID == "lidAwake" ? "lid-awake.action" : providerID + ".action",
-            icon: "exclamationmark.circle.fill", tint: "#e0664f", title: title,
+            icon: .alert, tint: "#e0664f", title: title,
             subtitle: error.localizedDescription, priority: .high,
             autoHide: providerID == "lidAwake" ? 5 : 3)
     }
@@ -152,23 +152,24 @@ struct NotchQuickActionsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if tile.showTitle {
-                Label(tile.displayTitle, systemImage: "bolt").font(
+                Label(tile.displayTitle, edith: .bolt).font(
                     .edithText(.caption).weight(.semibold))
             }
             SurfaceControlLayout(minimumWidth: 110, cellHeight: tile.dense ? 62 : 82) {
                 if client.activeIDs.contains("system") {
-                    actionTile("keyboard", "Clean keys", active: false) {
+                    actionTile(.keyboard, "Clean keys", active: false) {
                         perform("system", "cleanKeys")
                     }
                 }
                 if client.activeIDs.contains("keepAwake") {
                     actionTile(
-                        activeAwake ? "moon.zzz.fill" : "moon.zzz", "Keep awake",
-                        active: activeAwake
-                    ) { perform("keepAwake", activeAwake ? "disable" : "enable") }
+                        activeAwake ? .keepAwakeOn : .moon, "Keep awake", active: activeAwake
+                    ) {
+                        perform("keepAwake", activeAwake ? "disable" : "enable")
+                    }
                 }
                 if client.activeIDs.contains("lidAwake") {
-                    actionTile("laptopcomputer", "Lid awake", active: activeLid) {
+                    actionTile(.laptop, "Lid awake", active: activeLid) {
                         if activeLid {
                             perform("lidAwake", "off")
                         } else {
@@ -184,12 +185,12 @@ struct NotchQuickActionsView: View {
                     }
                 }
                 if client.activeIDs.contains("presenter") {
-                    actionTile("person.wave.2", "Presenter", active: activePresenter) {
+                    actionTile(.person, "Presenter", active: activePresenter) {
                         perform("presenter", activePresenter ? "stop" : "start")
                     }
                 }
                 if client.activeIDs.contains("colorPicker") {
-                    actionTile("eyedropper", "Pick color", active: false) {
+                    actionTile(.eyedropper, "Pick color", active: false) {
                         perform("colorPicker", "pick")
                     }
                 }
@@ -227,21 +228,22 @@ struct NotchQuickActionsView: View {
     }
 
     private func actionTile(
-        _ icon: String, _ title: String, active: Bool, action: @escaping () -> Void
+        _ icon: EdithIcon, _ title: String, active: Bool, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        let activeInk = OnAccent.foreground(on: tile.highlightColor, dark: true)
+        return Button(action: action) {
             VStack(spacing: 6) {
                 if tile.shows("icons") {
-                    Image(systemName: icon).font(.system(size: 17, weight: .medium))
+                    EdithIconView(icon).font(.system(size: 17, weight: .medium))
                 }
                 Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
                 if tile.showDetails, !tile.dense, tile.shows("descriptions") {
                     Text(detail(title)).font(.edithText(.caption2))
-                        .foregroundStyle(active ? .black.opacity(0.65) : .secondary)
+                        .foregroundStyle(active ? activeInk.opacity(0.65) : .secondary)
                         .lineLimit(2).multilineTextAlignment(.center)
                 }
             }.padding(8).frame(maxWidth: .infinity, maxHeight: .infinity)
-                .foregroundStyle(active ? Color.black : Color.white.opacity(0.85))
+                .foregroundStyle(active ? activeInk : Color.white.opacity(0.85))
                 .background(
                     active ? tile.highlightColor : Color.white.opacity(0.055),
                     in: RoundedRectangle(cornerRadius: 10))

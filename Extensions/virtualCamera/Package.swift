@@ -17,6 +17,10 @@ let package = Package(
             ], path: ".", exclude: ["Tests", "Carrier", "ProviderFactory", "Privileged"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "VirtualCameraExtensionTests", dependencies: ["VirtualCameraExtension"],
+            name: "VirtualCameraExtensionTests",
+            dependencies: [
+                "VirtualCameraExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ],
             path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

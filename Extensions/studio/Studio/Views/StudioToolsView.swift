@@ -49,11 +49,11 @@ struct StudioToolsView: View {
         let tools = StudioToolCatalogQuery.tools(filter: model.toolFilter, query: model.toolQuery)
         let groups = StudioToolGrouping.byGroup(tools)
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: UIScale.pt(18)) {
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(24)) {
                 let controls =
                     compact
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(10)))
-                    : AnyLayout(HStackLayout(spacing: UIScale.pt(10)))
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(12)))
+                    : AnyLayout(HStackLayout(spacing: UIScale.pt(12)))
                 controls {
                     SearchField(
                         placeholder: "Search tools",
@@ -61,7 +61,7 @@ struct StudioToolsView: View {
                     )
                     .frame(maxWidth: compact ? .infinity : UIScale.pt(260))
                     PageTabPicker(
-                        title: "Tool category",
+                        "Tool category",
                         selection: Binding(
                             get: { model.toolFilter }, set: { model.toolFilter = $0 }),
                         options: StudioToolFilter.available, label: { $0.title })
@@ -72,24 +72,24 @@ struct StudioToolsView: View {
                     StudioWorkflowSection(model: model)
                 }
                 if groups.isEmpty {
-                    Text("No tools match \"\(model.toolQuery)\".")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, UIScale.pt(40))
+                    PageEmptyState(
+                        icon: .search,
+                        title: "No tools match your search",
+                        message:
+                            "Nothing matches \"\(model.toolQuery)\". Try a shorter word such as pdf, compress or convert, or browse every tool.",
+                        primary: PageAction("Show all tools", icon: .grid) {
+                            model.toolQuery = ""
+                            model.toolFilter = .all
+                        }
+                    )
+                    .frame(minHeight: UIScale.pt(280))
                 }
                 ForEach(groups, id: \.group) { entry in
-                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                        Text(entry.group.title.uppercased())
-                            .font(DashSkin.mono(10, weight: .semibold))
-                            .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
-                        LazyVGrid(
-                            columns: PageMetrics.cardColumns(compact, minimum: 240, spacing: 12),
-                            alignment: .leading, spacing: UIScale.pt(12)
-                        ) {
-                            ForEach(entry.tools) { tool in
-                                StudioToolCard(tool: tool, environment: model.environment) {
-                                    model.open(tool, with: model.selectedURLs)
-                                }
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        PageCapsLabel(entry.group.title)
+                        StudioTileGrid(items: entry.tools) { tool in
+                            StudioToolCard(tool: tool, environment: model.environment) {
+                                model.open(tool, with: model.selectedURLs)
                             }
                         }
                     }
@@ -102,12 +102,17 @@ struct StudioToolsView: View {
     }
 }
 
+enum StudioCardMetrics {
+    static let toolCardHeight = 138.0
+}
+
 struct StudioToolCard: View {
     let tool: StudioTool
     let environment: StudioEnvironment
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -118,10 +123,10 @@ struct StudioToolCard: View {
                     StudioToolBadges(tool: tool, environment: environment)
                 }
                 Text(tool.title)
-                    .font(.system(size: UIScale.pt(13.5), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(scheme == .dark))
                 Text(tool.summary)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
@@ -129,7 +134,10 @@ struct StudioToolCard: View {
                 Spacer(minLength: 0)
             }
             .padding(UIScale.pt(14))
-            .frame(maxWidth: .infinity, minHeight: UIScale.pt(138), alignment: .topLeading)
+            .frame(
+                maxWidth: .infinity, minHeight: UIScale.pt(StudioCardMetrics.toolCardHeight),
+                maxHeight: .infinity, alignment: .topLeading
+            )
             .background(
                 DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12))
             )
@@ -137,16 +145,16 @@ struct StudioToolCard: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(12))
                     .strokeBorder(
                         hovering
-                            ? StudioPalette.tint(for: tool).opacity(0.6)
+                            ? DashSkin.accent(scheme == .dark).opacity(0.6)
                             : DashSkin.line(scheme == .dark))
             )
-            .offset(y: hovering ? -1 : 0)
+            .offset(y: hovering && !reduceMotion ? -1 : 0)
             .shadow(color: .black.opacity(hovering ? 0.08 : 0), radius: 6, y: 3)
             .edithButtonTarget(.borderless)
         }
         .buttonStyle(.edith(.borderless))
         .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
+        .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering)
         .accessibilityLabel(tool.title)
         .accessibilityHint(tool.summary)
     }
@@ -170,7 +178,7 @@ struct StudioToolBadges: View {
 
     private func badge(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+            .font(.edithText(.caption2).weight(.semibold))
             .foregroundStyle(color)
             .padding(.horizontal, UIScale.pt(6))
             .padding(.vertical, UIScale.pt(2))
@@ -190,16 +198,17 @@ struct StudioToolRow: View {
                 StudioToolIcon(tool: tool, size: 30)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(tool.title)
-                        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                        .font(.edithText(.callout).weight(.semibold))
                         .foregroundStyle(DashSkin.ink(scheme == .dark))
                     Text(tool.summary)
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
             .padding(UIScale.pt(10))
+            .frame(maxHeight: .infinity)
             .background(
                 DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10))
             )

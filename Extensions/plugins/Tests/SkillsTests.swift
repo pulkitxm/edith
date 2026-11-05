@@ -127,7 +127,7 @@ import EdithExtensionSupport
             try SkillInstaller.arguments(skill: skill, agentIDs: ["unknown"])
         }
         let invalid = EdithSkill(
-            id: "../other", name: "Other", summary: "", detail: "", symbol: "terminal")
+            id: "../other", name: "Other", summary: "", detail: "", icon: .terminal)
         #expect(throws: SkillsError.self) {
             try SkillInstaller.arguments(skill: invalid, agentIDs: ["cursor"])
         }

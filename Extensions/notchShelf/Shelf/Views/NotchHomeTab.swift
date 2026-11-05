@@ -173,7 +173,7 @@ struct NotchSurfaceCard: View {
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if tile.showTitle {
-                    Label(tile.displayTitle, systemImage: tile.widget.icon).font(
+                    Label(tile.displayTitle, edith: tile.widget.icon).font(
                         .edithText(.headline))
                 }
                 ForEach(
@@ -199,7 +199,7 @@ private struct NotchClockCard: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                 if tile.showTitle {
-                    Label(tile.displayTitle, systemImage: "clock")
+                    Label(tile.displayTitle, edith: .clock)
                         .font(.edithText(.caption).weight(.semibold))
                 }
                 Text(context.date.formatted(.dateTime.hour().minute().second()))
@@ -233,7 +233,7 @@ private struct NotchProviderCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             if hidden {
-                Label("Hidden while presenting", systemImage: "eye.slash").font(
+                Label("Hidden while presenting", edith: .eyeOff).font(
                     .edithText(.caption))
             } else if let snapshot {
                 SurfaceSnapshotContent(

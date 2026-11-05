@@ -13,6 +13,10 @@ let package = Package(
             ],
             path: ".", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "BifrostExtensionTests", dependencies: ["BifrostExtension"], path: "Tests",
-            swiftSettings: [.swiftLanguageMode(.v5)]),
+            name: "BifrostExtensionTests",
+            dependencies: [
+                "BifrostExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ],
+            path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

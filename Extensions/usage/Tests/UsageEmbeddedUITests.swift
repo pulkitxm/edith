@@ -188,7 +188,7 @@ import Testing
         gate?.resume()
         await load.value
         await model.awaitPendingComputation()
-        #expect(model.loaded && model.range == .yesterday && client.prepared)
+        #expect(model.loaded && model.range == .preset(.yesterday) && client.prepared)
         await controller.shutdown()
     }
 

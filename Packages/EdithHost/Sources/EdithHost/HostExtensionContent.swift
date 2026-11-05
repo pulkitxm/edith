@@ -46,6 +46,7 @@ struct HostExtensionContent: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.windowVisible) private var visible
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var active: Bool { marketplace.surfaceAvailability.activeIDs.contains(extensionID) }
     private var transitioning: Bool {
@@ -74,17 +75,31 @@ struct HostExtensionContent: View {
     private var title: String {
         marketplace.entries.first { $0.id == extensionID }?.title ?? extensionID
     }
+    private var inSettings: Bool { location == "settings" }
+    private func loading(_ title: String) -> some View {
+        PageLoading(state: .loading, title: title, layout: inSettings ? .form : .list) {
+            EmptyView()
+        }
+        .padding(.horizontal, inSettings ? UIScale.pt(PageMetrics.groupedFormInset) : 0)
+        .padding(.vertical, inSettings ? UIScale.pt(PageMetrics.pinnedContentTop) : 0)
+    }
+
     var body: some View {
         Group {
             if let controller {
                 HostEmbeddedController(controller: controller, compact: compact, visible: visible)
                     .frame(height: contentHeight.map { CGFloat($0) })
+                    .clipped()
+                    .animation(
+                        Motion.animation(Motion.glide, reduceMotion: reduceMotion),
+                        value: contentHeight
+                    )
                     .id(ObjectIdentifier(controller))
             } else if transitioning {
-                PageLoading(state: .loading, title: "Preparing " + title) { EmptyView() }
+                loading("Preparing " + title)
             } else if !eligible {
                 ContentUnavailableView {
-                    Label(title, systemImage: "puzzlepiece.extension")
+                    Label(title, edith: .puzzle)
                 } description: {
                     Text(
                         failure
@@ -101,20 +116,25 @@ struct HostExtensionContent: View {
                     }
                     Button("Extensions", action: openMarketplace).buttonStyle(.edith(.secondary))
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if presenter == nil {
-                ContentUnavailableView(
-                    title, systemImage: "puzzlepiece.extension",
-                    description: Text("The extension view is not connected."))
+                ContentUnavailableView {
+                    Label(title, edith: .puzzle)
+                } description: {
+                    Text("The extension view is not connected.")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error {
                 ContentUnavailableView {
-                    Label(title, systemImage: "exclamationmark.triangle")
+                    Label(title, edith: .warning)
                 } description: {
                     Text(error)
                 } actions: {
                     Button("Try again") { retry += 1 }.buttonStyle(.edith(.secondary))
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                PageLoading(state: .loading, title: "Opening " + title) { EmptyView() }
+                loading("Opening " + title)
             }
         }
         .frame(height: (contentHeight ?? initialHeight).map { CGFloat($0) })

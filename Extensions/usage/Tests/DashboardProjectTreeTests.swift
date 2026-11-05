@@ -13,7 +13,7 @@ import Testing
         let parsed = try JSONDecoder().decode(DashUsage.self, from: Data(json.utf8))
         let m = DashboardModel(preferences: preferences)
         m.ingest(parsed)
-        m.range = .all
+        m.range = .preset(.allTime)
         return m
     }
 
@@ -273,9 +273,9 @@ import Testing
         m.projSortAscending = true
         m.projListOpen = true
         m.projExpanded = ["proj:x"]
-        m.range = .today
+        m.range = .preset(.today)
         m.reset()
-        #expect(m.range == .all)
+        #expect(m.range == .preset(.allTime))
         #expect(m.projSortKey == .cost)
         #expect(m.projSortAscending == false)
         #expect(m.projListOpen == false)
@@ -291,7 +291,7 @@ import Testing
             from: Data(usage(daily: day("2026-06-01", projects: "")).utf8))
         let m = DashboardModel(preferences: preferences)
         m.ingest(parsed)
-        #expect(m.range == .all)
+        #expect(m.range == .preset(.allTime))
         #expect(preferences.string(forKey: "dashRange") == "all")
     }
 
@@ -327,7 +327,7 @@ import Testing
                  "chats":[\(chat("new", tokens: 200, source: "cli"))]}
                 """)
         let m = try model(usage(daily: "\(first),\(latest)"))
-        m.range = .today
+        m.range = .preset(.today)
         #expect(Set(m.heatDetail.keys) == ["2026-06-01", todayStr])
         #expect(m.calendarDays.count > 7)
         #expect(m.projectTree.map(\.name) == ["new"])
@@ -360,7 +360,7 @@ import Testing
                 """)
         let m = try model(usage(daily: "\(noisy),\(quiet)"))
         let allTime = try #require(m.projectTree.first { $0.name == "orbit" }?.tokens)
-        m.range = .today
+        m.range = .preset(.today)
         let today = try #require(m.projectTree.first { $0.name == "orbit" }?.tokens)
         #expect(abs(today - 200) < 0.0001)
         #expect(allTime >= today)
@@ -676,7 +676,7 @@ import Testing
             DashUsage.self, from: Data(usage(daily: d).utf8))
         let m = DashboardModel(preferences: preferences)
         m.ingest(parsed)
-        m.range = .all
+        m.range = .preset(.allTime)
         #expect(m.selectedModels == ["m"])
         #expect(m.selectedPaths.isEmpty)
         #expect(abs(m.series.reduce(0) { $0 + $1.tokens } - 100) < 0.0001)

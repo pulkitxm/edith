@@ -1,11 +1,28 @@
 import AppKit
 internal import GhosttyKit
 
+public struct TerminalOverlayIcons {
+    public let link: NSImage
+    public let file: NSImage
+    public let previous: NSImage
+    public let next: NSImage
+    public let close: NSImage
+
+    public init(link: NSImage, file: NSImage, previous: NSImage, next: NSImage, close: NSImage) {
+        self.link = link
+        self.file = file
+        self.previous = previous
+        self.next = next
+        self.close = close
+    }
+}
+
 final class TerminalLinkHoverView: NSView {
     private let backdrop = NSVisualEffectView(frame: .zero)
-    private let icon = NSImageView()
+    let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private let hint = NSTextField(labelWithString: "⌘ click to open")
+    var icons: TerminalOverlayIcons?
 
     override var acceptsFirstResponder: Bool { false }
 
@@ -28,8 +45,6 @@ final class TerminalLinkHoverView: NSView {
         label.maximumNumberOfLines = 1
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.image = NSImage(
-            systemSymbolName: "arrow.up.forward.square", accessibilityDescription: nil)
         icon.contentTintColor = .secondaryLabelColor
         hint.translatesAutoresizingMaskIntoConstraints = false
         hint.font = .systemFont(ofSize: 10.5, weight: .medium)
@@ -62,9 +77,7 @@ final class TerminalLinkHoverView: NSView {
         let value = value?.isEmpty == false ? value : nil
         label.stringValue = value ?? ""
         hint.stringValue = revealsFile ? "⌘ click to show in Files" : "⌘ click to open"
-        icon.image = NSImage(
-            systemSymbolName: revealsFile ? "folder" : "arrow.up.forward.square",
-            accessibilityDescription: nil)
+        icon.image = revealsFile ? icons?.file : icons?.link
         let action = revealsFile ? "show it in Files" : "open"
         setAccessibilityLabel(value.map { "Link \($0). Command-click to \(action)." })
         isHidden = value == nil
@@ -100,13 +113,20 @@ final class TerminalSearchField: NSSearchField {
 final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
     let field = TerminalSearchField(frame: .zero)
     private let countLabel = NSTextField(labelWithString: "")
-    private let previousButton = NSButton()
-    private let nextButton = NSButton()
-    private let closeButton = NSButton()
+    let previousButton = NSButton()
+    let nextButton = NSButton()
+    let closeButton = NSButton()
     var onQuery: ((String) -> Void)?
     var onNavigate: ((Bool) -> Void)?
     var onClose: (() -> Void)?
     private var queryTask: Task<Void, Never>?
+    var icons: TerminalOverlayIcons? {
+        didSet {
+            previousButton.image = icons?.previous
+            nextButton.image = icons?.next
+            closeButton.image = icons?.close
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -117,15 +137,16 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
         layer?.cornerRadius = 8
         layer?.masksToBounds = true
         field.placeholderString = "Find in terminal"
+        field.focusRingType = .none
         field.delegate = self
         field.onClose = { [weak self] in self?.onClose?() }
         field.onNext = { [weak self] previous in self?.onNavigate?(previous) }
         countLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         countLabel.textColor = .secondaryLabelColor
         countLabel.alignment = .right
-        configure(previousButton, symbol: "chevron.up", action: #selector(previous))
-        configure(nextButton, symbol: "chevron.down", action: #selector(next))
-        configure(closeButton, symbol: "xmark", action: #selector(close))
+        configure(previousButton, action: #selector(previous))
+        configure(nextButton, action: #selector(next))
+        configure(closeButton, action: #selector(close))
         let stack = NSStackView(views: [field, countLabel, previousButton, nextButton, closeButton])
         stack.orientation = .horizontal
         stack.alignment = .centerY
@@ -188,8 +209,7 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
         countLabel.stringValue = "\(selected) of \(total)"
     }
 
-    private func configure(_ button: NSButton, symbol: String, action: Selector) {
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+    private func configure(_ button: NSButton, action: Selector) {
         button.bezelStyle = .inline
         button.isBordered = false
         button.target = self
@@ -209,33 +229,74 @@ final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
     }
 }
 
-final class TerminalProgressStrip: NSProgressIndicator {
+final class TerminalProgressStrip: NSView {
+    private static let sweepKey = "sweep"
+    private let fill = CALayer()
+    private var fraction: CGFloat = 0
+    private var isIndeterminate = false
+
+    var accent = NSColor.labelColor {
+        didSet { fill.backgroundColor = accent.cgColor }
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        style = .bar
-        minValue = 0
-        maxValue = 100
+        wantsLayer = true
         isHidden = true
+        layer?.addSublayer(fill)
+        fill.backgroundColor = accent.cgColor
+        setAccessibilityElement(true)
+        setAccessibilityRole(.progressIndicator)
     }
 
     required init?(coder: NSCoder) { nil }
 
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        arrangeFill()
+    }
+
     func update(_ state: ghostty_action_progress_report_state_e, progress: Int) {
         switch state {
         case GHOSTTY_PROGRESS_STATE_REMOVE:
-            stopAnimation(nil)
             isHidden = true
+            show(indeterminate: false, fraction: 0)
         case GHOSTTY_PROGRESS_STATE_INDETERMINATE:
             isHidden = false
-            isIndeterminate = true
-            startAnimation(nil)
+            show(indeterminate: true, fraction: 0)
         default:
-            stopAnimation(nil)
             isHidden = false
-            isIndeterminate = progress < 0
-            doubleValue = Double(max(0, progress))
-            if isIndeterminate { startAnimation(nil) }
+            show(indeterminate: progress < 0, fraction: CGFloat(max(0, min(progress, 100))) / 100)
         }
+    }
+
+    private func show(indeterminate: Bool, fraction: CGFloat) {
+        isIndeterminate = indeterminate
+        self.fraction = fraction
+        setAccessibilityValue(indeterminate ? nil : Int((fraction * 100).rounded()))
+        arrangeFill()
+    }
+
+    private func arrangeFill() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        fill.removeAnimation(forKey: Self.sweepKey)
+        let width = bounds.width
+        guard isIndeterminate else {
+            fill.frame = CGRect(x: 0, y: 0, width: width * fraction, height: bounds.height)
+            return
+        }
+        let segment = width * 0.28
+        fill.frame = CGRect(x: 0, y: 0, width: segment, height: bounds.height)
+        let sweep = CABasicAnimation(keyPath: "position.x")
+        sweep.fromValue = -segment / 2
+        sweep.toValue = width + segment / 2
+        sweep.duration = 1.2
+        sweep.repeatCount = .infinity
+        fill.add(sweep, forKey: Self.sweepKey)
     }
 }
 

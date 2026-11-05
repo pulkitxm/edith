@@ -2,7 +2,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-struct QuinjetProjectGridSkeleton: View {
+struct QuinjetProjectListSkeleton: View {
     let dark: Bool
     var rows = 6
     @Environment(\.compactLayout) private var compact
@@ -10,13 +10,15 @@ struct QuinjetProjectGridSkeleton: View {
     var body: some View {
         SkeletonGroup {
             ScrollView {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 330, spacing: 14),
-                    spacing: UIScale.pt(14)
-                ) {
+                LazyVStack(spacing: 0) {
                     ForEach(0..<rows, id: \.self) { index in
-                        HStack(spacing: UIScale.pt(12)) {
-                            HStack(spacing: UIScale.pt(11)) {
+                        if index > 0 {
+                            Divider()
+                                .padding(
+                                    .leading, UIScale.pt(QuinjetProjectRowMetrics.dividerInset))
+                        }
+                        HStack(spacing: UIScale.pt(QuinjetProjectRowMetrics.spacing)) {
+                            HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                                 SkeletonBlock(width: 18, height: 18, corner: 4)
                                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                                     SkeletonBlock(height: 12)
@@ -36,24 +38,17 @@ struct QuinjetProjectGridSkeleton: View {
                             }
                             .frame(width: UIScale.pt(78), alignment: .trailing)
                             .padding(.horizontal, UIScale.pt(12))
-                            .padding(.vertical, UIScale.pt(10))
+                            .padding(.vertical, UIScale.pt(8))
                             .overlay {
-                                RoundedRectangle(cornerRadius: UIScale.pt(9))
+                                RoundedRectangle(cornerRadius: UIScale.pt(8))
                                     .strokeBorder(DashSkin.lineStrong(dark))
                             }
                         }
-                        .padding(UIScale.pt(14))
-                        .background(
-                            DashSkin.paper2(dark),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-                        )
-                        .overlay {
-                            RoundedRectangle(cornerRadius: UIScale.pt(12))
-                                .strokeBorder(DashSkin.lineStrong(dark))
-                        }
+                        .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
+                        .padding(.vertical, UIScale.pt(10))
                     }
                 }
-                .padding(.top, UIScale.pt(2))
+                .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
                 .pageContent(compact)
             }
         }

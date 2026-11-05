@@ -229,10 +229,10 @@ struct StudioDropOverlay: View {
                 )
                 .padding(UIScale.pt(14))
             VStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "square.and.arrow.down.on.square")
+                EdithIconView(.saveTo)
                     .font(.system(size: UIScale.pt(34), weight: .light))
                 Text("Drop to add to Studio")
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
             }
             .foregroundStyle(DashSkin.accent(scheme == .dark))
         }
@@ -258,10 +258,7 @@ struct StudioHome: View {
                     layout {
                         StudioTabBar(model: model)
                             .frame(maxWidth: UIScale.pt(250))
-                        Text(subtitle)
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        PageSubtitle(subtitle)
                     }
                 })
         } content: {
@@ -316,9 +313,13 @@ struct StudioHeaderActions: View {
                         }
                     }
                 } label: {
-                    Label("\(model.runningCount) running", systemImage: "gearshape.2")
+                    Label {
+                        Text("\(model.runningCount) running")
+                    } icon: {
+                        EdithIcon.gear.image()
+                    }
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .fixedSize()
             }
             StudioScanButton { urls in model.add(urls) }
@@ -326,7 +327,7 @@ struct StudioHeaderActions: View {
             Button {
                 model.paste()
             } label: {
-                Image(systemName: "doc.on.clipboard")
+                EdithIconView(.clipboard)
                     .font(.system(size: UIScale.pt(14), weight: .medium))
                     .frame(width: UIScale.pt(16), height: UIScale.pt(16))
             }
@@ -336,7 +337,7 @@ struct StudioHeaderActions: View {
             Button {
                 model.chooseFiles()
             } label: {
-                Label("Add files", systemImage: "plus")
+                Label("Add files", edith: .plus)
             }
             .buttonStyle(.edith(.primary))
             .keyboardShortcut("o", modifiers: .command)

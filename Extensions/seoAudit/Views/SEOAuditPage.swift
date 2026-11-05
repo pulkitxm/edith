@@ -71,29 +71,28 @@ struct SEOAuditPage: View {
 
 private struct SEOAuditProjectsView: View {
     @Bindable var model: SEOAuditModel
-    @Environment(\.compactLayout) private var compact
-    @Environment(\.colorScheme) private var scheme
     @State private var projectBeingRenamed: SEOAuditProjectSummary?
     @State private var projectBeingDeleted: SEOAuditProjectSummary?
 
-    private var dark: Bool { scheme == .dark }
-
     var body: some View {
-        PageScaffold {
-            PageHeader {
-                Text("Site Audit")
-            } accessory: {
-                HStack(spacing: UIScale.pt(14)) {
-                    Text("Crawl every page, inspect every share card, and keep each run local.")
-                        .font(.system(size: UIScale.pt(13)))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                    Button(action: model.presentNewProject) {
-                        Label("New project", systemImage: "plus")
+        PageScaffold(pinnedHeader: true) {
+            PageHeader(
+                "Site Audit",
+                subtitle: "Check a website for SEO problems. Results stay on this Mac.",
+                divider: true,
+                trailing: {
+                    if !(model.projectsLoaded && model.projects.isEmpty) {
+                        Button(action: model.presentNewProject) {
+                            Label("New project", edith: .plus)
+                        }
+                        .buttonStyle(.edith(.primary))
+                        .disabled(model.isRunning)
+                        .help(
+                            model.isRunning
+                                ? "Wait for the running audit to finish or stop it first."
+                                : "Add a website to audit")
                     }
-                    .buttonStyle(.edith(.primary))
-                    .disabled(model.isRunning)
-                }
-            }
+                })
         } content: {
             if model.projectsLoaded, let error = model.projectsLoadError {
                 PageNotice(
@@ -124,7 +123,9 @@ private struct SEOAuditProjectsView: View {
                 projectBeingDeleted = nil
             }
         } message: {
-            Text("This removes the project and its complete local audit history.")
+            Text(
+                "This removes the project and every saved audit run for it from this Mac. The website itself is not affected."
+            )
         }
     }
 
@@ -132,7 +133,8 @@ private struct SEOAuditProjectsView: View {
         PageLoading(
             state: model.projectsLoad.state,
             message: model.projectsLoadError ?? "",
-            layout: .cards, refreshing: model.projectsLoad.isRefreshing,
+            layout: .list, showsSkeletonControls: false,
+            refreshing: model.projectsLoad.isRefreshing,
             retry: { Task { await model.refreshProjects() } }
         ) {
             projectContent
@@ -142,33 +144,44 @@ private struct SEOAuditProjectsView: View {
     @ViewBuilder
     private var projectContent: some View {
         if model.projects.isEmpty {
-            VStack(spacing: UIScale.pt(10)) {
-                Image(systemName: "square.stack.3d.up.slash")
-                    .font(.system(size: UIScale.pt(28), weight: .light))
-                    .foregroundStyle(.tertiary)
-                Text("No projects yet")
-                    .font(DashSkin.heading(20))
-                Text("Your first completed crawl will stay here with its full history.")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
-                Button(action: model.presentNewProject) {
-                    Label("Create a project", systemImage: "plus")
-                }
-                .buttonStyle(.edith(.primary))
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, UIScale.pt(52))
+            PageEmptyState(
+                icon: .seoAudit,
+                title: "Check your website for SEO problems",
+                message:
+                    "Enter your site's address and Edith finds its pages, then checks titles, descriptions, share cards and more, one page at a time.",
+                steps: [
+                    PageGuideStep(
+                        icon: .link, title: "Add your site",
+                        detail: "Type a URL such as example.com or localhost:3000."),
+                    PageGuideStep(
+                        icon: .nodes,
+                        title: "Find its pages",
+                        detail: "Edith reads your sitemap, then you choose which pages to check."),
+                    PageGuideStep(
+                        icon: .clipboard, title: "Read the report",
+                        detail: "See issues per page, how it looks when shared, and past runs."),
+                ],
+                primary: PageAction(
+                    "Add your site", icon: .plus, identifier: "seo.new-project",
+                    perform: model.presentNewProject),
+                footnote:
+                    "Audits only read your public pages. Results are saved on this Mac and never uploaded."
+            )
+            .pageFillViewport()
         } else {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                 PageSectionHeader(
-                    "Projects", subtitle: "\(model.projects.count) local workspaces")
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 290, spacing: 14),
-                    spacing: UIScale.pt(14)
-                ) {
-                    ForEach(model.projects) { project in
+                    "Projects",
+                    subtitle: model.projects.count == 1
+                        ? "1 website" : "\(model.projects.count) websites")
+                VStack(spacing: 0) {
+                    ForEach(Array(model.projects.enumerated()), id: \.element.id) {
+                        index, project in
+                        if index > 0 {
+                            Divider().padding(.leading, UIScale.pt(SEOAuditProjectRow.dividerInset))
+                        }
                         let active = model.isRunning && model.selectedProject?.id == project.id
-                        SEOAuditProjectCard(
+                        SEOAuditProjectRow(
                             project: project,
                             activeStage: active ? model.stage : nil,
                             activeRun: active ? model.selectedRun : nil,
@@ -180,12 +193,17 @@ private struct SEOAuditProjectsView: View {
                             delete: { projectBeingDeleted = project })
                     }
                 }
+                .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius),
+                        style: .continuous))
             }
         }
     }
 }
 
-private struct SEOAuditNewProjectSheet: View {
+struct SEOAuditNewProjectSheet: View {
     @Bindable var model: SEOAuditModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -193,42 +211,40 @@ private struct SEOAuditNewProjectSheet: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(20)) {
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                Image(systemName: "point.3.connected.trianglepath.dotted")
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.top)) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                EdithIconView(.nodes)
                     .font(.system(size: UIScale.pt(21), weight: .medium))
                     .foregroundStyle(DashSkin.accent(dark))
                     .frame(width: UIScale.pt(38), height: UIScale.pt(38))
                     .background(DashSkin.accent(dark).opacity(0.12), in: Circle())
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                     Text("New audit project")
-                        .font(DashSkin.heading(23))
-                    Text("Add the site once. Every audit run stays attached to this project.")
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(.secondary)
+                        .font(.edithText(.title3)).fontWeight(.semibold)
+                    Text(
+                        "Add the site once. Every audit of it is saved under this project so you can compare runs."
+                    )
+                    .font(.edithText(.subheadline))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
             }
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 fieldLabel("Site URL")
                 EdithTextField(
                     placeholder: "localhost:3000 or example.com", text: $model.input,
-                    icon: "link", clearable: true,
+                    icon: .link, clearable: true,
                     onSubmit: { Task { await model.beginNewProject() } })
-                fieldLabel("Project name")
+                fieldLabel("Project name").padding(.top, UIScale.pt(4))
                 EdithTextField(
-                    placeholder: "Optional", text: $model.projectName, icon: "folder")
+                    placeholder: "Optional, defaults to the site address", text: $model.projectName,
+                    icon: .folder)
             }
-            HStack(spacing: UIScale.pt(10)) {
-                capability("Sitemap discovery", "point.3.connected.trianglepath.dotted", true)
-                if model.lighthouseResolved {
-                    capability(
-                        model.lighthouseAvailable
-                            ? "Lighthouse detected" : "Lighthouse not installed",
-                        "gauge.with.needle", model.lighthouseAvailable)
-                }
+            if model.lighthouseResolved {
+                lighthouseNote
             }
-            HStack {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 Button("Cancel") {
                     model.newProjectPresented = false
                     dismiss()
@@ -236,45 +252,61 @@ private struct SEOAuditNewProjectSheet: View {
                 .keyboardShortcut(.cancelAction)
                 Spacer()
                 if model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Enter a site URL to continue")
-                        .font(.system(size: UIScale.pt(10.5)))
+                    Text("Enter a site address first")
+                        .font(.edithText(.caption))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
                 Button(action: { Task { await model.beginNewProject() } }) {
-                    Label("Create and discover", systemImage: "arrow.right")
+                    Label("Create and find pages", edith: .arrowRight)
                 }
                 .buttonStyle(.edith(.primary))
                 .keyboardShortcut(.defaultAction)
+                .fixedSize()
                 .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(UIScale.pt(24))
+        .padding(UIScale.pt(PageMetrics.gutter))
+        .buttonStyle(.edith(.secondary))
         .frame(width: PresentationMetrics.width(500))
         .background(DashSkin.paper(dark))
         .presenterCover(SEOAuditPrivacyState.shared.hidden)
     }
 
     private func fieldLabel(_ value: String) -> some View {
-        Text(value.uppercased())
-            .font(DashSkin.mono(8.5, weight: .bold))
-            .tracking(0.6)
-            .foregroundStyle(.tertiary)
+        PageCapsLabel(value)
     }
 
-    private func capability(_ title: String, _ icon: String, _ available: Bool) -> some View {
-        HStack(spacing: UIScale.pt(7)) {
-            Image(systemName: available ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(available ? DashSkin.ok : DashSkin.warn)
-            Image(systemName: icon).foregroundStyle(.secondary)
-            Text(title).font(.system(size: UIScale.pt(10.5), weight: .medium))
+    private var lighthouseNote: some View {
+        let available = model.lighthouseAvailable
+        return Label {
+            Text(
+                available
+                    ? "Lighthouse is installed, so audits can also score speed and accessibility."
+                    : "Lighthouse is not installed. Audits still check titles, descriptions and links."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            EdithIconView(available ? .success : .info)
+                .foregroundStyle(available ? DashSkin.ok : Color.secondary)
+                .accessibilityHidden(true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(UIScale.pt(10))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+        .font(.edithText(.subheadline))
+        .foregroundStyle(.secondary)
     }
 }
 
-private struct SEOAuditProjectCard: View {
+private struct SEOAuditProjectRow: View {
+    static let thumbnailWidth = 72.0
+    static let thumbnailHeight = 44.0
+    static let horizontalPadding = 14.0
+    static let spacing = 12.0
+    static let metricWidth = 52.0
+    static let statusWidth = 150.0
+    static let updatedWidth = 112.0
+    static let menuSize = 28.0
+    static var dividerInset: Double { horizontalPadding + thumbnailWidth + spacing }
+
     let project: SEOAuditProjectSummary
     let activeStage: SEOAuditStage?
     let activeRun: SEOAuditRun?
@@ -284,6 +316,7 @@ private struct SEOAuditProjectCard: View {
     let rename: () -> Void
     let delete: () -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @State private var hovered = false
     @State private var snapshotImage: NSImage?
@@ -292,43 +325,47 @@ private struct SEOAuditProjectCard: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .trailing) {
             Button(action: viewDetails) {
-                VStack(alignment: .leading, spacing: 0) {
-                    artwork
-                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                HStack(spacing: UIScale.pt(Self.spacing)) {
+                    thumbnail
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(project.name)
-                            .font(.system(size: UIScale.pt(15), weight: .semibold))
+                            .font(.edithText(.body).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         Text(project.baseURL)
-                            .font(DashSkin.mono(10.5))
+                            .font(.edithText(.caption))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                        Divider()
-                        HStack(spacing: UIScale.pt(16)) {
-                            cardMetric("Pages", displayedPageCount)
-                            cardMetric("Issues", displayedIssueCount)
-                            cardMetric("Score", displayedAverageScore)
-                            Spacer(minLength: 0)
-                            Text(project.updatedAt, format: .relative(presentation: .named))
-                                .font(.system(size: UIScale.pt(10)))
-                                .foregroundStyle(.tertiary)
+                            .truncationMode(.middle)
+                        if compact {
+                            HStack(spacing: UIScale.pt(Self.spacing)) {
+                                status
+                                updated
+                            }
                         }
                     }
-                    .padding(UIScale.pt(14))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if !compact {
+                        status.frame(width: UIScale.pt(Self.statusWidth), alignment: .leading)
+                    }
+                    metric("Pages", displayedPageCount)
+                    metric("Issues", displayedIssueCount)
+                    metric("Score", displayedAverageScore)
+                    if !compact {
+                        updated.frame(width: UIScale.pt(Self.updatedWidth), alignment: .trailing)
+                    }
+                    Color.clear
+                        .frame(width: UIScale.pt(Self.menuSize), height: UIScale.pt(Self.menuSize))
+                        .accessibilityHidden(true)
                 }
-                .background(DashSkin.paper2(dark))
-                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(15)))
-                .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(15))
-                        .strokeBorder(
-                            hovered ? DashSkin.accent(dark).opacity(0.55) : DashSkin.line(dark),
-                            lineWidth: UIScale.pt(1))
-                )
-                .shadow(
-                    color: .black.opacity(hovered ? 0.1 : 0.04), radius: hovered ? 12 : 4, y: 3)
+                .padding(.horizontal, UIScale.pt(Self.horizontalPadding))
+                .padding(.vertical, UIScale.pt(10))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(hovered && canViewDetails ? Color.primary.opacity(0.04) : .clear)
+                .overlay(alignment: .bottom) { progressBar }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
             .disabled(!canViewDetails)
@@ -337,16 +374,13 @@ private struct SEOAuditProjectCard: View {
             Menu {
                 projectActions
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                    .background(.black.opacity(0.62), in: Circle())
+                EdithIcon.more.image()
+                    .foregroundStyle(DashSkin.inkSoft(dark))
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
-            .padding(UIScale.pt(10))
+            .padding(.trailing, UIScale.pt(Self.horizontalPadding))
             .accessibilityLabel("Project actions for \(project.name)")
         }
         .onHover { hovered = $0 }
@@ -357,21 +391,21 @@ private struct SEOAuditProjectCard: View {
     @ViewBuilder
     private var projectActions: some View {
         Button(action: viewDetails) {
-            Label("View details", systemImage: "doc.text.magnifyingglass")
+            Label("View details", edith: .seoAudit)
         }
         .disabled(!canViewDetails)
         Button(action: rename) {
-            Label("Rename", systemImage: "pencil")
+            Label("Rename", edith: .edit)
         }
         .disabled(!actionsEnabled)
         Divider()
         Button(role: .destructive, action: delete) {
-            Label("Delete", systemImage: "trash")
+            Label("Delete", edith: .trash)
         }
         .disabled(!actionsEnabled)
     }
 
-    private var artwork: some View {
+    private var thumbnail: some View {
         ZStack {
             Rectangle().fill(
                 LinearGradient(
@@ -385,43 +419,12 @@ private struct SEOAuditProjectCard: View {
                 projectMark
             }
         }
-        .frame(height: UIScale.pt(138))
-        .clipped()
-        .overlay(alignment: .bottomLeading) {
-            HStack(spacing: UIScale.pt(7)) {
-                if activeStage != nil {
-                    SkeletonGroup {
-                        SkeletonBlock(width: 9, height: 9, corner: 4.5)
-                    }
-                    .accessibilityLabel("Audit in progress")
-                }
-                Text(activityLabel)
-                    .font(DashSkin.mono(9, weight: .bold))
-                    .tracking(0.8)
-                if let activeProgress {
-                    Text(activeProgress, format: .percent.precision(.fractionLength(0)))
-                        .font(DashSkin.mono(9, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.72))
-                }
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(5))
-            .background(.black.opacity(0.68), in: Capsule())
-            .padding(UIScale.pt(10))
-        }
-        .overlay(alignment: .bottom) {
-            if let activeProgress {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Rectangle().fill(.black.opacity(0.42))
-                        Rectangle().fill(DashSkin.accent(dark))
-                            .frame(width: geometry.size.width * activeProgress)
-                    }
-                }
-                .frame(height: UIScale.pt(3))
-            }
-        }
+        .frame(width: UIScale.pt(Self.thumbnailWidth), height: UIScale.pt(Self.thumbnailHeight))
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+                .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
+        )
         .pageTask(id: snapshotFileURL?.absoluteString ?? project.imageURL) {
             snapshotImage = nil; imageFinished = false
             guard !SEOAuditPrivacyState.shared.hidden,
@@ -434,6 +437,45 @@ private struct SEOAuditProjectCard: View {
         }
     }
 
+    private var status: some View {
+        HStack(spacing: UIScale.pt(7)) {
+            if activeStage != nil {
+                SkeletonGroup {
+                    SkeletonBlock(width: 9, height: 9, corner: 4.5)
+                }
+                .accessibilityLabel("Audit in progress")
+            }
+            Text(activityLabel)
+            if let activeProgress {
+                Text(activeProgress, format: .percent.precision(.fractionLength(0)))
+                    .monospacedDigit()
+            }
+        }
+        .font(.edithText(.caption).weight(.medium))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+
+    private var updated: some View {
+        Text(project.updatedAt, format: .relative(presentation: .named))
+            .font(.edithText(.caption))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+    }
+
+    @ViewBuilder private var progressBar: some View {
+        if let activeProgress {
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(DashSkin.line(dark))
+                    Rectangle().fill(DashSkin.accent(dark))
+                        .frame(width: geometry.size.width * activeProgress)
+                }
+            }
+            .frame(height: UIScale.pt(3))
+        }
+    }
+
     private var snapshotFileURL: URL? {
         guard let value = project.imageSnapshotURL, let url = URL(string: value), url.isFileURL
         else { return nil }
@@ -442,14 +484,14 @@ private struct SEOAuditProjectCard: View {
 
     private var activityLabel: String {
         guard let activeStage else {
-            return project.latestRun?.state.rawValue.uppercased() ?? "READY"
+            return project.latestRun?.state.rawValue.capitalized ?? "Not audited yet"
         }
         switch activeStage {
-        case .idle: return project.latestRun?.state.rawValue.uppercased() ?? "READY"
-        case .discovering: return "DISCOVERING"
-        case let .auditing(current, total, _): return "AUDITING \(current)/\(total)"
-        case .lighthouse: return "LIGHTHOUSE"
-        case .saving: return "SAVING RUN"
+        case .idle: return project.latestRun?.state.rawValue.capitalized ?? "Not audited yet"
+        case .discovering: return "Finding pages"
+        case let .auditing(current, total, _): return "Auditing \(current) of \(total)"
+        case .lighthouse: return "Running Lighthouse"
+        case .saving: return "Saving results"
         }
     }
 
@@ -478,16 +520,17 @@ private struct SEOAuditProjectCard: View {
     }
 
     private var projectMark: some View {
-        Image(systemName: "globe.desk")
-            .font(.system(size: UIScale.pt(34), weight: .light))
+        EdithIconView(.globe)
+            .font(.system(size: UIScale.pt(20), weight: .light))
             .foregroundStyle(DashSkin.accent(dark))
     }
 
-    private func cardMetric(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text(value).font(DashSkin.mono(12, weight: .semibold))
-            Text(label).font(.system(size: UIScale.pt(9))).foregroundStyle(.tertiary)
+    private func metric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .trailing, spacing: UIScale.pt(1)) {
+            Text(value).font(.edithText(.body).weight(.semibold)).monospacedDigit()
+            Text(label).font(.edithText(.caption)).foregroundStyle(.secondary)
         }
+        .frame(width: UIScale.pt(Self.metricWidth), alignment: .trailing)
     }
 }
 
@@ -507,15 +550,15 @@ private struct SEOAuditRenameProjectSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text("Rename project")
-                    .font(DashSkin.heading(22))
+                    .font(.edithText(.title3)).fontWeight(.semibold)
                 Text(project.baseURL)
-                    .font(DashSkin.mono(10.5))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
             }
             EdithTextField(
-                placeholder: "Project name", text: $name, icon: "folder", clearable: true,
+                placeholder: "Project name", text: $name, icon: .folder, clearable: true,
                 onSubmit: submit)
-            HStack {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
@@ -525,7 +568,8 @@ private struct SEOAuditRenameProjectSheet: View {
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(UIScale.pt(24))
+        .padding(UIScale.pt(PageMetrics.gutter))
+        .buttonStyle(.edith(.secondary))
         .frame(width: PresentationMetrics.width(420))
         .presenterCover(SEOAuditPrivacyState.shared.hidden)
     }

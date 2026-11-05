@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public actor ExtensionCatalogClient {
@@ -39,6 +40,8 @@ public actor ExtensionCatalogClient {
         public let fallback: Fallback?
         public var offline: Bool { fallback == .offline }
     }
+
+    public static func isOffline(_ error: Error) -> Bool { Fallback(error) == .offline }
 
     private struct TransportFailure: Error { let underlying: Error }
 
@@ -87,16 +90,21 @@ public actor ExtensionCatalogClient {
                 url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
             request.setValue("Edith", forHTTPHeaderField: "User-Agent")
             request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
+            let validator = CatalogValidator(cache: cache)
+            let cached = validator.currentTag()
+            if let cached { request.setValue(cached.tag, forHTTPHeaderField: "If-None-Match") }
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let response = response as? HTTPURLResponse else {
                 throw MarketplaceError.downloadFailed
             }
+            if response.statusCode == 304, let cached { return cached.body }
             if response.statusCode == 403 || response.statusCode == 429 {
                 throw MarketplaceError.rateLimited
             }
             guard response.statusCode == 200, data.count <= 3 * 1024 * 1024 else {
                 throw MarketplaceError.downloadFailed
             }
+            validator.record(tag: response.value(forHTTPHeaderField: "ETag"), body: data)
             return data
         }
     }
@@ -173,5 +181,40 @@ public actor ExtensionCatalogClient {
         guard data.count <= 3 * 1024 * 1024 else { throw MarketplaceError.invalidCatalog }
         return try JSONDecoder().decode(SignedExtensionCatalog.self, from: data).verified(
             publicKey: publicKey, repository: repository, minimumRevision: minimumRevision)
+    }
+}
+
+struct CatalogValidator: Sendable {
+    struct Entry: Codable, Equatable {
+        let tag: String
+        let digest: String
+    }
+
+    let cache: URL
+    var file: URL { cache.appendingPathExtension("etag") }
+
+    static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    func currentTag() -> (tag: String, body: Data)? {
+        guard let body = try? Data(contentsOf: cache), body.count <= 3 * 1024 * 1024,
+            let saved = try? Data(contentsOf: file),
+            let entry = try? JSONDecoder().decode(Entry.self, from: saved),
+            entry.digest == Self.digest(body)
+        else { return nil }
+        return (entry.tag, body)
+    }
+
+    func record(tag: String?, body: Data) {
+        guard let tag, !tag.isEmpty else {
+            try? FileManager.default.removeItem(at: file)
+            return
+        }
+        try? FileManager.default.createDirectory(
+            at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(Entry(tag: tag, digest: Self.digest(body))) {
+            try? data.write(to: file, options: .atomic)
+        }
     }
 }

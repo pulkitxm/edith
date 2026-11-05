@@ -169,10 +169,10 @@ struct StudioCompareView: View {
                 title: "Compare PDF",
                 subtitle:
                     "\(compare.originalURL.lastPathComponent) → \(compare.revisedURL.lastPathComponent)",
-                symbol: "rectangle.split.2x1", back: model.goHome
+                icon: .layoutLeft, back: model.goHome
             ) {
                 Toggle("Visual difference", isOn: $compare.showsVisual)
-                    .toggleStyle(.switch)
+                    .toggleStyle(.edithSwitch)
                     .controlSize(.small)
                 Button("Save report") {
                     model.open(
@@ -242,9 +242,9 @@ struct StudioCompareView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(report.summary)
-                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                 Text("\(report.originalPages) → \(report.revisedPages) pages")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
             }
             .padding(UIScale.pt(14))
@@ -256,19 +256,16 @@ struct StudioCompareView: View {
                             compare.focused = change
                         } label: {
                             HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                                Image(
-                                    systemName: change.side == .original
-                                        ? "minus.circle.fill" : "plus.circle.fill"
-                                )
-                                .foregroundStyle(
-                                    change.side == .original ? DashSkin.danger : DashSkin.ok)
+                                EdithIconView(change.side == .original ? .removeFilled : .addFilled)
+                                    .foregroundStyle(
+                                        change.side == .original ? DashSkin.danger : DashSkin.ok)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(change.text)
-                                        .font(.system(size: UIScale.pt(11.5)))
+                                        .font(.edithText(.subheadline))
                                         .lineLimit(3)
                                         .multilineTextAlignment(.leading)
                                     Text("Page \(change.page + 1)")
-                                        .font(.system(size: UIScale.pt(10)))
+                                        .font(.edithText(.caption))
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer(minLength: 0)
@@ -297,7 +294,8 @@ struct StudioCompareView: View {
                     value: $compare.visualPage, in: 0...max(pages - 1, 0))
                 Spacer()
                 Text("\(String(format: "%.2f", compare.visualFraction * 100))% of pixels changed")
-                    .font(DashSkin.mono(11))
+                    .font(.edithText(.caption))
+                    .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, UIScale.pt(16))
@@ -308,7 +306,11 @@ struct StudioCompareView: View {
                     .aspectRatio(contentMode: .fit)
                     .padding(UIScale.pt(12))
             } else {
-                LoadingIndicator().frame(maxHeight: .infinity)
+                SkeletonGroup {
+                    SkeletonBlock(height: 320, corner: 12).padding(UIScale.pt(24))
+                }
+                .frame(maxHeight: .infinity)
+                .accessibilityLabel("Preparing comparison")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -325,9 +327,7 @@ struct StudioCompareColumn: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(title.uppercased())
-                .font(DashSkin.mono(10, weight: .semibold))
-                .foregroundStyle(.secondary)
+            PageCapsLabel(title)
                 .padding(.vertical, UIScale.pt(6))
             StudioReadOnlyPDFView(document: document, focus: focus)
         }

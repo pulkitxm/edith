@@ -702,7 +702,7 @@ import Testing
         preferences.removePersistentDomain(forName: suite)
         let dashboard = DashboardModel(preferences: preferences)
         dashboard.ingest(dashboardUsage)
-        dashboard.range = .all
+        dashboard.range = .preset(.allTime)
         #expect(dashboard.projectTree.count == 1)
         #expect(dashboard.projectTree.first?.id != "repo:unattributed")
         #expect(dashboard.projectTree.first?.tokens == 30)
@@ -898,7 +898,7 @@ import Testing
         preferences.removePersistentDomain(forName: suite)
         let dashboard = DashboardModel(preferences: preferences)
         dashboard.ingest(dashboardUsage)
-        dashboard.range = .all
+        dashboard.range = .preset(.allTime)
         #expect(dashboard.projectTree.count == 1)
         #expect(dashboard.projectTree.first?.id != "repo:unattributed")
         #expect(dashboard.projectTree.first?.tokens == 40)

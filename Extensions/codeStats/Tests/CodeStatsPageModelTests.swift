@@ -23,6 +23,34 @@ import Testing
         #expect(model.loadingState == .content)
     }
 
+    @Test func runSummaryExplainsFreshnessAndTheNextRefresh() {
+        let now = CodeStatsPageFixture.date("2026-10-05")
+        #expect(
+            CodeStatsPageFixture.status().runSummary(now: now)
+                == "Not updated yet. Refreshes when you ask.")
+        let running = CodeStatsPageFixture.status(
+            active: CodeStatsActiveRun(trigger: .manual, startedAt: now))
+        #expect(running.runSummary(now: now) == "Not updated yet. Refreshing now.")
+        let reported = CodeStatsPageFixture.status(reportedAt: now.addingTimeInterval(-3_600))
+        #expect(reported.runSummary(now: now).hasPrefix("Updated "))
+    }
+
+    @Test func startBlockerExplainsWhyTheFirstSyncCannotStart() async {
+        let missingFolder = model(
+            CodeStatsFakeAgent(status: CodeStatsPageFixture.status(storage: .notConfigured)))
+        #expect(missingFolder.startBlocker == "Checking your setup...")
+        await missingFolder.loadStatus()
+        #expect(missingFolder.startBlocker == "Choose a storage folder first.")
+        let missingGit = model(
+            CodeStatsFakeAgent(status: CodeStatsPageFixture.status(gitAvailable: false)))
+        await missingGit.loadStatus()
+        #expect(missingGit.startBlocker?.contains("git") == true)
+        let ready = model(CodeStatsFakeAgent(status: CodeStatsPageFixture.status()))
+        await ready.loadStatus()
+        #expect(ready.startBlocker == nil)
+        #expect(!ready.reportIsEmpty)
+    }
+
     @Test func failedStatusUsesRecoverableLoadingStateInsteadOfPermanentSkeleton() async {
         let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
         var service = agent.service
@@ -105,6 +133,7 @@ import Testing
         let model = model(agent)
         await model.refresh()
         #expect(model.phase == .firstRun)
+        #expect(model.loadingState == .content)
         #expect(model.isRunning)
         #expect(
             model.progress.flatMap(CodeStatsProgressMath.repositories)
@@ -186,7 +215,7 @@ import Testing
             ])
         let model = model(agent)
         await model.refresh()
-        await model.select(.days(30))
+        await model.select(.preset(.last30))
         #expect(model.range == .days(30))
         #expect(model.report?.range == .days(30))
         #expect(model.report?.totals.commits == 3)
@@ -319,7 +348,7 @@ import Testing
         let model = model(agent)
         await model.refresh()
         #expect(!model.showsPreviousRange)
-        await model.select(.all)
+        await model.select(.preset(.allTime))
         #expect(model.phase == .content)
         #expect(model.showsPreviousRange)
         #expect(model.banners.map(\.id) == ["report"])

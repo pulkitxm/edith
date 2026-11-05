@@ -3,6 +3,14 @@ import Foundation
 import Testing
 @testable import ExtensionMarketplace
 
+@Test func onlyConnectivityFailuresCountAsOffline() {
+    #expect(ExtensionCatalogClient.isOffline(URLError(.notConnectedToInternet)))
+    #expect(ExtensionCatalogClient.isOffline(URLError(.timedOut)))
+    #expect(!ExtensionCatalogClient.isOffline(URLError(.badServerResponse)))
+    #expect(!ExtensionCatalogClient.isOffline(MarketplaceError.rateLimited))
+    #expect(!ExtensionCatalogClient.isOffline(MarketplaceError.downloadFailed))
+}
+
 @Test func aVerifiedCatalogRemainsAvailableOffline() async throws {
     let fixture = try PackageFixture()
     defer { fixture.clean() }
@@ -229,4 +237,22 @@ private func signedCatalog(_ key: Curve25519.Signing.PrivateKey, revision: Int64
     task.cancel()
     await #expect(throws: CancellationError.self) { try await task.value }
     #expect(try Data(contentsOf: cache) == data)
+}
+
+@Test func aCatalogValidatorOnlyAppliesToTheBodyItWasRecordedFor() throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let cache = fixture.directory.appendingPathComponent("catalog.json")
+    let validator = CatalogValidator(cache: cache)
+    let body = Data("catalog".utf8)
+    #expect(validator.currentTag() == nil)
+    try body.write(to: cache)
+    validator.record(tag: "\"abc\"", body: body)
+    #expect(validator.currentTag()?.tag == "\"abc\"")
+    #expect(validator.currentTag()?.body == body)
+    try Data("replaced".utf8).write(to: cache)
+    #expect(validator.currentTag() == nil)
+    try body.write(to: cache)
+    validator.record(tag: nil, body: body)
+    #expect(validator.currentTag() == nil)
 }

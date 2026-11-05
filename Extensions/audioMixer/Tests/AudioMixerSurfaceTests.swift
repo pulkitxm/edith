@@ -177,7 +177,7 @@ private final class SurfaceTapProbe: AudioMixerTapControlling {
         let all = surface.snapshot(.init(.ability("audioMixer")))
         #expect(all.rows.map(\.title) == ["Browser", "Music"])
         #expect(all.rows.map(\.value) == ["Muted", "66%"])
-        #expect(all.rows.map(\.icon) == ["speaker.slash", "speaker.wave.2"])
+        #expect(all.rows.map(\.icon) == [.speakerOff, .speaker])
         #expect(all.sources.map(\.id) == ["b.browser", "a.music"])
         #expect(all.metrics.last?.title == "Muted")
         #expect(all.actions.isEmpty)

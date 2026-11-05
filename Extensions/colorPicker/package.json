@@ -1,7 +1,7 @@
 {
   "id": "colorPicker",
   "title": "Color Picker",
-  "symbolName": "eyedropper",
+  "icon": "eyedropper",
   "category": "desk",
   "background": false,
   "commands": [
@@ -25,5 +25,36 @@
     "desk",
     "extension:colorPicker"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Pick any color on your screen and copy it in the format you need.",
+    "summary": "Press the shortcut to get a magnifier you can move over anything on screen. Click to copy the exact color as hex, RGB, HSL or code. Recent colors are kept so you can copy them again later.",
+    "steps": [
+      {
+        "icon": "keyboard",
+        "title": "Press the shortcut",
+        "detail": "A magnifier appears. You can also choose Pick Color in settings."
+      },
+      {
+        "icon": "eyedropper",
+        "title": "Click a color",
+        "detail": "Move over any pixel on screen and click to sample it."
+      },
+      {
+        "icon": "clipboard",
+        "title": "Paste it anywhere",
+        "detail": "The color is copied in your chosen format, such as #1A73E8."
+      },
+      {
+        "icon": "history",
+        "title": "Reuse recent colors",
+        "detail": "Click a swatch in settings to copy it again."
+      }
+    ],
+    "examples": [
+      "ed color pick",
+      "ed color ls --limit 5",
+      "ed color copy 1 --format rgb"
+    ]
+  }
 }

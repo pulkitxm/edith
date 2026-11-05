@@ -1,17 +1,29 @@
 import EdithExtensionCore
+import EdithIcons
 import Foundation
 
 public struct FilePlace: Identifiable, Equatable, Codable, Sendable {
     public var name: String
     public var path: String
-    public var symbol: String
+    public var icon: EdithIcon
 
     public var id: String { path }
 
-    public init(name: String, path: String, symbol: String) {
+    public init(name: String, path: String, icon: EdithIcon) {
         self.name = name
         self.path = path
-        self.symbol = symbol
+        self.icon = icon
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, path, icon
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        path = try container.decode(String.self, forKey: .path)
+        icon = try container.decodeIfPresent(EdithIcon.self, forKey: .icon) ?? .folder
     }
 }
 
@@ -33,23 +45,23 @@ public enum FilePlaces {
         volumes: [URL] = []
     ) -> [FilePlaceSection] {
         let favorites = [
-            FilePlace(name: "Home", path: home.path, symbol: "house"),
+            FilePlace(name: "Home", path: home.path, icon: .home),
             FilePlace(
                 name: "Desktop", path: home.appendingPathComponent("Desktop").path,
-                symbol: "menubar.dock.rectangle"),
+                icon: .menuBar),
             FilePlace(
                 name: "Documents", path: home.appendingPathComponent("Documents").path,
-                symbol: "doc"),
+                icon: .doc),
             FilePlace(
                 name: "Downloads", path: home.appendingPathComponent("Downloads").path,
-                symbol: "arrow.down.circle"),
-            FilePlace(name: "Applications", path: "/Applications", symbol: "square.grid.2x2"),
+                icon: .arrowDown),
+            FilePlace(name: "Applications", path: "/Applications", icon: .grid),
         ]
         var sections = [FilePlaceSection(title: "Favorites", places: favorites)]
         let locations =
-            [FilePlace(name: "Macintosh HD", path: "/", symbol: "internaldrive")]
+            [FilePlace(name: "Macintosh HD", path: "/", icon: .drive)]
             + volumes.map {
-                FilePlace(name: $0.lastPathComponent, path: $0.path, symbol: "externaldrive")
+                FilePlace(name: $0.lastPathComponent, path: $0.path, icon: .drive)
             }
         sections.append(FilePlaceSection(title: "Locations", places: locations))
         return sections
@@ -61,33 +73,33 @@ public enum FilePlaces {
         -> [FilePlaceSection]
     {
         let favorites = [
-            FilePlace(name: "Home", path: home, symbol: "house"),
+            FilePlace(name: "Home", path: home, icon: .home),
             FilePlace(
                 name: "Desktop", path: FileListing.join(parent: home, name: "Desktop"),
-                symbol: "menubar.dock.rectangle"),
+                icon: .menuBar),
             FilePlace(
                 name: "Documents", path: FileListing.join(parent: home, name: "Documents"),
-                symbol: "doc"),
+                icon: .doc),
             FilePlace(
                 name: "Downloads", path: FileListing.join(parent: home, name: "Downloads"),
-                symbol: "arrow.down.circle"),
+                icon: .arrowDown),
         ]
         var system =
             platform == .windows
             ? [
                 FilePlace(
-                    name: "Windows", path: String(home.prefix(3)), symbol: "internaldrive")
+                    name: "Windows", path: String(home.prefix(3)), icon: .drive)
             ]
             : [
-                FilePlace(name: "Root", path: "/", symbol: "internaldrive"),
-                FilePlace(name: "etc", path: "/etc", symbol: "gearshape"),
-                FilePlace(name: "var/log", path: "/var/log", symbol: "doc.text"),
-                FilePlace(name: "tmp", path: "/tmp", symbol: "clock"),
-                FilePlace(name: "Media", path: "/media", symbol: "externaldrive"),
+                FilePlace(name: "Root", path: "/", icon: .drive),
+                FilePlace(name: "etc", path: "/etc", icon: .gear),
+                FilePlace(name: "var/log", path: "/var/log", icon: .docText),
+                FilePlace(name: "tmp", path: "/tmp", icon: .clock),
+                FilePlace(name: "Media", path: "/media", icon: .drive),
             ]
         system.append(
             contentsOf: extras.map {
-                FilePlace(name: ($0 as NSString).lastPathComponent, path: $0, symbol: "folder")
+                FilePlace(name: ($0 as NSString).lastPathComponent, path: $0, icon: .folder)
             })
         return [
             FilePlaceSection(title: "Favorites", places: favorites),

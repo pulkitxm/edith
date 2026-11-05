@@ -34,7 +34,7 @@ import Testing
                     let content = state.withContext {
                         ExtensionPageHost {
                             ControlSettingsHost(presentation: model) {
-                                Form { EmojiSettingsRows(presentation: model) }.formStyle(.grouped)
+                                Form { EmojiSettingsRows(presentation: model) }.settingsForm()
                             }
                         }
                     }

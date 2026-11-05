@@ -86,7 +86,7 @@ import Testing
         try EmojiCatalog.decode(
             Data(
                 """
-                {"schema":1,"source":"fixture","groups":[{"id":"people-body","name":"People","symbol":"hand.wave"}],
+                {"schema":1,"source":"fixture","groups":[{"id":"people-body","name":"People","icon":"person"}],
                 "emoji":[{"e":"👍","n":"thumbs up","g":0,"v":0.6,"t":["thumbsup"],"s":["👍🏻","👍🏼","👍🏽","👍🏾","👍🏿"]}]}
                 """.utf8))
     }

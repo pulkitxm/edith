@@ -69,7 +69,7 @@ struct LaTeXPDFPane: View {
             Button {
                 controls.view?.goToPreviousPage(nil)
             } label: {
-                Image(systemName: "chevron.up")
+                EdithIconView(.chevronUp)
             }
             .help("Previous page").disabled(controls.page <= 1)
             Text("\(controls.page) / \(controls.count)").font(.edithText(.caption))
@@ -77,7 +77,7 @@ struct LaTeXPDFPane: View {
             Button {
                 controls.view?.goToNextPage(nil)
             } label: {
-                Image(systemName: "chevron.down")
+                EdithIconView(.chevronDown)
             }
             .help("Next page").disabled(controls.page >= controls.count)
         }
@@ -87,14 +87,14 @@ struct LaTeXPDFPane: View {
             Button {
                 controls.view?.zoomOut(nil)
             } label: {
-                Image(systemName: "minus.magnifyingglass")
+                EdithIconView(.zoomOut)
             }
             .help("Zoom PDF out")
             Text("\(controls.percent)%").font(.edithText(.caption)).monospacedDigit()
             Button {
                 controls.view?.zoomIn(nil)
             } label: {
-                Image(systemName: "plus.magnifyingglass")
+                EdithIconView(.zoomIn)
             }
             .help("Zoom PDF in")
             Button("Fit") {

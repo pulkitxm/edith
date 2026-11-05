@@ -25,7 +25,8 @@ enum DashPalette {
 
     static func categorical(_ index: Int, dark: Bool) -> Color {
         let c = dark ? darkColors : lightColors
-        return c[((index % c.count) + c.count) % c.count]
+        let slot = ((index % c.count) + c.count) % c.count
+        return slot == 0 ? DashSkin.accent(dark) : c[slot]
     }
 
     static func modelColor(_ index: Int?, dark: Bool) -> Color {
@@ -158,12 +159,6 @@ struct DashUsage: Decodable {
         let cost: Double?
         let bySource: [String: SourceBreakdown]?
     }
-}
-
-enum DashRange: Equatable {
-    case today, yesterday, thisWeek, lastWeek, all
-    case month(String)
-    case custom(String, String)
 }
 
 enum DashMetric: String { case tokens, cost }
@@ -425,7 +420,9 @@ final class DashboardModel {
     static let shared = DashboardModel()
     static let unattributedCostModel = DashboardComputation.unattributedCostModel
 
-    var range: DashRange = .all { didSet { persist(.range); recompute() } }
+    var range = DateFilterSelection.preset(.allTime) {
+        didSet { persist(.range); recompute() }
+    }
     var selectedSources: Set<String> = [] { didSet { persist(.sources); recompute() } }
     var selectedModels: Set<String> = [] { didSet { persist(.models); recompute() } }
     var selectedPaths: Set<String> = [] { didSet { persist(.paths); recompute() } }
@@ -828,7 +825,7 @@ final class DashboardModel {
 
     private var preferenceState: PreferenceState {
         PreferenceState(
-            range: encodeRange(range), sources: selectedSources, models: selectedModels,
+            range: range.rawValue, sources: selectedSources, models: selectedModels,
             paths: selectedPaths, sort: sortColumn.rawValue, sortAscending: sortAscending,
             projectSort: projSortKey.rawValue, projectSortAscending: projSortAscending,
             heatMetric: heatMetric.rawValue)
@@ -839,8 +836,8 @@ final class DashboardModel {
         defer { loading = false }
         let d = preferences
         if let rs = d.string(forKey: "dashRange") {
-            range = decodeRange(rs)
-            d.setIfChanged(encodeRange(range), forKey: "dashRange")
+            range = DateFilterSelection(rawValue: rs) ?? .preset(.allTime)
+            d.setIfChanged(range.rawValue, forKey: "dashRange")
         }
         let validSources = Set(allSources.map(\.id))
         let savedSources = d.string(forKey: "dashSources").flatMap(Self.decodeSet)
@@ -921,7 +918,7 @@ final class DashboardModel {
         let d = preferences
         switch setting {
         case .range:
-            d.setIfChanged(encodeRange(range), forKey: "dashRange")
+            d.setIfChanged(range.rawValue, forKey: "dashRange")
         case .sources:
             d.setIfChanged(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
             d.setIfChanged(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
@@ -944,43 +941,14 @@ final class DashboardModel {
         }
     }
 
-    private func encodeRange(_ r: DashRange) -> String {
-        switch r {
-        case .today: return "today"
-        case .yesterday: return "yesterday"
-        case .thisWeek: return "thisWeek"
-        case .lastWeek: return "lastWeek"
-        case .all: return "all"
-        case .month(let ym): return "month:\(ym)"
-        case .custom(let f, let t): return "custom:\(f)~\(t)"
-        }
-    }
-
     private static func decodeSet(_ raw: String) -> Set<String>? {
         let values = Set(raw.split(separator: ",").map(String.init))
         return values.isEmpty ? nil : values
     }
 
-    private func decodeRange(_ s: String) -> DashRange {
-        switch s {
-        case "today": return .today
-        case "yesterday": return .yesterday
-        case "thisWeek": return .thisWeek
-        case "lastWeek": return .lastWeek
-        case "all": return .all
-        default:
-            if s.hasPrefix("month:") { return .month(String(s.dropFirst(6))) }
-            if s.hasPrefix("custom:") {
-                let parts = s.dropFirst(7).split(separator: "~", maxSplits: 1).map(String.init)
-                if parts.count == 2 { return .custom(parts[0], parts[1]) }
-            }
-            return .all
-        }
-    }
-
     func reset() {
         loading = true
-        range = .all
+        range = .preset(.allTime)
         selectedSources = Set(defaultSources)
         selectedModels = Set(defaultModels)
         selectedPaths = []
@@ -1006,14 +974,9 @@ final class DashboardModel {
         modelTotals.filter { $0.model != Self.unattributedCostModel && $0.tokens > 0 }
     }
 
-    var dataRange: ClosedRange<Date>? {
-        guard let first = sortedPeriods.first, let last = sortedPeriods.last,
-            let e = parseYMD(first), let l = parseYMD(last)
-        else { return nil }
-        return e...max(l, cal.startOfDay(for: Date()))
-    }
+    var earliestDay: DateFilterDay? { sortedPeriods.first.flatMap(DateFilterDay.init) }
 
-    func ymd(_ d: Date) -> String { ymdStr(d) }
+    var dateFilterMonths: [DateFilterMonth] { monthOptions.compactMap(DateFilterMonth.init) }
 
     private func computeRequest(_ data: DashUsage) -> DashboardComputeRequest {
         DashboardComputeRequest(
@@ -1077,15 +1040,6 @@ final class DashboardModel {
             projectTree, key: projSortKey, ascending: projSortAscending)
         published = next
     }
-}
-
-extension DateFormatter {
-    static let monthParser: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM"
-        return f
-    }()
 }
 
 enum DashFmt {

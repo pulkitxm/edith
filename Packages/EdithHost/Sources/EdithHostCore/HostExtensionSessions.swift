@@ -511,6 +511,15 @@ public final class HostExtensionSessions {
         return false
     }
 
+    public func quitBlockers() async -> [String] {
+        var blockers: [String] = []
+        for (id, worker) in workers.sorted(by: { $0.key < $1.key })
+        where await worker.preventsQuit() {
+            blockers.append(id)
+        }
+        return blockers
+    }
+
     public func applyUpdate(_ package: ExtensionPackage) async throws {
         guard !pendingDisableIDs.contains(package.id), states[package.id] == .active,
             versions[package.id] != package.version

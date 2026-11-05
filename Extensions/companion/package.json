@@ -1,7 +1,7 @@
 {
   "id": "companion",
   "title": "Memory",
-  "symbolName": "brain.head.profile",
+  "icon": "companion",
   "category": "agents",
   "background": true,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "companion",
       "title": "Memory",
-      "symbolName": "brain.head.profile",
+      "icon": "companion",
       "order": 4
     }
   ],
@@ -21,5 +21,36 @@
   "notchCards": [
     "extension:companion"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "A private memory of your notes and voice memos that you can ask questions.",
+    "summary": "Memory keeps your notes, recordings and files in a searchable store that runs on a machine you choose. Ask it questions and it answers from what you saved, with sources. Setup takes a few minutes and runs a small set of containers on that machine.",
+    "steps": [
+      {
+        "icon": "server",
+        "title": "Choose where it runs",
+        "detail": "Pick this Mac or one of your machines to host the memory service."
+      },
+      {
+        "icon": "tray",
+        "title": "Add something to remember",
+        "detail": "Drop in notes, PDFs, photos or recordings, or capture a voice memo."
+      },
+      {
+        "icon": "messages",
+        "title": "Ask a question",
+        "detail": "Chat answers from your own memory and shows the notes it used."
+      },
+      {
+        "icon": "jev",
+        "title": "See what it learned",
+        "detail": "Mind shows beliefs and patterns it formed, which you can correct or forget."
+      }
+    ],
+    "examples": [
+      "ed companion status",
+      "ed companion ask what did I decide yesterday?",
+      "ed companion search roadmap"
+    ]
+  }
 }

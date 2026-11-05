@@ -36,8 +36,8 @@ import Foundation
                 title: TerminalWorker.bounded(tab.title, bytes: 512),
                 detail: TerminalWorker.bounded(
                     abbreviated(tab.directory), bytes: 1_024),
-                value: tab.running ? "Running" : "Ended", icon: "terminal",
-                actions: [.init("focus/" + tab.id.uuidString, "Show", "macwindow")])
+                value: tab.running ? "Running" : "Ended", icon: .terminal,
+                actions: [.init("focus/" + tab.id.uuidString, "Show", .window)])
         }
         return SurfaceSnapshot(
             providerID: "terminal",
@@ -46,7 +46,7 @@ import Foundation
                 .init("running", "Running", "\(tabs.filter(\.running).count)"),
             ],
             rows: Array(rows),
-            actions: [.init("new", "New terminal", "plus")],
+            actions: [.init("new", "New terminal", .plus)],
             sources: allTabs.map {
                 .init($0.id.uuidString, TerminalWorker.bounded($0.title, bytes: 512))
             },

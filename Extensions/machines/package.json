@@ -1,7 +1,7 @@
 {
   "id": "machines",
   "title": "Machines",
-  "symbolName": "desktopcomputer",
+  "icon": "display",
   "category": "agents",
   "background": true,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "machines",
       "title": "Machines",
-      "symbolName": "server.rack",
+      "icon": "server",
       "order": 6
     }
   ],
@@ -23,5 +23,37 @@
     "machines",
     "extension:machines"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Watch, browse and run your servers and containers from one place.",
+    "summary": "Add any computer you can reach over SSH. Edith shows its CPU, memory and disk, opens a terminal, browses files and manages Docker containers. Your Mac is already listed. Removing a machine only forgets it; nothing on the machine changes.",
+    "steps": [
+      {
+        "icon": "addFilled",
+        "title": "Add a machine",
+        "detail": "Enter its address and username, or pick a host from your SSH config."
+      },
+      {
+        "icon": "gauge",
+        "title": "Watch its health",
+        "detail": "See CPU, memory, disk and running containers for every machine at a glance."
+      },
+      {
+        "icon": "terminal",
+        "title": "Open a terminal or files",
+        "detail": "Pick a machine to run commands, browse and transfer files, or manage Docker."
+      },
+      {
+        "icon": "layoutLeft",
+        "title": "Build a workspace",
+        "detail": "Arrange terminals from several machines side by side in split panes."
+      }
+    ],
+    "examples": [
+      "ed machines ls",
+      "ed machines add box --host 10.0.0.4",
+      "ed machines show box",
+      "ed machines exec box uptime"
+    ]
+  }
 }

@@ -21,6 +21,7 @@ struct AttentionPage: View {
 
     private var pageHeader: some View {
         PageHeader(
+            divider: true,
             title: { Text("Attention") },
             trailing: {
                 EmptyView()
@@ -30,7 +31,6 @@ struct AttentionPage: View {
                     AttentionSectionBar(model: model)
                     if model.section.usesPeriod {
                         AttentionPeriodControl(model: model)
-                        AttentionFilterBar(model: model)
                     }
                 }
             })
@@ -67,6 +67,7 @@ struct AttentionPage: View {
             }
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
+        .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
         .padding(
             .bottom, hasNotices || model.hasFilters ? UIScale.pt(PageMetrics.sectionSpacing) : 0)
     }
@@ -113,7 +114,8 @@ struct AttentionPage: View {
 
     private var scaffold: some View {
         PageScaffold(
-            pinnedHeader: true, scrollIdentity: model.section.rawValue, activity: model.activity
+            width: model.needsSetup ? .readable : .fluid, pinnedHeader: true,
+            scrollIdentity: model.section.rawValue, activity: model.activity
         ) {
             pageHeader
         } content: {
@@ -122,6 +124,7 @@ struct AttentionPage: View {
             PageLoading(
                 state: model.loading.state,
                 title: "No attention activity",
+                errorTitle: "Attention could not load",
                 message: model.loading.errorMessage
                     ?? "Enable a tracking source to begin collecting activity.",
                 layout: .analytics, activity: model.activity,
@@ -132,6 +135,7 @@ struct AttentionPage: View {
                         AttentionSetupView(model: model)
                     } else if model.section == .settings {
                         AttentionSettingsView(model: model)
+                            .buttonStyle(.edith(.secondary))
                     } else if model.hasFilters, !model.hasActivity, model.section != .focus {
                         AttentionNoMatchView(model: model)
                     } else {
@@ -143,6 +147,8 @@ struct AttentionPage: View {
                             case .overview:
                                 if model.hasActivity {
                                     AttentionOverview(model: model)
+                                } else if model.showsEmptyPeriod {
+                                    AttentionEmptyPeriodView(model: model)
                                 } else {
                                     AttentionCollectingView(model: model)
                                 }
@@ -167,7 +173,7 @@ private struct AttentionPresenterCover: View {
     var body: some View {
         ZStack {
             DashSkin.paper(scheme == .dark)
-            Label("Hidden while presenting", systemImage: "eye.slash")
+            Label("Hidden while presenting", edith: .eyeOff)
                 .font(.edithText(.callout))
                 .foregroundStyle(.secondary)
         }
@@ -175,113 +181,42 @@ private struct AttentionPresenterCover: View {
 }
 
 private struct AttentionPeriodControl: View {
-    let model: AttentionPageModel
-    @State private var customOpen = false
-    @State private var customFrom = Date()
-    @State private var customTo = Date()
+    @Bindable var model: AttentionPageModel
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        let dark = scheme == .dark
-        WrapHStack(spacing: UIScale.pt(6), lineSpacing: UIScale.pt(8)) {
-            ForEach(
-                compact
-                    ? [AttentionRangePreset.today, .allTime] : [.today, .last7, .last30, .allTime],
-                id: \.self
-            ) { preset in
-                chip(
-                    preset == .last7 ? "7 days" : preset == .last30 ? "30 days" : preset.title,
-                    active: preset == .allTime
-                        ? model.period.preset == .allTime : model.period == AttentionPeriod(preset),
-                    dark: dark
-                ) { model.select(preset) }
+        PageFilterBar {
+            PageFilterRow("Range") {
+                PageDateFilter(
+                    selection: Binding(
+                        get: { model.period.selection }, set: { model.select($0) }),
+                    earliest: AttentionPeriod.earliestDay())
+                if let note = model.period.retentionNote() {
+                    Text(note)
+                        .font(.edithText(.caption))
+                        .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+                        .lineLimit(1)
+                        .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                        .fixedSize()
+                }
             }
-            Menu {
-                ForEach(Array(AttentionRangePreset.groups.enumerated()), id: \.offset) { _, group in
-                    Section {
-                        ForEach(group) { preset in
-                            Button(preset.title) { model.select(preset) }
-                        }
-                    }
-                }
-                Button("Custom range…") {
-                    customFrom = model.period.start
-                    customTo = model.period.lastDay
-                    customOpen = true
-                }
-            } label: {
-                Label("Range", systemImage: "calendar")
-            }
-            .menuStyle(.button)
-            .buttonStyle(.edith(.secondary))
-            .fixedSize()
-            .popover(isPresented: $customOpen, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    Text("Custom range").font(.system(size: UIScale.pt(13), weight: .semibold))
-                    DatePicker(
-                        "From", selection: $customFrom, in: ...Date(), displayedComponents: .date)
-                    DatePicker(
-                        "To", selection: $customTo, in: ...Date(), displayedComponents: .date)
-                    HStack {
-                        Spacer()
-                        Button("Show") {
-                            model.selectRange(from: customFrom, to: customTo)
-                            customOpen = false
-                        }
-                        .buttonStyle(.edith(.primary))
-                    }
-                }
-                .padding(16)
-                .frame(width: UIScale.pt(280))
-            }
-            AttentionWindowMenu(model: model)
-            AttentionIdleMenu(model: model)
-            HStack(spacing: UIScale.pt(6)) {
-                Button {
-                    model.step(-1)
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .buttonStyle(.edith(.iconOnly))
-                .disabled(!model.canStepBackward)
-                .help("Previous period")
-                Text(model.period.title())
-                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                    .frame(minWidth: UIScale.pt(96))
-                Button {
-                    model.step(1)
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-                .buttonStyle(.edith(.iconOnly))
-                .disabled(!model.canStepForward)
-                .help("Next period")
-            }
-            .fixedSize()
-        }
-    }
-
-    private func chip(_ title: String, active: Bool, dark: Bool, action: @escaping () -> Void)
-        -> some View
-    {
-        Button(action: action) {
-            Text(title)
-                .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
-                .padding(.horizontal, UIScale.pt(10))
-                .padding(.vertical, UIScale.pt(5))
-                .widgetBar(
-                    cornerRadius: 8,
-                    fill: active
-                        ? AnyShapeStyle(DashSkin.accent(dark))
-                        : AnyShapeStyle(DashSkin.paper2(dark)),
-                    stroke: active ? Color.clear : DashSkin.lineStrong(dark)
+            PageFilterRow("Show") {
+                AttentionFilterMenu(model: model)
+                AttentionWindowMenu(model: model)
+                AttentionIdleMenu(model: model)
+                SearchField(
+                    placeholder: "Search names and titles", text: $model.searchText, compact: true
                 )
-                .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+                .frame(width: UIScale.pt(240))
+                if model.hasFilters {
+                    Button("Clear filters") { model.clearFilters() }
+                        .buttonStyle(.edith(.borderless))
+                        .font(PageMetrics.chipFont)
+                        .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                        .fixedSize()
+                }
+            }
         }
-        .buttonStyle(.edith(.borderless))
-        .fixedSize()
     }
 }
 
@@ -289,12 +224,15 @@ private struct AttentionIdleMenu: View {
     @Bindable var model: AttentionPageModel
 
     var body: some View {
-        Menu {
+        PageMenuChip(
+            model.excludeIdleTime ? "Exclude idle" : "Include idle", icon: .moon,
+            active: !model.excludeIdleTime
+        ) {
             Button {
                 model.excludeIdleTime = true
             } label: {
                 if model.excludeIdleTime {
-                    Label("Exclude idle time", systemImage: "checkmark")
+                    Label("Exclude idle time", edith: .check)
                 } else {
                     Text("Exclude idle time")
                 }
@@ -305,17 +243,10 @@ private struct AttentionIdleMenu: View {
                 if model.excludeIdleTime {
                     Text("Include idle time")
                 } else {
-                    Label("Include idle time", systemImage: "checkmark")
+                    Label("Include idle time", edith: .check)
                 }
             }
-        } label: {
-            Label(
-                model.excludeIdleTime ? "Exclude idle" : "Include idle",
-                systemImage: "moon.zzz")
         }
-        .menuStyle(.button)
-        .buttonStyle(.edith(model.excludeIdleTime ? .primary : .secondary))
-        .fixedSize()
         .help("Filter screen time with or without idle and locked periods")
     }
 }
@@ -325,7 +256,9 @@ private struct AttentionWindowMenu: View {
 
     var body: some View {
         let window = model.window
-        Menu {
+        PageMenuChip(
+            window.isAll ? "All hours" : window.title, icon: .clock, active: !window.isAll
+        ) {
             Section("Days") {
                 ForEach(AttentionDayFilter.allCases) { filter in
                     toggle(
@@ -369,17 +302,12 @@ private struct AttentionWindowMenu: View {
             if !window.isAll {
                 Button("Reset to all days and hours") { model.setWindow(.all) }
             }
-        } label: {
-            Label(window.isAll ? "All hours" : window.title, systemImage: "clock")
         }
-        .menuStyle(.button)
-        .buttonStyle(.edith(window.isAll ? .secondary : .primary))
-        .fixedSize()
     }
 
     private func toggle(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            if on { Label(title, systemImage: "checkmark") } else { Text(title) }
+            if on { Label(title, edith: .check) } else { Text(title) }
         }
     }
 }
@@ -406,19 +334,38 @@ private struct AttentionSetupView: View {
     @Bindable var model: AttentionPageModel
     @State private var applicationTracking = true
     @State private var browserTracking = true
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+            VStack(spacing: UIScale.pt(16)) {
+                PageGuideBadge(icon: .hourglass)
                 Text("See where your attention actually goes")
-                    .font(DashSkin.heading(28))
+                    .font(.edithText(.title2)).fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
                 Text(
-                    "Edith records real foreground activity on this Mac. Start with applications, add browser detail if you want it, and change every rule later. Nothing leaves this Mac unless you enable iCloud backup."
+                    "Attention measures how long each app and website is in front of you, so you can see where your day really goes. It runs quietly in the background and everything stays on this Mac unless you turn on iCloud backup."
                 )
-                .foregroundStyle(.secondary)
+                .font(.edithText(.body)).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: UIScale.pt(520))
+                PageGuideSteps(
+                    steps: [
+                        PageGuideStep(
+                            icon: .stepTools, title: "Pick sources",
+                            detail: "Apps, and optionally your browser."),
+                        PageGuideStep(
+                            icon: .shield, title: "Set privacy",
+                            detail: "Choose how much detail is stored."),
+                        PageGuideStep(
+                            icon: .play, title: "Begin tracking",
+                            detail: "Charts appear after a few minutes of use."),
+                    ], columns: compact ? 1 : 3)
             }
-            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, UIScale.pt(12))
 
             PageCard {
                 SetupStep(
@@ -429,12 +376,12 @@ private struct AttentionSetupView: View {
                 Divider()
                 Toggle(isOn: $applicationTracking) {
                     SourceLabel(
-                        icon: "macwindow", title: "Applications",
+                        icon: .window, title: "Applications",
                         subtitle: "Foreground app, active time, idle time, sleep and lock state")
                 }
                 Toggle(isOn: $browserTracking) {
                     SourceLabel(
-                        icon: "globe", title: "Browser detail",
+                        icon: .globe, title: "Browser detail",
                         subtitle: "Focused site, tab changes, favicons, profiles and optional media"
                     )
                 }
@@ -457,7 +404,7 @@ private struct AttentionSetupView: View {
                         }
                     })
                 Text(privacyDescription)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
                 if model.settings.privacyLevel == .detailed {
                     Toggle(
@@ -472,13 +419,19 @@ private struct AttentionSetupView: View {
                 BrowserInstallCard(model: model, showToken: true)
             }
 
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("The event store starts empty")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    Text("You will see a collecting state until genuine activity arrives.")
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(.secondary)
+            HStack(spacing: UIScale.pt(16)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text(
+                        AttentionPageModel.setupBlocker(
+                            applicationTracking: applicationTracking,
+                            browserTracking: browserTracking) ?? "Nothing is recorded yet"
+                    )
+                    .font(.edithText(.callout).weight(.semibold))
+                    Text(
+                        "Tracking starts when you press Begin. You can pause or erase it any time in Settings."
+                    )
+                    .font(.edithText(.subheadline))
+                    .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Begin tracking") {
@@ -490,8 +443,9 @@ private struct AttentionSetupView: View {
                 .controlSize(.large)
                 .disabled(!applicationTracking && !browserTracking)
             }
-            .padding(.top, 4)
+            .padding(.top, UIScale.pt(4))
         }
+        .buttonStyle(.edith(.secondary))
     }
 
     private var privacyDescription: String {
@@ -519,7 +473,7 @@ private struct AttentionFilterScopeNotice: View {
                 + AttentionFormat.duration(summary.activeDuration) + " of "
                 + AttentionFormat.duration(summary.activeDuration + summary.unmatchedDuration)
                 + " active time. Idle time is left out while filtering.",
-            symbol: "line.3.horizontal.decrease.circle",
+            icon: .filter,
             actions: {
                 Button("Clear filters") { model.clearFilters() }
             })
@@ -530,75 +484,82 @@ private struct AttentionNoMatchView: View {
     let model: AttentionPageModel
 
     var body: some View {
-        PageCard {
-            VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .font(.system(size: UIScale.pt(30), weight: .light))
-                    .foregroundStyle(.secondary)
-                Text("Nothing matches these filters").font(DashSkin.heading(20))
-                Text(
-                    "No activity in \(model.period.title()) matches the current filters. "
-                        + AttentionFormat.duration(model.summary.unmatchedDuration)
-                        + " of other activity is hidden."
-                )
-                .font(.system(size: UIScale.pt(12.5)))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                Button("Clear filters") { model.clearFilters() }
-                    .buttonStyle(.edith(.primary))
+        PageEmptyState(
+            icon: .filter,
+            title: "Nothing matches these filters",
+            message:
+                "No activity in \(model.period.title()) matches the current filters. "
+                + AttentionFormat.duration(model.summary.unmatchedDuration)
+                + " of other activity is hidden.",
+            primary: PageAction("Clear filters", icon: .closeFilled) {
+                model.clearFilters()
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, UIScale.pt(24))
-        }
+        )
+        .pageFillViewport()
+    }
+}
+
+private struct AttentionEmptyPeriodView: View {
+    let model: AttentionPageModel
+
+    var body: some View {
+        PageEmptyState(
+            icon: .calendar,
+            title: "No activity in \(model.period.title())",
+            message: model.period.retentionNote().map { $0 + "." }
+                ?? "Attention recorded nothing in this period. Pick another range to see it.",
+            primary: PageAction("Show today", icon: .undo) {
+                model.select(.preset(.today))
+            }
+        )
+        .pageFillViewport()
     }
 }
 
 private struct AttentionCollectingView: View {
     @Bindable var model: AttentionPageModel
 
+    private var enabled: Bool { model.settings.isEnabled }
+
     var body: some View {
-        PageCard {
-            VStack(spacing: 18) {
-                ZStack {
-                    Circle().fill(Color.themeAccent.opacity(0.12)).frame(
-                        width: UIScale.pt(76), height: UIScale.pt(76))
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: UIScale.pt(30), weight: .medium))
-                        .foregroundStyle(Color.themeAccent)
-                }
-                Text(
-                    model.settings.isEnabled
-                        ? "Collecting your first real activity" : "Attention is disabled"
-                )
-                .font(DashSkin.heading(24))
-                Text(
-                    model.settings.isEnabled
-                        ? "Use your Mac normally. The overview appears after the first genuine foreground heartbeat arrives."
-                        : "Attention is completely disabled. Existing history and settings remain on this Mac."
-                )
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: UIScale.pt(520))
-                HStack(spacing: 12) {
-                    AttentionStatusPill(
-                        title: "Applications",
-                        state: model.settings.isEnabled && model.settings.trackingEnabled
-                            ? "Listening" : "Off",
-                        good: model.settings.isEnabled && model.settings.trackingEnabled)
-                    AttentionStatusPill(
-                        title: "Browser",
-                        state: model.browserConnected
-                            ? "Connected"
-                            : model.settings.isEnabled && model.settings.browserTrackingEnabled
-                                ? "Waiting" : "Off",
-                        good: model.browserConnected)
-                }
-                Button("Review setup") { model.section = .settings }
-                    .buttonStyle(.edith(.secondary))
+        VStack(spacing: UIScale.pt(16)) {
+            PageEmptyState(
+                icon: enabled ? .pulse : .pause,
+                title: enabled ? "Tracking is on, waiting for activity" : "Tracking is paused",
+                message: enabled
+                    ? "Use your Mac normally. Charts appear within a minute or two of the first app or site you use. This page updates by itself."
+                    : "Attention is not recording. Your existing history and settings stay on this Mac.",
+                primary: enabled
+                    ? PageAction("Review sources", icon: .adjust) {
+                        model.section = .settings
+                    }
+                    : PageAction("Turn tracking on", icon: .play) {
+                        model.setAttentionEnabled(true)
+                    },
+                secondary: enabled
+                    ? nil
+                    : PageAction("Open settings", icon: .gear) {
+                        model.section = .settings
+                    }
+            )
+            .frame(minHeight: UIScale.pt(240))
+            HStack(spacing: 12) {
+                AttentionStatusPill(
+                    title: "Applications",
+                    state: enabled && model.settings.trackingEnabled ? "Listening" : "Off",
+                    good: enabled && model.settings.trackingEnabled)
+                AttentionStatusPill(
+                    title: "Browser",
+                    state: model.browserConnected
+                        ? "Connected"
+                        : enabled && model.settings.browserTrackingEnabled
+                            ? "Waiting for the extension" : "Off",
+                    good: model.browserConnected)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 42)
         }
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .pageFillViewport()
     }
 }
 
@@ -608,31 +569,32 @@ struct SetupStep: View {
     let subtitle: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 11) {
+        HStack(alignment: .top, spacing: UIScale.pt(12)) {
             Text(number)
-                .font(.system(size: UIScale.pt(12), weight: .bold, design: .rounded))
+                .font(.edithText(.callout).weight(.bold))
                 .frame(width: UIScale.pt(26), height: UIScale.pt(26))
                 .background(Color.themeAccent.opacity(0.14), in: Circle())
                 .foregroundStyle(Color.themeAccent)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
-                Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(title).font(.edithText(.headline))
+                Text(subtitle).font(.edithText(.callout)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 }
 
 struct SourceLabel: View {
-    let icon: String
+    let icon: EdithIcon
     let title: String
     let subtitle: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon).foregroundStyle(Color.themeAccent).frame(width: UIScale.pt(24))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: UIScale.pt(13), weight: .semibold))
-                Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: UIScale.pt(8)) {
+            EdithIconView(icon).foregroundStyle(Color.themeAccent).frame(width: UIScale.pt(20))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(title).font(.edithText(.body).weight(.semibold))
+                Text(subtitle).font(.edithText(.subheadline)).foregroundStyle(.secondary)
             }
         }
     }
@@ -650,12 +612,12 @@ struct GuideRow<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Text(String(number)).font(.system(size: UIScale.pt(10), weight: .bold)).frame(
+        HStack(spacing: UIScale.pt(8)) {
+            Text(String(number)).font(.edithText(.caption).weight(.bold)).frame(
                 width: UIScale.pt(21), height: UIScale.pt(21)
             )
             .background(.secondary.opacity(0.12), in: Circle())
-            Text(text).font(.system(size: UIScale.pt(12)))
+            Text(text).font(.edithText(.callout))
             Spacer()
             trailing
         }
@@ -678,9 +640,10 @@ struct SettingsTitle: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
-            Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+            Text(title).font(.edithText(.headline))
+            Text(subtitle).font(.edithText(.callout)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -723,7 +686,7 @@ struct BrowserInstallCard: View {
             if showToken {
                 Divider()
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("Local port").font(.system(size: UIScale.pt(11), weight: .semibold))
+                    Text("Local port").font(.edithText(.subheadline).weight(.semibold))
                     Text(String(model.settings.serverPort))
                         .font(.system(size: UIScale.pt(11), design: .monospaced))
                         .textSelection(.enabled)
@@ -739,13 +702,13 @@ struct BrowserInstallCard: View {
                     Text(
                         "Paste this token into the extension settings for every profile. Each profile gets its own label and can import its own 30-day site inventory."
                     )
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                 }
             }
             Text(
                 "Version \(AttentionExtensionInstaller.version) reads the focused tab, page titles, searches, repositories, videos, playing media and typing, clicking and scrolling counts on every site. Updates install themselves when Edith ships a newer version."
             )
-            .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
+            .font(.edithText(.subheadline)).foregroundStyle(.secondary)
         }
     }
 }

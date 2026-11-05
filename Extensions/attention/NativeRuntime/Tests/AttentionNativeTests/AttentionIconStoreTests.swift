@@ -53,7 +53,7 @@ import Testing
 
     @Test func symbolsNeverLoad() async {
         let store = AttentionIconStore()
-        let descriptor = AttentionEventIconDescriptor.symbol("globe")
+        let descriptor = AttentionEventIconDescriptor.icon(.globe)
         #expect(!store.needsLoad(descriptor))
         #expect(await store.load(descriptor, fetch: { Data() }) == nil)
     }

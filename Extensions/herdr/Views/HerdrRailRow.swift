@@ -31,10 +31,7 @@ struct HerdrRailRow: View, Equatable {
                     .padding(.top, UIScale.pt(2))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(agent.title)
-                        .font(
-                            .system(
-                                size: UIScale.pt(12.5), weight: selected ? .semibold : .medium)
-                        )
+                        .font(.edithText(.callout).weight(selected ? .semibold : .medium))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -48,8 +45,8 @@ struct HerdrRailRow: View, Equatable {
                 Spacer(minLength: 0)
                 let waiting = store.messaging.armedHooks(for: agent.id)
                 if !waiting.isEmpty {
-                    Image(systemName: "paperplane.circle.fill")
-                        .font(.system(size: UIScale.pt(11)))
+                    EdithIconView(.send)
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.accent(dark))
                         .padding(.top, UIScale.pt(2))
                         .help(waitingHelp(waiting))

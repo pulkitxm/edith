@@ -49,7 +49,7 @@ extension SocialManagerModel: PaneWorkspaceInteractions {
     func paneIdentity(_ id: String) -> WorkspacePaneIdentity? {
         guard let account = account(id), let platform = platform(for: account) else { return nil }
         return WorkspacePaneIdentity(
-            title: accountTitle(account), category: platform.name, symbol: platform.symbol,
+            title: accountTitle(account), category: platform.name, icon: platform.icon,
             image: avatars[account.id])
     }
 

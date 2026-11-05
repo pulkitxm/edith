@@ -59,7 +59,7 @@ import Testing
     }
 }
 
-private actor ScanGate {
+actor ScanGate {
     private var continuation: CheckedContinuation<Void, Never>?
     var waiting: Bool { continuation != nil }
 
@@ -70,5 +70,35 @@ private actor ScanGate {
     func release() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+@Suite struct BlitzTreePresentationTests {
+    @Test func noFolderYetShowsTheIntroduction() {
+        #expect(
+            BlitzTreePresentation(
+                hasRoot: false, hasReport: false, scanning: false, hasError: false)
+                == .intro)
+    }
+
+    @Test func scanningWithoutAReportShowsProgress() {
+        #expect(
+            BlitzTreePresentation(hasRoot: true, hasReport: false, scanning: true, hasError: false)
+                == .scanning)
+    }
+
+    @Test func failedAndCancelledScansExplainThemselves() {
+        #expect(
+            BlitzTreePresentation(hasRoot: true, hasReport: false, scanning: false, hasError: true)
+                == .failed)
+        #expect(
+            BlitzTreePresentation(hasRoot: true, hasReport: false, scanning: false, hasError: false)
+                == .cancelled)
+    }
+
+    @Test func aReportKeepsShowingWhileRefreshingOrFailing() {
+        #expect(
+            BlitzTreePresentation(hasRoot: true, hasReport: true, scanning: true, hasError: true)
+                == .results)
     }
 }

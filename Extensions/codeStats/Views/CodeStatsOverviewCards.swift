@@ -2,27 +2,16 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-struct CodeStatsRangePicker: View {
-    let range: CodeStatsRange
-    let select: (CodeStatsRange) -> Void
+struct CodeStatsDateFilter: View {
+    let model: CodeStatsModel
 
     var body: some View {
-        EdithSegmentedPicker(
-            "Range",
-            selection: Binding(get: { range }, set: { select($0) }),
-            options: CodeStatsRange.presets, label: { Self.title($0) }
-        )
-        .labelsHidden()
-        .fixedSize()
-    }
-
-    static func title(_ range: CodeStatsRange) -> String {
-        switch range {
-        case .days(let count): "\(count) days"
-        case .year: "1 year"
-        case .all: "All"
-        case .between(let start, let end): start + " to " + end
-        }
+        PageDateFilter(
+            selection: Binding(
+                get: { model.selection },
+                set: { next in Task { await model.select(next) } }),
+            months: model.facets.months, earliest: model.facets.earliestDay,
+            now: model.dateFilterNow, calendar: model.dateFilterCalendar)
     }
 }
 
@@ -31,63 +20,52 @@ struct CodeStatsKPIGrid: View {
     let dark: Bool
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: UIScale.pt(10)) { tiles }
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), spacing: UIScale.pt(10))],
-                spacing: UIScale.pt(10)
-            ) { tiles }
+        PageMetricGrid {
+            tile(
+                "Commits", CodeStatsNumberFormat.compact(report.totals.commits),
+                icon: .nodes,
+                change: report.momentum?.commitChange, detail: commitsPerDay(report.totals))
+            tile(
+                "Lines authored", CodeStatsNumberFormat.compact(report.totals.authored),
+                icon: .textAdd,
+                change: report.momentum?.lineChange,
+                detail:
+                    "+\(CodeStatsNumberFormat.grouped(report.totals.added)) / -\(CodeStatsNumberFormat.grouped(report.totals.deleted))"
+            )
+            tile(
+                "Active days", CodeStatsNumberFormat.grouped(report.totals.activeDays),
+                icon: .calendar,
+                detail:
+                    "\(CodeStatsNumberFormat.decimal(report.totals.averagePerActiveDay)) lines per active day"
+            )
+            tile(
+                "Streak", CodeStatsNumberFormat.grouped(report.totals.currentStreak) + "d",
+                icon: .flame,
+                detail: "Longest " + Self.days(report.totals.longestStreak))
+            tile(
+                "Repositories", CodeStatsNumberFormat.grouped(report.totals.repositories),
+                icon: .box,
+                detail: "Net " + CodeStatsNumberFormat.grouped(report.totals.net) + " lines")
         }
     }
 
-    @ViewBuilder private var tiles: some View {
-        let totals = report.totals
-        CodeStatsTile(
-            label: "Commits", value: CodeStatsNumberFormat.compact(totals.commits),
-            symbol: "point.3.connected.trianglepath.dotted",
-            change: report.momentum?.commitChange, dark: dark)
-        CodeStatsTile(
-            label: "Lines authored", value: CodeStatsNumberFormat.compact(totals.authored),
-            symbol: "text.line.first.and.arrowtriangle.forward",
-            change: report.momentum?.lineChange,
-            detail:
-                "+\(CodeStatsNumberFormat.grouped(totals.added)) / -\(CodeStatsNumberFormat.grouped(totals.deleted))",
-            dark: dark)
-        CodeStatsTile(
-            label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays),
-            symbol: "calendar",
-            detail:
-                "\(CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)) lines per active day",
-            dark: dark)
-        CodeStatsTile(
-            label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d",
-            symbol: "flame",
-            detail: "Longest " + CodeStatsNumberFormat.grouped(totals.longestStreak) + " days",
-            dark: dark)
-        CodeStatsTile(
-            label: "Repositories", value: CodeStatsNumberFormat.grouped(totals.repositories),
-            symbol: "shippingbox",
-            detail: "Net " + CodeStatsNumberFormat.grouped(totals.net) + " lines", dark: dark)
+    static func days(_ count: Int) -> String {
+        CodeStatsNumberFormat.grouped(count) + (count == 1 ? " day" : " days")
+    }
+
+    private func tile(
+        _ title: String, _ value: String, icon: EdithIcon, change: Double? = nil, detail: String
+    ) -> some View {
+        PageMetric(
+            title: title, value: value, detail: detail, icon: icon,
+            tint: DashSkin.accent(dark), trend: change.map { CodeStatsNumberFormat.percent($0) },
+            trendPositive: (change ?? 0) >= 0)
     }
 }
 
-struct CodeStatsTile: View {
-    let label: String
-    let value: String
-    let symbol: String
-    var change: Double?
-    var detail: String?
-    let dark: Bool
-
-    var body: some View {
-        PageMetric(
-            title: label, value: value,
-            detail: detail ?? (change == nil ? " " : "vs previous period"), symbol: symbol,
-            tint: DashSkin.accent(dark), trend: change.map { CodeStatsNumberFormat.percent($0) },
-            trendPositive: (change ?? 0) >= 0
-        )
-        .frame(minWidth: UIScale.pt(170))
-    }
+private func commitsPerDay(_ totals: CodeStatsTotals) -> String {
+    let perDay = totals.activeDays > 0 ? Double(totals.commits) / Double(totals.activeDays) : 0
+    return CodeStatsNumberFormat.decimal(perDay) + " per active day"
 }
 
 struct CodeStatsHeatmapCard: View {
@@ -96,10 +74,39 @@ struct CodeStatsHeatmapCard: View {
 
     var body: some View {
         PageCard(
-            title: "Contributions", note: "Commits per day, hover a day for details"
+            title: "Contributions", note: "Commits per day, hover a day for details", fill: true
         ) {
-            CodeStatsHeatGrid(weeks: weeks, dark: dark)
+            CodeStatsHeatGrid(weeks: weeks, dark: dark, fillsWidth: true)
         }
+    }
+}
+
+struct CodeStatsActivityRow: View {
+    static let sharedRowWeeks = 27
+
+    let projection: CodeStatsProjection
+    let dark: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                heatmap.frame(minWidth: UIScale.pt(420))
+                topDays.frame(width: UIScale.pt(CodeStatsTopDaysCard.width))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                heatmap
+                topDays
+            }
+        }
+    }
+
+    private var heatmap: some View {
+        CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
+    }
+
+    private var topDays: some View {
+        CodeStatsTopDaysCard(days: projection.topDays, dark: dark)
     }
 }
 
@@ -107,6 +114,7 @@ struct CodeStatsHeatGrid: View {
     let weeks: [CodeStatsHeatWeek]
     let dark: Bool
     var cellSize: CGFloat = 14
+    var fillsWidth = false
     @Environment(\.codeStatsActions) private var actions
     var body: some View {
         let cells = Dictionary(uniqueKeysWithValues: weeks.flatMap(\.cells).map { ($0.id, $0) })
@@ -118,7 +126,9 @@ struct CodeStatsHeatGrid: View {
                         id: $0.id, date: $0.date, value: Double($0.commits), level: $0.level)
                 })
         }
-        ActivityCalendarGrid(weeks: calendarWeeks, dark: dark, cellSize: cellSize) { day in
+        ActivityCalendarGrid(
+            weeks: calendarWeeks, dark: dark, cellSize: cellSize, fillsWidth: fillsWidth
+        ) { day in
             if let cell = cells[day.id] {
                 CodeStatsDayPopover(cell: cell, detail: actions.dayDetails[cell.id], dark: dark)
             }
@@ -134,7 +144,7 @@ struct CodeStatsDayPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             Text(cell.date?.formatted(date: .complete, time: .omitted) ?? cell.id)
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
             HStack(spacing: UIScale.pt(14)) {
                 metric("Commits", CodeStatsNumberFormat.grouped(detail?.commits ?? cell.commits))
                 metric("Lines", CodeStatsNumberFormat.compact(detail?.lines ?? cell.lines))
@@ -147,7 +157,7 @@ struct CodeStatsDayPopover: View {
             }
             if (detail?.commits ?? cell.commits) == 0 {
                 Text("No commits on this day.")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
         }
@@ -157,20 +167,16 @@ struct CodeStatsDayPopover: View {
 
     private func metric(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text(title.uppercased())
-                .font(DashSkin.mono(9))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            PageCapsLabel(title)
             Text(value)
-                .font(.system(size: UIScale.pt(16), weight: .semibold))
+                .font(.edithText(.title3).weight(.semibold))
                 .monospacedDigit()
         }
     }
 
     private func section(_ title: String, _ shares: [CodeStatsDayShare]) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-            Text(title.uppercased())
-                .font(DashSkin.mono(9))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            PageCapsLabel(title)
             ForEach(shares, id: \.name) { share in
                 HStack {
                     Text(share.name).lineLimit(1).truncationMode(.middle)
@@ -181,7 +187,7 @@ struct CodeStatsDayPopover: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .monospacedDigit()
                 }
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
             }
         }
     }

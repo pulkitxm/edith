@@ -3,6 +3,14 @@ import Testing
 @testable import AttentionNative
 @MainActor
 struct AttentionBreakdownPresentationTests {
+    @Test func metricDetailsLeaveNoDanglingSeparator() {
+        #expect(AttentionFormat.share(30, of: 60, previous: nil) == "50% of active")
+        #expect(
+            AttentionFormat.share(600, of: 1_200, previous: 300)
+                == "50% of active · +5m vs before")
+        #expect(AttentionFormat.joined("peak 2 at once", nil) == "peak 2 at once")
+    }
+
     @Test func repeatedAndEmptyNamesHaveNoSubtitle() {
         for label in ["Edith", "Netflix", "YouTube: Comedy"] {
             let row = AttentionBreakdownItem(

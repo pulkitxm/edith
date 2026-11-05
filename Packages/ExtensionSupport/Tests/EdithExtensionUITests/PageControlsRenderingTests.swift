@@ -21,7 +21,7 @@ extension SurfaceGridRenderingTests {
                     }
                     PageMetric(
                         title: "Commits", value: "1,234", detail: "Synthetic activity",
-                        symbol: "arrow.triangle.branch", trend: "12%")
+                        icon: .quinjet, trend: "12%")
                     PageSkeletonControls()
                 }
                 .frame(width: width, height: 500)

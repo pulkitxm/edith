@@ -23,8 +23,8 @@ struct SEOAuditPageAccordion: View {
         VStack(spacing: 0) {
             HStack(spacing: UIScale.pt(10)) {
                 Toggle("Select \(page.url)", isOn: $selected)
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.edithCheckboxMark)
+                    .accessibilityLabel("Select \(page.url)")
                     .padding(.leading, UIScale.pt(14))
                 Button {
                     expanded.toggle()
@@ -36,11 +36,11 @@ struct SEOAuditPageAccordion: View {
                                 page.metadata.title ?? URL(string: page.url)?.lastPathComponent
                                     ?? page.url
                             )
-                            .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                             Text(page.url)
-                                .font(DashSkin.mono(9.5))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
@@ -48,8 +48,8 @@ struct SEOAuditPageAccordion: View {
                         if page.errorCount > 0 { issuePill(String(page.errorCount), .error) }
                         if page.warningCount > 0 { issuePill(String(page.warningCount), .warning) }
                         score
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        EdithIconView(.chevronRight)
+                            .font(.edithText(.caption).weight(.semibold))
                             .foregroundStyle(.tertiary)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
                             .animation(.easeOut(duration: 0.16), value: expanded)
@@ -76,8 +76,8 @@ struct SEOAuditPageAccordion: View {
     private var statusMark: some View {
         ZStack {
             Circle().fill(statusColor.opacity(0.14))
-            Image(systemName: page.error == nil ? "checkmark" : "xmark")
-                .font(.system(size: UIScale.pt(9), weight: .bold))
+            EdithIconView(page.error == nil ? .check : .close)
+                .font(.edithText(.caption).weight(.bold))
                 .foregroundStyle(statusColor)
         }
         .frame(width: UIScale.pt(25), height: UIScale.pt(25))
@@ -93,7 +93,7 @@ struct SEOAuditPageAccordion: View {
         HStack(spacing: UIScale.pt(3)) {
             Circle().fill(severityColor(severity)).frame(
                 width: UIScale.pt(5), height: UIScale.pt(5))
-            Text(value).font(DashSkin.mono(9.5, weight: .semibold))
+            Text(value).font(.edithText(.caption).weight(.semibold))
         }
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(4))
@@ -112,16 +112,16 @@ struct SEOAuditPageAccordion: View {
             WrapHStack(spacing: UIScale.pt(10)) {
                 if let url = URL(string: page.url) {
                     Link(destination: url) {
-                        Label("Open page", systemImage: "arrow.up.right")
+                        Label("Open page", edith: .arrowUpRight)
                     }
                     .buttonStyle(.edith(.secondary))
                 }
                 Button(action: runLighthouse) {
                     Label(
                         page.hasLighthouseScores ? "Run Lighthouse again" : "Run Lighthouse",
-                        systemImage: "gauge.with.needle")
+                        edith: .gauge)
                 }
-                .buttonStyle(.edith(.primary))
+                .buttonStyle(.edith(.secondary))
                 .disabled(!lighthouseAvailable || lighthouseRunning)
                 if lighthouseRunning {
                     SkeletonGroup {
@@ -130,11 +130,11 @@ struct SEOAuditPageAccordion: View {
                     .accessibilityLabel("Running four Lighthouse categories")
                 } else if !lighthouseAvailable {
                     Text("Install the Lighthouse CLI to enable page scores.")
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .font(.edithText(.caption).weight(.medium))
                         .foregroundStyle(DashSkin.warn)
                 }
                 Text(selected ? "Included in next audit" : "Excluded from next audit")
-                    .font(DashSkin.mono(9, weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(selected ? DashSkin.ok : .secondary)
             }
             ViewThatFits(in: .horizontal) {
@@ -155,11 +155,11 @@ struct SEOAuditPageAccordion: View {
     private var openGraphPreview: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             HStack(spacing: UIScale.pt(6)) {
-                Label(socialPlatform.title, systemImage: socialPlatform.icon)
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                Label(socialPlatform.title, edith: socialPlatform.icon)
+                    .font(.edithText(.caption).weight(.semibold))
                 Spacer(minLength: UIScale.pt(8))
                 Text(previewFormatLabel)
-                    .font(DashSkin.mono(8, weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
             platformPreview
@@ -303,20 +303,17 @@ struct SEOAuditPageAccordion: View {
 
     private var previewTitle: some View {
         Text(socialCard.title)
-            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+            .font(.edithText(.subheadline).weight(.semibold))
     }
 
     private var previewDescription: some View {
         Text(socialCard.detail)
-            .font(.system(size: UIScale.pt(9.5)))
+            .font(.edithText(.caption))
             .foregroundStyle(.secondary)
     }
 
     private var previewDomain: some View {
-        Text(URL(string: page.url)?.host?.uppercased() ?? "PAGE")
-            .font(DashSkin.mono(8, weight: .bold))
-            .tracking(0.6)
-            .foregroundStyle(.tertiary)
+        PageCapsLabel(URL(string: page.url)?.host ?? "Page")
     }
 
     private var previewImageURL: URL? {
@@ -338,7 +335,7 @@ struct SEOAuditPageAccordion: View {
     private var previewFormatLabel: String { socialCard.formatLabel }
 
     private var previewFallback: some View {
-        Image(systemName: "photo")
+        EdithIconView(.photo)
             .font(.system(size: UIScale.pt(24), weight: .light))
             .foregroundStyle(.tertiary)
     }
@@ -350,7 +347,7 @@ struct SEOAuditPageAccordion: View {
                     sectionLabel("Lighthouse", count: page.scores.values.count)
                     Spacer()
                     Text(page.hasLighthouseScores ? "latest local run" : "not run")
-                        .font(DashSkin.mono(8.5, weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                         .foregroundStyle(page.hasLighthouseScores ? DashSkin.ok : .secondary)
                 }
                 if lighthouseRunning {
@@ -364,17 +361,17 @@ struct SEOAuditPageAccordion: View {
                     }
                 } else {
                     HStack(spacing: UIScale.pt(9)) {
-                        Image(systemName: "gauge.open.with.lines.needle.33percent")
+                        EdithIconView(.gauge)
                             .foregroundStyle(DashSkin.accent(dark))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text("No Lighthouse report for this page")
-                                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                                .font(.edithText(.subheadline).weight(.semibold))
                             Text(
                                 lighthouseAvailable
                                     ? "Run it here, or include Lighthouse in the next bulk audit."
                                     : "Install the Lighthouse CLI, then return to this page."
                             )
-                            .font(.system(size: UIScale.pt(9.5)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(.secondary)
                         }
                     }
@@ -390,10 +387,7 @@ struct SEOAuditPageAccordion: View {
             .overlay(
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(120)), alignment: .leading)],
-                alignment: .leading, spacing: UIScale.pt(10)
-            ) {
+            PageMetricGrid(minimumWidth: 120) {
                 fact("Status", page.statusCode.map(String.init) ?? "Failed")
                 fact("Response", page.responseMilliseconds.map { "\($0) ms" } ?? "-")
                 fact(
@@ -413,22 +407,18 @@ struct SEOAuditPageAccordion: View {
     private var metadataPanel: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             sectionLabel("Search and social", count: metadataValues.count)
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), alignment: .leading)],
-                alignment: .leading, spacing: UIScale.pt(9)
-            ) {
+            PageMetricGrid(minimumWidth: 170) {
                 ForEach(metadataValues, id: \.0) { label, value in
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(label.uppercased())
-                            .font(DashSkin.mono(7.5, weight: .bold))
-                            .foregroundStyle(.tertiary)
+                        PageCapsLabel(label)
                         Text(value)
-                            .font(.system(size: UIScale.pt(10)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(
                                 value == "Missing" ? DashSkin.warn : DashSkin.ink(dark)
                             )
                             .lineLimit(2)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -452,7 +442,7 @@ struct SEOAuditPageAccordion: View {
             Text(value.map(String.init) ?? "-")
                 .font(DashSkin.mono(15, weight: .semibold))
                 .foregroundStyle(scoreColor(value))
-            Text(label).font(DashSkin.mono(7.5, weight: .bold)).foregroundStyle(.tertiary)
+            Text(label).font(.edithText(.caption).weight(.bold)).foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, UIScale.pt(8))
@@ -461,10 +451,10 @@ struct SEOAuditPageAccordion: View {
 
     private func fact(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(label.uppercased()).font(DashSkin.mono(7.5, weight: .bold)).foregroundStyle(
-                .tertiary)
-            Text(value).font(.system(size: UIScale.pt(10.5), weight: .medium)).lineLimit(1)
+            PageCapsLabel(label)
+            Text(value).font(.edithText(.caption).weight(.medium)).lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var issues: some View {
@@ -476,8 +466,8 @@ struct SEOAuditPageAccordion: View {
                         .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                         .padding(.top, UIScale.pt(4))
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(issue.title).font(.system(size: UIScale.pt(11), weight: .semibold))
-                        Text(issue.detail).font(.system(size: UIScale.pt(9.5))).foregroundStyle(
+                        Text(issue.title).font(.edithText(.subheadline).weight(.semibold))
+                        Text(issue.detail).font(.edithText(.caption)).foregroundStyle(
                             .secondary)
                     }
                 }
@@ -494,10 +484,10 @@ struct SEOAuditPageAccordion: View {
                         previous.auditedAt,
                         format: .dateTime.month(.abbreviated).day().hour().minute()
                     )
-                    .font(DashSkin.mono(9.5))
+                    .font(.edithText(.caption))
                     .frame(width: UIScale.pt(120), alignment: .leading)
                     Text("\(previous.issues.count) issues")
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text(previous.scores.average.map(String.init) ?? "-")
@@ -510,8 +500,8 @@ struct SEOAuditPageAccordion: View {
 
     private func sectionLabel(_ value: String, count: Int) -> some View {
         HStack {
-            Text(value).font(.system(size: UIScale.pt(11.5), weight: .semibold))
-            Text(String(count)).font(DashSkin.mono(9)).foregroundStyle(.tertiary)
+            Text(value).font(.edithText(.subheadline).weight(.semibold))
+            Text(String(count)).font(.edithText(.caption)).foregroundStyle(.tertiary)
         }
     }
 

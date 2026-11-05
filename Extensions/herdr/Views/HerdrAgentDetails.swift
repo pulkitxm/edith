@@ -103,7 +103,7 @@ struct HerdrAgentDetails: View {
                     if !agent.cwd.isEmpty { metaRow("Directory", agent.cwd, blur: hideAgents) }
                     VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                         Text("Attach")
-                            .font(.system(size: UIScale.pt(11), weight: .semibold))
+                            .font(.edithText(.subheadline).weight(.semibold))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         Text(command)
                             .font(DashSkin.mono(10))
@@ -118,8 +118,7 @@ struct HerdrAgentDetails: View {
                                     ? "Copied"
                                     : (agent.machineIsLocal || agent.isTerminal
                                         ? "Copy command" : "Copy SSH"),
-                                systemImage: store.copiedID == agent.id
-                                    ? "checkmark" : "doc.on.doc")
+                                edith: store.copiedID == agent.id ? .check : .copy)
                         }
                         .buttonStyle(.edith(.toolbar))
                     }
@@ -162,11 +161,11 @@ struct HerdrAgentDetails: View {
                         }
                         .accessibilityLabel("Closing agent")
                     } else {
-                        Image(systemName: "xmark.circle.fill")
+                        EdithIconView(.closeFilled)
                     }
                     Text(closingAgent ? "Closing Agent" : "Close Agent")
                 }
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, UIScale.pt(9))
@@ -202,7 +201,7 @@ struct HerdrAgentDetails: View {
         let last = store.messaging.lastHook(for: agent.id)
         return VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             Text("Message")
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             if !armed.isEmpty {
                 ForEach(armed) { hook in
@@ -210,20 +209,17 @@ struct HerdrAgentDetails: View {
                 }
             } else if let last {
                 HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
-                    Image(
-                        systemName: last.phase == .sent
-                            ? "checkmark.circle.fill" : "exclamationmark.circle"
-                    )
-                    .foregroundStyle(last.phase == .sent ? Color.green : Color.orange)
+                    EdithIconView(last.phase == .sent ? .success : .alert)
+                        .foregroundStyle(last.phase == .sent ? Color.green : Color.orange)
                     Text(lastSummary(last))
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                     Button {
                         HerdrWorkOwnership.start { await store.messaging.remove(last.id) }
                     } label: {
-                        Image(systemName: "xmark")
+                        EdithIconView(.close)
                             .font(.system(size: UIScale.pt(9), weight: .semibold))
                     }
                     .buttonStyle(.edith(.borderless))
@@ -235,7 +231,7 @@ struct HerdrAgentDetails: View {
                 Button {
                     store.messaging.compose(to: agent, presenterID: presenterID)
                 } label: {
-                    Label("Message", systemImage: "paperplane")
+                    Label("Write a message", edith: .send)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Write a message to send now, when it finishes, or at a time")
@@ -246,14 +242,14 @@ struct HerdrAgentDetails: View {
     private func waitingRow(_ hook: HerdrAgentHook) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
-                Label(waitingTitle(hook), systemImage: "paperplane.circle.fill")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                Label(waitingTitle(hook), edith: .send)
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.accent(dark))
                 Spacer(minLength: 0)
                 Button {
                     HerdrWorkOwnership.start { await store.messaging.remove(hook.id) }
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                 }
                 .buttonStyle(.edith(.borderless))
@@ -262,7 +258,7 @@ struct HerdrAgentDetails: View {
                 .accessibilityLabel("Cancel this waiting message")
             }
             Text(hook.message)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(4)
                 .textSelection(.enabled)
@@ -284,7 +280,7 @@ struct HerdrAgentDetails: View {
     private var viewSection: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             Text("View")
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             HerdrAgentViewToggle(selection: tab.view) { option in
                 if let onSetView {
@@ -306,12 +302,12 @@ struct HerdrAgentDetails: View {
     private var kindRow: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text("Kind")
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             HStack(spacing: UIScale.pt(8)) {
                 HerdrKindMark(kind: agent.kind, size: UIScale.pt(14))
                 Text(agent.isTerminal ? HerdrMachineTerminal.title : agent.kind)
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .textSelection(.enabled)
             }
             .foregroundStyle(DashSkin.ink(dark))
@@ -321,10 +317,10 @@ struct HerdrAgentDetails: View {
     private func metaRow(_ label: String, _ value: String, blur: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(label)
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(value)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.ink(dark))
                 .textSelection(.enabled)
                 .presenterTextBlur(blur, fontSize: 12.5)

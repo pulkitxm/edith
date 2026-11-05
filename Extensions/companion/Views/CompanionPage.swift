@@ -47,15 +47,15 @@ enum CompanionTab: String, CaseIterable, Identifiable {
         }
     }
 
-    var icon: String {
+    var icon: EdithIcon {
         switch self {
-        case .chat: return "bubble.left.and.text.bubble.right"
-        case .capture: return "mic"
-        case .desk: return "tray.full"
-        case .library: return "books.vertical"
-        case .mind: return "brain"
-        case .setup: return "server.rack"
-        case .settings: return "gearshape"
+        case .chat: return .messages
+        case .capture: return .mic
+        case .desk: return .tray
+        case .library: return .books
+        case .mind: return .jev
+        case .setup: return .server
+        case .settings: return .gear
         }
     }
 }
@@ -78,6 +78,7 @@ struct CompanionPage: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.windowVisible) private var windowVisible
     @State private var checkedSetup = false
+    @State private var hasDeployment = false
     @State private var refreshTick = 0
     @State private var visited: Set<CompanionTab> = []
     @State private var setupModel: CompanionSetupModel?
@@ -102,7 +103,7 @@ struct CompanionPage: View {
             tabBar
             Divider().opacity(0.35)
         } content: {
-            screens.presenterCover(presenting, dark: dark)
+            screens.overlay { backendGate }.presenterCover(presenting, dark: dark)
         }
         .navigationRoute("tab", selection: tabBinding)
         .edithSheet(
@@ -143,17 +144,30 @@ struct CompanionPage: View {
             await home.refresh()
             guard !Task.isCancelled else { return }
             if !checkedSetup {
-                checkedSetup = true
                 if workspace.transport.remoteBridge != nil { await backend.refreshSnapshot() }
-                if (workspace.transport.remoteBridge != nil
-                    ? backend.deployment : CompanionDeploymentStore.load()) == nil, !home.reachable,
-                    !setupDeclined
-                {
-                    openSetup()
-                } else if !home.reachable {
-                    select(.setup)
-                }
+                hasDeployment =
+                    (workspace.transport.remoteBridge != nil
+                        ? backend.deployment : CompanionDeploymentStore.load()) != nil
+                checkedSetup = true
+                if !hasDeployment, !home.reachable, !setupDeclined { openSetup() }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var backendGate: some View {
+        let gate = CompanionBackendGate.resolve(
+            tab: tab, checked: checkedSetup && home.hasAttemptedRefresh,
+            reachable: home.reachable, hasDeployment: hasDeployment)
+        if gate != .proceed {
+            CompanionBackendGateView(
+                gate: gate, setUp: { openSetup() }, openBackend: { select(.setup) },
+                retry: {
+                    refreshTick += 1
+                    Task { await home.refresh() }
+                }
+            )
+            .background(DashSkin.paper(dark))
         }
     }
 
@@ -171,20 +185,21 @@ struct CompanionPage: View {
 
     private var header: some View {
         PageHeader(
-            "Companion",
+            "Memory",
             trailing: {
                 HStack(spacing: UIScale.pt(10)) {
                     Button {
                         refreshTick += 1
                         Task { await home.refresh() }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        EdithIconView(.refresh)
+                            .font(.edithText(.subheadline).weight(.medium))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
                     .help("Refresh this screen")
+                    .accessibilityLabel("Refresh")
                     Button {
                         select(.setup)
                     } label: {
@@ -192,8 +207,8 @@ struct CompanionPage: View {
                             Circle()
                                 .fill(healthTint)
                                 .frame(width: UIScale.pt(8), height: UIScale.pt(8))
-                            Text(home.state.label)
-                                .font(.system(size: UIScale.pt(11.5)))
+                            Text(home.hasAttemptedRefresh ? home.state.label : "checking…")
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                         .contentShape(Rectangle())
@@ -203,13 +218,11 @@ struct CompanionPage: View {
                 }
             },
             accessory: {
-                if let status = home.status {
-                    Text(
-                        "\(status.episodes) episodes, \(status.chunks) chunks indexed, "
-                            + "\(status.observations) observations"
-                    )
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                if let summary = CompanionMemoryState.summary(status: home.status) {
+                    Text(summary)
+                        .font(.edithText(.callout).monospacedDigit())
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
                 }
             }
         )
@@ -226,7 +239,7 @@ struct CompanionPage: View {
 
     private var healthHelp: String {
         guard home.reachable else {
-            return "The companion backend is not reachable. Open Backend to choose where it runs."
+            return "Memory is not reachable. Open Backend to choose where it runs."
         }
         let failing = home.failing
         guard !failing.isEmpty else {
@@ -238,10 +251,11 @@ struct CompanionPage: View {
 
     private var tabBar: some View {
         PageTabPicker(
-            title: "Companion section",
+            "Memory section",
             selection: Binding(get: { tab }, set: select),
             options: CompanionTab.allCases, label: { $0.title }
         )
+        .frame(maxWidth: .infinity, alignment: .leading)
         .pageGutter(compact)
         .padding(.bottom, UIScale.pt(12))
     }
@@ -267,14 +281,14 @@ struct CompanionPage: View {
                 .strokeBorder(
                     DashSkin.accent(dark), style: StrokeStyle(lineWidth: 1.5, dash: [7, 5]))
             VStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "tray.and.arrow.down")
-                    .font(.system(size: UIScale.pt(26)))
+                EdithIconView(.tray)
+                    .font(.edithText(.largeTitle))
                     .foregroundStyle(DashSkin.accent(dark))
                 Text("Drop to remember")
                     .font(DashSkin.heading(20, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("Notes, recordings, photos, video, PDFs")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
         }
@@ -307,7 +321,15 @@ struct CompanionPage: View {
                 openEpisode: { id in
                     select(.library)
                     Task { await library.select(id) }
-                })
+                },
+                openLibrary: {
+                    select(.library)
+                    Task {
+                        await Task.yield()
+                        await CompanionFilePicker.ingest(into: library, home: home)
+                    }
+                },
+                openCapture: { select(.capture) })
         case .capture:
             CompanionCaptureScreen(model: capture, home: home, isActive: tab == .capture)
         case .desk: CompanionDeskScreen(model: desk, isActive: tab == .desk)

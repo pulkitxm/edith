@@ -29,22 +29,20 @@ struct SkillPreviewSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: UIScale.pt(14)) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable().scaledToFit()
-                    .frame(width: UIScale.pt(44), height: UIScale.pt(44))
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                PageGuideBadge(icon: skill.icon, size: 40)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(skill.name)
-                        .font(.system(size: UIScale.pt(20), weight: .semibold))
+                        .font(.edithText(.title3)).fontWeight(.semibold)
                     Text("SKILL.md")
-                        .font(.system(size: UIScale.pt(11), design: .monospaced))
+                        .font(.edithText(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button {
                     dismiss()
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                 }
                 .buttonStyle(.edith(.borderless))
                 .foregroundStyle(.secondary)
@@ -65,8 +63,7 @@ struct SkillPreviewSheet: View {
                     copied = NSPasteboard.general.setString(document.markdown, forType: .string)
                 } label: {
                     Label(
-                        copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc"
-                    )
+                        copied ? "Copied" : "Copy", edith: copied ? .check : .copy)
                 }
                 .disabled(document == nil)
                 .help("Copy the complete skill Markdown, including its metadata")
@@ -116,7 +113,7 @@ struct SkillPreviewSheet: View {
             }
         } else if let error = load.errorMessage {
             VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "wifi.exclamationmark").font(.edithText(.title2)).foregroundStyle(
+                EdithIconView(.wifi).font(.edithText(.title2)).foregroundStyle(
                     .secondary)
                 Text(error).multilineTextAlignment(.center)
                     .font(.edithText(.callout)).frame(maxWidth: UIScale.pt(380))

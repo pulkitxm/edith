@@ -354,11 +354,11 @@ struct HerdrSpaceView: View {
                     if let agent = tab.agentTab?.agent {
                         HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
                     } else {
-                        Image(systemName: "terminal")
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        EdithIconView(.terminal)
+                            .font(.edithText(.caption).weight(.semibold))
                     }
                     Text(tab.title)
-                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        .font(.edithText(.subheadline).weight(.medium))
                         .lineLimit(1)
                 }
                 .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
@@ -372,7 +372,7 @@ struct HerdrSpaceView: View {
             Button {
                 close(tab)
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
                     .font(.system(size: UIScale.pt(8.5), weight: .bold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(20), height: UIScale.pt(20))
@@ -403,11 +403,9 @@ struct HerdrSpaceView: View {
                 }
             }
         } label: {
-            Image(systemName: "plus")
-                .font(.system(size: UIScale.pt(11), weight: .bold))
-                .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+            EdithIcon.plus.image()
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .fixedSize()
         .help("New terminal (⌘T)")
         .accessibilityLabel("New terminal")
@@ -422,8 +420,8 @@ struct HerdrSpaceView: View {
                     Button {
                         tab?.setAgentView(mode, defaults: store.uiDefaults)
                     } label: {
-                        Label(mode.shortTitle, systemImage: mode.icon)
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        Label(mode.shortTitle, edith: mode.icon)
+                            .font(.edithText(.caption).weight(.semibold))
                             .frame(maxWidth: .infinity, minHeight: UIScale.pt(22))
                     }
                     .buttonStyle(
@@ -442,20 +440,20 @@ struct HerdrSpaceView: View {
                 stroke: DashSkin.line(dark))
 
             controlButton(
-                "rectangle.split.2x1", help: "Split right (⌘D)", enabled: tab != nil
+                .layoutLeft, help: "Split right (⌘D)", enabled: tab != nil
             ) { model.split(.right) }
             controlButton(
-                "rectangle.split.1x2", help: "Split down (⇧⌘D)", enabled: tab != nil
+                .layoutTop, help: "Split down (⇧⌘D)", enabled: tab != nil
             ) { model.split(.bottom) }
             controlButton(
-                "equal.square", help: "Even out panes", enabled: (tab?.paneCount ?? 0) > 1
+                .grid, help: "Even out panes", enabled: (tab?.paneCount ?? 0) > 1
             ) { tab?.equalize() }
             controlButton(
-                "rectangle.split.2x1.fill", help: "Close focused pane (⇧⌘W)",
+                .close, help: "Close focused pane (⇧⌘W)",
                 enabled: (tab?.paneCount ?? 0) > 1
             ) { model.closeFocusedPane() }
             controlButton(
-                "sidebar.right",
+                .sidebarRight,
                 help: HerdrAgentDetailCommand.help(open: store.detailOpen, available: agent != nil),
                 enabled: agent != nil, selected: store.detailOpen
             ) { store.detailOpen.toggle() }
@@ -464,12 +462,12 @@ struct HerdrSpaceView: View {
     }
 
     private func controlButton(
-        _ systemImage: String, help: String, enabled: Bool, selected: Bool = false,
+        _ icon: EdithIcon, help: String, enabled: Bool, selected: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+            EdithIconView(icon)
+                .font(.edithText(.caption).weight(.semibold))
                 .frame(width: UIScale.pt(24), height: UIScale.pt(24))
         }
         .buttonStyle(.edith(.toolbar, selected: selected, tint: DashSkin.accent(dark)))
@@ -481,10 +479,10 @@ struct HerdrSpaceView: View {
     private var content: some View {
         if model.tabs.isEmpty {
             VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "terminal")
-                    .font(.system(size: UIScale.pt(28), weight: .light))
+                EdithIconView(.terminal)
+                    .font(.edithText(.largeTitle).weight(.light))
                 Text("No terminals open")
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                 Button("New Terminal") { model.addTerminal() }
                     .buttonStyle(.edith(.primary))
             }
@@ -663,12 +661,12 @@ private struct HerdrSpaceTerminalView: View {
                     launchEnabled: launchEnabled, onFocus: onFocus)
             } else {
                 VStack(spacing: UIScale.pt(9)) {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: UIScale.pt(24), weight: .light))
+                    EdithIconView(.help)
+                        .font(.edithText(.title).weight(.light))
                     Text("Machine unavailable")
-                        .font(.system(size: UIScale.pt(14), weight: .semibold))
+                        .font(.edithText(.title3).weight(.semibold))
                     Text("Add this machine in Edith to open its terminal.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                 }
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

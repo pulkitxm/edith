@@ -26,10 +26,16 @@ struct CalendarNotchScene: View {
             layout: SurfaceHostContext.current?.layout(.notch) ?? .standard(.notch))
     }
 
+    private var events: [CalendarEventPayload] {
+        Array(
+            CalendarWidgetEvents.selected(store.events, tile: tile, target: .notch)
+                .prefix(tile.itemLimit))
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: tile.dense ? 6 : 10) {
+        VStack(alignment: .leading, spacing: tile.dense ? 8 : 12) {
             if tile.showTitle {
-                Label(tile.displayTitle, systemImage: "calendar")
+                Label(tile.displayTitle, edith: .calendar)
                     .font(.edithText(.caption).weight(.semibold))
             }
             LoadingContainer(
@@ -37,50 +43,40 @@ struct CalendarNotchScene: View {
                 title: "Calendar unavailable", message: store.error ?? "Reading your schedule.",
                 retry: store.refresh
             ) {
-                let events = Array(
-                    CalendarWidgetEvents.selected(store.events, tile: tile, target: .notch)
-                        .prefix(tile.itemLimit))
-                if events.isEmpty {
+                if !store.authorized {
+                    accessPrompt
+                } else if events.isEmpty {
                     Text("No upcoming meetings").font(.edithText(.caption))
                         .foregroundStyle(.secondary)
-                }
-                ForEach(events, id: \.id) { event in
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(event.title).font(.edithText(.caption))
-                                .lineLimit(tile.dense ? 1 : 2).presenterBlur(store.blurEvents)
-                            if tile.showDetails, tile.shows("time") {
-                                Text(
-                                    event.isAllDay
-                                        ? "All day"
-                                        : event.start.formatted(.dateTime.hour().minute())
-                                            + " to "
-                                            + event.end.formatted(.dateTime.hour().minute())
-                                )
-                                .font(.edithText(.caption2)).foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer(minLength: 4)
-                        if tile.showActions, tile.shows("join"),
-                            MeetingLink.url(for: event) != nil
-                        {
-                            Button {
-                                store.perform(.join, eventID: event.id)
-                            } label: {
-                                Image(systemName: "video.fill")
-                            }.help("Join meeting").accessibilityLabel("Join meeting")
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    VStack(alignment: .leading, spacing: tile.dense ? 8 : 10) {
+                        ForEach(events, id: \.id) { event in row(event) }
                     }
                 }
             } placeholder: {
-                SkeletonBlock(height: tile.dense ? 62 : 92)
-            }
-            if tile.showActions {
-                Button("Open Calendar", action: open).font(.edithText(.caption))
+                VStack(alignment: .leading, spacing: 8) {
+                    SkeletonBlock(width: 160, height: 10)
+                    SkeletonBlock(width: 110, height: 8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             if store.loaded, let error = store.error {
-                Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
-                Button("Retry", action: store.refresh).buttonStyle(.edith(.borderless))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(error).font(.edithText(.caption2)).foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    Button("Retry", action: store.refresh).buttonStyle(.edith(.borderless))
+                        .font(.edithText(.caption))
+                }
+            }
+            if tile.showActions, store.authorized {
+                Button(action: open) {
+                    Label("Open Calendar", edith: .external)
+                }
+                .buttonStyle(.edith(.borderless))
+                .font(.edithText(.caption).weight(.medium))
+                .foregroundStyle(DashSkin.accent(true))
             }
         }
         .padding(presentation.padding)
@@ -91,5 +87,53 @@ struct CalendarNotchScene: View {
         )
         .environment(\.surfacePresentation, presentation)
         .pageTask(cancel: store.suspend) { await store.observe() }
+    }
+
+    private var accessPrompt: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                PageGuideBadge(icon: .calendar, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Calendar access needed").font(.edithText(.caption).weight(.semibold))
+                    Text("Allow it to see your next meetings here.")
+                        .font(.edithText(.caption2)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Button("Allow Access") { store.perform(.permission) }
+                .buttonStyle(.edith(.primary))
+                .controlSize(.small)
+                .fixedSize()
+                .help("Allow Edith to read your calendar")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func row(_ event: CalendarEventPayload) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title).font(.edithText(.caption).weight(.medium))
+                    .lineLimit(tile.dense ? 1 : 2).presenterBlur(store.blurEvents)
+                if tile.showDetails, tile.shows("time") {
+                    Text(
+                        event.isAllDay
+                            ? "All day"
+                            : event.start.formatted(.dateTime.hour().minute())
+                                + " to " + event.end.formatted(.dateTime.hour().minute())
+                    )
+                    .font(.edithText(.caption2)).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 4)
+            if tile.showActions, tile.shows("join"), MeetingLink.url(for: event) != nil {
+                Button {
+                    store.perform(.join, eventID: event.id)
+                } label: {
+                    EdithIconView(.video)
+                }
+                .buttonStyle(.edith(.iconOnly, tint: DashSkin.accent(true)))
+                .help("Join meeting").accessibilityLabel("Join meeting")
+            }
+        }
     }
 }

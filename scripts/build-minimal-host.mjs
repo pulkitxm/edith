@@ -26,6 +26,7 @@ function hostUntrackedInputs(execute = execFileSync) {
         "-z",
         "--",
         "Packages/EdithHost/Sources",
+        "Packages/EdithIcons/Sources",
         "Packages/ExtensionMarketplace/Sources",
         "Packages/ExtensionSupport/Sources",
         "Extensions/fixtureSupport",

@@ -99,13 +99,7 @@ final class AudioMixerService: ExtensionService {
                     })
             }
             return NSHostingController(
-                rootView: ExtensionPageHost {
-                    PageWorkspace {
-                        PageHeader("Audio Mixer")
-                    } content: {
-                        AudioMixerView(engine: engine)
-                    }
-                })
+                rootView: ExtensionPageHost { AudioMixerPage(engine: engine) })
         }
         return NSHostingController(
             rootView: ExtensionPageHost {

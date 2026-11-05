@@ -14,6 +14,10 @@ import Observation
     let changed: () -> Void
 }
 
+extension HostWorkflowEnvironment {
+    static let resumeStageKey = "onboardingResumeStage"
+}
+
 struct HostWorkflowPackageReview: Equatable {
     let version: String?
     let downloadBytes: Int64?
@@ -41,25 +45,22 @@ struct HostWorkflowPackageReview: Equatable {
 }
 
 @MainActor @Observable final class HostWorkflowOnboardingModel {
-    enum Stage: Equatable {
-        case workflows, review, installing, finished
+    enum Stage: String, Equatable, CaseIterable {
+        case welcome, workflows, tools, permissions, installing, finished
 
-        var position: Int {
-            switch self {
-            case .workflows: 0
-            case .review: 1
-            case .installing: 2
-            case .finished: 3
-            }
-        }
+        var position: Int { Self.allCases.firstIndex(of: self) ?? 0 }
+        var resumable: Bool { [.welcome, .workflows, .tools, .permissions].contains(self) }
     }
     enum InstallState: Equatable { case waiting, installing, ready, failed(String) }
     static let reviewPendingKey = HostSettingsCatalog.onboardingReviewPendingKey
     static let workflowKey = HostSettingsCatalog.workflowKey
     let entries: [HostExtension]
     private(set) var presented = false
-    private(set) var stage = Stage.workflows {
-        didSet { advancing = stage.position >= oldValue.position }
+    private(set) var stage = Stage.welcome {
+        didSet {
+            advancing = stage.position >= oldValue.position
+            persistStage()
+        }
     }
     private(set) var advancing = true
     private(set) var workflow = HostWorkflow.custom
@@ -70,14 +71,20 @@ struct HostWorkflowPackageReview: Equatable {
     private(set) var busy = false
     private(set) var restoring = false
     private(set) var catalogRevision = 0
+    private(set) var deferredPermissions = Set<HostPermission>()
+    let permissions: HostPermissions
     private let defaults: UserDefaults
     private let environment: HostWorkflowEnvironment
     private var task: Task<Void, Never>?
     private var originalCompletion = false
     private var imported = false
 
-    init(entries: [HostExtension], defaults: UserDefaults, environment: HostWorkflowEnvironment) {
+    init(
+        entries: [HostExtension], defaults: UserDefaults, environment: HostWorkflowEnvironment,
+        permissions: HostPermissions = HostPermissions()
+    ) {
         self.entries = entries
+        self.permissions = permissions
         self.defaults = defaults
         self.environment = environment
         icloudBackup = defaults.object(forKey: AppStorageKeys.Backup.icloud) as? Bool ?? true
@@ -108,22 +115,51 @@ struct HostWorkflowPackageReview: Equatable {
         return HostWorkflowPackageReview(package: environment.available()[id])
     }
 
+    var selectedEntries: [HostExtension] { entries.filter { selected.contains($0.id) } }
+    var permissionItems: [HostOnboardingPermission] {
+        HostOnboardingPermissionPlan.items(
+            selected: selectedEntries, granted: permissions.granted)
+    }
+    var currentPermission: HostPermission? {
+        HostOnboardingPermissionPlan.current(permissionItems, deferred: deferredPermissions)
+    }
+    var relaunchBatch: [HostPermission] {
+        HostOnboardingPermissionPlan.relaunchBatch(
+            permissionItems, awaiting: permissions.awaitingRelaunch)
+    }
+    var groups: [(category: String, entries: [HostExtension])] {
+        let visible = visibleEntries
+        let categories = Dictionary(grouping: visible, by: \.category)
+        let order = [workflow.rawValue] + HostWorkflow.allCases.map(\.rawValue)
+        let known = order.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        let ranked = known + categories.keys.filter { !known.contains($0) }.sorted()
+        return ranked.compactMap { category in
+            categories[category].map { (category, $0) }
+        }
+    }
+    func tagline(for entry: HostExtension) -> String {
+        HostMarketplaceCatalog.tagline(entry)
+    }
+
     var canInstall: Bool { !busy && cost.complete && !selected.isEmpty }
 
     func present() {
         guard !busy else { return }
         originalCompletion = defaults.bool(forKey: HostSettingsCatalog.onboardingCompletedKey)
         imported = false
+        let resumeStage = defaults.string(forKey: HostWorkflowEnvironment.resumeStageKey)
+            .flatMap(Stage.init(rawValue:))
         presented = true
-        stage = .workflows
+        stage = .welcome
         states = [:]
         failure = nil
+        deferredPermissions = []
         let saved = defaults.stringArray(forKey: HostSettingsCatalog.workflowSelectionKey) ?? []
         if defaults.bool(forKey: Self.reviewPendingKey), saved.count <= entries.count {
             selected = Set(saved).intersection(Set(entries.map(\.id)))
             workflow =
                 HostWorkflow(rawValue: defaults.string(forKey: Self.workflowKey) ?? "") ?? .custom
-            if !selected.isEmpty { stage = .review }
+            stage = Self.resumed(resumeStage, hasSelection: !selected.isEmpty)
         } else {
             selected = []
         }
@@ -131,12 +167,18 @@ struct HostWorkflowPackageReview: Equatable {
         environment.changed()
     }
 
+    static func resumed(_ saved: Stage?, hasSelection: Bool) -> Stage {
+        guard let saved, saved.resumable else { return hasSelection ? .tools : .welcome }
+        if !hasSelection, [.tools, .permissions].contains(saved) { return .workflows }
+        return saved
+    }
+
     func choose(_ workflow: HostWorkflow) {
         guard !busy else { return }
         self.workflow = workflow
         selected = workflow.suggestions(in: entries).intersection(
             offeredIDs)
-        stage = .review
+        stage = .tools
         saveSelection()
         states = [:]
         failure = nil
@@ -152,7 +194,91 @@ struct HostWorkflowPackageReview: Equatable {
 
     func setICloudBackup(_ enabled: Bool) { guard !busy else { return }; icloudBackup = enabled }
 
-    func back() { guard !busy else { return }; stage = .workflows }
+    func setGroup(_ category: String, selected enabled: Bool) {
+        guard !busy else { return }
+        let ids = entries.filter { $0.category == category && offeredIDs.contains($0.id) }
+            .map(\.id)
+        if enabled { selected.formUnion(ids) } else { selected.subtract(ids) }
+        states = [:]
+        saveSelection()
+    }
+
+    func groupSelected(_ category: String) -> Bool {
+        let ids = entries.filter { $0.category == category && offeredIDs.contains($0.id) }
+        return !ids.isEmpty && ids.allSatisfy { selected.contains($0.id) }
+    }
+
+    func start() { guard !busy, stage == .welcome else { return }; stage = .workflows }
+
+    func back() {
+        guard !busy else { return }
+        switch stage {
+        case .welcome, .finished: break
+        case .workflows: stage = .welcome
+        case .tools: stage = .workflows
+        case .permissions: stage = .tools
+        case .installing: stage = permissionItems.isEmpty ? .tools : .permissions
+        }
+    }
+
+    func continueFromTools() {
+        guard stage == .tools, canInstall else { return }
+        refreshPermissions()
+        if permissionItems.isEmpty { installSelection() } else { stage = .permissions }
+    }
+
+    func skipStep() {
+        guard !busy else { return }
+        switch stage {
+        case .welcome: stage = .workflows
+        case .workflows:
+            workflow = .custom
+            stage = .tools
+        case .tools: skip()
+        case .permissions: installSelection()
+        case .installing, .finished: break
+        }
+    }
+
+    func refreshPermissions() { Task { await permissions.refresh() } }
+
+    func watchPermissions(interval: Duration = .seconds(1)) async {
+        await permissions.watch(
+            interval: interval,
+            while: { [weak self] in
+                self?.stage == .permissions
+            })
+    }
+
+    func requestPermission(_ permission: HostPermission) async {
+        guard stage == .permissions, !busy else { return }
+        deferredPermissions.remove(permission)
+        await permissions.request(permission)
+    }
+
+    func openSettings(_ permission: HostPermission) {
+        guard stage == .permissions else { return }
+        _ = permissions.openSettings(permission)
+    }
+
+    func deferPermission(_ permission: HostPermission, _ deferred: Bool) {
+        guard stage == .permissions,
+            permissionItems.first(where: { $0.permission == permission })?.canDefer == true
+        else { return }
+        if deferred {
+            deferredPermissions.insert(permission)
+        } else {
+            deferredPermissions.remove(permission)
+        }
+    }
+
+    func relaunch() {
+        guard stage == .permissions, !busy, !relaunchBatch.isEmpty else { return }
+        defaults.set(true, forKey: Self.reviewPendingKey)
+        persistStage()
+        saveSelection()
+        permissions.relaunch()
+    }
 
     func refreshCatalog() {
         guard !busy else { return }
@@ -178,7 +304,7 @@ struct HostWorkflowPackageReview: Equatable {
             model.selected = Set(result.suggestedExtensionIDs).intersection(
                 Set(model.entries.map(\.id)))
             model.workflow = .custom
-            model.stage = .review
+            model.stage = .tools
             model.saveSelection()
             model.environment.changed()
         }
@@ -201,9 +327,10 @@ struct HostWorkflowPackageReview: Equatable {
                 selected: Set(chosen), available: reviewed, installed: model.environment.installed()
             ).packageIDs
             guard required.allSatisfy({ reviewed[$0] == current[$0] }) else {
-                model.stage = .review
+                model.stage = .tools
                 throw HostWorkflowFailure(
-                    "Extension versions or sizes changed. Review your selection and try again.")
+                    "Some tools changed since you picked them. Review your selection and try again."
+                )
             }
             var installs: [Task<Void, Error>] = []
             for id in chosen {
@@ -223,14 +350,14 @@ struct HostWorkflowPackageReview: Equatable {
                                 model.environment.active().contains(id)
                             else {
                                 throw HostWorkflowFailure(
-                                    "The downloaded extension could not start. Retry to finish setup."
+                                    "The tool downloaded but could not start. Retry to finish setup."
                                 )
                             }
                             model.states[id] = .ready
                         } catch is CancellationError { throw CancellationError() } catch let error
                             as HostWorkflowReviewChanged
                         {
-                            model.stage = .review
+                            model.stage = .tools
                             throw error
                         } catch {
                             model.states[id] = .failed(error.localizedDescription)
@@ -249,7 +376,7 @@ struct HostWorkflowPackageReview: Equatable {
                 })
             else {
                 throw HostWorkflowFailure(
-                    "Some extensions could not finish. Your working extensions remain available. Retry the failed extensions."
+                    "Some tools could not finish. The ones that did are ready to use."
                 )
             }
             model.complete()
@@ -257,7 +384,7 @@ struct HostWorkflowPackageReview: Equatable {
     }
 
     var skipTitle: String {
-        environment.active().isEmpty ? "Start without extensions" : "Keep current setup"
+        environment.active().isEmpty ? "Start without tools" : "Keep current setup"
     }
 
     func skip() {
@@ -274,6 +401,7 @@ struct HostWorkflowPackageReview: Equatable {
             forKey: HostSettingsCatalog.onboardingCompletedKey)
         defaults.set(false, forKey: Self.reviewPendingKey)
         presented = false
+        defaults.removeObject(forKey: HostWorkflowEnvironment.resumeStageKey)
         environment.changed()
     }
 
@@ -306,6 +434,24 @@ struct HostWorkflowPackageReview: Equatable {
         environment.changed()
     }
 
+    func open(page: String) {
+        guard stage == .finished, !busy else { return }
+        dismiss()
+        defaults.set(page, forKey: AppStorageKeys.General.mainWindowSection)
+    }
+
+    func destinations(for entry: HostExtension) -> [HostPage] {
+        entry.pages.sorted { $0.order < $1.order }
+    }
+
+    private func persistStage() {
+        if stage.resumable {
+            defaults.set(stage.rawValue, forKey: HostWorkflowEnvironment.resumeStageKey)
+        } else {
+            defaults.removeObject(forKey: HostWorkflowEnvironment.resumeStageKey)
+        }
+    }
+
     private func saveSelection() {
         defaults.set(workflow.rawValue, forKey: Self.workflowKey)
         defaults.set(selected.sorted(), forKey: HostSettingsCatalog.workflowSelectionKey)
@@ -323,7 +469,7 @@ struct HostWorkflowPackageReview: Equatable {
             defer { busy = false; task = nil }
             do { try await action(self) } catch is CancellationError {
                 if stage == .installing {
-                    failure = "Setup was cancelled. Downloaded extensions remain installed."
+                    failure = "Setup was cancelled. Tools that finished stay installed."
                 }
             } catch { failure = error.localizedDescription }
         }

@@ -6,6 +6,8 @@ public struct HostExtensionOperation: Equatable, Sendable {
         case queued
         case downloading
         case installing
+        case verifying
+        case starting
     }
 
     public var phase: Phase
@@ -30,6 +32,8 @@ public struct HostExtensionOperation: Equatable, Sendable {
         case .working: return "Working"
         case .queued: return "Queued"
         case .installing: return "Installing"
+        case .verifying: return "Verifying"
+        case .starting: return "Starting"
         case .downloading:
             guard totalBytes > 0, receivedBytes > 0 else { return "Downloading" }
             let progress =

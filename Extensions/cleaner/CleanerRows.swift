@@ -32,6 +32,25 @@ struct CleanerRow: Identifiable, Equatable, Sendable {
     let kind: Kind
 }
 
+enum CleanerPresentation: Equatable {
+    case firstRun
+    case scanning
+    case nothingToClean
+    case results
+
+    init(scanned: Bool, scanning: Bool, hasCategories: Bool) {
+        if scanning && !hasCategories {
+            self = .scanning
+        } else if !scanned && !scanning {
+            self = .firstRun
+        } else if scanned && !hasCategories {
+            self = .nothingToClean
+        } else {
+            self = .results
+        }
+    }
+}
+
 final class CleanerSizeText {
     private var cache: [Int64: String] = [:]
 
@@ -144,14 +163,14 @@ struct CleanerListState: Equatable, Sendable {
 
     static func badges(_ worktree: WorktreeInfo) -> [String] {
         var badges: [String] = []
-        if worktree.dirty == true { badges.append("UNCOMMITTED") }
-        if let unpushed = worktree.unpushed, unpushed > 0 { badges.append("\(unpushed) UNPUSHED") }
+        if worktree.dirty == true { badges.append("Uncommitted changes") }
+        if let unpushed = worktree.unpushed, unpushed > 0 { badges.append("\(unpushed) unpushed") }
         if worktree.merged {
-            badges.append("MERGED")
+            badges.append("Merged")
         } else if worktree.upstreamGone {
-            badges.append("UPSTREAM GONE")
+            badges.append("Upstream gone")
         }
-        if worktree.locked { badges.append("LOCKED") }
+        if worktree.locked { badges.append("Locked") }
         return badges
     }
 }

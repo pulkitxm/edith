@@ -30,15 +30,16 @@ struct QuinjetProjectPicker: View {
             } else if let machine = selectedMachine,
                 let error = tab.folderPicker?.errorMessage ?? tab.errorMessage
             {
-                ContentUnavailableView {
-                    Label("Machine unavailable", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error)
-                } actions: {
-                    Button("Try again") { select(machine) }
-                    Button("Use This Mac") { select(machines.localMachine) }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                PageEmptyState(
+                    icon: .warning,
+                    title: "\(machine.name) is not reachable",
+                    message: "\(error) Nothing was changed on that machine.",
+                    primary: PageAction("Try again", icon: .refresh) {
+                        select(machine)
+                    },
+                    secondary: PageAction("Use this Mac", icon: .laptop) {
+                        select(machines.localMachine)
+                    })
             } else {
                 QuinjetPreparingMachineSkeleton(
                     machines: machines, selection: tab.machineID,
@@ -124,39 +125,31 @@ private struct QuinjetRemoteProjectPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader {
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text("Open a project")
-                    Text(
-                        mode == .recent
-                            ? "Recent Quinjet workspaces on \(machine.name)"
-                            : "Browse live folders on \(machine.name)"
-                    )
-                    .font(.system(size: UIScale.pt(12), weight: .regular))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-            } trailing: {
+            PageHeader(
+                "Open a project",
+                subtitle: mode == .recent
+                    ? "Recent Quinjet workspaces on \(machine.name)."
+                    : "Browse live folders on \(machine.name)."
+            ) {
                 HStack(spacing: UIScale.pt(8)) {
                     if mode == .browse {
                         Button {
                             QuinjetWorkOwnership.start { await picker.goUp() }
                         } label: {
-                            Image(systemName: "arrow.up")
+                            EdithIconView(.arrowUp)
                         }
-                        .buttonStyle(QuinjetToolbarButtonStyle())
                         .disabled(FileListing.parentPath(of: picker.directory) == nil)
                         .help("Parent folder")
                     }
                     Button {
                         refresh()
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        EdithIconView(.refresh)
                     }
-                    .buttonStyle(QuinjetToolbarButtonStyle())
                     .help(mode == .recent ? "Refresh recent projects" : "Refresh folder")
                 }
             } accessory: {
-                VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     QuinjetMachineStrip(
                         machines: machines, selection: tab.machineID, select: selectMachine)
                     EdithSegmentedPicker(
@@ -176,31 +169,20 @@ private struct QuinjetRemoteProjectPicker: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            TextField("Search projects and worktrees", text: $model.query)
-                .textFieldStyle(.plain)
-        }
-        .padding(.horizontal, UIScale.pt(11))
-        .frame(height: UIScale.pt(36))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(8))
-                .strokeBorder(DashSkin.lineStrong(dark))
-        }
+        SearchField(placeholder: "Search projects and worktrees", text: $model.query)
     }
 
     private var pathField: some View {
-        HStack(spacing: UIScale.pt(9)) {
-            Image(systemName: "folder")
+        HStack(spacing: UIScale.pt(8)) {
+            EdithIconView(.folder)
                 .foregroundStyle(DashSkin.inkFaint(dark))
+                .accessibilityHidden(true)
             TextField(
                 "Absolute folder path",
                 text: Binding(get: { picker.path }, set: { picker.editPath($0) })
             )
             .textFieldStyle(.plain)
-            .font(DashSkin.mono(10.5))
+            .font(.edithText(.callout, design: .monospaced))
             .onKeyPress(.tab) {
                 QuinjetWorkOwnership.start { await picker.completePath() }
                 return .handled
@@ -227,64 +209,47 @@ private struct QuinjetRemoteProjectPicker: View {
                 .accessibilityLabel("Matching folder path")
             } else if !picker.canOpenCurrentDirectory, !picker.path.isEmpty {
                 Text("matching")
-                    .font(DashSkin.mono(8.5))
+                    .font(.edithText(.caption2, design: .monospaced))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .padding(.horizontal, UIScale.pt(11))
-        .frame(height: UIScale.pt(36))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(8))
-                .strokeBorder(DashSkin.lineStrong(dark))
-        }
+        .edithFieldSurface(focused: false)
     }
 
     @ViewBuilder
     private var recentContent: some View {
         let projects = model.filteredProjects(for: remote)
         if model.isLoadingProjects(for: remote), projects.isEmpty {
-            QuinjetProjectGridSkeleton(dark: dark)
+            QuinjetProjectListSkeleton(dark: dark)
                 .accessibilityLabel("Loading recent projects from \(machine.name)")
         } else if let error = model.projectError(for: remote), projects.isEmpty {
-            ContentUnavailableView {
-                Label("Projects unavailable", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(error)
-            } actions: {
-                Button("Try again") {
+            PageEmptyState(
+                icon: .warning,
+                title: "Recent projects could not be loaded",
+                message: "\(error) Nothing was changed on \(machine.name).",
+                primary: PageAction("Try again", icon: .refresh) {
                     QuinjetWorkOwnership.start { await model.refreshProjects(for: remote) }
-                }
-                Button("Browse folders") { mode = .browse }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                },
+                secondary: PageAction("Browse folders", icon: .folder) { mode = .browse })
         } else if projects.isEmpty {
-            ContentUnavailableView {
-                Label(
-                    model.query.isEmpty ? "No recent projects" : "No matching projects",
-                    systemImage: "folder")
-            } description: {
-                Text("Browse a project folder on this machine to open it in Quinjet.")
-            } actions: {
-                Button("Browse folders") { mode = .browse }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageEmptyState(
+                icon: .folder,
+                title: model.query.isEmpty
+                    ? "No recent projects on \(machine.name)" : "No project matches that search",
+                message: model.query.isEmpty
+                    ? "Browse the folders on \(machine.name) and pick a Git project to review. Opening a project only reads it."
+                    : "Search looks at project names, branches and paths. Clear it to see every recent project.",
+                primary: PageAction("Browse folders", icon: .folder) { mode = .browse },
+                secondary: model.query.isEmpty
+                    ? nil
+                    : PageAction("Clear search", icon: .closeFilled) { model.query = "" })
         } else {
             ScrollView {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 330, spacing: 14),
-                    spacing: UIScale.pt(14)
-                ) {
-                    ForEach(projects) { project in
-                        QuinjetProjectCard(
-                            project: project,
-                            open: { worktree in
-                                model.open(
-                                    worktree, projectName: project.name,
-                                    available: project.availableWorktrees, remote: remote, in: tab,
-                                    launchEnabled: launchEnabled, configuration: configuration)
-                            })
-                    }
+                QuinjetProjectList(projects: projects) { project, worktree in
+                    model.open(
+                        worktree, projectName: project.name,
+                        available: project.availableWorktrees, remote: remote, in: tab,
+                        launchEnabled: launchEnabled, configuration: configuration)
                 }
                 .padding(.top, UIScale.pt(2))
                 .pageContent(compact)
@@ -298,23 +263,21 @@ private struct QuinjetRemoteProjectPicker: View {
             QuinjetFolderBrowserSkeleton(dark: dark)
                 .accessibilityLabel("Connecting to \(machine.name)")
         } else if let error = picker.errorMessage, picker.entries.isEmpty {
-            ContentUnavailableView {
-                Label("Folder unavailable", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(error)
-            } actions: {
-                Button("Try again") { QuinjetWorkOwnership.start { await picker.start() } }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageEmptyState(
+                icon: .warning,
+                title: "Folders could not be listed",
+                message: "\(error) Nothing was changed on \(machine.name).",
+                primary: PageAction("Try again", icon: .refresh) {
+                    QuinjetWorkOwnership.start { await picker.start() }
+                })
         } else if let error = tab.errorMessage {
-            ContentUnavailableView {
-                Label("Project unavailable", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(error)
-            } actions: {
-                Button("Choose another folder") { tab.errorMessage = nil }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageEmptyState(
+                icon: .warning,
+                title: "That folder could not be opened",
+                message: "\(error) Pick a different folder, ideally one that is a Git project.",
+                primary: PageAction("Choose another folder", icon: .folder) {
+                    tab.errorMessage = nil
+                })
         } else {
             ScrollView {
                 LazyVStack(spacing: UIScale.pt(5)) {
@@ -330,7 +293,7 @@ private struct QuinjetRemoteProjectPicker: View {
                 if picker.entries.isEmpty, !picker.loading, !picker.canOpenCurrentDirectory {
                     ContentStatusView(
                         "No matching folders", message: "Check the path or keep typing.",
-                        symbol: "folder"
+                        icon: .folder
                     )
                     .allowsHitTesting(false)
                 }
@@ -344,21 +307,21 @@ private struct QuinjetRemoteProjectPicker: View {
             open(picker.directory)
         } label: {
             HStack(spacing: UIScale.pt(11)) {
-                Image(systemName: "arrow.turn.down.right")
+                EdithIconView(.arrowTurn)
                     .foregroundStyle(DashSkin.accent(dark))
                     .frame(width: UIScale.pt(18))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("Open this directory")
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .font(.edithText(.headline))
                     Text(picker.directory)
-                        .font(DashSkin.mono(9))
+                        .font(.edithText(.caption, design: .monospaced))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 0)
                 Text("return")
-                    .font(DashSkin.mono(8.5))
+                    .font(.edithText(.caption2, design: .monospaced))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .padding(.horizontal, UIScale.pt(12))
@@ -377,22 +340,22 @@ private struct QuinjetRemoteProjectPicker: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(11)) {
-                Image(systemName: entry.isDirectory ? "folder.fill" : "doc")
+                EdithIconView(entry.isDirectory ? .folder : .doc)
                     .foregroundStyle(
                         entry.isDirectory ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
                     )
                     .frame(width: UIScale.pt(18))
                 Text(entry.name)
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 if picker.selectedEntry == entry {
                     Text("return")
-                        .font(DashSkin.mono(8.5))
+                        .font(.edithText(.caption2, design: .monospaced))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 } else if entry.isDirectory || entry.kind == .symlink {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
@@ -455,23 +418,19 @@ private struct QuinjetPreparingMachineSkeleton: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PageHeader {
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text("Open a project")
-                    Text("Recent Quinjet workspaces on \(machineName ?? "this machine")")
-                        .font(.system(size: UIScale.pt(12), weight: .regular))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-            } trailing: {
+            PageHeader(
+                "Open a project",
+                subtitle: "Recent Quinjet workspaces on \(machineName ?? "this machine")."
+            ) {
                 SkeletonGroup {
                     SkeletonBlock(width: 30, height: 30, corner: 7)
                 }
             } accessory: {
-                VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     QuinjetMachineStrip(
                         machines: machines, selection: selection, select: selectMachine)
                     SkeletonGroup {
-                        VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                             HStack(spacing: UIScale.pt(2)) {
                                 SkeletonBlock(height: 24, corner: 6)
                                 SkeletonBlock(height: 24, corner: 6)
@@ -495,7 +454,7 @@ private struct QuinjetPreparingMachineSkeleton: View {
                     }
                 }
             }
-            QuinjetProjectGridSkeleton(dark: dark)
+            QuinjetProjectListSkeleton(dark: dark)
                 .pageContent(compact)
         }
         .accessibilityElement(children: .contain)
@@ -515,16 +474,18 @@ struct QuinjetMachineStrip: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(8)) {
-                ForEach(recentMachines) { machine in
-                    QuinjetMachineChip(
-                        machine: machine, session: machines.session(for: machine.id),
-                        selected: machine.id == selection,
-                        local: machines.isLocal(machine.id), select: { select(machine) })
+        if machines.allMachines.count > 1 {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                    ForEach(recentMachines) { machine in
+                        QuinjetMachineChip(
+                            machine: machine, session: machines.session(for: machine.id),
+                            selected: machine.id == selection,
+                            local: machines.isLocal(machine.id), select: { select(machine) })
+                    }
                 }
+                .padding(.vertical, UIScale.pt(1))
             }
-            .padding(.vertical, UIScale.pt(1))
         }
     }
 }
@@ -538,54 +499,16 @@ private struct QuinjetMachineChip: View {
 
     @Environment(\.colorScheme) private var scheme
 
-    private var dark: Bool { scheme == .dark }
-
     var body: some View {
-        Button(action: select) {
-            HStack(spacing: UIScale.pt(7)) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: UIScale.pt(6), height: UIScale.pt(6))
-                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    Text(machine.name)
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-                    Text(local ? "Local machine" : machine.subtitle)
-                        .font(.system(size: UIScale.pt(8.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-            }
-            .padding(.horizontal, UIScale.pt(10))
-            .frame(height: UIScale.pt(34))
-        }
-        .buttonStyle(QuinjetMachineChipStyle(selected: selected, dark: dark))
+        PageChip(machine.name, dot: statusColor, active: selected, action: select)
+            .help(local ? "This Mac" : machine.subtitle)
     }
 
     private var statusColor: Color {
         if local || session.state.isConnected { return .green }
         if session.state.isBusy { return .orange }
         if session.state.failureMessage != nil { return .red }
-        return DashSkin.inkFaint(dark)
-    }
-}
-
-private struct QuinjetMachineChipStyle: ButtonStyle {
-    let selected: Bool
-    let dark: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(DashSkin.ink(dark))
-            .background(
-                selected ? DashSkin.accent(dark).opacity(0.14) : DashSkin.paper2(dark),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    .strokeBorder(
-                        selected ? DashSkin.accent(dark).opacity(0.7) : DashSkin.lineStrong(dark))
-            }
-            .edithButtonTarget(.selection)
-            .opacity(configuration.isPressed ? 0.75 : 1)
+        return DashSkin.inkFaint(scheme == .dark)
     }
 }
 

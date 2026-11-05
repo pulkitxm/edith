@@ -8,7 +8,7 @@ enum TerminalSessionAction: Equatable {
 
     var title: String {
         switch self {
-        case .start: "Start"
+        case .start: "Start a New Shell"
         case .restart: "Restart"
         }
     }
@@ -29,7 +29,7 @@ struct TerminalSessionPresentation: Equatable {
         }
         if let exitMessage {
             return TerminalSessionPresentation(
-                title: "Terminal session ended", detail: exitMessage, showsProgress: false,
+                title: "This shell stopped", detail: exitMessage, showsProgress: false,
                 showsTerminal: false, action: .start)
         }
         return TerminalSessionPresentation(
@@ -62,17 +62,14 @@ struct TerminalSessionView: View {
                     TerminalPane(holder: holder, palette: palette, active: active)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     if let actionError = holder.actionError {
-                        Text(actionError).font(.edithText(.caption)).foregroundStyle(
-                            DashSkin.danger
-                        ).padding(UIScale.pt(8))
+                        TerminalStatusBar(
+                            icon: .warning, message: actionError,
+                            tint: DashSkin.danger)
                     }
                     if let exitMessage = holder.exitMessage {
-                        HStack {
-                            Text(exitMessage).font(.edithText(.caption))
-                            Spacer()
-                            Button("Restart", action: restart).buttonStyle(.edith(.toolbar))
-                        }
-                        .padding(UIScale.pt(8))
+                        TerminalStatusBar(
+                            icon: .stop, message: exitMessage,
+                            tint: DashSkin.inkSoft(dark), actionTitle: "Restart", action: restart)
                     }
                 }
             } else if presentation.showsProgress {
@@ -85,29 +82,63 @@ struct TerminalSessionView: View {
     }
 
     private func unavailable(_ presentation: TerminalSessionPresentation) -> some View {
-        VStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "terminal")
-                .font(.system(size: UIScale.pt(24), weight: .light))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(presentation.title)
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-            if let detail = presentation.detail {
-                Text(detail)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .multilineTextAlignment(.center)
-            }
-            if let action = presentation.action {
-                Button(action.title) { perform(action) }
-                    .buttonStyle(.edith(.primary))
-            }
-        }
-        .padding(UIScale.pt(24))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        TerminalSessionUnavailableView(presentation: presentation, perform: perform)
     }
 
     private func perform(_ action: TerminalSessionAction) {
         restart()
+    }
+}
+
+struct TerminalSessionUnavailableView: View {
+    let presentation: TerminalSessionPresentation
+    let perform: (TerminalSessionAction) -> Void
+
+    var body: some View {
+        PageEmptyState(
+            icon: .terminal,
+            title: presentation.title,
+            message: [presentation.detail, "Starting again opens a fresh shell in the same tab."]
+                .compactMap { $0 }.joined(separator: " "),
+            primary: presentation.action.map { action in
+                PageAction(
+                    action.title, icon: .refresh,
+                    identifier: "terminal.session.start"
+                ) { perform(action) }
+            }
+        )
+    }
+}
+
+struct TerminalStatusBar: View {
+    let icon: EdithIcon
+    let message: String
+    let tint: Color
+    var actionTitle: String?
+    var action: () -> Void = {}
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            EdithIconView(icon)
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.edithText(.callout))
+                .foregroundStyle(DashSkin.ink(scheme == .dark))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: UIScale.pt(8))
+            if let actionTitle {
+                Button(actionTitle, action: action).buttonStyle(.edith(.secondary))
+            }
+        }
+        .padding(.horizontal, UIScale.pt(12))
+        .padding(.vertical, UIScale.pt(8))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.08))
+        .overlay(alignment: .top) {
+            Rectangle().fill(DashSkin.line(scheme == .dark)).frame(height: 1)
+        }
     }
 }

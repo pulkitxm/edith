@@ -8,6 +8,7 @@ struct LogPalette: Equatable {
     var stderr: NSColor
     var timestamp: NSColor
     var background: NSColor
+    var selection: NSColor
 }
 
 struct LogDocument: Equatable {
@@ -77,6 +78,7 @@ final class LogTextViewController: NSViewController {
             renderedPresentation = presentation
             configureWrapping(document.wraps)
             textView.backgroundColor = palette.background
+            textView.selectedTextAttributes = [.backgroundColor: palette.selection]
             scrollView.backgroundColor = palette.background
             rebuild(document, palette: palette)
         } else if let appended = appendedSuffix(of: document.lines) {

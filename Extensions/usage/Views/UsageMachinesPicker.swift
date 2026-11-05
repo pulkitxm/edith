@@ -10,11 +10,11 @@ struct UsageMachinesPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text("Machines")
-                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .padding(.horizontal, UIScale.pt(6))
             Text("Tick a machine to count it in the charts. Option-click to show it alone.")
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, UIScale.pt(6))
@@ -32,13 +32,13 @@ struct UsageMachinesPicker: View {
             Divider().opacity(0.4)
             HStack(spacing: UIScale.pt(10)) {
                 Text(footnote)
-                    .font(DashSkin.mono(10))
+                    .font(.edithText(.caption).monospacedDigit())
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer(minLength: 0)
                 Button("Done") { dismiss() }
                     .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
+                    .font(.edithText(.subheadline).weight(.semibold))
+                    .foregroundStyle(DashSkin.accent(dark))
             }
             .padding(.horizontal, UIScale.pt(6))
         }
@@ -54,7 +54,7 @@ struct UsageMachinesPicker: View {
     private func shownRow(_ group: MachineGroup, now: Date) -> some View {
         let shown = model.machineIsShown(group)
         let partial = model.machineIsPartlyShown(group)
-        let mark = shown ? "checkmark.circle.fill" : (partial ? "circle.lefthalf.filled" : "circle")
+        let mark: EdithIcon = shown ? .success : (partial ? .contrast : .ring)
         let freshness = freshness(group, now: now)
         return Button {
             if NSEvent.modifierFlags.contains(.option) {
@@ -64,33 +64,33 @@ struct UsageMachinesPicker: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: mark)
-                    .font(.system(size: UIScale.pt(10)))
+                EdithIconView(mark)
+                    .font(.edithText(.caption))
                     .foregroundStyle(
                         shown || partial ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text(group.name)
                         .font(
-                            .system(size: UIScale.pt(11.5), weight: shown ? .semibold : .regular)
+                            .edithText(.subheadline).weight(shown ? .semibold : .regular)
                         )
                         .foregroundStyle(DashSkin.ink(dark))
                         .presenterBlur(.fleet)
                     Text(group.agentSummary)
-                        .font(DashSkin.mono(9.5))
+                        .font(.edithText(.caption).monospacedDigit())
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                     if let freshness {
                         HStack(spacing: UIScale.pt(4)) {
                             if freshness.needsAttention {
-                                Image(systemName: "exclamationmark.triangle.fill")
+                                EdithIconView(.warning)
                                     .font(.system(size: UIScale.pt(8)))
                             }
                             Text(freshness.statusLabel)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .multilineTextAlignment(.leading)
                         }
-                        .font(DashSkin.mono(9.5))
+                        .font(.edithText(.caption).monospacedDigit())
                         .foregroundStyle(
                             freshness.needsAttention
                                 ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
@@ -99,7 +99,7 @@ struct UsageMachinesPicker: View {
                 }
                 Spacer(minLength: UIScale.pt(8))
                 Text(agentCount(group))
-                    .font(DashSkin.mono(9.5))
+                    .font(.edithText(.caption).monospacedDigit())
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .padding(.horizontal, UIScale.pt(9))

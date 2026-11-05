@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionSupport
 import Foundation
 
@@ -27,12 +28,12 @@ public enum HerdrAgentView: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    public var icon: String {
+    public var icon: EdithIcon {
         switch self {
-        case .agent: "terminal"
-        case .diff: "arrow.triangle.branch"
-        case .split: "rectangle.split.2x1"
-        case .files: "folder"
+        case .agent: .terminal
+        case .diff: .quinjet
+        case .split: .layoutLeft
+        case .files: .folder
         }
     }
 
@@ -62,7 +63,7 @@ public enum HerdrSplitCompanion: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    public var icon: String {
+    public var icon: EdithIcon {
         switch self {
         case .diff: HerdrAgentView.diff.icon
         case .files: HerdrAgentView.files.icon

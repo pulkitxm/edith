@@ -34,7 +34,7 @@ import Testing
                     let content = state.withContext {
                         ExtensionPageHost {
                             ControlSettingsHost(presentation: model) {
-                                Form { ColorPickerRows(presentation: model) }.formStyle(.grouped)
+                                Form { ColorPickerRows(presentation: model) }.settingsForm()
                             }
                         }
                     }

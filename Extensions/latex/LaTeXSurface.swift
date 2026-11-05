@@ -49,9 +49,9 @@ import Foundation
                             ? URL(fileURLWithPath: project.sourcePath).lastPathComponent
                             : project.repository, bytes: 4096),
                     value: project.pullRequest.map { "PR #\($0)" } ?? project.compiler.title,
-                    icon: "doc.richtext",
+                    icon: .docText,
                     actions: [
-                        .init("open/" + project.id.uuidString, "Open document", "arrow.up.right")
+                        .init("open/" + project.id.uuidString, "Open document", .arrowUpRight)
                     ])
             },
             sources: projects.prefix(100).map {

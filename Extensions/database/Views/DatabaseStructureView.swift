@@ -21,7 +21,7 @@ struct DatabaseStructureView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Label("\(fields.count) fields", systemImage: "list.bullet.rectangle")
+                Label("\(fields.count) fields", edith: .list)
                     .font(.system(size: UIScale.pt(11), weight: .medium))
                 Spacer()
                 TextField("Find a field or type", text: $search)
@@ -31,12 +31,12 @@ struct DatabaseStructureView: View {
             Divider()
             if fields.isEmpty {
                 DatabaseWorkbenchEmptyState(
-                    symbol: "list.bullet.rectangle", title: "No field metadata",
+                    icon: .list, title: "No field metadata",
                     detail:
                         "Browse an object to inspect the fields reported by its database adapter.")
             } else if rows.isEmpty {
                 DatabaseWorkbenchEmptyState(
-                    symbol: "magnifyingglass", title: "No matching fields",
+                    icon: .search, title: "No matching fields",
                     detail: "Try a different field name or data type.")
             } else {
                 SwiftUI.Table(rows) {
@@ -60,6 +60,7 @@ struct DatabaseStructureView: View {
                     SwiftUI.TableColumn("Default") { Text(flag($0.field.hasDefault)) }.width(70)
                     SwiftUI.TableColumn("Generated") { Text(flag($0.field.isGenerated)) }.width(80)
                 }
+                .themedSelection()
                 .tableStyle(.inset(alternatesRowBackgrounds: true))
                 .accessibilityLabel("Object field structure")
             }

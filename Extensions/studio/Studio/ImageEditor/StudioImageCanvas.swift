@@ -66,7 +66,11 @@ struct StudioImageCanvas: View {
                     }
                 }
             } else {
-                LoadingIndicator().frame(maxWidth: .infinity, maxHeight: .infinity)
+                SkeletonGroup {
+                    SkeletonBlock(height: 320, corner: 12).padding(UIScale.pt(24))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Loading image")
             }
         }
         .overlay(alignment: .bottom) { selectionControls }
@@ -100,13 +104,13 @@ struct StudioImageCanvas: View {
                     .font(.edithText(.body))
                     .frame(maxWidth: UIScale.pt(240))
                 }
-                Button("Duplicate", systemImage: "plus.square.on.square") {
+                Button("Duplicate", edith: .plus) {
                     editor.duplicateSelected()
                 }
                 .labelStyle(.iconOnly)
                 .help("Duplicate layer (⌘D)")
                 .accessibilityLabel("Duplicate selected layer")
-                Button("Delete", systemImage: "trash", role: .destructive) {
+                Button("Delete", edith: .trash, role: .destructive) {
                     editor.deleteSelected()
                 }
                 .labelStyle(.iconOnly)

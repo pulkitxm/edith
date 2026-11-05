@@ -15,17 +15,18 @@ struct HomeMeetingsCard: View {
         "accent"
 
     private var theme: Color { themeColor(themeName) }
-    private var blurCalendar: Bool { store.blurEvents }
+    private var isAuthorized: Bool { authorized?() ?? store.authorized }
+    private var limit: Int { presentation?.tile.itemLimit ?? 6 }
+    private var showsActions: Bool { presentation?.tile.showActions != false }
 
     private var todayEvents: [CalendarEventPayload] {
         CalendarWidgetEvents.selected(
             store.events, tile: presentation?.tile ?? SurfaceTile(.calendar), target: .home)
-
     }
 
     var body: some View {
         PageCard(title: "Today's meetings", note: note) {
-            VStack(alignment: .leading, spacing: UIScale.pt(0)) {
+            VStack(alignment: .leading, spacing: 0) {
                 if !store.loaded {
                     LoadingContainer(
                         state: store.error == nil ? .loading : .error,
@@ -35,74 +36,107 @@ struct HomeMeetingsCard: View {
                     ) {
                         EmptyView()
                     } placeholder: {
-                        SkeletonBlock(height: UIScale.pt(70))
+                        skeleton
                     }
-                } else if !(authorized?() ?? store.authorized) {
-                    accessPrompt
+                } else if !isAuthorized {
+                    PageEmptyState(
+                        icon: .calendar,
+                        title: "See today's meetings here",
+                        message: "Allow Edith to read your calendar. It never changes your events.",
+                        primary: PageAction(
+                            "Allow Calendar Access", identifier: "calendar.home.grant"
+                        ) {
+                            if let grantAccess { grantAccess() } else { store.perform(.permission) }
+                        },
+                        style: .compact)
                 } else if todayEvents.isEmpty {
-                    Text("No meetings today. Clear runway.")
-                        .font(.system(size: UIScale.pt(12.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
+                    Text("No meetings today.")
+                        .font(.edithText(.callout))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(64))
                 } else {
-                    ForEach(todayEvents.prefix(presentation?.tile.itemLimit ?? 6), id: \.id) {
-                        event in
+                    let visible = Array(todayEvents.prefix(limit))
+                    ForEach(visible, id: \.id) { event in
                         row(event)
-                        if event != todayEvents.prefix(presentation?.tile.itemLimit ?? 6).last {
-                            Divider().opacity(0.4)
-                        }
+                        if event != visible.last { Divider() }
                     }
                 }
-                openCalendar
                 if store.loaded, let error = store.error {
-                    HStack {
+                    HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                        EdithIconView(.warning)
+                            .foregroundStyle(.orange)
+                            .accessibilityHidden(true)
                         Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Retry", action: store.refresh).buttonStyle(.edith(.toolbar))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: UIScale.pt(8))
+                        Button("Retry", action: store.refresh).buttonStyle(.edith(.secondary))
                     }
-                    .padding(.top, UIScale.pt(10))
+                    .padding(.top, UIScale.pt(12))
+                }
+                if showsActions, isAuthorized || !store.loaded {
+                    Button(action: open) {
+                        Label("Open Calendar", edith: .arrowRight)
+                            .labelStyle(CalendarTrailingIconLabelStyle())
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .font(.edithText(.callout).weight(.medium))
+                    .foregroundStyle(DashSkin.accentDeep(dark))
+                    .padding(.top, UIScale.pt(12))
                 }
             }
         }
         .pageTask(cancel: store.suspend) { await store.observe() }
     }
 
+    private var skeleton: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            ForEach(0..<3, id: \.self) { index in
+                HStack(spacing: UIScale.pt(12)) {
+                    SkeletonBlock(width: 96, height: 12)
+                    SkeletonBlock(width: index == 1 ? 120 : 180, height: 12)
+                }
+            }
+        }
+        .padding(.vertical, UIScale.pt(8))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var note: String {
-        guard authorized?() ?? store.authorized else { return "" }
+        guard store.loaded, isAuthorized else { return "" }
         let count = todayEvents.count
         return count == 0 ? "" : "\(count) event\(count == 1 ? "" : "s")"
     }
 
     private func row(_ event: CalendarEventPayload) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
+        HStack(alignment: .center, spacing: UIScale.pt(12)) {
             if presentation?.tile.shows("time") != false {
                 Text(timeLabel(event))
-                    .font(DashSkin.mono(11))
+                    .font(.edithText(.caption))
+                    .monospacedDigit()
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
             Text(event.title)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .lineLimit(1)
                 .foregroundStyle(DashSkin.ink(dark))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .presenterBlur(blurCalendar)
-            if MeetingLink.url(for: event) != nil, presentation?.tile.showActions != false,
+                .presenterBlur(store.blurEvents)
+            if MeetingLink.url(for: event) != nil, showsActions,
                 presentation?.tile.shows("join") != false
             {
                 Button {
                     store.perform(.join, eventID: event.id)
                 } label: {
-                    Image(systemName: "video.fill")
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(theme)
+                    EdithIconView(.video)
                 }
-                .buttonStyle(.edith(.toolbar))
+                .buttonStyle(.edith(.iconOnly, tint: theme))
                 .help("Join meeting")
+                .accessibilityLabel("Join meeting")
             }
         }
-        .padding(.vertical, UIScale.pt(6))
+        .frame(minHeight: UIScale.pt(36))
     }
 
     private func timeLabel(_ event: CalendarEventPayload) -> String {
@@ -111,38 +145,13 @@ struct HomeMeetingsCard: View {
         let end = event.end.formatted(date: .omitted, time: .shortened)
         return "\(start)–\(end)"
     }
+}
 
-    private var accessPrompt: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "calendar.badge.exclamationmark")
-                .foregroundStyle(.orange)
-            Text("Grant calendar access to see today's schedule.")
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-            Spacer()
-            Button("Grant…") {
-                if let grantAccess { grantAccess() } else { store.perform(.permission) }
-            }
-            .buttonStyle(.edith(.toolbar))
-            .font(.system(size: UIScale.pt(11)))
-            .foregroundStyle(theme)
-        }
-        .padding(.vertical, UIScale.pt(14))
-    }
-
-    @ViewBuilder private var openCalendar: some View {
-        if presentation?.tile.showActions != false {
-            Button(action: open) {
-                HStack(spacing: UIScale.pt(4)) {
-                    Text("Open Calendar")
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: UIScale.pt(9), weight: .semibold))
-                }
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                .foregroundStyle(DashSkin.accentDeep(dark))
-            }
-            .buttonStyle(.edith(.borderless))
-            .padding(.top, UIScale.pt(10))
+private struct CalendarTrailingIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: UIScale.pt(4)) {
+            configuration.title
+            configuration.icon.imageScale(.small)
         }
     }
 }

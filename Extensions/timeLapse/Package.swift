@@ -13,6 +13,10 @@ let package = Package(
             ],
             path: ".", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "TimeLapseExtensionTests", dependencies: ["TimeLapseExtension"], path: "Tests",
+            name: "TimeLapseExtensionTests",
+            dependencies: [
+                "TimeLapseExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ], path: "Tests",
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

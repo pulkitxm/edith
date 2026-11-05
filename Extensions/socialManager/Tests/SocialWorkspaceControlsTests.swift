@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import AppKit
 import ImageIO

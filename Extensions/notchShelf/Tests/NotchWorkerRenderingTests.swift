@@ -1,6 +1,7 @@
 import AppKit
 import QuartzCore
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -46,6 +47,30 @@ import Testing
         }
     }
 
+    @Test func emptyFilesTabExplainsHowToParkFiles() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.controller.layouts.update(.notch) {
+            $0.notchAutoWidth = false
+            $0.notchWidth = 580
+        }
+        fixture.controller.expand(on: 0, preferredTab: .files)
+        fixture.controller.selectTab(.files)
+        #expect(fixture.controller.items.isEmpty)
+        let host = NSHostingView(
+            rootView: NotchShelfContentView(controller: fixture.controller)
+                .preferredColorScheme(.dark)
+                .environment(\.automaticViewActionsEnabled, false)
+                .transaction { $0.animation = nil })
+        host.frame = CGRect(x: 0, y: 0, width: 660, height: 460)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        await settle(window, host)
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+        try capture(host, name: "notch-files-empty-dark")
+        window.contentView = nil
+    }
+
     @Test func settingsRenderAtCompactRegularAndIncreasedZoom() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -84,9 +109,11 @@ import Testing
     }
 
     private func capture(_ host: NSView, name: String) throws {
-        guard let directory = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_NOTCH"] else {
-            return
-        }
+        let environment = ProcessInfo.processInfo.environment
+        guard
+            let directory = environment["EDITH_TEST_CAPTURE_NOTCH"]
+                ?? environment["EDITH_TEST_CAPTURE_SURFACES"]
+        else { return }
         let representation = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: representation)
         let data = try #require(representation.representation(using: .png, properties: [:]))

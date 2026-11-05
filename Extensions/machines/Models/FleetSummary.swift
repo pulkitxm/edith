@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionSupport
 import Foundation
 
@@ -21,6 +22,7 @@ public struct MachineSnapshot: Equatable, Sendable {
     public var updatesAvailable: Int?
     public var hottestTemperature: Double?
     public var os: String
+    public var connectionFailure: String?
 
     public init(
         id: UUID, name: String, isLocal: Bool, online: Bool, cores: Int, cpuPercent: Double,
@@ -28,7 +30,7 @@ public struct MachineSnapshot: Equatable, Sendable {
         swapUsedKB: Int64 = 0, diskTotalKB: Int64 = 0, diskUsedKB: Int64 = 0,
         loadOne: Double = 0, uptime: Double = 0, containersRunning: Int = 0,
         containersTotal: Int = 0, updatesAvailable: Int? = nil,
-        hottestTemperature: Double? = nil, os: String = ""
+        hottestTemperature: Double? = nil, os: String = "", connectionFailure: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -49,6 +51,7 @@ public struct MachineSnapshot: Equatable, Sendable {
         self.updatesAvailable = updatesAvailable
         self.hottestTemperature = hottestTemperature
         self.os = os
+        self.connectionFailure = connectionFailure
     }
 
     public var memoryPercent: Double {
@@ -86,14 +89,14 @@ public struct FleetAlert: Identifiable, Equatable, Sendable {
         self.detail = detail
     }
 
-    public var symbol: String {
+    public var icon: EdithIcon {
         switch kind {
-        case .offline: return "bolt.horizontal.circle"
-        case .diskFull: return "externaldrive.badge.exclamationmark"
-        case .memoryPressure: return "memorychip"
-        case .highLoad: return "gauge.with.dots.needle.100percent"
-        case .updates: return "shippingbox.and.arrow.backward"
-        case .hot: return "thermometer.high"
+        case .offline: return .bolt
+        case .diskFull: return .drive
+        case .memoryPressure: return .memory
+        case .highLoad: return .gauge
+        case .updates: return .appMaintenance
+        case .hot: return .thermometer
         }
     }
 }

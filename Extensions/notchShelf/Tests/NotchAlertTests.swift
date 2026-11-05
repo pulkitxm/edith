@@ -4,7 +4,7 @@ import Testing
 
 @Suite struct NotchAlertLogicTests {
     private func alert(_ id: String, _ priority: NotchAlertPriority) -> NotchAlert {
-        NotchAlert(id: id, icon: "x", title: id, priority: priority)
+        NotchAlert(id: id, icon: .bolt, title: id, priority: priority)
     }
 
     @Test func anyAlertPreemptsWhenNoneShowing() {

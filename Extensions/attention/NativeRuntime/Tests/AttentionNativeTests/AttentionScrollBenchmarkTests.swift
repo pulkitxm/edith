@@ -1,3 +1,4 @@
+import EdithExtensionCore
 import AppKit
 import QuartzCore
 import EdithExtensionUI
@@ -17,7 +18,7 @@ import Testing
         let only = ProcessInfo.processInfo.environment["EDITH_SCROLL_CASE"]
         let frames = Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_FRAMES"] ?? "") ?? 300
         for (section, preset) in [
-            (AttentionPageSection.overview, AttentionRangePreset.today),
+            (AttentionPageSection.overview, DateFilterPreset.today),
             (.overview, .last7), (.timeline, .last7), (.breakdown, .last7), (.focus, .last7),
             (.agents, .last7),
         ] where only == nil || only == "\(section.rawValue)-\(preset.rawValue)" {
@@ -25,7 +26,7 @@ import Testing
             let client = fixture.client(counter: requests)
             let model = AttentionPageModel(repository: fixture.repository, uiClient: client)
             model.section = section
-            model.select(preset)
+            model.select(.preset(preset))
             model.reload()
             await model.waitForReload()
             let realizeStart = CACurrentMediaTime()
@@ -60,7 +61,7 @@ extension AttentionScrollBenchmarkTests {
             repository: fixture.repository,
             uiClient: fixture.client(counter: AttentionRequestCounter()))
         model.section = .overview
-        model.select(.last7)
+        model.select(.preset(.last7))
         model.reload()
         await model.waitForReload()
         let (window, host) = AttentionScrollHarness.host(
@@ -86,7 +87,7 @@ extension AttentionScrollBenchmarkTests {
         let model = AttentionPageModel(
             repository: fixture.repository, uiClient: fixture.client(counter: counter))
         model.section = .overview
-        model.select(.last7)
+        model.select(.preset(.last7))
         model.reload()
         await model.waitForReload()
         let (window, host) = AttentionScrollHarness.host(
@@ -112,7 +113,7 @@ extension AttentionScrollBenchmarkTests {
         let client = fixture.client(counter: AttentionRequestCounter())
         let model = AttentionPageModel(repository: fixture.repository, uiClient: client)
         model.section = .overview
-        model.select(.last7)
+        model.select(.preset(.last7))
         model.reload()
         await model.waitForReload()
         let panels: [(String, AnyView)] = [

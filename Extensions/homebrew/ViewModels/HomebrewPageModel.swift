@@ -26,7 +26,6 @@ final class HomebrewPageModel {
     var query = ""
     var installedQuery = ""
     var updatesOnly = false
-    var selectedPackageID: String?
     var packages: [HomebrewPackage] = []
     var status: HomebrewStatus?
     let loading = ContentLoad()

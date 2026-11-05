@@ -133,13 +133,22 @@ final class AttentionPageModel {
             && !timelineRows.isEmpty && !(hasFilters && !hasActivity)
     }
 
+    var showsEmptyPeriod: Bool {
+        hasStoredEvents && !hasActivity && period.selection != .preset(.today)
+    }
+
     var hasActivity: Bool {
         !summary.categories.isEmpty || summary.idleDuration > 0 || !summary.agents.isEmpty
     }
 
+    static func setupBlocker(applicationTracking: Bool, browserTracking: Bool) -> String? {
+        applicationTracking || browserTracking ? nil : "Turn on at least one source to begin."
+    }
+
     var refreshInterval: Duration {
+        if needsSetup && loaded { return .seconds(60) }
         guard period.isCurrent() else { return .seconds(900) }
-        if period.preset == .allTime { return .seconds(120) }
+        if period.isAllTime { return .seconds(120) }
         return period.isSingleDay ? .seconds(30) : .seconds(120)
     }
 
@@ -152,27 +161,9 @@ final class AttentionPageModel {
 
     func category(_ id: String) -> AttentionCategory { settings.category(id) }
 
-    func select(_ preset: AttentionRangePreset) {
-        setPeriod(AttentionPeriod(preset))
+    func select(_ selection: DateFilterSelection) {
+        setPeriod(AttentionPeriod(selection))
     }
-
-    func selectRange(from: Date, to: Date) {
-        setPeriod(AttentionPeriod.custom(from: from, to: to))
-    }
-
-    func step(_ steps: Int) {
-        guard period.preset != .allTime else { return }
-        let next = period.shifted(by: steps)
-        guard next.start <= Date() else { return }
-        setPeriod(next)
-    }
-
-    func showToday() {
-        setPeriod(AttentionPeriod(.today))
-    }
-
-    var canStepBackward: Bool { period.preset != .allTime }
-    var canStepForward: Bool { period.preset != .allTime && !period.isCurrent() }
 
     func setPeriod(_ next: AttentionPeriod) {
         guard next != period else { return }
@@ -293,7 +284,7 @@ final class AttentionPageModel {
         if !preserveSettings, settings != state.settings { settings = state.settings }
         if let derived = state.derived {
             summary = derived.summary
-            if period.preset == .allTime { period.start = summary.from }
+            if period.isAllTime { period.start = summary.from }
             dayRibbon = derived.dayRibbon
             timeline = derived.timeline
             timelineRows = derived.timelineRows
@@ -334,8 +325,8 @@ final class AttentionPageModel {
             ? period.interval() : DateInterval(start: current.from, end: current.to)
         let request = AttentionSummaryRequest(
             from: interval.start, to: interval.end, settings: settings,
-            comparePeriod: period.comparePeriod, window: window, parts: parts,
-            allTime: period.preset == .allTime && retained.isEmpty, filter: filter)
+            comparePeriod: period.comparePeriod(), window: window, parts: parts,
+            allTime: period.isAllTime && retained.isEmpty, filter: filter)
         var snapshot = try await Self.snapshot(request, repository: repository, uiClient: uiClient)
         try Task.checkCancellation()
         if !retained.isEmpty {
@@ -347,7 +338,7 @@ final class AttentionPageModel {
                 snapshot = try await Self.snapshot(
                     AttentionSummaryRequest(
                         from: interval.start, to: interval.end, settings: settings,
-                        comparePeriod: period.comparePeriod, window: window,
+                        comparePeriod: period.comparePeriod(), window: window,
                         parts: retained.union(parts), filter: filter),
                     repository: repository, uiClient: uiClient)
             }
@@ -744,7 +735,7 @@ final class AttentionPageModel {
         let request = AttentionUIBreakdownRequest(
             summary: AttentionSummaryRequest(
                 from: interval.start, to: interval.end, window: window,
-                parts: [.breakdown], allTime: period.preset == .allTime, filter: spanFilter),
+                parts: [.breakdown], allTime: period.isAllTime, filter: spanFilter),
             dimension: breakdownDimension, sort: breakdownSort.rawValue)
         remote(
             "attention.ui.breakdown.copy", value: request,

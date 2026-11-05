@@ -1,7 +1,7 @@
 {
   "id": "database",
   "title": "Database",
-  "symbolName": "cylinder.fill",
+  "icon": "database",
   "category": "developer",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "database",
       "title": "Database",
-      "symbolName": "cylinder.fill",
+      "icon": "database",
       "order": 1
     }
   ],
@@ -23,5 +23,36 @@
     "databases",
     "extension:database"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Browse and safely edit your databases without leaving your Mac.",
+    "summary": "Save a connection to PostgreSQL, MySQL, SQLite, MongoDB, Redis and more, then browse tables, run queries and edit rows. Risky changes are previewed and need your confirmation first. Passwords stay in your Keychain.",
+    "steps": [
+      {
+        "icon": "addFilled",
+        "title": "Add a connection",
+        "detail": "Pick your database type and enter its host, or choose a file for SQLite."
+      },
+      {
+        "icon": "bolt",
+        "title": "Open it",
+        "detail": "Edith connects and shows the tables, collections or keys inside."
+      },
+      {
+        "icon": "table",
+        "title": "Browse and filter",
+        "detail": "Look through records, search, sort and filter without writing a query."
+      },
+      {
+        "icon": "shield",
+        "title": "Review before changing",
+        "detail": "Edits show exactly what will change and wait for your confirmation."
+      }
+    ],
+    "examples": [
+      "ed database connections list",
+      "ed database connections add notes --product postgresql",
+      "ed database connect <connection-id>"
+    ]
+  }
 }

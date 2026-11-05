@@ -1,7 +1,7 @@
 {
   "id": "jev",
   "title": "Jev",
-  "symbolName": "sparkles",
+  "icon": "jev",
   "category": "labs",
   "background": false,
   "commands": [
@@ -13,5 +13,31 @@
   "notchCards": [
     "extension:jev"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Faster, smarter decisions behind Edith's smart features.",
+    "summary": "Jev is a fast decision service from TypeSafe. With your own API key saved, Edith uses it for agent attention, docs search, usage matching and alerts. Without a key, every feature keeps working with its built-in rules.",
+    "steps": [
+      {
+        "icon": "key",
+        "title": "Get a TypeSafe key",
+        "detail": "Create an API key at console.typesafe.ai. It is optional."
+      },
+      {
+        "icon": "shield",
+        "title": "Save it in Edith",
+        "detail": "Paste the key into settings. It is stored in your Keychain on this Mac."
+      },
+      {
+        "icon": "success",
+        "title": "Check the key",
+        "detail": "Run a tiny test to confirm it works and has credits."
+      }
+    ],
+    "examples": [
+      "ed jev status",
+      "ed jev status --probe",
+      "ed jev key show"
+    ]
+  }
 }

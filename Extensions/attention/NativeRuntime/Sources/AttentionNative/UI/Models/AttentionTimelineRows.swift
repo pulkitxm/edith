@@ -79,7 +79,9 @@ extension AttentionPageDerived {
                 block.tags[AttentionTag.project], block.tags[AttentionTag.repository],
                 block.tags[AttentionTag.channel],
             ].compactMap { $0 }
-            + (block.skipped > 0 ? ["after \(block.skipped) brief switches"] : [])
+            + (block.skipped > 0
+                ? ["after \(block.skipped) brief \(block.skipped == 1 ? "switch" : "switches")"]
+                : [])
         let detail = block.detail.flatMap { $0 == block.name ? nil : $0 }
         return AttentionTimelineRow.Entry(
             block: block, start: AttentionFormat.time(block.start),

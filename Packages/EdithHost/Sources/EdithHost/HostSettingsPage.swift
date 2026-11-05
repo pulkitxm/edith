@@ -20,6 +20,8 @@ struct HostSettingsPage: View {
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
         var settingsTab =
         "general"
+    @AppStorage(HostSettingsCatalog.introductionsEnabledKey, store: SharedDefaults.store) private
+        var introductions = true
     let marketplace: HostMarketplace?
     let permissions: HostPermissions
     var openPermissions: () -> Void = {}
@@ -54,6 +56,8 @@ struct HostSettingsPage: View {
             wrappedValue: "home", AppStorageKeys.General.mainWindowSection, store: defaults)
         _settingsTab = AppStorage(
             wrappedValue: "general", AppStorageKeys.General.settingsTab, store: defaults)
+        _introductions = AppStorage(
+            wrappedValue: true, HostSettingsCatalog.introductionsEnabledKey, store: defaults)
     }
     private let defaults: UserDefaults
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -72,20 +76,10 @@ struct HostSettingsPage: View {
                 .onChange(of: appearance) { _, value in applyAppearance(value) }
 
                 LabeledContent("Theme") {
-                    WrapHStack(spacing: UIScale.pt(10)) {
-                        Toggle(
-                            "Use accent",
-                            isOn: Binding(
-                                get: { themeName == "accent" },
-                                set: {
-                                    $themeName
-                                        .wrappedValue = $0 ? "accent" : lastPaletteTheme
-                                })
-                        )
-                        .toggleStyle(.switch)
-                        ForEach(themePalette, id: \.name) { entry in
-                            swatch(entry.name, color: entry.color)
-                        }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: UIScale.pt(10)) { themeControls }
+                            .fixedSize()
+                        WrapHStack(spacing: UIScale.pt(10)) { themeControls }
                     }
                 }
             } header: {
@@ -100,23 +94,21 @@ struct HostSettingsPage: View {
                     .onChange(of: showDockIcon) { _, on in
                         activation(on)
                     }
-                LabeledContent {
+                HStack(alignment: .center, spacing: UIScale.pt(6)) {
+                    Text("Panel shortcut")
+                    InfoDot(
+                        "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
+                    )
+                    Spacer(minLength: UIScale.pt(12))
                     HostHotKeyRecorder(
                         keyPrefix: "hotKey", defaultLabel: "⌥⌘E", defaults: defaults,
                         commit: panelShortcutChanged)
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Panel shortcut")
-                        InfoDot(
-                            "The keyboard shortcut that opens Edith's menu bar panel, from anywhere."
-                        )
-                    }
                 }
             } header: {
                 Text("Window")
             } footer: {
-                Text("Features are turned on and off from the Extensions page.")
-                    .font(.system(size: UIScale.pt(10)))
+                Text("Turn features on and off from the Extensions page.")
+                    .font(.edithText(.caption))
             }
 
             Section {
@@ -128,8 +120,8 @@ struct HostSettingsPage: View {
                         HStack(spacing: UIScale.pt(6)) {
                             Text(permissionSummary)
                                 .foregroundStyle(.secondary)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: UIScale.pt(10)))
+                            EdithIconView(.chevronRight)
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.tertiary)
                         }
                     }
@@ -140,7 +132,23 @@ struct HostSettingsPage: View {
                 Text("Access")
             } footer: {
                 Text("Every permission Edith can ask for, in one place.")
-                    .font(.system(size: UIScale.pt(10)))
+                    .font(.edithText(.caption))
+            }
+
+            Section {
+                Toggle("Introduce extensions the first time you open them", isOn: $introductions)
+                    .accessibilityIdentifier("settings.introductions")
+                Button("Reset introductions") {
+                    HostIntroductions(defaults: defaults).reset()
+                }
+                .accessibilityIdentifier("settings.introductions.reset")
+            } header: {
+                Text("Introductions")
+            } footer: {
+                Text(
+                    "Reset to see every introduction and the Get started list on Home again."
+                )
+                .font(.edithText(.caption))
             }
 
             Section {
@@ -155,6 +163,19 @@ struct HostSettingsPage: View {
         .edithForm()
         .navigationTitle("General")
         .pageTask { await permissions.refresh() }
+    }
+
+    @ViewBuilder private var themeControls: some View {
+        Toggle(
+            "Use accent",
+            isOn: Binding(
+                get: { themeName == "accent" },
+                set: { $themeName.wrappedValue = $0 ? "accent" : lastPaletteTheme })
+        )
+        .toggleStyle(.edithSwitch)
+        ForEach(themePalette, id: \.name) { entry in
+            swatch(entry.name, color: entry.color)
+        }
     }
 
     private var enabledExtensionPermissions: Set<HostPermission> {
@@ -179,9 +200,9 @@ struct HostSettingsPage: View {
             ZStack {
                 Circle().fill(color).frame(width: UIScale.pt(20), height: UIScale.pt(20))
                 if themeName == name {
-                    Image(systemName: "checkmark")
+                    EdithIconView(.check)
                         .font(.system(size: UIScale.pt(9), weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme(storedName: name).onAccent)
                 }
             }
         }

@@ -15,11 +15,27 @@ extension Binding {
 
 struct BifrostSettings: View {
     var context: BifrostUIContext? = nil
+
     var body: some View {
-        PageWorkspace {
-            PageHeader(BifrostMode.launcher.title)
-        } content: {
-            Form { BifrostRows() }.formStyle(.grouped).edithForm()
-        }.pageTask { await context?.load() }
+        Group {
+            if let context, !context.loaded {
+                if let error = context.error {
+                    PageEmptyState(
+                        icon: .warning,
+                        title: "Launcher settings did not load",
+                        message: error + " Your shortcuts, snippets and quicklinks are safe.",
+                        primary: PageAction("Try Again", icon: .refresh) {
+                            Task { await context.load() }
+                        })
+                } else {
+                    PageSkeleton(layout: .form)
+                        .padding(PageMetrics.groupedFormInset)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
+            } else {
+                Form { BifrostRows(error: context?.error) }.settingsForm()
+            }
+        }
+        .pageTask { await context?.load() }
     }
 }

@@ -1,24 +1,25 @@
 import EdithExtensionSupport
+import EdithIcons
 import Foundation
 
 public struct BifrostCommand: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let subtitle: String
-    public let symbolName: String
+    public let icon: EdithIcon
     public let abilityID: String?
     public let notification: Notification.Name
     public let terms: [String]
     public let mode: BifrostMode?
 
     public init(
-        id: String, title: String, subtitle: String, symbolName: String, abilityID: String?,
+        id: String, title: String, subtitle: String, icon: EdithIcon, abilityID: String?,
         notification: Notification.Name, terms: [String] = [], mode: BifrostMode? = nil
     ) {
         self.id = id
         self.title = title
         self.subtitle = subtitle
-        self.symbolName = symbolName
+        self.icon = icon
         self.abilityID = abilityID
         self.notification = notification
         self.terms = terms
@@ -36,36 +37,36 @@ public enum BifrostCommandCatalog {
             BifrostCommand(
                 id: "clipboard.open", title: "Clipboard History",
                 subtitle: "Paste something you copied earlier",
-                symbolName: "doc.on.clipboard", abilityID: "clipboard",
+                icon: .clipboard, abilityID: "clipboard",
                 notification: BifrostIPC.Name.requestClipboardPanel,
                 terms: ["paste", "copied", "history"], mode: .clipboard),
             BifrostCommand(
                 id: "emoji.pick", title: "Emoji Picker",
                 subtitle: "Type an emoji into the app in front of you",
-                symbolName: "face.smiling", abilityID: "emoji",
+                icon: .emoji, abilityID: "emoji",
                 notification: BifrostIPC.Name.requestEmojiPanel,
                 terms: ["emoji", "smiley", "symbol"]),
             BifrostCommand(
                 id: "color.pick", title: "Color Picker",
                 subtitle: "Sample a colour from anywhere on screen",
-                symbolName: "eyedropper", abilityID: "colorPicker",
+                icon: .eyedropper, abilityID: "colorPicker",
                 notification: BifrostIPC.Name.requestColorPick,
                 terms: ["colour", "hex", "eyedropper", "pick"]),
             BifrostCommand(
                 id: "files.search", title: "Search Files",
                 subtitle: "Find a file by name, or pick one you used lately",
-                symbolName: "magnifyingglass", abilityID: nil,
+                icon: .search, abilityID: nil,
                 notification: BifrostIPC.Name.requestBifrostPanel,
                 terms: ["file", "files", "finder", "document"], mode: .files),
             BifrostCommand(
                 id: "panel.open", title: "Edith Panel",
-                subtitle: "Open the menu bar panel", symbolName: "square.grid.2x2",
+                subtitle: "Open the menu bar panel", icon: .grid,
                 abilityID: nil, notification: BifrostIPC.Name.openPanel,
                 terms: ["edith", "menu bar", "panel"]),
             BifrostCommand(
                 id: "bifrost.reindex", title: "Rebuild Application Index",
                 subtitle: "Scan the application folders again",
-                symbolName: "arrow.clockwise", abilityID: "bifrost",
+                icon: .refresh, abilityID: "bifrost",
                 notification: BifrostIPC.Name.requestBifrostReindex,
                 terms: ["reindex", "rescan", "refresh", "apps"]),
         ]

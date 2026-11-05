@@ -28,11 +28,14 @@ import Testing
         let suite = "system-scroll-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let snapshots = (0..<count).map { index in
-            RunningAppSnapshot(
+        let snapshots: [RunningAppSnapshot] = (0..<count).map {
+            (index: Int) -> RunningAppSnapshot in
+            let cpu: Double = Double(index % 40)
+            let memory: Double = Double(50 + index * 7 % 900)
+            return RunningAppSnapshot(
                 pid: pid_t(1_000 + index), name: "Synthetic App \(index)",
                 bundleID: "test.synthetic.app\(index)", active: false,
-                cpuPercent: Double(index % 40), memoryMB: Double(50 + index * 7 % 900))
+                cpuPercent: cpu, memoryMB: memory)
         }
         let operations = RunningAppOperationCenter(
             snapshot: { snapshots }, perform: { _, _ in 0 },

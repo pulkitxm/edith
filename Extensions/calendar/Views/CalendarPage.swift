@@ -11,12 +11,9 @@ struct CalendarPage: View {
     }
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
-    private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
-    private var blurCalendar: Bool { store.blurEvents }
 
     var body: some View {
         PageWorkspace {
@@ -24,25 +21,25 @@ struct CalendarPage: View {
         } content: {
             LoadingContainer(
                 state: store.loaded ? .content : store.error == nil ? .loading : .error,
-                title: "Calendar unavailable", message: store.error ?? "Reading your schedule.",
+                title: "Calendar unavailable",
+                message: store.error ?? "Reading your schedule.",
                 retry: store.refresh
             ) {
-                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                VStack(alignment: .leading, spacing: 0) {
                     if let error = store.error {
-                        HStack {
-                            Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
-                            Spacer()
-                            Button("Retry", action: store.refresh).buttonStyle(.edith(.toolbar))
+                        PageNotice(
+                            "Showing the last schedule Edith read. \(error)",
+                            title: "Couldn't refresh your calendar", tone: .warning
+                        ) {
+                            Button("Retry", action: store.refresh)
                         }
-                        .padding(.horizontal, UIScale.pt(24))
+                        .pageGutter(compact)
+                        .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                     }
                     if !store.authorized {
-                        CalendarPermissionPrompt(
-                            style: calendarStyle, accentColor: theme,
-                            onGrant: { store.perform(.permission) }
-                        )
-                        .frame(maxWidth: UIScale.pt(420))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        CalendarCenteredState { permissionState }
+                    } else if store.groupedDays.isEmpty {
+                        CalendarCenteredState { emptyState }
                     } else {
                         agenda
                     }
@@ -50,41 +47,97 @@ struct CalendarPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } placeholder: {
                 PageSkeleton(layout: .list)
+                    .pageGutter(compact)
+                    .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .navigationTitle("Calendar")
         .pageTask(cancel: store.suspend) { await store.observe() }
     }
 
+    private var permissionState: some View {
+        PageEmptyState(
+            icon: .calendar,
+            title: "Allow Edith to read your calendar",
+            message:
+                "Edith shows your upcoming meetings here, in the notch and on Home, and can join a call in one click. It only reads events from the macOS Calendar app and never changes them.",
+            steps: [
+                PageGuideStep(
+                    icon: .hand, title: "Allow access",
+                    detail: "macOS asks once. Choose Allow Full Access."),
+                PageGuideStep(
+                    icon: .calendar, title: "See what is next",
+                    detail: "Events from every calendar in the Calendar app appear here."),
+                PageGuideStep(
+                    icon: .video, title: "Join in one click",
+                    detail: "Meetings with a call link get a Join button."),
+            ],
+            primary: PageAction(
+                "Allow Calendar Access", icon: .calendar,
+                identifier: "calendar.grant"
+            ) { store.perform(.permission) },
+            secondary: PageAction(
+                "Open System Settings", icon: .gear, identifier: "calendar.settings"
+            ) {
+                if let url = CalendarUIEngine.privacySettingsURL { NSWorkspace.shared.open(url) }
+            },
+            footnote:
+                "If you chose Don't Allow before, turn Edith on under Privacy & Security, Calendars."
+        )
+    }
+
+    private var emptyState: some View {
+        PageEmptyState(
+            icon: .calendar,
+            title: "Nothing coming up",
+            message:
+                "No events were found in your calendars for the next \(store.days) days. Add an event in the Calendar app and it shows up here within seconds.",
+            primary: PageAction(
+                "Open Calendar", icon: .external, identifier: "calendar.open"
+            ) { store.perform(.open) },
+            footnote: "Edith reads every calendar that is turned on in the Calendar app.")
+    }
+
     private var pageHeader: some View {
         PageHeader(
-            "Calendar",
+            "Calendar", subtitle: "Upcoming events from every calendar in the Calendar app.",
+            divider: true,
             trailing: {
-                Button {
-                    store.perform(.open)
-                } label: {
-                    Label("Open Calendar", systemImage: "arrow.up.forward.app")
+                if store.authorized {
+                    Button {
+                        store.perform(.open)
+                    } label: {
+                        Label("Open Calendar", edith: .external)
+                    }
+                    .help("Open the macOS Calendar app")
                 }
-                .buttonStyle(EdithButtonStyle(.toolbar, tint: theme))
             })
     }
 
     private var agenda: some View {
         CalendarAgendaView(
             days: store.groupedDays,
-            style: calendarStyle,
+            style: CalendarAgendaStyle(compact: compact),
             accentColor: theme,
-            blurEvents: blurCalendar,
+            blurEvents: store.blurEvents,
             onLoadMore: store.loadMore,
             onOpenMeeting: { store.perform(.join, eventID: $0.id) },
             onDirections: { store.perform(.directions, eventID: $0.id) }
         )
     }
+}
 
-    private var calendarStyle: CalendarAgendaStyle {
-        .page(
-            compact: compact,
-            rowBackground: DashSkin.paper2(dark),
-            strokeColor: DashSkin.line(dark))
+private struct CalendarCenteredState<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                content()
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+            .scrollIndicators(.automatic)
+        }
     }
 }

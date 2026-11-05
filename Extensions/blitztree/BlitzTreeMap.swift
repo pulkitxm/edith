@@ -1,10 +1,62 @@
+import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
+enum BlitzTreePalette {
+    private static let steps: [(contrast: Double, hue: CGFloat)] = [
+        (4.6, 0), (6.4, -0.012), (5.4, 0.012), (8.2, 0), (4.9, -0.02), (7.2, 0.02),
+    ]
+
+    static func tones(theme: AppTheme, dark: Bool) -> [NSColor] {
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        let base = NSColor(theme.accent(dark: dark)).usingColorSpace(.sRGB) ?? .systemGray
+        base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+        return steps.map { step in
+            func tone(_ brightness: CGFloat) -> NSColor {
+                NSColor(
+                    hue: (hue + step.hue + 1).truncatingRemainder(dividingBy: 1),
+                    saturation: max(saturation, 0.55), brightness: brightness, alpha: 1
+                ).usingColorSpace(.sRGB) ?? base
+            }
+            var low: CGFloat = 0
+            var high: CGFloat = 1
+            for _ in 0..<12 {
+                let middle = (low + high) / 2
+                if contrast(.white, tone(middle)) >= step.contrast {
+                    low = middle
+                } else {
+                    high = middle
+                }
+            }
+            return tone(low)
+        }
+    }
+
+    static func luminance(_ color: NSColor) -> Double {
+        let srgb = color.usingColorSpace(.sRGB) ?? color
+        func linear(_ value: CGFloat) -> Double {
+            let value = Double(value)
+            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(srgb.redComponent) + 0.7152 * linear(srgb.greenComponent)
+            + 0.0722 * linear(srgb.blueComponent)
+    }
+
+    static func contrast(_ first: NSColor, _ second: NSColor) -> Double {
+        let values = [luminance(first), luminance(second)]
+        return ((values.max() ?? 0) + 0.05) / ((values.min() ?? 0) + 0.05)
+    }
+}
+
 struct BlitzTreeMap: View {
     let report: BlitzTreeReport
     let activate: (BlitzTreeReport.Entry) -> Void
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
+        "accent"
+    @Environment(\.colorScheme) private var scheme
 
     private var entries: [BlitzTreeReport.Entry] {
         Array(report.report.inventory.largestChildren.filter { $0.allocatedBytes > 0 }.prefix(60))
@@ -20,8 +72,11 @@ struct BlitzTreeMap: View {
                 entries.map { Double($0.allocatedBytes) } + (other > 0 ? [Double(other)] : [])
             let rectangles = BlitzTreeLayout.rectangles(
                 weights: weights, in: CGRect(origin: .zero, size: proxy.size))
+            let tones = BlitzTreePalette.tones(
+                theme: AppTheme(storedName: themeName), dark: scheme == .dark)
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 8).fill(.quaternary)
+                RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius))
+                    .fill(.quaternary)
                 ForEach(rectangles.indices, id: \.self) { index in
                     let rect = rectangles[index].insetBy(dx: 1, dy: 1)
                     let entry = index < entries.count ? entries[index] : nil
@@ -29,26 +84,29 @@ struct BlitzTreeMap: View {
                         Button {
                             if let entry { activate(entry) }
                         } label: {
-                            RoundedRectangle(cornerRadius: 5)
-                                .fill(entry == nil ? Color.gray.opacity(0.6) : color(index))
+                            RoundedRectangle(cornerRadius: UIScale.pt(4))
+                                .fill(
+                                    entry == nil
+                                        ? AnyShapeStyle(.quaternary)
+                                        : AnyShapeStyle(Color(nsColor: tones[index % tones.count]))
+                                )
                                 .overlay(alignment: .topLeading) {
                                     if rect.width > UIScale.pt(58), rect.height > UIScale.pt(38) {
-                                        VStack(alignment: .leading, spacing: 3) {
+                                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                             Text(entry?.name ?? "Other")
-                                                .font(
-                                                    .system(size: UIScale.pt(12), weight: .semibold)
-                                                )
-                                                .lineLimit(2)
+                                                .font(.edithText(.callout)).fontWeight(.semibold)
+                                                .lineLimit(1)
+                                                .truncationMode(.tail)
                                             Text(
                                                 ByteCountFormatter.string(
                                                     fromByteCount: Int64(
                                                         clamping: entry?.allocatedBytes ?? other),
                                                     countStyle: .file)
                                             )
-                                            .font(.system(size: UIScale.pt(10)))
+                                            .font(.edithText(.caption)).monospacedDigit()
                                         }
-                                        .foregroundStyle(.white)
-                                        .padding(8)
+                                        .foregroundStyle(entry == nil ? Color.primary : Color.white)
+                                        .padding(UIScale.pt(8))
                                     }
                                 }
                                 .clipped()
@@ -68,10 +126,6 @@ struct BlitzTreeMap: View {
                 }
             }
         }
-    }
-
-    private func color(_ index: Int) -> Color {
-        [.blue, .teal, .indigo, .orange, .purple, .green][index % 6]
     }
 }
 

@@ -52,27 +52,27 @@ enum StudioPDFTool: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    var icon: EdithIcon {
         switch self {
-        case .select: "cursorarrow"
-        case .fill: "character.cursor.ibeam"
-        case .text: "textformat"
-        case .draw: "scribble.variable"
-        case .highlight: "highlighter"
-        case .underline: "underline"
-        case .strike: "strikethrough"
-        case .rectangle: "rectangle"
-        case .ellipse: "circle"
-        case .line: "line.diagonal"
-        case .arrow: "arrow.up.right"
-        case .note: "note.text"
-        case .image: "photo"
-        case .signature: "signature"
-        case .redact: "rectangle.fill"
-        case .crop: "crop"
-        case .textField: "character.textbox"
-        case .checkbox: "checkmark.square"
-        case .dropdown: "filemenu.and.selection"
+        case .select: .cursor
+        case .fill: .textCursor
+        case .text: .text
+        case .draw: .signature
+        case .highlight: .marker
+        case .underline: .underline
+        case .strike: .strikethrough
+        case .rectangle: .frame
+        case .ellipse: .ring
+        case .line: .lineTool
+        case .arrow: .arrowUpRight
+        case .note: .textLines
+        case .image: .photo
+        case .signature: .signature
+        case .redact: .layoutFull
+        case .crop: .crop
+        case .textField: .text
+        case .checkbox: .checkboxOn
+        case .dropdown: .menuBar
         }
     }
 

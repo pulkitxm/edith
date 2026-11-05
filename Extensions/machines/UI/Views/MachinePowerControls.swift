@@ -3,7 +3,7 @@ import EdithExtensionUI
 import SwiftUI
 
 private struct PowerIconButton: View {
-    let symbol: String
+    let icon: EdithIcon
     let tint: Color
     let help: String
     let enabled: Bool
@@ -14,8 +14,8 @@ private struct PowerIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+            EdithIconView(icon)
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(hovering && enabled ? tint : DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(24), height: UIScale.pt(20))
                 .background(
@@ -79,19 +79,19 @@ struct MachinePowerControls: View {
     private var controls: some View {
         HStack(spacing: UIScale.pt(1)) {
             PowerIconButton(
-                symbol: "arrow.triangle.2.circlepath", tint: DashSkin.accent(dark),
+                icon: .sync, tint: DashSkin.accent(dark),
                 help: "Restart this machine", enabled: session.state.isConnected, dark: dark
             ) {
                 confirmPower = .reboot
             }
             PowerIconButton(
-                symbol: "power", tint: DashSkin.danger, help: "Shut this machine down",
+                icon: .power, tint: DashSkin.danger, help: "Shut this machine down",
                 enabled: session.state.isConnected, dark: dark
             ) {
                 confirmPower = .shutdown
             }
             PowerIconButton(
-                symbol: "bolt", tint: DashSkin.gold,
+                icon: .bolt, tint: DashSkin.accent(dark),
                 help: wakeAddress.map { "Wake this machine (\($0))" }
                     ?? "No wake address known yet",
                 enabled: wakeAddress != nil, dark: dark
@@ -108,10 +108,10 @@ struct MachinePowerControls: View {
     private func toast(_ text: String) -> some View {
         let tone = messageIsFailure ? DashSkin.danger : DashSkin.sage
         return HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: messageIsFailure ? "exclamationmark.triangle" : "checkmark")
+            EdithIconView(messageIsFailure ? .warning : .check)
                 .font(.system(size: UIScale.pt(9.5), weight: .semibold))
             Text(text)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }

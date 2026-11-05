@@ -59,6 +59,15 @@ before pushing.
 
 See `docs/shared-screen-architecture.md` for the loading and ownership contract.
 
+## Icons
+
+Edith draws its own icons, and every icon in the app comes from
+`Packages/EdithIcons`. Never reuse an icon from anywhere: no SF Symbols, icon
+fonts, open source sets, or assets copied or traced from another product. If an
+icon does not exist, draw it for the package, and follow
+[skills/edith-icons/SKILL.md](skills/edith-icons/SKILL.md), which holds the design
+system, the review process and the only exceptions. `make ci-icons` enforces this.
+
 ## Development builds
 
 Every worktree builds and runs its own development app, so several branches can
@@ -108,7 +117,7 @@ Develop and test extensions against this worktree's development build. Nothing
 in the loop needs GitHub or a merged pull request.
 
 An extension's host registration lives in `Extensions/<id>/package.json`
-(`title`, `symbolName`, `category`, `background`, `commands`, `hotkeys`).
+(`title`, `icon`, `category`, `background`, `commands`, `hotkeys`).
 `homeCards` and `notchCards` list the surface widget ids the extension provides
 on each surface; `notchTabs` lists its Notch tabs. The generated host index
 registers these providers without loading code and starts them when their card
@@ -119,10 +128,10 @@ default `shortcut` such as `control+shift+e`; the host registers it while the
 extension is idle and starts the extension on the first press. `launchWhen`
 lists preference keys (`key`, `default`) that start a non-background extension
 at launch while any of them is true, for a toggle such as Focus Dim that must
-be restored. `pages` adds sidebar pages (`id`, `title`, `symbolName`, `order`,
+be restored. `pages` adds sidebar pages (`id`, `title`, `icon`, `order`,
 optional `detachable` and `logoName`) under the landing page of the
 extension's category, sorted by `order`. `sections` adds Maintenance sections
-(`page: "appMaintenance"`, `id`, `title`, `symbolName`, `summary`, `order`).
+(`page: "appMaintenance"`, `id`, `title`, `icon`, `summary`, `order`).
 After editing it, run `bun scripts/extension-index.mjs --write` and rebuild the development
 app, since the host index ships inside the app. Set `background` only when the
 extension must run before anything opens it.

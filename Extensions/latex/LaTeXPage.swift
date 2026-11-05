@@ -4,12 +4,99 @@ import EdithExtensionUI
 import PDFKit
 import SwiftUI
 
+private struct LaTeXProjectRow: View {
+    static let icon = 32.0
+    static let horizontalPadding = 14.0
+    static let spacing = 12.0
+    static var dividerInset: Double { horizontalPadding + icon + spacing }
+
+    let project: LaTeXProject
+    let disabled: Bool
+    let open: () -> Void
+    @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: UIScale.pt(Self.spacing)) {
+                PageGuideBadge(
+                    icon: project.location == .disk ? .docText : .quinjet,
+                    size: Self.icon)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(project.name).font(.edithText(.body).weight(.semibold))
+                        .foregroundStyle(.primary).lineLimit(1)
+                    Text(source)
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                    if compact { summary }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if compact {
+                    VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
+                        location
+                        openEditor
+                    }
+                } else {
+                    summary.frame(maxWidth: .infinity, alignment: .leading)
+                    location.frame(width: UIScale.pt(150), alignment: .leading)
+                    openEditor
+                }
+            }
+            .padding(.horizontal, UIScale.pt(Self.horizontalPadding))
+            .padding(.vertical, UIScale.pt(10))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(hovering && !disabled ? Color.primary.opacity(0.04) : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .disabled(disabled)
+        .onHover { hovering = $0 }
+    }
+
+    private var source: String {
+        project.location == .disk
+            ? URL(fileURLWithPath: project.sourcePath).lastPathComponent : project.repository
+    }
+
+    private var summary: some View {
+        Text(
+            project.location == .disk
+                ? "Compiles and saves its PDF on this Mac."
+                : "\(project.sourcePath) · \(project.baseBranch)"
+        )
+        .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+    }
+
+    @ViewBuilder private var location: some View {
+        if let number = project.pullRequest {
+            Label("Pull request #\(number)", edith: .quinjet)
+                .font(.edithText(.caption)).foregroundStyle(.green).lineLimit(1)
+        } else {
+            Text(project.location.title)
+                .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    private var openEditor: some View {
+        HStack(spacing: UIScale.pt(4)) {
+            Text("Open editor")
+            EdithIconView(.arrowRight)
+        }
+        .font(.edithText(.callout).weight(.medium))
+        .foregroundStyle(DashSkin.accent(scheme == .dark))
+        .fixedSize()
+    }
+}
+
 struct LaTeXPage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
     @State private var editing = false
     @State private var adding = false
     @State private var showingReview = false
+    @State private var addLocation = LaTeXLocation.disk
+    @State private var confirmingRemoval = false
     @State private var inspector = "PDF"
     @State private var layout = "Split"
     let model: LaTeXModel
@@ -35,7 +122,7 @@ struct LaTeXPage: View {
         }
         .pageTask { await model.start() }
         .edithSheet(isPresented: $adding, dismissible: nil) {
-            LaTeXAddProject(model: model, onAdded: { editing = true })
+            LaTeXAddProject(model: model, location: addLocation, onAdded: { editing = true })
         }
         .onChange(of: model.editorRequest) { _, generation in
             if generation > 0 { editing = true }
@@ -46,89 +133,102 @@ struct LaTeXPage: View {
     }
 
     private var projectsPage: some View {
-        PageScaffold {
-            PageHeader("LaTeX projects") {
-                Button {
-                    adding = true
-                } label: {
-                    Label("Add project", systemImage: "plus")
-                }
-                .disabled(model.busy || model.load.isRunning)
-            } accessory: {
-                Text("Your documents, on this Mac and on GitHub.")
-                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
-            }
+        PageScaffold(pinnedHeader: true) {
+            PageHeader(
+                "LaTeX projects",
+                subtitle: "Write documents and see the PDF beside them, on this Mac or on GitHub.",
+                divider: true,
+                trailing: {
+                    if !showsFirstRun {
+                        Button {
+                            beginAdding(.disk)
+                        } label: {
+                            Label("Add project", edith: .plus)
+                        }
+                        .buttonStyle(.edith(.primary))
+                        .disabled(model.busy || model.load.isRunning)
+                        .help(
+                            model.load.isRunning
+                                ? "Wait for your projects to finish loading."
+                                : "Add a LaTeX project")
+                    }
+                })
         } content: {
-            PageLoading(
-                state: model.projects.isEmpty ? model.load.state : .content,
-                title: "Your first LaTeX project",
-                message: model.load.errorMessage
-                    ?? "Add a .tex file from this Mac or a source path in a GitHub repository.",
-                layout: .cards, retry: { model.launch { await model.start() } }
-            ) {
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 300, spacing: 16),
-                    spacing: UIScale.pt(16)
+            if showsFirstRun {
+                firstRun
+            } else {
+                PageLoading(
+                    state: model.projects.isEmpty ? model.load.state : .content,
+                    title: "Could not load your projects",
+                    message: model.load.errorMessage
+                        ?? "Your LaTeX library could not be read. Try again.",
+                    layout: .list, showsSkeletonControls: false,
+                    retry: { model.launch { await model.start() } }
                 ) {
-                    ForEach(model.projects) { project in projectCard(project) }
+                    projectList
                 }
             }
         }
     }
 
-    private func projectCard(_ project: LaTeXProject) -> some View {
-        Button {
-            model.launch {
-                editing = true
-                await model.select(project.id)
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-                HStack {
-                    Image(
-                        systemName: project.location == .disk
-                            ? "doc.richtext" : "arrow.triangle.branch"
-                    )
-                    .font(.system(size: UIScale.pt(24))).foregroundStyle(.tint)
-                    Spacer()
-                    Text(project.location.title).font(.edithText(.caption)).foregroundStyle(
-                        .secondary)
+    private var showsFirstRun: Bool { model.projects.isEmpty && model.load.state == .empty }
+
+    private var firstRun: some View {
+        PageEmptyState(
+            icon: .docText,
+            title: "Write LaTeX and see the PDF as you go",
+            message:
+                "Add a .tex file and Edith opens an editor with a live PDF preview. Your files are never moved or deleted.",
+            steps: [
+                PageGuideStep(
+                    icon: .docAdd, title: "Add a document",
+                    detail: "Pick a .tex file on this Mac, or one inside a GitHub repository."),
+                PageGuideStep(
+                    icon: .edit, title: "Edit the source",
+                    detail:
+                        "Use the editor on the left. Find, undo and insert helpers are built in."),
+                PageGuideStep(
+                    icon: .seoAudit, title: "Compile and preview",
+                    detail:
+                        "Press Save & compile (Command-S) to build the PDF and see it on the right."
+                ),
+            ],
+            primary: PageAction(
+                "Choose a .tex file", icon: .docAdd,
+                identifier: "latex.add-disk"
+            ) { beginAdding(.disk) },
+            secondary: PageAction(
+                "Use a GitHub repository", icon: .quinjet,
+                identifier: "latex.add-github"
+            ) { beginAdding(.github) },
+            footnote: "Nothing is installed or uploaded until you add a project and compile it."
+        )
+        .pageFillViewport()
+    }
+
+    private func beginAdding(_ location: LaTeXLocation) {
+        addLocation = location
+        adding = true
+    }
+
+    private var projectList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(model.projects.enumerated()), id: \.element.id) { index, project in
+                if index > 0 {
+                    Divider().padding(.leading, UIScale.pt(LaTeXProjectRow.dividerInset))
                 }
-                Text(project.name).font(.edithText(.title3)).foregroundStyle(.primary)
-                Text(
-                    project.location == .disk
-                        ? URL(fileURLWithPath: project.sourcePath).lastPathComponent
-                        : project.repository
-                )
-                .font(.edithText(.subheadline)).foregroundStyle(.secondary)
-                Text(
-                    project.location == .disk
-                        ? "Compile and save PDFs on this Mac"
-                        : "\(project.sourcePath) · \(project.baseBranch)"
-                )
-                .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(2)
-                Divider()
-                HStack {
-                    if let number = project.pullRequest {
-                        Label("Pull request #\(number)", systemImage: "arrow.triangle.pull")
-                            .font(.edithText(.caption)).foregroundStyle(.green)
+                LaTeXProjectRow(project: project, disabled: model.busy || model.load.isRunning) {
+                    model.launch {
+                        editing = true
+                        await model.select(project.id)
                     }
-                    Spacer()
-                    Label("Open editor", systemImage: "arrow.right")
-                        .font(.edithText(.subheadline)).foregroundStyle(.tint)
                 }
             }
-            .padding(UIScale.pt(20))
-            .frame(maxWidth: .infinity, minHeight: UIScale.pt(190), alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(14)).fill(DashSkin.paper(scheme == .dark))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(
-                    Color.secondary.opacity(0.2)))
         }
-        .buttonStyle(.edith(.borderless))
-        .disabled(model.busy || model.load.isRunning)
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
     }
 
     private func workspace(_ project: LaTeXProject) -> some View {
@@ -141,10 +241,10 @@ struct LaTeXPage: View {
                             ? "Saving and compiling…"
                             : model.buildingPDF ? "Building PDF on GitHub…" : "Loading source…")
                 } else if model.dirty {
-                    Label("Unsaved changes", systemImage: "circle.fill")
+                    Label("Unsaved changes", edith: .dot)
                         .foregroundStyle(.orange)
                 } else {
-                    Label("Saved", systemImage: "checkmark.circle")
+                    Label("Saved", edith: .success)
                         .foregroundStyle(.secondary)
                 }
                 if let message = model.statusMessage ?? model.load.errorMessage {
@@ -181,9 +281,16 @@ struct LaTeXPage: View {
             } else if model.load.isRunning {
                 PageSkeleton(layout: .editor).padding(UIScale.pt(16))
             } else {
-                ContentUnavailableView(
-                    "Source unavailable", systemImage: "doc.questionmark",
-                    description: Text("Retry loading the project above."))
+                PageEmptyState(
+                    icon: .doc,
+                    title: "Could not open this source file",
+                    message: model.load.errorMessage
+                        ?? "The file may have moved or been renamed. Your project entry is still in the library.",
+                    primary: PageAction("Try again", icon: .refresh) {
+                        model.launch { await model.reload() }
+                    },
+                    secondary: PageAction("Back to projects") { editing = false }
+                )
             }
         }
     }
@@ -196,14 +303,14 @@ struct LaTeXPage: View {
         PageSectionHeader(
             project.name,
             subtitle: project.location == .disk
-                ? project.sourcePath
-                : "\(project.repository) · \(project.baseBranch) · \(project.sourcePath)"
+                ? URL(fileURLWithPath: project.sourcePath).lastPathComponent
+                : "\(project.repository) · \(project.baseBranch)"
         ) {
-            HStack(spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 Button {
                     editing = false
                 } label: {
-                    Label("Projects", systemImage: "chevron.left")
+                    Label("Projects", edith: .chevronLeft)
                 }.disabled(model.dirty || model.busy)
                 if project.location == .disk {
                     Button("Save & compile") { model.saveAndCompile() }
@@ -236,8 +343,13 @@ struct LaTeXPage: View {
                         Text("PDF only").tag("PDF")
                     }
                 } label: {
-                    Image(systemName: "rectangle.split.2x1")
-                }.help("Editor layout").accessibilityLabel("Editor layout")
+                    EdithIcon.layoutLeft.image()
+                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Editor layout")
+                .accessibilityLabel("Editor layout")
                 Menu {
                     Button("Reload source") { model.launch { await model.reload() } }
                     if project.location == .disk {
@@ -245,15 +357,39 @@ struct LaTeXPage: View {
                             model.revealSource()
                         }
                     }
-                    Button("Remove from library", role: .destructive) { model.remove() }
+                    Button("Remove from library", role: .destructive) {
+                        confirmingRemoval = true
+                    }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    EdithIcon.more.image()
                 }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("More actions")
                 .disabled(model.dirty || model.busy || model.load.isRunning)
+                .help(
+                    model.dirty
+                        ? "Save or discard your edits before using these actions."
+                        : "More actions")
             }
+            .buttonStyle(.edith(.secondary))
         }
         .pageGutter(compact)
-        .padding(.vertical, UIScale.pt(14))
+        .padding(.top, UIScale.pt(PageMetrics.cardSpacing))
+        .padding(.bottom, UIScale.pt(4))
+        .confirmationDialog(
+            "Remove \(project.name) from your library?", isPresented: $confirmingRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove from library", role: .destructive) { model.remove() }
+        } message: {
+            Text(
+                project.location == .disk
+                    ? "Only the entry in Edith is removed. Your .tex file and PDF stay where they are."
+                    : "Only the entry in Edith is removed. The repository, its files and any pull request are not changed."
+            )
+        }
     }
 
     private var editor: some View {
@@ -262,7 +398,7 @@ struct LaTeXPage: View {
             WrapHStack(spacing: UIScale.pt(12)) {
                 Label(
                     model.selected.map { URL(fileURLWithPath: $0.sourcePath).lastPathComponent }
-                        ?? "Source", systemImage: "doc.text"
+                        ?? "Source", edith: .docText
                 )
                 .font(.edithText(.subheadline))
                 .lineLimit(1).truncationMode(.middle)
@@ -270,18 +406,18 @@ struct LaTeXPage: View {
                     Button {
                         editorControls.undo()
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        EdithIconView(.undo)
                     }.help("Undo (⌘Z)").disabled(!editorControls.canUndo)
                     Button {
                         editorControls.redo()
                     } label: {
-                        Image(systemName: "arrow.uturn.forward")
+                        EdithIconView(.redo)
                     }.help("Redo (⇧⌘Z)").disabled(!editorControls.canRedo)
                     Divider().frame(height: UIScale.pt(16))
                     Button {
                         editorControls.find()
                     } label: {
-                        Label("Find", systemImage: "magnifyingglass")
+                        Label("Find", edith: .search)
                     }.help("Find and replace (⌘F)").keyboardShortcut("f", modifiers: .command)
                     Menu {
                         Button("Bold (⌘B)") { editorControls.command("bold") }
@@ -290,7 +426,7 @@ struct LaTeXPage: View {
                         Button("Equation") { editorControls.command("equation") }
                         Button("List") { editorControls.command("list") }
                     } label: {
-                        Image(systemName: "textformat")
+                        EdithIcon.text.image()
                     }.help("Insert LaTeX").accessibilityLabel("Insert LaTeX")
                     Menu {
                         Toggle("Wrap lines", isOn: $editorControls.wrapsLines)
@@ -300,7 +436,7 @@ struct LaTeXPage: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "slider.horizontal.3")
+                        EdithIcon.adjust.image()
                     }.help("Editor options").accessibilityLabel("Editor options")
                 }.disabled(model.busy || model.load.isRunning)
             }
@@ -354,11 +490,14 @@ struct LaTeXPage: View {
                 {
                     LaTeXPDFPane(url: project.pdfURL, generation: model.buildGeneration)
                 } else {
-                    ContentUnavailableView(
-                        "Ready to compile", systemImage: "doc.richtext",
-                        description: Text("Save & compile creates a PDF beside your source file.")
+                    PageEmptyState(
+                        icon: .docText, title: "No PDF yet",
+                        message:
+                            "Save & compile builds your document and shows the PDF here. The PDF is saved beside your .tex file.",
+                        primary: PageAction(
+                            "Save & compile", icon: .hammer, identifier: "latex.compile"
+                        ) { model.saveAndCompile() }
                     )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }.padding(UIScale.pt(16))
         } else {
@@ -374,40 +513,42 @@ struct LaTeXPage: View {
                             model.busy || model.dirty)
                     }
                     if let buildURL = model.buildURL {
-                        Link("View PDF build", destination: buildURL)
+                        EdithLink("View PDF build", destination: buildURL)
                     }
                     if let data = model.pdfPreview {
                         LaTeXPDFPane(data: data, generation: model.buildGeneration)
                     } else {
-                        ContentUnavailableView(
-                            model.buildingPDF
-                                ? "Building PDF"
-                                : model.hasRepositoryBuild ? "Ready to recompile" : "GitHub build",
-                            systemImage: "doc.richtext",
-                            description: Text(
-                                model.hasRepositoryBuild
+                        if model.buildingPDF {
+                            PageSkeleton(layout: .editor)
+                        } else {
+                            PageEmptyState(
+                                icon: .docText,
+                                title: model.hasRepositoryBuild
+                                    ? "Ready to recompile" : "No PDF built yet",
+                                message: model.hasRepositoryBuild
                                     ? "Recompile builds the saved revision on GitHub. The PDF opens here when it finishes."
                                     : "Create a pull request to build this document on GitHub. The PDF opens here when it finishes."
                             )
-                        ).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
-                    Link(
+                    EdithLink(
                         "Builds & PDF artifacts",
                         destination: URL(
-                            string: "https://github.com/\(project.repository)/actions")!)
+                            string: "https://github.com/\(project.repository)/actions")!
+                    )
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
                             PageSectionHeader(
                                 "GitHub build",
                                 subtitle: "Source, review, and PDF builds stay on GitHub.")
-                            Label("1. Edit your source", systemImage: "pencil")
+                            Label("1. Edit your source", edith: .edit)
                             Label(
                                 "2. Create or update a pull request",
-                                systemImage: "arrow.triangle.pull")
+                                edith: .quinjet)
                             Label(
                                 "3. Review with Quinjet and squash merge",
-                                systemImage: "checkmark.circle")
+                                edith: .success)
                             Text(
                                 "The pull request adds a compiler workflow. GitHub Actions compiles your document and attaches a PDF artifact to the run."
                             )
@@ -418,10 +559,11 @@ struct LaTeXPage: View {
                                     LaTeXMergeOptions(model: model)
                                 }
                             }
-                            Link(
+                            EdithLink(
                                 "Builds & PDF artifacts",
                                 destination: URL(
-                                    string: "https://github.com/\(project.repository)/actions")!)
+                                    string: "https://github.com/\(project.repository)/actions")!
+                            )
                             Text(
                                 "No repository clone is created. Repository edits stay in memory until you submit them."
                             )
@@ -438,7 +580,7 @@ private struct LaTeXChecks: View {
     let review: LaTeXReview
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Link(
+            EdithLink(
                 "#\(review.pullRequest.number) · \(review.pullRequest.title)",
                 destination: URL(string: review.pullRequest.url)!
             )
@@ -451,12 +593,12 @@ private struct LaTeXChecks: View {
             }
             ForEach(Array(review.checks.enumerated()), id: \.offset) { _, check in
                 HStack {
-                    Image(systemName: check.status == "passed" ? "checkmark.circle.fill" : "clock")
+                    EdithIconView(check.status == "passed" ? .success : .clock)
                         .foregroundStyle(check.status == "passed" ? Color.green : Color.secondary)
                     Text("\(check.workflow) · \(check.name): \(check.status)").font(
                         .edithText(.caption))
                     if let url = URL(string: check.link), url.scheme == "https" {
-                        Link("View run", destination: url)
+                        EdithLink("View run", destination: url)
                     }
                 }
             }
@@ -474,10 +616,10 @@ private struct LaTeXReviewWorkspace: View {
         PageWorkspace {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 PageSectionHeader("Quinjet review", subtitle: model.selected?.repository ?? "") {
-                    Button("Refresh", systemImage: "arrow.clockwise") { model.refreshReview() }
+                    Button("Refresh", edith: .refresh) { model.refreshReview() }
                         .disabled(model.busy)
                     if model.review?.pullRequest.state == "OPEN" { LaTeXMergeOptions(model: model) }
-                    Button("Back to editor", systemImage: "chevron.left", action: onClose)
+                    Button("Back to editor", edith: .chevronLeft, action: onClose)
                 }
                 if let review = model.review {
                     HStack(alignment: .top, spacing: UIScale.pt(12)) {
@@ -498,7 +640,7 @@ private struct LaTeXReviewWorkspace: View {
                         }
                         Spacer()
                         if let url = URL(string: review.pullRequest.url), url.scheme == "https" {
-                            Link("GitHub", destination: url).font(.edithText(.subheadline))
+                            EdithLink("GitHub", destination: url).font(.edithText(.subheadline))
                         }
                     }
                     HStack {
@@ -511,7 +653,7 @@ private struct LaTeXReviewWorkspace: View {
                                 "Diff layout", selection: $format, options: ["Unified", "Split"],
                                 label: { $0 }
                             ).frame(width: UIScale.pt(180))
-                            Button("Copy patch", systemImage: "doc.on.doc") {
+                            Button("Copy patch", edith: .copy) {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(review.diff, forType: .string)
                             }
@@ -540,11 +682,11 @@ private struct LaTeXReviewWorkspace: View {
                             }
                             ForEach(Array(review.checks.enumerated()), id: \.offset) { _, check in
                                 HStack(spacing: UIScale.pt(12)) {
-                                    Image(
-                                        systemName: check.status == "passed"
-                                            ? "checkmark.circle.fill"
+                                    EdithIconView(
+                                        check.status == "passed"
+                                            ? .success
                                             : check.status == "failed"
-                                                ? "xmark.circle.fill" : "clock"
+                                                ? .closeFilled : .clock
                                     )
                                     .foregroundStyle(
                                         check.status == "passed"
@@ -558,7 +700,7 @@ private struct LaTeXReviewWorkspace: View {
                                     }
                                     Spacer()
                                     if let url = URL(string: check.link), url.scheme == "https" {
-                                        Link("View run", destination: url)
+                                        EdithLink("View run", destination: url)
                                     }
                                 }.padding(UIScale.pt(14)).background(
                                     .quaternary, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))

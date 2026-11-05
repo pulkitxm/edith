@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import EdithIcons
 import EdithExtensionSupport
 import Foundation
 
@@ -21,13 +22,13 @@ public struct VirtualCameraSource: Codable, Equatable, Identifiable, Sendable {
         self.kind = kind
     }
 
-    public var symbolName: String {
+    public var icon: EdithIcon {
         switch kind {
-        case .builtIn: "laptopcomputer"
-        case .continuity: "iphone"
-        case .external: "web.camera"
-        case .deskView: "rectangle.and.hand.point.up.left"
-        case .virtual: "camera.filters"
+        case .builtIn: .laptop
+        case .continuity: .phone
+        case .external: .virtualCamera
+        case .deskView: .selection
+        case .virtual: .filters
         }
     }
 }

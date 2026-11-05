@@ -69,19 +69,22 @@ import Testing
         #expect(DashSkin.accent(true, theme: .blue) != DashSkin.accent(true, theme: .orange))
     }
 
-    @Test func heatmapLevelsGetLighterAsActivityRises() {
+    @Test func heatmapLevelsGrowStrongerAsActivityRises() {
         for dark in [false, true] {
             let levels = (0...3).map { luminance(DashSkin.heat($0, dark)) }
-            #expect(levels == levels.sorted(), "dark=\(dark) \(levels)")
+            #expect(levels == (dark ? levels.sorted() : levels.sorted().reversed()), "\(levels)")
             #expect(Set(levels).count == levels.count, "dark=\(dark) \(levels)")
         }
     }
 
-    @Test func calendarLevelsGetLighterAsActivityRises() {
+    @Test func calendarLevelsGrowStrongerAsActivityRises() {
         for dark in [false, true] {
             let levels = (1...6).map { luminance(ActivityCalendarStyle.color($0, dark: dark)) }
-            #expect(levels == levels.sorted(), "dark=\(dark) \(levels)")
+            #expect(levels == (dark ? levels.sorted() : levels.sorted().reversed()), "\(levels)")
             #expect(Set(levels).count == levels.count, "dark=\(dark) \(levels)")
+            let empty = luminance(ActivityCalendarStyle.color(0, dark: dark))
+            let distances = levels.map { abs($0 - empty) }
+            #expect(distances.last == distances.max(), "More must be the strongest: \(distances)")
         }
     }
 

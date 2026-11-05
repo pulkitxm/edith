@@ -1,3 +1,4 @@
+import EdithExtensionUI
 import EdithHostCore
 import ExtensionMarketplace
 import Foundation
@@ -7,7 +8,7 @@ enum HostWorkflow: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
     var suite: HostMarketplaceSuite? { HostMarketplaceCatalog.suites.first { $0.id == rawValue } }
     var title: String { suite?.title ?? "Custom" }
-    var symbol: String { suite?.symbol ?? "slider.horizontal.3" }
+    var icon: EdithIcon { suite?.icon ?? .workflowCustom }
     var detail: String { suite?.subtitle ?? "Choose exactly the extensions you want." }
     func suggestions(in entries: [HostExtension]) -> Set<String> {
         Set(entries.filter { $0.category == rawValue }.map(\.id))

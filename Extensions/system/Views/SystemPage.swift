@@ -16,14 +16,17 @@ struct SystemPage: View {
 
     var body: some View {
         PageScaffold(pinnedHeader: true) {
-            header
+            VStack(spacing: 0) {
+                header
+                Divider()
+            }
         } content: {
             if let status = model.actionStatus {
                 actionStatus(status)
             }
             PageLoading(state: model.loading.state, layout: .list) {
                 summary
-                PageCard(title: "Running apps") {
+                PageCard {
                     appList
                 }
             }
@@ -44,7 +47,9 @@ struct SystemPage: View {
             }
             Button("Cancel", role: .cancel) { pendingQuit = nil }
         } message: {
-            Text("The app will close. Unsaved changes will prompt you first.")
+            Text(
+                "The app asks to quit. If it has unsaved changes, it will ask whether to save first."
+            )
         }
         .onDisappear { model.setScrolling(false) }
         .pageRefresh(interval: { .seconds(2) }, cancel: { model.loading.cancel() }) {
@@ -62,9 +67,18 @@ struct SystemPage: View {
                 Button(role: .destructive) {
                     confirmQuitAll = true
                 } label: {
-                    Label("Quit all apps", systemImage: "xmark.circle")
+                    Label(
+                        model.quitAllTargetCount > 0
+                            ? "Quit all apps (\(model.quitAllTargetCount))" : "Quit all apps",
+                        edith: .closeFilled)
                 }
                 .buttonStyle(EdithButtonStyle(.destructive))
+                .disabled(model.quitAllTargetCount == 0)
+                .help(
+                    model.quitAllTargetCount == 0
+                        ? "There are no apps to quit."
+                        : "Ask every app except Finder and Edith to quit. You confirm first."
+                )
                 .confirmationDialog(
                     "Quit all apps?", isPresented: $confirmQuitAll, titleVisibility: .visible
                 ) {
@@ -72,20 +86,29 @@ struct SystemPage: View {
                         model.quitAll()
                     }
                 } message: {
-                    Text("Finder and Edith stay open. Apps with unsaved changes will ask first.")
+                    Text(
+                        "Finder, Edith and essential system apps stay open. Any app with unsaved changes asks whether to save before it quits."
+                    )
                 }
             },
             accessory: {
-                SearchField(placeholder: "Filter app, bundle identifier or PID", text: $model.query)
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    PageSubtitle(
+                        "See which apps are open and how much processor and memory each one uses. Quit the ones you are not using to free resources."
+                    )
+                    SearchField(
+                        placeholder: "Filter by app name, bundle identifier or PID",
+                        text: $model.query)
+                }
             })
     }
 
     private func actionStatus(_ status: RunningAppActionStatus) -> some View {
         let presentation = actionStatusPresentation(status)
         return HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(9)) {
-            Image(systemName: presentation.symbol)
+            EdithIconView(presentation.icon)
             Text(status.message)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .font(.edithText(.callout)).fontWeight(.medium)
                 .presenterBlur(hidesRunningApps)
                 .privacySensitive(hidesRunningApps)
                 .accessibilityHidden(hidesRunningApps)
@@ -93,7 +116,7 @@ struct SystemPage: View {
             Button {
                 model.clearActionStatus()
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
             }
             .buttonStyle(EdithButtonStyle(.iconOnly, tint: presentation.color))
             .accessibilityLabel("Dismiss status")
@@ -111,34 +134,31 @@ struct SystemPage: View {
 
     private func actionStatusPresentation(
         _ status: RunningAppActionStatus
-    ) -> (symbol: String, color: Color) {
+    ) -> (icon: EdithIcon, color: Color) {
         switch status {
         case .accepted:
-            ("checkmark.circle.fill", .green)
+            (.success, .green)
         case .partial:
-            ("exclamationmark.triangle.fill", .orange)
+            (.warning, .orange)
         case .planRejected, .planningFailed, .rejected:
-            ("xmark.octagon.fill", .red)
+            (.error, .red)
         }
     }
 
     private var summary: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            summaryCard("Running apps", "\(model.apps.count)")
-            summaryCard("App memory", String(format: "%.1f GB", model.totalMemoryMB / 1024))
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing)),
+                count: 2),
+            spacing: UIScale.pt(PageMetrics.cardSpacing)
+        ) {
+            PageMetric(
+                title: "Running apps", value: "\(model.apps.count)",
+                icon: .windows)
+            PageMetric(
+                title: "Memory used by apps",
+                value: String(format: "%.1f GB", model.totalMemoryMB / 1024), icon: .memory)
         }
-    }
-
-    private func summaryCard(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            Text(label.uppercased())
-                .font(.system(size: UIScale.pt(10), weight: .semibold)).tracking(UIScale.pt(0.6))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(value).font(.system(size: UIScale.pt(22), weight: .semibold)).monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(UIScale.pt(16))
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
     }
 
     private var columnHeaders: some View {
@@ -147,10 +167,13 @@ struct SystemPage: View {
                 .padding(.leading, UIScale.pt(32))
             Spacer()
             headerButton("CPU", .cpu, width: UIScale.pt(48), alignment: .trailing)
+                .help("Processor use. 100% is one full core. Click to sort.")
             headerButton("Memory", .memory, width: UIScale.pt(72), alignment: .trailing)
-            Color.clear.frame(width: UIScale.pt(16))
+                .help("Memory the app is holding. Click to sort.")
+            Color.clear.frame(width: UIScale.pt(28))
         }
-        .padding(.bottom, UIScale.pt(6))
+        .padding(.horizontal, UIScale.pt(8))
+        .padding(.bottom, UIScale.pt(8))
     }
 
     private func headerButton(
@@ -163,9 +186,9 @@ struct SystemPage: View {
                 if alignment == .trailing { Spacer(minLength: 0) }
                 Text(label.uppercased())
                     .font(.system(size: UIScale.pt(10), weight: .semibold)).tracking(
-                        UIScale.pt(0.5))
+                        UIScale.pt(1.4))
                 if model.sortKey == key {
-                    Image(systemName: model.ascending ? "chevron.up" : "chevron.down")
+                    EdithIconView(model.ascending ? .chevronUp : .chevronDown)
                         .font(.system(size: UIScale.pt(7), weight: .bold))
                 }
                 if alignment == .leading { Spacer(minLength: 0) }
@@ -179,20 +202,35 @@ struct SystemPage: View {
         )
     }
 
+    private var listState: RunningAppsListState {
+        RunningAppsListState(
+            hasApps: !model.apps.isEmpty, hasVisibleApps: !model.visibleApps.isEmpty,
+            searching: !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     private var appList: some View {
         let apps = model.visibleApps
         return VStack(spacing: UIScale.pt(0)) {
             columnHeaders
             Divider().opacity(0.4)
-            if apps.isEmpty {
-                Text(
-                    model.query.isEmpty
-                        ? "No user applications are running." : "No apps match this search."
+            switch listState {
+            case .apps: EmptyView()
+            case .noneRunning:
+                PageEmptyState(
+                    icon: .selection,
+                    title: "No apps are running",
+                    message:
+                        "Only regular apps with a Dock icon are listed. When you open one, it appears here with its processor and memory use."
                 )
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, UIScale.pt(24))
+            case .noMatches:
+                PageEmptyState(
+                    icon: .search,
+                    title: "No apps match your search",
+                    message:
+                        "Nothing running matches \"\(model.query.trimmingCharacters(in: .whitespacesAndNewlines))\". Try part of the name, or clear the search.",
+                    primary: PageAction("Clear search", identifier: "system.clear-search") {
+                        model.query = ""
+                    })
             }
             LazyVStack(spacing: UIScale.pt(0)) {
                 ForEach(apps) { app in
@@ -278,30 +316,31 @@ struct SystemAppRow: View {
                     Image(nsImage: icon).resizable().frame(
                         width: UIScale.pt(22), height: UIScale.pt(22))
                 } else {
-                    Image(systemName: "app.fill")
-                        .foregroundStyle(DashSkin.inkSoft(dark))
+                    EdithIconView(.selection, tone: .muted)
+                        .font(.system(size: UIScale.pt(16)))
+                        .foregroundStyle(.secondary)
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 }
             }
             .presenterCover(hidesName, dark: dark)
             .accessibilityHidden(hidesName)
-            Text(app.name).font(.system(size: UIScale.pt(13))).lineLimit(1)
+            Text(app.name).font(.edithText(.body)).lineLimit(1)
                 .presenterBlur(hidesName)
                 .privacySensitive(hidesName)
                 .accessibilityHidden(hidesName)
             Spacer()
             Text(SystemPage.cpuLabel(app.cpuPercent))
-                .font(.system(size: UIScale.pt(12), design: .monospaced))
+                .font(.edithText(.callout)).monospacedDigit()
                 .foregroundStyle(app.cpuPercent > 25 ? .orange : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(48), alignment: .trailing)
             Text(SystemPage.memoryLabel(app.memoryMB))
-                .font(.system(size: UIScale.pt(12), design: .monospaced))
+                .font(.edithText(.callout)).monospacedDigit()
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(72), alignment: .trailing)
             Button {
                 onQuit()
             } label: {
-                Image(systemName: "xmark.circle.fill")
+                EdithIconView(.closeFilled)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(EdithButtonStyle(.iconOnly, tint: DashSkin.accent(dark)))
@@ -310,13 +349,15 @@ struct SystemAppRow: View {
             .help(
                 hidesName
                     ? (canQuit ? "Quit app" : "This app stays open")
-                    : (canQuit ? "Quit \(app.name)" : "\(app.name) stays open"))
+                    : (canQuit
+                        ? "Ask \(app.name) to quit"
+                        : "\(app.name) is essential, so Edith keeps it open"))
         }
-        .padding(.horizontal, UIScale.pt(6))
-        .padding(.vertical, UIScale.pt(7))
+        .padding(.horizontal, UIScale.pt(8))
+        .padding(.vertical, UIScale.pt(8))
         .background(
-            RoundedRectangle(cornerRadius: UIScale.pt(7))
-                .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.1) : .clear)
+            RoundedRectangle(cornerRadius: UIScale.pt(8))
+                .fill(hovering ? Color.primary.opacity(0.05) : .clear)
         )
         .onHover { hovering = $0 }
     }
@@ -330,16 +371,13 @@ struct SystemSettings: View {
     var body: some View {
         Form {
             Section {
-                HStack {
-                    Text("Keyboard cleaning")
-                    InfoDot(
-                        "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
-                    )
-                    Spacer()
-                    if started {
-                        Text("Locked - check the overlay").settingsCaption()
-                    }
-                    Button("Clean now") {
+                SettingsRow(
+                    "Keyboard cleaning",
+                    subtitle: started
+                        ? "Keyboard locked. Look for the full-screen overlay."
+                        : "Locks the keyboard for a few seconds so you can wipe it. Click Done cleaning with the mouse, or wait for the timer, to unlock."
+                ) {
+                    Button("Start cleaning mode") {
                         Task { await clean() }
                         started = true
                         reset?.cancel()
@@ -348,10 +386,11 @@ struct SystemSettings: View {
                             if !Task.isCancelled { started = false }
                         }
                     }
+                    .buttonStyle(.edith(.secondary))
                 }
             }
         }
-        .edithForm()
+        .settingsForm()
         .onDisappear { reset?.cancel() }
     }
 }

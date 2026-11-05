@@ -207,11 +207,11 @@ struct LaTeXSettings: View {
             SkeletonGroup { SkeletonBlock(width: 14, height: 14, corner: 7) }
                 .accessibilityLabel("Checking command-line tool")
         } else if owner.installed.contains(tool.id) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            EdithIconView(.success).foregroundStyle(.green)
         } else if owner.status[tool.id] != nil {
-            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+            EdithIconView(.closeFilled).foregroundStyle(.red)
         } else {
-            Image(systemName: "circle").foregroundStyle(.secondary)
+            EdithIconView(.ring).foregroundStyle(.secondary)
         }
     }
 }

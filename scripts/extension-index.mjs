@@ -1,5 +1,6 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import iconNames from "../Packages/EdithIcons/names.json" with { type: "json" };
 
 export const indexPath =
   "Packages/EdithHost/Sources/EdithHostCore/Resources/index.json";
@@ -131,7 +132,20 @@ function checked(declaration, directory, field, required, optional = {}) {
   return declaration;
 }
 
+const knownIcons = new Set([
+  ...iconNames.icons,
+  ...Object.keys(iconNames.aliases ?? {}),
+]);
+
+function requireIcon(name, directory) {
+  if (!knownIcons.has(name))
+    throw new Error(
+      `${directory}: unknown icon ${name}, draw it in Packages/EdithIcons`,
+    );
+}
+
 function page(declaration, directory) {
+  requireIcon(declaration.icon, directory);
   const { detachable = true, ...rest } = checked(
     declaration,
     directory,
@@ -139,7 +153,7 @@ function page(declaration, directory) {
     {
       id: "string",
       title: "string",
-      symbolName: "string",
+      icon: "string",
       order: "number",
     },
     { detachable: "boolean", logoName: "string" },
@@ -148,17 +162,61 @@ function page(declaration, directory) {
 }
 
 function section(declaration, directory) {
+  requireIcon(declaration.icon, directory);
   checked(declaration, directory, "sections", {
     page: "string",
     id: "string",
     title: "string",
-    symbolName: "string",
+    icon: "string",
     summary: "string",
     order: "number",
   });
   if (!sectionPages.includes(declaration.page))
     throw new Error(`${directory}: unknown section page ${declaration.page}`);
   return declaration;
+}
+
+function guide(declaration, directory) {
+  if (declaration === undefined) return undefined;
+  const fail = (reason) => {
+    throw new Error(`${directory}: guide ${reason}`);
+  };
+  if (typeof declaration !== "object" || Array.isArray(declaration))
+    fail("must be an object");
+  const allowed = ["tagline", "summary", "steps", "examples"];
+  const unknown = Object.keys(declaration).filter(
+    (key) => !allowed.includes(key),
+  );
+  if (unknown.length) fail(`has unknown keys ${unknown.join(", ")}`);
+  for (const key of ["tagline", "summary"])
+    if (typeof declaration[key] !== "string" || !declaration[key].trim())
+      fail(`needs ${key}`);
+  if (declaration.tagline.length > 90)
+    fail("tagline must be 90 characters or fewer");
+  if (declaration.summary.length > 280)
+    fail("summary must be 280 characters or fewer");
+  const steps = declaration.steps;
+  if (!Array.isArray(steps) || steps.length < 2 || steps.length > 4)
+    fail("needs two to four steps");
+  const stepKeys = ["icon", "title", "detail"];
+  for (const step of steps)
+    if (
+      typeof step !== "object" ||
+      Object.keys(step).some((key) => !stepKeys.includes(key)) ||
+      stepKeys.some((key) => typeof step[key] !== "string" || !step[key].trim())
+    )
+      fail(`steps need ${stepKeys.join(", ")}`);
+  for (const step of steps) requireIcon(step.icon, directory);
+  const examples = declaration.examples ?? [];
+  if (
+    !Array.isArray(examples) ||
+    examples.length > 4 ||
+    examples.some(
+      (example) => typeof example !== "string" || !example.startsWith("ed "),
+    )
+  )
+    fail("examples must be up to four ed commands");
+  return { ...declaration, examples };
 }
 
 function hotkey(declaration, directory) {
@@ -178,7 +236,7 @@ export function validateDeclaration(declaration, directory) {
   const keys = [
     "id",
     "title",
-    "symbolName",
+    "icon",
     "category",
     "background",
     "commands",
@@ -189,15 +247,17 @@ export function validateDeclaration(declaration, directory) {
     "homeCards",
     "notchCards",
     "notchTabs",
+    "guide",
   ];
   const unknown = Object.keys(declaration).filter((key) => !keys.includes(key));
   if (unknown.length)
     throw new Error(`${directory}: unknown keys ${unknown.join(", ")}`);
   if (declaration.id !== directory)
     throw new Error(`${directory}: id must match its directory`);
-  for (const key of ["title", "symbolName"])
+  for (const key of ["title", "icon"])
     if (typeof declaration[key] !== "string" || !declaration[key])
       throw new Error(`${directory}: ${key} is required`);
+  requireIcon(declaration.icon, directory);
   if (!categories.includes(declaration.category))
     throw new Error(`${directory}: unknown category ${declaration.category}`);
   if (typeof declaration.background !== "boolean")
@@ -253,6 +313,9 @@ export function validateDeclaration(declaration, directory) {
     hotkeys: (declaration.hotkeys ?? []).map((entry) =>
       hotkey(entry, directory),
     ),
+    ...(declaration.guide === undefined
+      ? {}
+      : { guide: guide(declaration.guide, directory) }),
   };
 }
 

@@ -150,7 +150,7 @@ final class CodeStatsService: ExtensionService {
         return NSHostingController(
             rootView: ExtensionPageHost {
                 if settings {
-                    Form { CodeStatsRows(model: model) }.formStyle(.grouped)
+                    Form { CodeStatsRows(model: model) }.edithForm()
                 } else {
                     CodeStatsPage(model: model)
                 }

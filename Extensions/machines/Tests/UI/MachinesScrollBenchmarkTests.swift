@@ -94,7 +94,7 @@ struct MachinesDockerListFixture: View {
                         id: $0.id, title: $0.displayName,
                         subtitle: "\($0.shortID) · \($0.createdSince)",
                         trailing: ByteFormatter.string($0.sizeBytes),
-                        symbol: "square.stack.3d.up", badge: $0.dangling ? "dangling" : nil)
+                        icon: .layers, badge: $0.dangling ? "dangling" : nil)
                 }, dark: true, onDelete: { _ in })
         }
     }
@@ -108,15 +108,18 @@ struct MachinesDockerListFixture: View {
 enum MachinesSynthetic {
     static func sample(processes count: Int) -> MachineSample {
         let words = ["worker", "daemon", "agent", "server", "indexer", "proxy", "scheduler"]
-        let procs = (0..<count).map { index in
-            MachineProcess(
-                pid: 100 + index, user: index % 5 == 0 ? "root" : "svc\(index % 7)",
-                cpu: Double((index * 37) % 1_000) / 10, mem: Double(index % 90) / 10,
-                rssKB: Int64(2_000 + (index * 7_919) % 900_000),
-                name: "\(words[index % words.count])-\(index)",
-                cmd:
-                    "/usr/local/lib/sample/\(words[index % words.count])/bin/\(words[index % words.count]) --config /etc/sample/\(index).toml --listen 127.0.0.1:\(8_000 + index % 900) --log-level info"
-            )
+        let procs: [MachineProcess] = (0..<count).map { (index: Int) -> MachineProcess in
+            let word: String = words[index % words.count]
+            let user: String = index % 5 == 0 ? "root" : "svc\(index % 7)"
+            let cpu: Double = Double((index * 37) % 1_000) / 10
+            let mem: Double = Double(index % 90) / 10
+            let rss: Int64 = Int64(2_000 + (index * 7_919) % 900_000)
+            let port: Int = 8_000 + index % 900
+            let cmd: String =
+                "/usr/local/lib/sample/\(word)/bin/\(word) --config /etc/sample/\(index).toml --listen 127.0.0.1:\(port) --log-level info"
+            return MachineProcess(
+                pid: 100 + index, user: user, cpu: cpu, mem: mem, rssKB: rss,
+                name: "\(word)-\(index)", cmd: cmd)
         }
         return MachineSample(
             ts: 1_000, dt: 2, cpu: MachineCPU(total: 20),
@@ -126,26 +129,27 @@ enum MachinesSynthetic {
 
     static func state(machine: Machine, containers: Int, images: Int) -> MachineUISessionState {
         let projects = max(1, containers / 10)
-        let rows = (0..<containers).map { index in
-            DockerContainer(
+        let rows: [DockerContainer] = (0..<containers).map { (index: Int) -> DockerContainer in
+            let exited: Bool = index % 4 == 0
+            let port = DockerPortMapping(
+                hostIP: "0.0.0.0", hostPort: 8_000 + index, containerPort: 80, proto: "tcp")
+            let cpu: Double = Double(index % 90) / 3
+            let memory: Int64 = Int64(index % 400 + 10) * 1_048_576
+            return DockerContainer(
                 id: String(format: "%064x", index + 1), names: ["sample-service-\(index)"],
                 image: "registry.example.com/sample/service-\(index % 31):1.\(index % 17)",
-                command: "run", state: index % 4 == 0 ? .exited : .running,
-                status: index % 4 == 0 ? "Exited (0) 3 hours ago" : "Up \(index % 50) hours",
-                ports: [
-                    DockerPortMapping(
-                        hostIP: "0.0.0.0", hostPort: 8_000 + index, containerPort: 80,
-                        proto: "tcp")
-                ], composeProject: "project-\(index % projects)",
-                composeService: "service-\(index)", cpuPercent: Double(index % 90) / 3,
-                memUsedBytes: Int64(index % 400 + 10) * 1_048_576)
+                command: "run", state: exited ? .exited : .running,
+                status: exited ? "Exited (0) 3 hours ago" : "Up \(index % 50) hours",
+                ports: [port], composeProject: "project-\(index % projects)",
+                composeService: "service-\(index)", cpuPercent: cpu, memUsedBytes: memory)
         }
-        let pictures = (0..<images).map { index in
-            DockerImage(
+        let pictures: [DockerImage] = (0..<images).map { (index: Int) -> DockerImage in
+            let size: Int64 = Int64(index % 900 + 20) * 1_048_576
+            return DockerImage(
                 id: String(format: "sha256:%064x", index + 1),
                 repository: "registry.example.com/sample/image-\(index)", tag: "v\(index % 13)",
                 createdSince: "\(index % 30 + 1) days ago",
-                sizeBytes: Int64(index % 900 + 20) * 1_048_576, dangling: index % 40 == 0)
+                sizeBytes: size, dangling: index % 40 == 0)
         }
         return MachineUISessionState(
             machine: machine, state: .connected(latencyMillis: 10), platform: .linux, hello: nil,

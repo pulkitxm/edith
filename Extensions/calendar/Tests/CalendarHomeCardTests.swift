@@ -88,9 +88,9 @@ import Testing
         tile.sourceIDs = []
         await render(authorized: true)
         #expect(find(host, label: "Synthetic finished meeting") == nil)
-        #expect(find(host, label: "No meetings today. Clear runway.") != nil)
+        #expect(find(host, label: "No meetings today.") != nil)
         await render(authorized: false)
-        let grant = try #require(find(host, label: "Grant…"))
+        let grant = try #require(find(host, label: "Allow Calendar Access"))
         _ = (grant as AnyObject).accessibilityPerformPress?()
         #expect(granted == 1)
         #expect(find(host, label: "Synthetic finished meeting") == nil)

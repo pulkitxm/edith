@@ -1,3 +1,4 @@
+import EdithExtensionUI
 import EdithHostCore
 import Foundation
 
@@ -5,7 +6,7 @@ struct HostMarketplaceSuite: Identifiable, Equatable {
     let id: String
     let title: String
     let subtitle: String
-    let symbol: String
+    let icon: EdithIcon
     var defaultsKey: String { "suite" + id.capitalized + "Enabled" }
 }
 
@@ -14,73 +15,43 @@ enum HostMarketplaceCatalog {
         .init(
             id: "agents", title: "Agents & Terminal",
             subtitle: "Run and review coding agents, track their limits, and reach your machines.",
-            symbol: "sparkles"),
+            icon: .suiteAgents),
         .init(
             id: "utilities", title: "Mac Utilities",
             subtitle: "Updates, disk cleanup, sleep control, menu bar stats and your calendar.",
-            symbol: "switch.2"),
+            icon: .suiteUtilities),
         .init(
             id: "desk", title: "Desk",
             subtitle: "Hotkey tools: the launcher, clipboard, pickers, the notch and focus.",
-            symbol: "hand.tap"),
+            icon: .suiteDesk),
         .init(
             id: "media", title: "Media",
             subtitle: "Edit files, record your screen, style your camera, play and save media.",
-            symbol: "play.rectangle.on.rectangle"),
+            icon: .suiteMedia),
         .init(
             id: "developer", title: "Developer & Data",
             subtitle: "Databases, code growth, site audits, LaTeX and where your time goes.",
-            symbol: "cylinder.split.1x2"),
+            icon: .suiteDeveloper),
         .init(
             id: "labs", title: "Labs",
             subtitle: "Experiments and visual toys. Hidden from the main list.",
-            symbol: "flask"),
+            icon: .suiteLabs),
     ]
     static let hiddenByDefault: Set<String> = ["labs"]
-    static let subtitles: [String: String] = [
-        "usage": "See Claude, Codex and Cursor limits and usage, with alerts before you run out.",
-        "herdr": "Start, watch and talk to coding agents on this Mac and your SSH machines.",
-        "quinjet": "Review pull requests and live workspace changes in a native terminal.",
-        "companion": "Your notes, voice memos and activity, remembered and searchable.",
-        "plugins": "Install Edith skills into your coding agents.",
-        "machines":
-            "Add Macs and Linux servers over SSH, then open terminals, files and services on them.",
-        "terminal": "Native terminal tabs for this Mac. Machines opens them on SSH hosts.",
-        "docs": "Browse the ed command reference and ask how to do something.",
-        "appMaintenance": "Install, update and cleanly remove apps, with a full history.",
-        "homebrew": "Manage Homebrew formulae, casks and taps.",
-        "cleaner": "Find reclaimable space across your drives and remove it after review.",
-        "blitztree": "See what fills your disk as a treemap with the largest files.",
-        "system": "See running apps and lock the keyboard while you clean it.",
-        "keepAwake": "Keep the Mac and display awake until you turn it off.",
-        "lidAwake": "Keep the Mac running with the lid closed, even on battery.",
-        "systemStats": "Live CPU and memory in the menu bar.",
-        "micMute": "Mute every microphone with ⌘⇧M or the menu bar icon.",
-        "presenter": "Blur sensitive numbers while you share your screen.",
-        "calendar": "Your schedule in the panel and the app.",
-        "bifrost": "One bar to open any app, do quick sums and convert units.",
-        "clipboard": "Clipboard history with instant paste.",
-        "emoji": "Every emoji on a hotkey, typed into the app you are using.",
-        "colorPicker": "Pick any color on screen and copy it.",
-        "keystrokeHighlight": "Show key presses on screen for demos and recordings.",
-        "focusDim": "Dim everything behind the app you are using.",
-        "notchShelf": "A file shelf, now playing, camera and alerts around the notch.",
-        "audioMixer": "Set the volume of each app from the notch.",
-        "studio": "Edit, convert, compress and combine images, PDFs, video and audio.",
-        "timeLapse": "Record displays or windows with audio, or capture a time-lapse.",
-        "virtualCamera": "Frame, zoom and style your camera, then pick Edith Camera in any call.",
-        "music": "Play local music, Spotify or YouTube Music.",
-        "downloads": "Save videos, images and social posts with a download queue.",
-        "socialManager": "Keep separate website accounts side by side in one window.",
-        "database": "Explore databases and run guarded production changes.",
-        "codeStats": "Mirror your GitHub repositories and see how your code grows.",
-        "seoAudit": "Crawl sitemaps and check page metadata, all locally.",
-        "latex": "Compile LaTeX documents locally or edit them on GitHub with review.",
-        "attention": "See where your time goes and protect focused work.",
-        "hinge": "Fold the desktop away as the MacBook lid closes.",
-        "windowSweaters": "Knitted borders around your windows in each app's colors.",
-        "jev": "Quick typed yes or no decisions from the Jev model.",
+    static let featuredIDs = [
+        "usage", "herdr", "bifrost", "clipboard", "studio", "timeLapse", "music", "appMaintenance",
     ]
+    static let featuredLimit = 4
+
+    static func suite(for entry: HostExtension) -> HostMarketplaceSuite? {
+        suites.first { $0.id == entry.category }
+    }
+
+    static func tagline(_ entry: HostExtension) -> String {
+        if let tagline = entry.guide?.tagline, !tagline.isEmpty { return tagline }
+        return suite(for: entry).map { "Part of \($0.title)" } ?? entry.title
+    }
+
     static func providers(_ entries: [HostExtension] = (try? HostIndex.bundled()) ?? []) -> [String:
         Set<
             String
@@ -88,15 +59,79 @@ enum HostMarketplaceCatalog {
     {
         Dictionary(grouping: entries, by: \.category).mapValues { Set($0.map(\.id)) }
     }
-    static func filter(_ entries: [HostExtension], query: String, category: String)
-        -> [HostExtension]
-    {
+    static func matches(_ entry: HostExtension, query: String) -> Bool {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return entries.filter { entry in
-            (!query.isEmpty || entry.category == category
-                || (category == "all" && !hiddenByDefault.contains(entry.category)))
-                && (query.isEmpty || entry.title.localizedCaseInsensitiveContains(query)
-                    || (subtitles[entry.id] ?? "").localizedCaseInsensitiveContains(query))
+        guard !query.isEmpty else { return true }
+        return entry.title.localizedCaseInsensitiveContains(query)
+            || tagline(entry).localizedCaseInsensitiveContains(query)
+            || (entry.guide?.summary ?? "").localizedCaseInsensitiveContains(query)
+    }
+
+    static func filter(
+        _ entries: [HostExtension], query: String, category: String,
+        scope: HostMarketplaceScope = .all, installed: Set<String> = [],
+        updatable: Set<String> = []
+    ) -> [HostExtension] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let searching = !trimmed.isEmpty
+        let matched = entries.filter { entry in
+            let inCategory =
+                searching
+                || (category == "all"
+                    ? (scope != .all || !hiddenByDefault.contains(entry.category))
+                    : entry.category == category)
+            let inScope =
+                switch scope {
+                case .all: true
+                case .installed: installed.contains(entry.id)
+                case .updates: updatable.contains(entry.id)
+                }
+            return inCategory && inScope && matches(entry, query: query)
+        }
+        guard searching else { return matched }
+        return matched.enumerated().sorted { left, right in
+            let leftRank = relevance(left.element, query: trimmed)
+            let rightRank = relevance(right.element, query: trimmed)
+            return leftRank == rightRank ? left.offset < right.offset : leftRank < rightRank
+        }.map(\.element)
+    }
+
+    static func relevance(_ entry: HostExtension, query: String) -> Int {
+        if entry.title.compare(query, options: [.caseInsensitive, .diacriticInsensitive])
+            == .orderedSame
+        {
+            return 0
+        }
+        if entry.title.localizedCaseInsensitiveContains(query) { return 1 }
+        if tagline(entry).localizedCaseInsensitiveContains(query) { return 2 }
+        return 3
+    }
+
+    static func featured(_ entries: [HostExtension], installed: Set<String>) -> [HostExtension] {
+        let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        return Array(
+            featuredIDs.compactMap { byID[$0] }.filter { !installed.contains($0.id) }
+                .prefix(featuredLimit))
+    }
+
+    static func groups(_ entries: [HostExtension]) -> [(
+        suite: HostMarketplaceSuite, entries: [HostExtension]
+    )] {
+        suites.compactMap { suite in
+            let members = entries.filter { $0.category == suite.id }
+            return members.isEmpty ? nil : (suite, members)
+        }
+    }
+}
+
+enum HostMarketplaceScope: String, CaseIterable, Hashable {
+    case all, installed, updates
+
+    var title: String {
+        switch self {
+        case .all: "Browse"
+        case .installed: "Installed"
+        case .updates: "Updates"
         }
     }
 }

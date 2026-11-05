@@ -98,7 +98,7 @@ final class CompanionSettingsModel {
             connectors = try await operations.updateConnectors(update)
             githubToken = ""
             notionToken = ""
-            connectorStatus = "Saved on the companion."
+            connectorStatus = "Saved to Memory."
             connectorStatusIsError = false
         } catch {
             connectorStatus = error.localizedDescription
@@ -360,19 +360,19 @@ struct CompanionSettingsScreen: View {
             PageLoading(
                 state: model.loading.state,
                 message: model.loading.errorMessage
-                    ?? "Companion settings could not be loaded.",
+                    ?? "Settings could not be loaded.",
                 layout: .cards, refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.load() } }
             ) {
                 PageGrid {
                     reasonerCard
                     connectorsCard
-                    dataCard
                 } secondary: {
                     healthCard
                     connectionCard
-                    dangerCard
+                    dataCard
                 } full: {
+                    dangerCard
                 }
             }
         }
@@ -395,10 +395,10 @@ struct CompanionSettingsScreen: View {
 
     @ViewBuilder
     private func unreachableCard(_ error: String) -> some View {
-        PageCard(title: "Settings", note: "companion unreachable") {
+        PageCard(title: "Settings", note: "Memory is unreachable") {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 Text(error)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .fixedSize(horizontal: false, vertical: true)
                 CompanionButton(title: "Try again", role: .primary) {
@@ -443,10 +443,10 @@ struct CompanionSettingsScreen: View {
                         label: "API key", placeholder: keyPlaceholder, text: $model.apiKey,
                         onSubmit: { Task { await model.save() } })
                     Text(
-                        "Stored on the companion and hot-swapped into the running service. "
+                        "Stored with Memory and applied to the running service. "
                             + "Never written to this Mac's defaults or the iCloud settings backup."
                     )
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
 
@@ -472,7 +472,7 @@ struct CompanionSettingsScreen: View {
                         text: status, tone: model.reasonerStatusIsError ? .error : .ok)
                 } else if let current = model.current {
                     Text(current.description)
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -490,10 +490,10 @@ struct CompanionSettingsScreen: View {
                 SkeletonGroup {
                     CompanionHealthRowsSkeleton()
                 }
-                .accessibilityLabel("Loading companion health")
+                .accessibilityLabel("Loading Memory health")
             } else if home.checks.isEmpty {
                 Text(home.error ?? "No health checks were returned.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             } else {
                 LazyVGrid(
@@ -507,7 +507,7 @@ struct CompanionSettingsScreen: View {
                                 .fill(check.ok ? DashSkin.ok : DashSkin.warn)
                                 .frame(width: UIScale.pt(7), height: UIScale.pt(7))
                             Text("\(check.name) · \(check.detail)")
-                                .font(.system(size: UIScale.pt(11.5)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(
                                     check.ok ? DashSkin.inkSoft(dark) : DashSkin.warn
                                 )
@@ -595,11 +595,11 @@ struct CompanionSettingsScreen: View {
                         }
                     }
                     Text(
-                        "Tokens are stored on the companion, never on this Mac, and take "
+                        "Tokens are stored with Memory, never on this Mac, and take "
                             + "effect without a restart. Calendar, music and YouTube have no "
                             + "live API worth using, so they come from an export you re-import."
                     )
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
 
@@ -614,7 +614,7 @@ struct CompanionSettingsScreen: View {
     private var connectionCard: some View {
         PageCard(title: "Connection") {
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                CompanionFieldLabel(text: "Companion endpoint")
+                CompanionFieldLabel(text: "Memory endpoint")
                 EdithTextField(
                     placeholder: CompanionClient.defaultEndpointString, text: $endpointDraft,
                     invalid: !endpointDraftIsValid,
@@ -623,18 +623,18 @@ struct CompanionSettingsScreen: View {
                 if !endpointDraftIsValid {
                     Label(
                         "Not a usable URL; the app keeps talking to \(endpoint)",
-                        systemImage: "exclamationmark.triangle.fill"
+                        edith: .warning
                     )
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.danger)
                 } else {
                     Text(
                         endpointDraft == endpoint
-                            ? "Where this Mac reaches the companion. A change applies when "
+                            ? "Where this Mac reaches Memory. A change applies when "
                                 + "you press Return or leave the field."
                             : "Applies to \(endpointDraft) on Return, or when you leave the field."
                     )
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -662,18 +662,18 @@ struct CompanionSettingsScreen: View {
     }
 
     private var dataCard: some View {
-        PageCard(title: "Your data", note: "it leaves whenever you say") {
+        PageCard(title: "Your data", note: "it leaves whenever you say", fill: true) {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text("Export everything")
-                            .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                         Text(
                             "Episodes, conversations, beliefs, observations and media, "
                                 + "written to a folder as a restorable bundle. Tokens stay behind."
                         )
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                     }
@@ -688,13 +688,13 @@ struct CompanionSettingsScreen: View {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text("Import a bundle")
-                            .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                         Text(
                             "Merges an exported bundle back in. Nothing is overwritten and "
                                 + "what already exists is skipped, so importing twice is safe."
                         )
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                     }
@@ -783,7 +783,7 @@ struct CompanionSettingsScreen: View {
             }
         case .wipe:
             CompanionConfirmSheet(
-                title: "Wipe the companion?",
+                title: "Wipe Memory?",
                 message:
                     "Every episode, observation, belief and conversation is deleted, along "
                     + "with the files behind them. The stack keeps running and its settings "
@@ -797,6 +797,7 @@ struct CompanionSettingsScreen: View {
                 Text("Operation unavailable")
                     .font(DashSkin.heading(17))
                 Button("Done") { destructiveOperation = nil }
+                    .buttonStyle(.edith(.secondary))
                     .keyboardShortcut(.cancelAction)
             }
             .padding(UIScale.pt(24))
@@ -818,7 +819,7 @@ struct CompanionSettingsScreen: View {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.prompt = "Export here"
-        panel.message = "Choose the folder the companion bundle is written into"
+        panel.message = "Choose the folder the Memory bundle is written into"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await model.exportData(into: url) }
     }

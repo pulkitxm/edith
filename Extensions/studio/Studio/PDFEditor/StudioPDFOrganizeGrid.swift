@@ -8,13 +8,25 @@ import SwiftUI
 struct StudioPDFOrganizeGrid: View {
     let editor: StudioPDFEditorModel
     @State private var targeted: Int?
+    @State private var width: CGFloat = 0
+
+    private static let tileWidth = 150.0
+    private static let spacing = 16.0
+    private static let inset = 20.0
+
+    private var columns: [GridItem] {
+        let tile = UIScale.pt(Self.tileWidth)
+        let gap = UIScale.pt(Self.spacing)
+        let available = width - UIScale.pt(Self.inset) * 2
+        let fit = max(1, Int((available + gap) / (tile + gap)))
+        return Array(
+            repeating: GridItem(.fixed(tile), spacing: gap),
+            count: max(1, min(fit, editor.pageCount)))
+    }
 
     var body: some View {
         ScrollView {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(150)), spacing: UIScale.pt(16))],
-                spacing: UIScale.pt(18)
-            ) {
+            LazyVGrid(columns: columns, spacing: UIScale.pt(18)) {
                 ForEach(0..<editor.pageCount, id: \.self) { index in
                     StudioPDFPageTile(editor: editor, index: index, targeted: targeted == index)
                         .draggable(String(index))
@@ -30,7 +42,13 @@ struct StudioPDFOrganizeGrid: View {
                         }
                 }
             }
-            .padding(UIScale.pt(20))
+            .padding(UIScale.pt(Self.inset))
+            .frame(maxWidth: .infinity)
+        }
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            width = $0
         }
     }
 }
@@ -74,7 +92,7 @@ struct StudioPDFPageTile: View {
                         editor.pageSelection.insert(index)
                     }
                 } label: {
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    EdithIconView(selected ? .success : .ring)
                         .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(
                             selected ? DashSkin.accent(scheme == .dark) : Color.secondary
@@ -87,15 +105,17 @@ struct StudioPDFPageTile: View {
                 .accessibilityLabel("Select page \(index + 1)")
                 if hovering {
                     HStack(spacing: UIScale.pt(2)) {
-                        tileButton("rotate.left", "Rotate left") { editor.rotate([index], by: -90) }
-                        tileButton("rotate.right", "Rotate right") {
+                        tileButton(.rotate, "Rotate left", mirrored: true) {
+                            editor.rotate([index], by: -90)
+                        }
+                        tileButton(.rotate, "Rotate right") {
                             editor.rotate([index], by: 90)
                         }
-                        tileButton("plus.square.on.square", "Duplicate") { editor.duplicate(index) }
-                        tileButton("doc.badge.plus", "Insert blank page after") {
+                        tileButton(.plus, "Duplicate") { editor.duplicate(index) }
+                        tileButton(.docAdd, "Insert blank page after") {
                             editor.insertBlank(after: index)
                         }
-                        tileButton("trash", "Delete") { editor.delete([index]) }
+                        tileButton(.trash, "Delete") { editor.delete([index]) }
                             .disabled(editor.pageCount <= 1)
                     }
                     .padding(UIScale.pt(4))
@@ -105,7 +125,7 @@ struct StudioPDFPageTile: View {
                 }
             }
             Text("\(index + 1)")
-                .font(DashSkin.mono(11, weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium)).monospacedDigit()
                 .foregroundStyle(.secondary)
         }
         .onHover { hovering = $0 }
@@ -115,11 +135,13 @@ struct StudioPDFPageTile: View {
         }
     }
 
-    private func tileButton(_ symbol: String, _ help: String, action: @escaping () -> Void)
-        -> some View
-    {
+    private func tileButton(
+        _ icon: EdithIcon, _ help: String, mirrored: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
+                .scaleEffect(x: mirrored ? -1 : 1)
                 .font(.system(size: UIScale.pt(11.5)))
                 .frame(width: UIScale.pt(24), height: UIScale.pt(22))
         }
@@ -155,7 +177,7 @@ struct StudioSignaturePad: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            Text("New signature").font(.system(size: UIScale.pt(16), weight: .semibold))
+            Text("New signature").font(.edithText(.title2).weight(.semibold))
             EdithSegmentedPicker(
                 "", selection: $mode, options: Mode.allCases, label: { $0.rawValue }
             )

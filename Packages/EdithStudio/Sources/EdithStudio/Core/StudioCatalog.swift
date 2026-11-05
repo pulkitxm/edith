@@ -13,11 +13,11 @@ public enum StudioQuickAction: String, CaseIterable, Sendable {
         }
     }
 
-    public var symbolName: String {
+    public var iconName: String {
         switch self {
-        case .edit: "slider.horizontal.3"
-        case .compress: "arrow.down.right.and.arrow.up.left"
-        case .convert: "arrow.triangle.2.circlepath"
+        case .edit: "adjust"
+        case .compress: "collapse"
+        case .convert: "sync"
         }
     }
 }

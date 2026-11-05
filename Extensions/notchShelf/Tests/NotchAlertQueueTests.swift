@@ -5,7 +5,7 @@ import Testing
 
 @Suite struct NotchAlertQueueTests {
     private func alert(_ id: String) -> NotchAlert {
-        NotchAlert(id: id, icon: "bolt.fill", title: id)
+        NotchAlert(id: id, icon: .bolt, title: id)
     }
 
     private let epoch = Date(timeIntervalSince1970: 1_000_000)

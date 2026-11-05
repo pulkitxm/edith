@@ -33,8 +33,8 @@ enum StudioSurface {
                 return .init(
                     id, sourceID: file.url.studioKind.rawValue,
                     title: bounded(file.name), detail: file.url.studioKind.title,
-                    icon: file.url.studioKind.symbolName,
-                    actions: [.init("open:" + id, "Open in Studio", "arrow.up.right")])
+                    icon: file.url.studioKind.icon,
+                    actions: [.init("open:" + id, "Open in Studio", .arrowUpRight)])
             }
         }
         if showsProjects {
@@ -43,8 +43,8 @@ enum StudioSurface {
                 let id = identifier(project.url)
                 return .init(
                     "project:" + id, sourceID: "video", title: bounded(project.title),
-                    detail: "Video project", icon: "film.stack",
-                    actions: [.init("project:" + id, "Open project", "arrow.up.right")])
+                    detail: "Video project", icon: .film,
+                    actions: [.init("project:" + id, "Open project", .arrowUpRight)])
             }
         }
         let selectedJobs = model.jobs.filter {
@@ -59,9 +59,9 @@ enum StudioSurface {
                     title: bounded(job.tool.title),
                     detail: job.status.map { bounded($0) } ?? "",
                     value: job.isRunning ? "Running" : job.progress == 1 ? "Finished" : "Ready",
-                    icon: job.tool.symbolName, progress: job.progress,
+                    icon: job.tool.icon, progress: job.progress,
                     actions: job.isRunning
-                        ? [.init("cancel:" + job.id.uuidString, "Cancel", "stop.fill")] : [])
+                        ? [.init("cancel:" + job.id.uuidString, "Cancel", .stop)] : [])
             }
         }
         return .init(

@@ -19,14 +19,14 @@ struct CodeStatsTrendCard: View {
     @State private var brushed: ClosedRange<Date>?
     @Environment(\.codeStatsActions) private var actions
 
-    private var unit: Calendar.Component {
-        projection.trendGranularity == .monthly ? .month : .weekOfYear
-    }
+    private var unit: Calendar.Component { projection.trendGranularity.unit }
+
+    private var zooms: Bool { projection.trendGranularity != .hourly }
 
     private var note: String {
         if cumulative { return "Running total since the start of the range" }
-        let period = projection.trendGranularity == .monthly ? "Monthly" : "Weekly"
-        return period + " bars, drag to zoom, click a bar to open it"
+        let period = projection.trendGranularity.barsTitle
+        return zooms ? period + " bars, drag to zoom, click a bar to open it" : period + " bars"
     }
 
     private var selected: CodeStatsTrendPoint? {
@@ -46,10 +46,10 @@ struct CodeStatsTrendCard: View {
                 .labelsHidden()
                 .fixedSize()
                 Toggle("Cumulative", isOn: $cumulative)
-                    .toggleStyle(.switch)
+                    .toggleStyle(.edithSwitch)
                     .controlSize(.small)
                 Spacer()
-                if let brushed {
+                if let brushed, zooms {
                     Button(Self.zoomTitle(brushed)) {
                         actions.zoom(brushed.lowerBound, brushed.upperBound)
                         self.brushed = nil
@@ -83,13 +83,15 @@ struct CodeStatsTrendCard: View {
                                 selected?.date == point.date ? 0.95 : 0.55)
                         )
                         .cornerRadius(2)
-                        LineMark(
-                            x: .value("Period", point.date, unit: unit),
-                            y: .value("Average", average(point))
-                        )
-                        .foregroundStyle(DashPalette.slate(dark))
-                        .interpolationMethod(.monotone)
-                        .lineStyle(StrokeStyle(lineWidth: UIScale.pt(2)))
+                        if zooms {
+                            LineMark(
+                                x: .value("Period", point.date, unit: unit),
+                                y: .value("Average", average(point))
+                            )
+                            .foregroundStyle(DashPalette.slate(dark))
+                            .interpolationMethod(.monotone)
+                            .lineStyle(StrokeStyle(lineWidth: UIScale.pt(2)))
+                        }
                     }
                 }
                 if let selected {
@@ -107,7 +109,7 @@ struct CodeStatsTrendCard: View {
             .chartXSelection(range: $brushed)
             .chartGesture { proxy in
                 SpatialTapGesture().onEnded { tap in
-                    guard let date: Date = proxy.value(atX: tap.location.x),
+                    guard zooms, let date: Date = proxy.value(atX: tap.location.x),
                         let period = Calendar.current.dateInterval(of: unit, for: date)
                     else { return }
                     actions.zoom(period.start, period.end.addingTimeInterval(-1))
@@ -126,7 +128,7 @@ struct CodeStatsTrendCard: View {
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
                             Text(CodeStatsNumberFormat.compact(Int(number.rounded())))
-                                .font(.system(size: UIScale.pt(9)))
+                                .font(.edithText(.caption))
                         }
                     }
                 }
@@ -137,12 +139,8 @@ struct CodeStatsTrendCard: View {
 
     private func tooltip(_ point: CodeStatsTrendPoint) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(
-                projection.trendGranularity == .monthly
-                    ? point.date.formatted(.dateTime.month(.wide).year())
-                    : "Week of " + point.date.formatted(date: .abbreviated, time: .omitted)
-            )
-            .font(.system(size: UIScale.pt(11), weight: .semibold))
+            Text(periodTitle(point.date))
+                .font(.edithText(.subheadline).weight(.semibold))
             Text(CodeStatsNumberFormat.grouped(point.commits) + " commits")
             Text(CodeStatsNumberFormat.grouped(point.lines) + " lines")
             Text(
@@ -150,13 +148,22 @@ struct CodeStatsTrendCard: View {
             )
             .foregroundStyle(DashSkin.inkFaint(dark))
         }
-        .font(.system(size: UIScale.pt(10.5)))
+        .font(.edithText(.caption))
         .monospacedDigit()
         .foregroundStyle(DashSkin.ink(dark))
         .padding(UIScale.pt(8))
         .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
         .overlay(
             RoundedRectangle(cornerRadius: UIScale.pt(8)).stroke(DashSkin.lineStrong(dark)))
+    }
+
+    private func periodTitle(_ date: Date) -> String {
+        switch projection.trendGranularity {
+        case .hourly: date.formatted(.dateTime.hour())
+        case .daily: date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        case .weekly: "Week of " + date.formatted(date: .abbreviated, time: .omitted)
+        case .monthly: date.formatted(.dateTime.month(.wide).year())
+        }
     }
 
     private static func zoomTitle(_ range: ClosedRange<Date>) -> String {
@@ -205,7 +212,7 @@ struct CodeStatsRepositoryCards: View {
                 note: "Top 10, click to filter, right-click a row below to exclude"
             ) {
                 Toggle("Log scale", isOn: $logScale)
-                    .toggleStyle(.switch)
+                    .toggleStyle(.edithSwitch)
                     .controlSize(.small)
                 Chart(projection.repositoryBars, id: \.repository) { summary in
                     BarMark(
@@ -224,13 +231,13 @@ struct CodeStatsRepositoryCards: View {
                         Text(
                             "\(CodeStatsNumberFormat.grouped(summary.commits)) commits, \(CodeStatsNumberFormat.compact(summary.counts.authored)) lines"
                         )
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                 }
                 .chartYAxis {
                     AxisMarks { _ in
-                        AxisValueLabel().font(.system(size: UIScale.pt(10.5)))
+                        AxisValueLabel().font(.edithText(.caption))
                     }
                 }
                 .chartXScale(domain: domain, type: logScale ? .log : .linear)
@@ -249,10 +256,14 @@ struct CodeStatsRepositoryCards: View {
                 .frame(
                     height: UIScale.pt(CGFloat(max(projection.repositoryBars.count, 1)) * 26 + 24))
             }
-            CodeStatsStackedCard(
-                title: "Top repositories by month", note: "Commits",
-                points: projection.repositoryMonthly,
-                series: projection.repositorySeries, percent: false, dark: dark)
+            if projection.showsStackedTrend {
+                CodeStatsStackedCard(
+                    title: projection.stackGranularity == .daily
+                        ? "Top repositories by day" : "Top repositories by month",
+                    note: "Commits", points: projection.repositoryMonthly,
+                    series: projection.repositorySeries, percent: false,
+                    granularity: projection.stackGranularity, dark: dark)
+            }
             CodeStatsRepositoryTable(rows: projection.repositoryRows, dark: dark)
         }
     }
@@ -264,6 +275,7 @@ struct CodeStatsStackedCard: View {
     let points: [CodeStatsStackPoint]
     let series: [String]
     let percent: Bool
+    let granularity: CodeStatsTrendGranularity
     let dark: Bool
     @State private var hovered: Date?
 
@@ -280,7 +292,8 @@ struct CodeStatsStackedCard: View {
     private var month: [CodeStatsStackPoint] {
         guard let hovered else { return [] }
         return points.filter {
-            Calendar.current.isDate($0.date, equalTo: hovered, toGranularity: .month)
+            Calendar.current.isDate(
+                $0.date, equalTo: hovered, toGranularity: granularity.unit)
                 && $0.value > 0
         }
     }
@@ -294,14 +307,14 @@ struct CodeStatsStackedCard: View {
             Chart(points) { point in
                 if percent {
                     AreaMark(
-                        x: .value("Month", point.date, unit: .month),
+                        x: .value("Period", point.date, unit: granularity.unit),
                         y: .value("Share", point.value), stacking: .standard
                     )
                     .foregroundStyle(by: .value("Series", point.series))
                     .interpolationMethod(.monotone)
                 } else {
                     BarMark(
-                        x: .value("Month", point.date, unit: .month),
+                        x: .value("Period", point.date, unit: granularity.unit),
                         y: .value("Commits", point.value)
                     )
                     .foregroundStyle(by: .value("Series", point.series))
@@ -316,7 +329,10 @@ struct CodeStatsStackedCard: View {
                         HStack {
                             Spacer()
                             CodeStatsTooltip(
-                                title: first.date.formatted(.dateTime.month(.wide).year()),
+                                title: granularity == .daily
+                                    ? first.date.formatted(
+                                        .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                                    : first.date.formatted(.dateTime.month(.wide).year()),
                                 lines: monthLines, dark: dark)
                         }
                         Spacer()
@@ -334,7 +350,7 @@ struct CodeStatsStackedCard: View {
                                     ? CodeStatsNumberFormat.percent(number * 100)
                                     : CodeStatsNumberFormat.compact(Int(number.rounded()))
                             )
-                            .font(.system(size: UIScale.pt(9)))
+                            .font(.edithText(.caption))
                         }
                     }
                 }
@@ -379,10 +395,10 @@ private struct CodeStatsRepositoryTable: View {
                         Button {
                             actions.toggleRepository(row.repository)
                         } label: {
-                            Image(
-                                systemName: actions.selectedRepositories.contains(row.repository)
-                                    ? "line.3.horizontal.decrease.circle.fill"
-                                    : "line.3.horizontal.decrease.circle")
+                            EdithIconView(
+                                .filter,
+                                tone: actions.selectedRepositories.contains(row.repository)
+                                    ? .duotone : .muted)
                         }
                         .buttonStyle(.edith(.borderless))
                         .accessibilityLabel("Toggle filter for " + row.repository)
@@ -397,20 +413,21 @@ private struct CodeStatsRepositoryTable: View {
                         }
                     }
                 }
-                .width(min: UIScale.pt(180), ideal: UIScale.pt(280))
+                .width(min: UIScale.pt(160), ideal: UIScale.pt(280))
                 SwiftUI.TableColumn("Commits") { row in
                     Text(CodeStatsNumberFormat.grouped(row.commits)).monospacedDigit()
                 }
-                .width(UIScale.pt(85))
+                .width(UIScale.pt(72))
                 SwiftUI.TableColumn("Lines") { row in
                     Text(CodeStatsNumberFormat.compact(row.counts.authored)).monospacedDigit()
                 }
-                .width(UIScale.pt(85))
+                .width(UIScale.pt(72))
                 SwiftUI.TableColumn("Language") { row in Text(row.topLanguage ?? "-") }
-                    .width(UIScale.pt(100))
+                    .width(UIScale.pt(92))
                 SwiftUI.TableColumn("Last active") { row in Text(row.lastDay).monospacedDigit() }
                     .width(UIScale.pt(100))
             }
+            .themedSelection()
             .tableStyle(.inset)
             .frame(height: UIScale.pt(min(420, max(100, Double(sorted.count) * 30 + 32))))
             .accessibilityLabel("Repository activity")

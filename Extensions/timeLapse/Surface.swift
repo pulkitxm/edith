@@ -42,7 +42,7 @@ enum TimeLapseSurface {
                 ].compactMap { $0 }
                 var actions: [SurfaceAction] = []
                 if recorder.recording, !recorder.busy, let id = recorder.activeSession {
-                    actions = [.init("stop:" + id.uuidString, "Stop recording", "stop.fill")]
+                    actions = [.init("stop:" + id.uuidString, "Stop recording", .stop)]
                 }
                 rows.append(
                     .init(
@@ -50,7 +50,7 @@ enum TimeLapseSurface {
                         detail: sourceDescription(recorder)
                             + " · \(recorder.settings.outputFPS) fps"
                             + (audio.isEmpty ? "" : " · " + audio.joined(separator: " + ")),
-                        value: state, icon: "record.circle", actions: actions))
+                        value: state, icon: .record, actions: actions))
             }
             message = recorder.error.map { String($0.prefix(2048)) }
         }
@@ -64,8 +64,8 @@ enum TimeLapseSurface {
                     + duration(session.playbackSeconds),
                 value: session.failure != nil
                     ? "Needs attention" : session.endedAt != nil ? "Saved" : "Incomplete",
-                icon: session.failure == nil ? "video" : "exclamationmark.circle",
-                actions: [.init("reveal:" + session.id.uuidString, "Show recording", "folder")])
+                icon: session.failure == nil ? .video : .alert,
+                actions: [.init("reveal:" + session.id.uuidString, "Show recording", .folder)])
         }
         if truncated {
             message = [
@@ -75,7 +75,7 @@ enum TimeLapseSurface {
         }
         return .init(
             providerID: "timeLapse", metrics: metrics, rows: rows,
-            actions: [.init("open", "Open recorder", "arrow.up.right")],
+            actions: [.init("open", "Open recorder", .arrowUpRight)],
             sources: ScreenRecordingMode.allCases.map { .init($0.rawValue, $0.rawValue) },
             message: message, updatedAt: now)
     }

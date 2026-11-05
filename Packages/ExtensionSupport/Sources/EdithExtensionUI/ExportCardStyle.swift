@@ -2,7 +2,7 @@ import AppKit
 import EdithExtensionCore
 import SwiftUI
 
-enum ExportCardStyle {
+public enum ExportCardStyle {
     private static var currentTheme: AppTheme {
         AppTheme(
             storedName: ExtensionScope.process.defaults().string(
@@ -39,27 +39,27 @@ enum ExportCardStyle {
     static func paper(_ d: Bool) -> Color {
         d ? paperPair.1 : paperPair.0
     }
-    static func paper(_ d: Bool, theme: AppTheme) -> Color {
+    public static func paper(_ d: Bool, theme: AppTheme) -> Color {
         themed(
             paperPair, dark: d, theme: theme, lightFraction: 0.055, darkFraction: 0.1)
     }
     static func paper2(_ d: Bool) -> Color {
         d ? paper2Pair.1 : paper2Pair.0
     }
-    static func paper2(_ d: Bool, theme: AppTheme) -> Color {
+    public static func paper2(_ d: Bool, theme: AppTheme) -> Color {
         themed(
             paper2Pair, dark: d, theme: theme, lightFraction: 0.035, darkFraction: 0.075)
     }
     static func ink(_ d: Bool) -> Color {
         d ? inkPair.1 : inkPair.0
     }
-    static func ink(_ d: Bool, theme: AppTheme) -> Color {
+    public static func ink(_ d: Bool, theme: AppTheme) -> Color {
         themed(inkPair, dark: d, theme: theme, lightFraction: 0.04, darkFraction: 0.025)
     }
     static func inkSoft(_ d: Bool) -> Color {
         d ? inkSoftPair.1 : inkSoftPair.0
     }
-    static func inkSoft(_ d: Bool, theme: AppTheme) -> Color {
+    public static func inkSoft(_ d: Bool, theme: AppTheme) -> Color {
         themed(
             inkSoftPair, dark: d, theme: theme, lightFraction: 0.035, darkFraction: 0.02)
     }

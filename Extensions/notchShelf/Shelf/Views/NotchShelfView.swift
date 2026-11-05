@@ -33,6 +33,7 @@ struct NotchShelfContentView: View {
                     }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .tint(DashSkin.accent(true))
             .animation(glide, value: shapeSize)
             .animation(glide, value: isExpanded)
             .animation(glide, value: controller.currentAlert)
@@ -218,12 +219,14 @@ struct NotchShelfContentView: View {
                 Button {
                     controller.selectTab(tab)
                 } label: {
-                    Image(systemName: tab.icon)
+                    EdithIconView(tab.icon)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(active ? Color.black : Color.white.opacity(0.6))
+                        .foregroundStyle(
+                            active ? DashSkin.onAccent(true) : Color.white.opacity(0.6)
+                        )
                         .frame(width: 26, height: 22)
                         .background(
-                            active ? Color.white.opacity(0.9) : Color.clear, in: Capsule()
+                            active ? DashSkin.accent(true) : Color.clear, in: Capsule()
                         )
                         .contentShape(Capsule())
                 }
@@ -261,29 +264,30 @@ struct NotchShelfContentView: View {
                                 $0 = preset.layout(for: .notch)
                             }
                         } label: {
-                            Label(preset.title, systemImage: preset.icon)
+                            Label(preset.title, edith: preset.icon)
                         }
                     }
                 } label: {
-                    Image(systemName: "rectangle.3.group").frame(width: 28, height: 24)
+                    EdithIconView(.window, size: 16)
                 }
-                .menuStyle(.borderlessButton).fixedSize().help("Notch presets")
+                .borderlessMenu()
+                .fixedSize().help("Notch presets")
                 if controller.layoutEditing {
                     Button {
                         controller.chromeLayouts.undo(.notch)
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        EdithIconView(.undo)
                     }.disabled(!controller.chromeLayouts.canUndo(.notch)).help("Undo layout change")
                     Button {
                         controller.chromeLayouts.redo(.notch)
                     } label: {
-                        Image(systemName: "arrow.uturn.forward")
+                        EdithIconView(.redo)
                     }.disabled(!controller.chromeLayouts.canRedo(.notch)).help("Redo layout change")
                 }
                 Button {
                     controller.layoutEditing.toggle()
                 } label: {
-                    Image(systemName: controller.layoutEditing ? "checkmark" : "pencil")
+                    EdithIconView(controller.layoutEditing ? .check : .edit)
                         .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.8))
                         .frame(width: 28, height: 22)
                         .background(Color.white.opacity(0.07), in: Capsule())
@@ -295,7 +299,7 @@ struct NotchShelfContentView: View {
                 controller.collapseNow()
                 controller.openCustomization()
             } label: {
-                Image(systemName: "gearshape")
+                EdithIconView(.gear)
                     .font(.system(size: 11.5))
                     .foregroundStyle(.white.opacity(0.7))
                     .frame(width: 32, height: 22)
@@ -317,7 +321,7 @@ struct NotchShelfContentView: View {
             controller.selectTab(tab)
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: tab.icon)
+                EdithIconView(tab.icon)
                     .font(.system(size: 11.5, weight: .medium))
                 Text(tab.title)
                     .font(.system(size: 11, weight: .semibold)).fixedSize()
@@ -330,11 +334,11 @@ struct NotchShelfContentView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .foregroundStyle(active ? Color.black : Color.white.opacity(0.65))
+            .foregroundStyle(active ? DashSkin.onAccent(true) : Color.white.opacity(0.65))
             .background {
                 if active {
                     Capsule()
-                        .fill(Color.white.opacity(0.93))
+                        .fill(DashSkin.accent(true))
                         .matchedGeometryEffect(id: "activeTab", in: tabPill)
                 } else {
                     Capsule().fill(Color.white.opacity(0.07))
@@ -392,11 +396,11 @@ struct NotchShelfContentView: View {
         return Group {
             if let client = controller as? NotchChromeClient {
                 NotchNativeSlotView(client: client, tile: configured, kind: .providerTab)
-                    .padding(.horizontal, 12).padding(.bottom, 12)
+                    .padding(.horizontal, 16).padding(.bottom, 12)
             } else {
                 ScrollView {
                     NotchSurfaceCard(controller: controller, tile: configured)
-                        .padding(.horizontal, 12).padding(.bottom, 12)
+                        .padding(.horizontal, 16).padding(.bottom, 12)
                 }
             }
         }
@@ -406,10 +410,24 @@ struct NotchShelfContentView: View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 if controller.items.isEmpty {
-                    Text("Drop files here to park them")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .frame(width: geo.size.width, height: geo.size.height)
+                    VStack(spacing: 6) {
+                        EdithIconView(.tray)
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .padding(.bottom, 4)
+                        Text("Drop files here to park them")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text(
+                            "Drag a file onto the notch, then drag it out again wherever you need it."
+                        )
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .accessibilityElement(children: .combine)
                 } else {
                     ForEach(Array(controller.items.enumerated()), id: \.element.id) {
                         index, item in
@@ -422,7 +440,7 @@ struct NotchShelfContentView: View {
                 }
                 if let error = controller.shelfOperationError {
                     HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
+                        EdithIconView(.warning)
                         Text(error)
                             .font(.system(size: 10.5, weight: .medium))
                             .lineLimit(2)
@@ -430,7 +448,7 @@ struct NotchShelfContentView: View {
                         Button {
                             controller.dismissShelfFailure()
                         } label: {
-                            Image(systemName: "xmark")
+                            EdithIconView(.close)
                                 .font(.system(size: 9, weight: .bold))
                         }
                         .buttonStyle(.edith(.borderless))
@@ -472,13 +490,13 @@ private struct NotchAlertDropView: View {
     @State private var appeared = false
 
     var body: some View {
-        let tint = Color(hex: alert.tint)
+        let tint =
+            alert.tint == NotchAlert.themeTint ? DashSkin.accent(true) : Color(hex: alert.tint)
         return Button {
             controller.alertTapped(alert)
         } label: {
             HStack(spacing: 11) {
-                Image(systemName: alert.icon)
-                    .font(.system(size: 14, weight: .medium))
+                EdithIconView(alert.icon, size: 16, tone: alert.muted ? .muted : .duotone)
                     .foregroundStyle(tint)
                     .frame(width: 30, height: 30)
                     .background(tint.opacity(0.2), in: RoundedRectangle(cornerRadius: 9))
@@ -495,7 +513,7 @@ private struct NotchAlertDropView: View {
                 }
                 Spacer(minLength: 0)
                 if alert.settingsTab != nil {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.4))
                 }
@@ -604,7 +622,8 @@ private struct NotchGlanceLabel: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: UIScale.pt(5)) {
-                Image(systemName: glance.icon).font(.edithText(.caption2))
+                EdithIconView(glance.icon, tone: glance.muted ? .muted : .duotone)
+                    .font(.edithText(.caption2))
                 value
             }.fixedSize(horizontal: true, vertical: false)
             value

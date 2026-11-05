@@ -37,96 +37,120 @@ struct CodeStatsFilterBar: View {
     let dark: Bool
     @State private var open: CodeStatsFacetKind?
 
-    private static let flags:
-        [(CodeStatsCommitFlags, String, WritableKeyPath<CodeStatsFilter, Bool>)] = [
-            (.bulk, "Bulk imports", \.includeBulk),
-            (.formatting, "Formatting", \.includeFormatting),
-            (.agentAssisted, "Agent-assisted", \.includeAgentAssisted),
-            (.coAuthored, "Co-authored", \.includeCoAuthored),
-        ]
+    static let flags: [(CodeStatsCommitFlags, String, WritableKeyPath<CodeStatsFilter, Bool>)] = [
+        (.bulk, "Bulk imports", \.includeBulk),
+        (.formatting, "Formatting", \.includeFormatting),
+        (.agentAssisted, "Agent-assisted", \.includeAgentAssisted),
+        (.coAuthored, "Co-authored", \.includeCoAuthored),
+    ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: UIScale.pt(10)) {
-                    rangeControls
-                    Spacer()
-                    resetButton
-                }
-                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                    ScrollView(.horizontal) { rangeControls }
-                        .scrollIndicators(.automatic)
-                    resetButton
-                }
+        PageFilterBar {
+            PageFilterRow("Range") {
+                CodeStatsDateFilter(model: model)
             }
-            WrapHStack(spacing: UIScale.pt(6), lineSpacing: UIScale.pt(6)) {
+            PageFilterRow("Filter") {
                 facetButton(.repositories, selected: model.filter.repositories.count)
                 facetButton(.owners, selected: model.filter.owners.count)
                 facetButton(.languages, selected: model.filter.languages.count)
-                Menu {
-                    ForEach(Self.flags, id: \.1) { flag in
-                        Toggle(
-                            flag.1,
-                            isOn: Binding(
-                                get: { model.filter[keyPath: flag.2] },
-                                set: { value in
-                                    Task {
-                                        await model.updateFilter { $0[keyPath: flag.2] = value }
-                                    }
-                                }))
-                    }
-                } label: {
-                    Label("Counted changes", systemImage: "line.3.horizontal.decrease")
+                fileTypesMenu
+                countedChangesMenu
+                if let note = Self.notCountedNote(model.filter) {
+                    Text(note)
+                        .font(.edithText(.caption))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                        .fixedSize()
                 }
-                .menuStyle(.button)
-                .buttonStyle(.edith(.secondary))
+                if model.hasActiveFilter {
+                    Button("Reset filters") { Task { await model.resetFilter() } }
+                        .buttonStyle(.edith(.borderless))
+                        .font(PageMetrics.chipFont)
+                        .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                        .fixedSize()
+                }
+            }
+            if hasSelection {
+                PageFilterRow("Showing") { selectedTokens }
+            }
+        }
+    }
+
+    static func notCountedNote(_ filter: CodeStatsFilter) -> String? {
+        let excluded = flags.filter { !filter[keyPath: $0.2] }.map { $0.1.lowercased() }
+        return excluded.isEmpty ? nil : "Not counted: " + excluded.joined(separator: ", ")
+    }
+
+    static func fileTypesTitle(_ categories: Set<CodeStatsCategory>) -> String {
+        let selected = CodeStatsCategory.filterable.filter(categories.contains)
+        switch selected.count {
+        case 0: return "No file types"
+        case 1: return selected[0].title
+        case CodeStatsCategory.filterable.count: return "All file types"
+        default: return "\(selected.count) file types"
+        }
+    }
+
+    private var countedChangesCustomized: Bool {
+        Self.flags.contains {
+            model.filter[keyPath: $0.2] != CodeStatsFilter.default[keyPath: $0.2]
+        }
+    }
+
+    private var hasSelection: Bool {
+        let filter = model.filter
+        return !filter.repositories.isEmpty || !filter.owners.isEmpty
+            || !filter.languages.isEmpty || !filter.excludedRepositories.isEmpty
+            || model.canReturnToNamedRange
+    }
+
+    private var fileTypesMenu: some View {
+        PageMenuChip(
+            Self.fileTypesTitle(model.filter.categories),
+            active: model.filter.categories != CodeStatsFilter.default.categories
+        ) {
+            Section("Count lines in") {
                 ForEach(CodeStatsCategory.filterable, id: \.self) { category in
-                    let active = model.filter.categories.contains(category)
-                    Button {
-                        Task { await model.toggleCategory(category) }
-                    } label: {
-                        CodeStatsFilterChip(
-                            title: category.title, color: DashSkin.accent(dark), active: active)
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .accessibilityAddTraits(active ? .isSelected : [])
+                    Toggle(
+                        category.title,
+                        isOn: Binding(
+                            get: { model.filter.categories.contains(category) },
+                            set: { _ in Task { await model.toggleCategory(category) } }))
                 }
             }
-            let excluded = Self.flags.filter { !model.filter[keyPath: $0.2] }.map {
-                $0.1.lowercased()
-            }
-            if !excluded.isEmpty {
-                Text("Excluded from totals: " + excluded.joined(separator: ", "))
-                    .font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-            }
-            selectedTokens
         }
+        .help("Choose which kinds of files count toward your lines")
     }
 
-    private var rangeControls: some View {
-        CodeStatsRangePicker(range: model.range) { range in
-            Task { await model.select(range) }
+    private var countedChangesMenu: some View {
+        PageMenuChip("Counted changes", active: countedChangesCustomized) {
+            Section("Count toward totals") {
+                ForEach(Self.flags, id: \.1) { flag in
+                    Toggle(
+                        flag.1,
+                        isOn: Binding(
+                            get: { model.filter[keyPath: flag.2] },
+                            set: { value in
+                                Task { await model.updateFilter { $0[keyPath: flag.2] = value } }
+                            }))
+                }
+            }
         }
-    }
-
-    @ViewBuilder private var resetButton: some View {
-        if model.hasActiveFilter {
-            Button("Reset filters") { Task { await model.resetFilter() } }
-                .buttonStyle(.edith(.borderless))
-        }
+        .help("Choose which kinds of commits count toward your totals")
     }
 
     private func facetButton(_ kind: CodeStatsFacetKind, selected: Int) -> some View {
         Button {
             open = kind
         } label: {
-            CodeStatsFilterChip(
-                title: selected == 0
+            PageChipLabel(
+                selected == 0
                     ? "All " + kind.rawValue.lowercased() : "\(kind.rawValue) (\(selected))",
-                color: DashSkin.accent(dark), active: selected > 0)
+                menu: true)
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.pageChip(active: selected > 0))
+        .fixedSize()
         .popover(
             isPresented: Binding(get: { open == kind }, set: { if !$0 { open = nil } }),
             arrowEdge: .bottom
@@ -137,49 +161,54 @@ struct CodeStatsFilterBar: View {
 
     @ViewBuilder private var selectedTokens: some View {
         let filter = model.filter
-        if !filter.repositories.isEmpty || !filter.owners.isEmpty || !filter.languages.isEmpty
-            || !filter.excludedRepositories.isEmpty || model.isCustomRange
-        {
-            ScrollView(.horizontal, showsIndicators: true) {
-                HStack(spacing: UIScale.pt(6)) {
-                    if model.isCustomRange {
-                        token(CodeStatsRangePicker.title(model.range)) {
-                            await model.clearCustomRange()
-                        }
-                    }
-                    ForEach(filter.excludedRepositories.sorted(), id: \.self) { name in
-                        token("Excluding " + name) { await model.toggleExcludedRepository(name) }
-                    }
-                    ForEach(filter.owners.sorted(), id: \.self) { name in
-                        token(name) { await model.toggleOwner(name) }
-                    }
-                    ForEach(filter.repositories.sorted(), id: \.self) { name in
-                        token(name) { await model.toggleRepository(name) }
-                    }
-                    ForEach(filter.languages.sorted(), id: \.self) { name in
-                        token(name) { await model.toggleLanguage(name) }
-                    }
-                }
+        if model.canReturnToNamedRange {
+            PageChip(
+                "Back to " + model.lastNamedSelection.title(calendar: model.dateFilterCalendar),
+                icon: .undo
+            ) {
+                Task { await model.returnToNamedRange() }
             }
+        }
+        ForEach(filter.excludedRepositories.sorted(), id: \.self) { name in
+            token("Excluding " + name) { await model.toggleExcludedRepository(name) }
+        }
+        ForEach(filter.owners.sorted(), id: \.self) { name in
+            token(name) { await model.toggleOwner(name) }
+        }
+        ForEach(filter.repositories.sorted(), id: \.self) { name in
+            token(name) { await model.toggleRepository(name) }
+        }
+        ForEach(filter.languages.sorted(), id: \.self) { name in
+            token(name) { await model.toggleLanguage(name) }
         }
     }
 
     private func token(_ name: String, remove: @escaping () async -> Void) -> some View {
-        Button {
+        CodeStatsTokenChip(title: name, active: true) {
             Task { await remove() }
-        } label: {
-            HStack(spacing: UIScale.pt(4)) {
-                Text(name).lineLimit(1)
-                Image(systemName: "xmark.circle.fill")
-            }
-            .font(.system(size: UIScale.pt(11), weight: .medium))
-            .padding(.horizontal, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(3))
-            .background(DashSkin.accent(dark).opacity(0.16), in: Capsule())
-            .foregroundStyle(DashSkin.ink(dark))
         }
-        .buttonStyle(.edith(.borderless))
-        .accessibilityLabel("Remove filter \(name)")
+    }
+}
+
+struct CodeStatsTokenChip: View {
+    let title: String
+    var active = false
+    let remove: () -> Void
+
+    var body: some View {
+        Button(action: remove) {
+            HStack(spacing: UIScale.pt(6)) {
+                Text(title).lineLimit(1).truncationMode(.middle)
+                EdithIconView(.close)
+                    .font(.system(size: UIScale.pt(8), weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: UIScale.pt(260))
+        }
+        .buttonStyle(.pageChip(active: active))
+        .fixedSize()
+        .accessibilityLabel("Remove \(title)")
     }
 }
 
@@ -213,8 +242,7 @@ private struct CodeStatsFacetPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            TextField("Search " + kind.rawValue.lowercased(), text: $query)
-                .textFieldStyle(.roundedBorder)
+            SearchField(placeholder: "Search " + kind.rawValue.lowercased(), text: $query)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     ForEach(matchingFacets) { facet in
@@ -257,7 +285,7 @@ private struct CodeStatsFacetPicker: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                EdithIconView(isOn ? .checkboxOn : .checkbox)
                     .foregroundStyle(isOn ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 Text(facet.name)
                     .lineLimit(1)
@@ -268,7 +296,7 @@ private struct CodeStatsFacetPicker: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .monospacedDigit()
             }
-            .font(.system(size: UIScale.pt(12)))
+            .font(.edithText(.callout))
             .padding(.vertical, UIScale.pt(4))
             .contentShape(Rectangle())
         }

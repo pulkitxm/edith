@@ -21,14 +21,12 @@ struct DashboardView: View {
     @Environment(\.compactLayout) private var compactLayout
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @State private var showLog = false
+    @State private var showMoreMetrics = false
     @State private var folderPickerOpen = false
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
-    @State private var customRangeOpen = false
     @State private var sharePresentation: ExportCardPresentation<UsageExportDeck>?
-    @State private var customFrom = Date()
-    @State private var customTo = Date()
 
     private var appTheme: Color { themeColor(themeName) }
     private var dark: Bool { scheme == .dark }
@@ -36,24 +34,6 @@ struct DashboardView: View {
     private var gold: Color { DashSkin.gold }
     private var blurMoney: Bool { presenterState.active && presenterState.money }
     private var blurUsage: Bool { presenterState.active && presenterState.usage }
-
-    private static let shortDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d MMM"
-        return formatter
-    }()
-
-    private static let monthKey: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        return formatter
-    }()
-
-    private static let monthName: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter
-    }()
 
     @MainActor init(
         model: DashboardModel? = nil, client: UsageUIClient? = nil,
@@ -73,22 +53,33 @@ struct DashboardView: View {
                 }))
     }
 
+    private static let firstRunSteps = [
+        PageGuideStep(
+            icon: .folder, title: "Collect",
+            detail: "Edith reads your agents' local history. This runs on your Mac."),
+        PageGuideStep(
+            icon: .chartBar, title: "Explore",
+            detail: "See cost and tokens by day, model, project and machine."),
+        PageGuideStep(
+            icon: .gauge, title: "Watch your limits",
+            detail: "Track how much of each plan's allowance you have used."),
+    ]
+
+    private var emptyState: UsageEmptyState {
+        UsageEmptyState.resolve(
+            state: model.contentLoad.state, loaded: model.loaded, updating: refresh.updating,
+            errorMessage: model.contentLoad.errorMessage)
+    }
+
+    private var emptyStateFillsPage: Bool {
+        !showLog && client?.notice == nil && client?.failure == nil
+            && UsageWorkerOperations.controller?.notice == nil
+    }
+
     var body: some View {
         PageScaffold(pinnedHeader: true) {
-            VStack(spacing: 0) {
-                masthead
-                if model.loaded {
-                    controlsBar.pageGutter(compactLayout)
-                        .padding(.bottom, UIScale.pt(12))
-                }
-                Divider()
-            }
+            masthead
         } content: {
-            if !model.loaded, model.contentLoad.state == .loading {
-                PageNotice(
-                    "Loading usage data. The first collection can take a few minutes.",
-                    tone: .information)
-            }
             if showLog { logView }
             if let notice = client?.notice
                 ?? UsageWorkerOperations.controller?.notice
@@ -107,25 +98,72 @@ struct DashboardView: View {
                         Button("Retry", action: refresh.requestRefresh)
                     })
             }
-            PageLoading(
-                state: model.contentLoad.state, title: "No usage data yet",
-                message: model.contentLoad.errorMessage ?? "Reload to run the bundled collector.",
-                layout: .analytics,
-                refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
-                retry: refresh.requestRefresh
-            ) {
-                kpiGrid(compact: compactLayout)
-                activityRow(compact: compactLayout)
-                LimitsCardView(theme: acc, dark: dark)
-                BudgetCardView(theme: acc, dark: dark)
-                charts(compact: compactLayout)
+            switch emptyState {
+            case .collecting:
+                PageEmptyState(
+                    icon: .chartBar,
+                    title: "Collecting your usage",
+                    message:
+                        "Edith is reading the history your coding agents keep on this Mac. The first collection can take a few minutes, and the dashboard fills in as soon as it finishes.",
+                    secondary: PageAction("Watch the log", icon: .terminal) {
+                        withAnimation(.easeOut(duration: 0.15)) { showLog = true }
+                    },
+                    footnote:
+                        "Only token counts and model names are read. Your prompts and code stay where they are."
+                )
+                .fillingPage(emptyStateFillsPage)
+            case .firstRun:
+                PageEmptyState(
+                    icon: .usage,
+                    title: "See what your coding agents cost",
+                    message:
+                        "Agent Usage adds up the tokens, cost and rate limits from agents like Claude Code and Codex, all from files already on this Mac.",
+                    steps: Self.firstRunSteps,
+                    primary: PageAction("Collect usage now", icon: .refresh) {
+                        refresh.requestRefresh()
+                    },
+                    secondary: PageAction("Show the log", icon: .terminal) {
+                        withAnimation(.easeOut(duration: 0.15)) { showLog = true }
+                    },
+                    footnote:
+                        "Nothing is uploaded and nothing is changed. If you have not used an agent yet, there is nothing to count until you do."
+                )
+                .fillingPage(emptyStateFillsPage)
+            case .failed(let message):
+                PageEmptyState(
+                    icon: .warning,
+                    title: "Usage could not be read",
+                    message:
+                        "\(message) Your usage files were not changed. Collecting again usually fixes this.",
+                    primary: PageAction("Collect again", icon: .refresh) {
+                        refresh.requestRefresh()
+                    },
+                    secondary: PageAction("Show the log", icon: .terminal) {
+                        withAnimation(.easeOut(duration: 0.15)) { showLog = true }
+                    }
+                )
+                .fillingPage(emptyStateFillsPage)
+            case .none:
+                PageLoading(
+                    state: model.contentLoad.state, title: "No usage data yet",
+                    errorTitle: "Usage could not be read",
+                    message: model.contentLoad.errorMessage ?? "Collect usage to fill this page.",
+                    layout: .analytics,
+                    refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
+                    retry: refresh.requestRefresh
+                ) {
+                    kpiGrid
+                    activityRow(compact: compactLayout)
+                    LimitsCardView(theme: acc, dark: dark)
+                    BudgetCardView(theme: acc, dark: dark)
+                    charts(compact: compactLayout)
+                }
             }
         }
         .exportCardPresentation(item: $sharePresentation)
         .navigationTitle("Agent Usage")
         .pageTask(id: refresh.updating) {
             await model.load()
-            syncCustomDates()
         }
         .pageTask {
             refresh.requestRefresh()
@@ -135,21 +173,16 @@ struct DashboardView: View {
             {
                 guard !Task.isCancelled else { return }
                 await model.load()
-                syncCustomDates()
             }
         }
         .pageTask(cancel: model.endObserving) {
             model.beginObserving()
-        }
-        .onChange(of: model.loaded) { _, loaded in
-            if automaticActionsEnabled, loaded { syncCustomDates() }
         }
         .onReceive(
             NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
         ) { _ in
             guard automaticActionsEnabled else { return }
             model.reloadPreferences()
-            syncCustomDates()
         }
         .onChange(of: automaticActionsEnabled) { _, enabled in
             if !enabled { refresh.setLogVisible(false) }
@@ -160,35 +193,48 @@ struct DashboardView: View {
     }
 
     private var masthead: some View {
-        PageHeader {
-            Text("Agent usage").accessibilityLabel("Agent usage")
+        PageHeader(subtitle: headerSubtitle, divider: true) {
+            Text("Agent usage")
         } trailing: {
             mastheadButtons
         } accessory: {
-            if model.loaded {
-                WrapHStack(spacing: UIScale.pt(6), lineSpacing: 2) {
-                    ForEach(metaSegments) { seg in
-                        Text(seg.text)
-                            .presenterBlur((seg.sensitive && blurMoney) || (seg.usage && blurUsage))
-                    }
-                }
-                .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
-            }
-        }.accessibilityElement(children: .contain).accessibilityLabel("Agent usage")
+            if model.loaded { filterBar }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Agent usage")
+    }
+
+    private var headerSubtitle: String {
+        guard model.loaded else {
+            return "Tokens, cost and rate limits from your coding agents, collected on this Mac."
+        }
+        return Self.metaSummary(
+            updated: model.meta.updated, activeDays: model.meta.activeDays,
+            sources: sourceMetaText)
+    }
+
+    static func metaSummary(updated: String, activeDays: Int, sources: String) -> String {
+        [
+            updated.isEmpty ? nil : "Updated \(updated)",
+            activeDays == 1 ? "1 active day" : "\(activeDays) active days",
+            sources.isEmpty ? nil : sources,
+        ]
+        .compactMap { $0 }
+        .joined(separator: " \u{00B7} ")
     }
 
     private var mastheadButtons: some View {
         HStack(spacing: UIScale.pt(6)) {
             PageToolbarButton(
                 action: refresh.requestRefresh,
-                systemImage: "arrow.clockwise",
-                helperText: "Refresh usage data",
+                icon: .refresh,
+                helperText: "Collect new usage now",
                 isLoading: refresh.updating
             )
             PageToolbarButton(
                 action: { withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() } },
-                systemImage: "terminal",
-                helperText: "Show collector log",
+                icon: .terminal,
+                helperText: showLog ? "Hide the collector log" : "Show the collector log",
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
             ExportCardButton(isEnabled: model.loaded, help: "Share usage cards") {
@@ -219,97 +265,61 @@ struct DashboardView: View {
             generatedAt: model.meta.updated)
     }
 
-    private struct MetaSegment: Identifiable {
-        let id: Int
-        let text: String
-        let sensitive: Bool
-        var usage = false
-    }
-
-    private var metaSegments: [MetaSegment] {
-        guard model.loaded else { return [MetaSegment(id: 0, text: "Loading…", sensitive: false)] }
-        let m = model.meta
-        let parts: [(String, Bool, Bool)] = [
-            ("Updated \(m.updated)", false, false),
-            ("\(m.activeDays) active days", false, false),
-            (sourceMetaText, false, false),
-        ]
-        return parts.enumerated().map { index, part in
-            MetaSegment(
-                id: index, text: index == 0 ? part.0 : "·  \(part.0)", sensitive: part.1,
-                usage: part.2)
-        }
-    }
-
     private var sourceMetaText: String {
         model.allSources.count > 3 ? "\(model.allSources.count) agents" : model.meta.sourceLabels
     }
 
-    private func kpiGrid(compact: Bool) -> some View {
-        VStack(spacing: UIScale.pt(6)) {
-            metricGrid(Array(model.kpis.prefix(4)), compact: compact)
+    private var kpiGrid: some View {
+        VStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            metricGrid(Array(model.kpis.prefix(4)))
             if model.kpis.count > 4 {
-                DisclosureGroup("More metrics") {
-                    metricGrid(Array(model.kpis.dropFirst(4)), compact: compact)
+                if showMoreMetrics {
+                    metricGrid(Array(model.kpis.dropFirst(4)))
                 }
-                .font(.system(size: UIScale.pt(12), weight: .medium))
-                .foregroundStyle(.secondary)
-                .disclosureGroupStyle(EdithDisclosureGroupStyle())
+                Button {
+                    withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+                        showMoreMetrics.toggle()
+                    }
+                } label: {
+                    HStack(spacing: UIScale.pt(4)) {
+                        Text(
+                            showMoreMetrics
+                                ? "Show fewer metrics"
+                                : "Show \(model.kpis.count - 4) more metrics")
+                        EdithIconView(.chevronDown)
+                            .font(.system(size: UIScale.pt(9), weight: .semibold))
+                            .rotationEffect(.degrees(showMoreMetrics ? 180 : 0))
+                            .accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.edith(.borderless))
+                .font(.edithText(.callout).weight(.medium))
+                .foregroundStyle(acc)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    private func metricGrid(_ metrics: [KPI], compact: Bool) -> some View {
-        let columns = Array(
-            repeating: GridItem(.flexible(), spacing: UIScale.pt(12)),
-            count: compact ? 2 : 4)
-        return LazyVGrid(columns: columns, spacing: UIScale.pt(12)) {
+    private func metricGrid(_ metrics: [KPI]) -> some View {
+        PageMetricGrid(maximumColumns: 4) {
             ForEach(metrics) { kpi in
-                HStack(spacing: UIScale.pt(0)) {
-                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        Text(kpi.label.uppercased())
-                            .font(DashSkin.mono(10)).tracking(UIScale.pt(1.4))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                        Text(kpi.value)
-                            .font(DashSkin.heading(26))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .monospacedDigit()
-                            .contentTransition(.numericText())
-                            .animation(
-                                Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                                value: kpi.value
-                            )
-                            .presenterBlur(
-                                (kpi.sensitiveValue && blurMoney) || (kpi.usageValue && blurUsage))
-                        Text(kpi.sub)
-                            .font(.system(size: UIScale.pt(11.5))).foregroundStyle(
-                                DashSkin.inkSoft(dark)
-                            )
-                            .contentTransition(.numericText())
-                            .animation(
-                                Motion.animation(Motion.settle, reduceMotion: reduceMotion),
-                                value: kpi.sub
-                            )
-                            .presenterBlur(
-                                (kpi.sensitiveSub && blurMoney) || (kpi.usageSub && blurUsage))
-                    }
-                    .padding(UIScale.pt(14))
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .edithSurface(cornerRadius: 14)
+                PageMetric(
+                    title: kpi.label, value: kpi.value, detail: kpi.sub,
+                    valueBlurred: (kpi.sensitiveValue && blurMoney)
+                        || (kpi.usageValue && blurUsage),
+                    detailBlurred: (kpi.sensitiveSub && blurMoney) || (kpi.usageSub && blurUsage))
             }
         }
     }
 
     @ViewBuilder private func activityRow(compact: Bool) -> some View {
         if compact {
-            VStack(spacing: UIScale.pt(16)) {
+            VStack(spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 PageCard(title: "Activity") { activityHeatmap }
                 RateLimitsDialsView(dark: dark)
             }
         } else {
-            HStack(alignment: .top, spacing: UIScale.pt(16)) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 PageCard(title: "Activity", fill: true) { activityHeatmap }
                 RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
             }
@@ -318,273 +328,71 @@ struct DashboardView: View {
     }
 
     private var activityHeatmap: some View {
-        ActivityHeatmap(
+        let summary = UsageActivitySummary.make(days: model.calendarDays)
+        let heatmap = ActivityHeatmap(
             days: model.calendarDays, scale: model.chartData.heatScale,
             model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage
         )
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var controlsBar: some View {
-        ViewThatFits(in: .horizontal) {
-            VStack(spacing: UIScale.pt(10)) {
-                HStack(spacing: UIScale.pt(8)) {
-                    filterSectionLabel("Range")
-                    rangePresets
-                    Spacer(minLength: UIScale.pt(24))
-                    monthArchiveMenu
-                    customRange
-                    resetButton
+        return Group {
+            if compactLayout {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    heatmap.frame(maxWidth: .infinity, alignment: .leading)
+                    UsageActivitySummaryView(
+                        summary: summary, axis: .horizontal, blurTokens: blurUsage)
                 }
-                HStack(spacing: UIScale.pt(8)) {
-                    filterSectionLabel("Scope")
-                    if !model.machineGroups.isEmpty { machineMenu }
-                    modelMenu
-                    Spacer(minLength: UIScale.pt(24))
-                    projectMenu
-                    sourceMenu
+            } else {
+                HStack(alignment: .top, spacing: UIScale.pt(24)) {
+                    heatmap.frame(maxWidth: .infinity, alignment: .leading)
+                    Rectangle().fill(DashSkin.line(dark)).frame(width: 1)
+                    UsageActivitySummaryView(
+                        summary: summary, axis: .vertical, blurTokens: blurUsage
+                    )
+                    .frame(width: UIScale.pt(156), alignment: .leading)
                 }
-            }
-            regularControlsBar
-            compactControlsBar
-        }
-        .foregroundStyle(DashSkin.inkSoft(dark))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical)
-    }
-
-    private var regularControlsBar: some View {
-        VStack(spacing: UIScale.pt(10)) {
-            HStack(spacing: UIScale.pt(8)) {
-                filterSectionLabel("Range")
-                rangeButton("Today", .today)
-                rangeButton("This week", .thisWeek)
-                if let month = currentMonthOption {
-                    rangeButton("This month", .month(month))
-                }
-                rangeButton("All", .all)
-                alternateRangeMenu
-                Spacer(minLength: UIScale.pt(8))
-                customRange
-                resetButton
-            }
-            HStack(spacing: UIScale.pt(8)) {
-                filterSectionLabel("Scope")
-                if !model.machineGroups.isEmpty { machineMenu }
-                modelMenu
-                Spacer(minLength: UIScale.pt(8))
-                monthArchiveMenu
-                projectMenu
-                sourceMenu
             }
         }
     }
 
-    private var compactControlsBar: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            filterSectionLabel("Range")
-            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
-                rangePresets
-                monthArchiveMenu
-                customRange
-                resetButton
+    private var filterBar: some View {
+        PageFilterBar {
+            PageFilterRow("Range") {
+                PageDateFilter(
+                    selection: $model.range, months: model.dateFilterMonths,
+                    earliest: model.earliestDay)
             }
-            filterSectionLabel("Scope")
-            WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
+            PageFilterRow("Scope") {
                 if !model.machineGroups.isEmpty { machineMenu }
                 modelMenu
                 projectMenu
                 sourceMenu
+                if !filtersAreDefault { resetButton }
             }
         }
     }
 
-    private var rangePresets: some View {
-        Group {
-            rangeButton("Today", .today)
-            rangeButton("Yesterday", .yesterday)
-            rangeButton("This week", .thisWeek)
-            rangeButton("Last week", .lastWeek)
-            if let month = currentMonthOption {
-                rangeButton("This month", .month(month))
-            }
-            if let month = previousMonthOption {
-                rangeButton("Last month", .month(month))
-            }
-            rangeButton("All", .all)
-        }
-    }
-
-    private func filterSectionLabel(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(DashSkin.mono(8, weight: .semibold))
-            .tracking(UIScale.pt(1.2))
-            .foregroundStyle(DashSkin.inkFaint(dark))
-            .frame(width: UIScale.pt(42), alignment: .leading)
-    }
-
-    private var monthArchiveMenu: some View {
-        Menu {
-            ForEach(model.monthOptions, id: \.self) { month in
-                Button(monthDisplayName(month)) { model.range = .month(month) }
-            }
-        } label: {
-            Label("Browse months", systemImage: "calendar.badge.clock")
-                .font(.system(size: UIScale.pt(11)))
-                .modifier(FilterChip(dark: dark))
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .disabled(model.monthOptions.isEmpty)
-    }
-
-    private var alternateRangeMenu: some View {
-        Menu {
-            Button("Yesterday") { model.range = .yesterday }
-            Button("Last week") { model.range = .lastWeek }
-            if let month = previousMonthOption {
-                Button("Last month") { model.range = .month(month) }
-            }
-        } label: {
-            Label("More", systemImage: "clock.arrow.circlepath")
-                .font(.system(size: UIScale.pt(11)))
-                .modifier(FilterChip(dark: dark, active: alternateRangeActive))
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-
-    private var alternateRangeActive: Bool {
-        switch model.range {
-        case .yesterday, .lastWeek:
-            return true
-        case .month(let month):
-            return month == previousMonthOption
-        default:
-            return false
-        }
+    private var filtersAreDefault: Bool {
+        model.range == .preset(.allTime) && model.selectedPaths.isEmpty
+            && model.selectedSources == Set(model.defaultSources)
+            && model.selectedModels == Set(model.defaultModels)
     }
 
     private var resetButton: some View {
-        Button("Reset") { model.reset() }
+        Button("Reset filters") { model.reset() }
             .buttonStyle(.edith(.borderless))
-            .font(DashSkin.mono(11))
+            .font(PageMetrics.chipFont)
             .foregroundStyle(acc)
-            .padding(.horizontal, UIScale.pt(6))
-            .padding(.vertical, UIScale.pt(5))
-    }
-
-    private var customRange: some View {
-        Button {
-            customRangeOpen = true
-        } label: {
-            Label(customRangeLabel, systemImage: "calendar")
-                .font(.system(size: UIScale.pt(11)))
-                .lineLimit(1)
-                .modifier(FilterChip(dark: dark, active: isCustomRangeActive))
-        }
-        .buttonStyle(.edith(.borderless))
-        .fixedSize()
-        .popover(isPresented: $customRangeOpen, arrowEdge: .bottom) {
-            DashboardDateRangePicker(
-                from: customFrom,
-                to: customTo,
-                bounds: model.dataRange ?? Date()...Date(),
-                onApply: { from, to in
-                    customFrom = from
-                    customTo = to
-                    model.range = .custom(model.ymd(from), model.ymd(to))
-                    customRangeOpen = false
-                },
-                onCancel: { customRangeOpen = false }
-            )
-        }
-    }
-
-    private var customRangeLabel: String {
-        guard isCustomRangeActive else { return "Custom range" }
-        return
-            "\(Self.shortDate.string(from: customFrom)) – \(Self.shortDate.string(from: customTo))"
-    }
-
-    private var isCustomRangeActive: Bool {
-        if case .custom = model.range { return true }
-        return false
-    }
-
-    private var currentMonthOption: String? {
-        guard let upperBound = model.dataRange?.upperBound else { return model.monthOptions.first }
-        return Self.monthKey.string(from: upperBound)
-    }
-
-    private var previousMonthOption: String? {
-        guard let upperBound = model.dataRange?.upperBound,
-            let date = Calendar.current.date(byAdding: .month, value: -1, to: upperBound)
-        else { return model.monthOptions.dropFirst().first }
-        let key = Self.monthKey.string(from: date)
-        return model.monthOptions.contains(key) ? key : nil
-    }
-
-    private func monthDisplayName(_ month: String) -> String {
-        guard let date = DateFormatter.monthParser.date(from: month) else { return month }
-        return Self.monthName.string(from: date)
-    }
-
-    private func syncCustomDates() {
-        guard model.loaded else { return }
-        if case let .custom(from, to) = model.range,
-            let f = DashboardModel.ymd.date(from: from),
-            let t = DashboardModel.ymd.date(from: to)
-        {
-            customFrom = f
-            customTo = t
-        } else if let b = model.dataRange {
-            customFrom = b.lowerBound
-            customTo = b.upperBound
-        }
-    }
-
-    private func rangeButton(_ title: String, _ r: DashRange) -> some View {
-        let active = isActive(r)
-        return Button {
-            model.range = r
-        } label: {
-            Text(title)
-                .font(DashSkin.mono(11, weight: active ? .semibold : .regular))
-                .padding(.horizontal, UIScale.pt(11))
-                .padding(.vertical, UIScale.pt(5))
-                .widgetBar(
-                    cornerRadius: 8,
-                    fill: active ? AnyShapeStyle(acc) : AnyShapeStyle(DashSkin.paper2(dark)),
-                    stroke: active ? Color.clear : DashSkin.lineStrong(dark)
-                )
-                .foregroundStyle(
-                    active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
-        }
-        .buttonStyle(.edith(.borderless))
-    }
-
-    private func isActive(_ r: DashRange) -> Bool {
-        switch (model.range, r) {
-        case (.today, .today), (.yesterday, .yesterday), (.thisWeek, .thisWeek),
-            (.lastWeek, .lastWeek), (.all, .all):
-            return true
-        case (.month(let selected), .month(let target)):
-            return selected == target
-        default: return false
-        }
+            .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+            .fixedSize()
+            .help("Show every agent, model and folder for all time")
     }
 
     private var projectMenu: some View {
         Button {
             folderPickerOpen = true
         } label: {
-            Label(folderScopeLabel, systemImage: "folder")
-                .font(.system(size: UIScale.pt(11)))
-                .lineLimit(1)
-                .modifier(FilterChip(dark: dark))
+            PageChipLabel(folderScopeLabel, icon: .folder, menu: true)
         }
-        .buttonStyle(.edith(.borderless)).fixedSize()
+        .buttonStyle(.pageChip(active: !model.selectedPaths.isEmpty)).fixedSize()
         .popover(isPresented: $folderPickerOpen, arrowEdge: .bottom) {
             FolderScopePicker(model: model, dark: dark) { folderPickerOpen = false }
         }
@@ -604,11 +412,10 @@ struct DashboardView: View {
         Button {
             sourcePickerOpen = true
         } label: {
-            Label(sourceSummary, systemImage: "square.stack.3d.up")
-                .font(.system(size: UIScale.pt(11)))
-                .modifier(FilterChip(dark: dark))
+            PageChipLabel(sourceSummary, icon: .layers, menu: true)
         }
-        .buttonStyle(.edith(.borderless)).fixedSize()
+        .buttonStyle(.pageChip(active: model.selectedSources.count != model.allSources.count))
+        .fixedSize()
         .popover(isPresented: $sourcePickerOpen, arrowEdge: .bottom) {
             FilterMultiSelect(
                 options: model.allSources.map { FilterSelectOption(id: $0.id, label: $0.label) },
@@ -618,11 +425,11 @@ struct DashboardView: View {
     }
 
     private var sourceSummary: String {
-        if model.selectedSources.count == model.allSources.count { return "All sources" }
+        if model.selectedSources.count == model.allSources.count { return "All agents" }
         if model.selectedSources.count == 1, let id = model.selectedSources.first {
             return model.sourceLabel(id)
         }
-        return "\(model.selectedSources.count) sources"
+        return "\(model.selectedSources.count) agents"
     }
 
     private var machineMenu: some View {
@@ -631,14 +438,17 @@ struct DashboardView: View {
             Button {
                 machinePickerOpen = true
             } label: {
-                Label(
+                PageChipLabel(
                     machineSummary(now: timeline.date),
-                    systemImage: stale.isEmpty ? "server.rack" : "exclamationmark.triangle.fill"
-                )
-                .font(.system(size: UIScale.pt(11)))
-                .modifier(FilterChip(dark: dark))
+                    icon: stale.isEmpty ? .server : .warning,
+                    menu: true)
             }
-            .buttonStyle(.edith(.borderless)).fixedSize()
+            .buttonStyle(
+                .pageChip(
+                    active: !stale.isEmpty || !allMachinesShown,
+                    tint: stale.isEmpty ? nil : .orange)
+            )
+            .fixedSize()
         }
         .popover(isPresented: $machinePickerOpen, arrowEdge: .bottom) {
             UsageMachinesPicker(model: model, dark: dark) { machinePickerOpen = false }
@@ -661,6 +471,10 @@ struct DashboardView: View {
         return "\(shown.count) of \(groups.count) machines"
     }
 
+    private var allMachinesShown: Bool {
+        model.machineGroups.allSatisfy { model.machineIsShown($0) }
+    }
+
     private func selectedStaleMachines(now: Date) -> [(
         group: MachineGroup, freshness: MachineUsageFreshness
     )] {
@@ -676,11 +490,10 @@ struct DashboardView: View {
         Button {
             modelPickerOpen = true
         } label: {
-            Label("\(model.selectedModels.count) models", systemImage: "cpu")
-                .font(.system(size: UIScale.pt(11)))
-                .modifier(FilterChip(dark: dark))
+            PageChipLabel(modelSummary, icon: .cpu, menu: true)
         }
-        .buttonStyle(.edith(.borderless)).fixedSize()
+        .buttonStyle(.pageChip(active: model.selectedModels.count != model.allModels.count))
+        .fixedSize()
         .popover(isPresented: $modelPickerOpen, arrowEdge: .bottom) {
             FilterMultiSelect(
                 options: model.allModels.map {
@@ -691,12 +504,19 @@ struct DashboardView: View {
         }
     }
 
+    private var modelSummary: String {
+        let count = model.selectedModels.count
+        if count == model.allModels.count { return "All models" }
+        if count == 1, let only = model.selectedModels.first { return DashFmt.shortModel(only) }
+        return "\(count) models"
+    }
+
     private var logView: some View {
         TerminalLogView(log: refresh.log, theme: appTheme, height: UIScale.pt(150))
     }
 
     private func charts(compact: Bool) -> some View {
-        LazyVStack(spacing: UIScale.pt(16)) {
+        LazyVStack(spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             LazyChartCard(title: "Daily usage", dark: dark) {
                 ComboChart(
                     points: model.chartData.daily, barColor: acc, lineColor: gold, dark: dark,
@@ -723,12 +543,12 @@ struct DashboardView: View {
                 }
             }
             if compact {
-                VStack(spacing: UIScale.pt(16)) {
+                VStack(spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                     dowCard
                     shareByModelCard
                 }
             } else {
-                HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                     dowCard
                     shareByModelCard
                 }
@@ -748,7 +568,7 @@ struct DashboardView: View {
                         }
                         if !pathUnattributedText.isEmpty {
                             Text(pathUnattributedText)
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                                 .presenterBlur(blurMoney || blurUsage)
                         }
@@ -762,7 +582,7 @@ struct DashboardView: View {
                         height: UIScale.pt(200), blur: blurMoney, blurTokens: blurUsage)
                     if !hourlyUnattributedText.isEmpty {
                         Text(hourlyUnattributedText)
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                             .presenterBlur(blurMoney || blurUsage)
                     }
@@ -776,7 +596,7 @@ struct DashboardView: View {
                         Text(
                             "Unattributed provider cost of \(DashFmt.usd(model.modelUnfilterableCost)) is excluded because it spans selected and unselected models."
                         )
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .presenterBlur(blurMoney)
                     }
@@ -848,7 +668,7 @@ struct DashboardView: View {
                     tableHeader("Days", .days, width: UIScale.pt(44))
                 }
             }
-            .font(DashSkin.mono(10, weight: .semibold)).foregroundStyle(DashSkin.inkFaint(dark))
+            .pageCapsStyle()
             .padding(.vertical, UIScale.pt(4))
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             if model.modelTotals.count > DashboardChartLayout.visibleModelRows {
@@ -875,21 +695,21 @@ struct DashboardView: View {
                 Circle().fill(model.modelColor(m.model, dark: dark)).frame(
                     width: UIScale.pt(8), height: UIScale.pt(8))
                 Text(model.modelLabel(m.model))
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.ink(dark))
+                    .font(.edithText(.callout)).foregroundStyle(DashSkin.ink(dark))
                     .frame(maxWidth: .infinity, alignment: .leading).lineLimit(1)
-                Text(DashFmt.usd(m.cost)).font(DashSkin.mono(11)).frame(
+                Text(DashFmt.usd(m.cost)).font(.edithText(.callout).monospacedDigit()).frame(
                     width: UIScale.pt(70), alignment: .trailing
                 ).presenterBlur(blurMoney)
                 if !compactLayout {
-                    Text(DashFmt.pct(m.share)).font(DashSkin.mono(11)).frame(
+                    Text(DashFmt.pct(m.share)).font(.edithText(.callout).monospacedDigit()).frame(
                         width: UIScale.pt(60), alignment: .trailing
                     ).foregroundStyle(DashSkin.inkSoft(dark))
                 }
-                Text(DashFmt.tokens(m.tokens)).font(DashSkin.mono(11)).frame(
+                Text(DashFmt.tokens(m.tokens)).font(.edithText(.callout).monospacedDigit()).frame(
                     width: UIScale.pt(70), alignment: .trailing
                 ).presenterBlur(blurUsage)
                 if !compactLayout {
-                    Text("\(m.days)").font(DashSkin.mono(11)).frame(
+                    Text("\(m.days)").font(.edithText(.callout).monospacedDigit()).frame(
                         width: UIScale.pt(44), alignment: .trailing
                     )
                     .foregroundStyle(DashSkin.inkSoft(dark))
@@ -913,8 +733,8 @@ struct DashboardView: View {
             HStack(spacing: UIScale.pt(2)) {
                 Text(title)
                 if model.sortColumn == col {
-                    Image(systemName: model.sortAscending ? "chevron.up" : "chevron.down")
-                        .font(.system(size: UIScale.pt(7)))
+                    EdithIconView(model.sortAscending ? .chevronUp : .chevronDown)
+                        .font(.system(size: UIScale.pt(8), weight: .semibold))
                 }
             }
             .frame(width: width, alignment: width == nil ? .leading : .trailing)
@@ -958,23 +778,6 @@ struct DashboardView: View {
     }
 }
 
-private struct FilterChip: ViewModifier {
-    let dark: Bool
-    var active = false
-
-    func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, UIScale.pt(10))
-            .padding(.vertical, UIScale.pt(5))
-            .widgetBar(
-                cornerRadius: 8,
-                fill: active
-                    ? AnyShapeStyle(DashSkin.accent(dark).opacity(0.13))
-                    : AnyShapeStyle(DashSkin.paper2(dark)),
-                stroke: active ? DashSkin.accent(dark).opacity(0.55) : DashSkin.lineStrong(dark))
-    }
-}
-
 struct ActivityHeatmap: View {
     let days: [DayPoint]
     let scale: UsageCalendarScale
@@ -983,16 +786,23 @@ struct ActivityHeatmap: View {
     var blur = false
     var blurTokens = false
     var body: some View {
-        let weeks = scale.weeks(days: days)
-        ActivityCalendarGrid(weeks: weeks, dark: dark) { day in
+        ActivityCalendarGrid(
+            weeks: scale.weeks(days: days), dark: dark, fillsWidth: true
+        ) { day in
             if let detail = model.heatDetail[day.id] {
                 HeatCard(
                     detail: detail, model: model, dark: dark, blur: blur, blurTokens: blurTokens)
             } else {
                 Text("No usage on this day.")
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .padding(UIScale.pt(12))
             }
         }
+    }
+}
+
+extension View {
+    @ViewBuilder fileprivate func fillingPage(_ fills: Bool) -> some View {
+        if fills { pageFillViewport() } else { self }
     }
 }

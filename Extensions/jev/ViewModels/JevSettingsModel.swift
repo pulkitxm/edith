@@ -21,6 +21,14 @@ final class JevSettingsModel {
     private var generation = 0
     private var stopped = false
 
+    init(
+        read: @escaping (Bool) async throws -> JevStatus,
+        write: @escaping (String?) async throws -> JevStatus
+    ) {
+        self.read = read
+        self.write = write
+    }
+
     init(engine: JevEngine) {
         read = { await engine.status(probe: $0) }
         write = {

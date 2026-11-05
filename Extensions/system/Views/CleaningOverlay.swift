@@ -30,12 +30,15 @@ struct CleaningOverlayView: View {
         ZStack {
             Color.black.opacity(0.6).ignoresSafeArea()
             VStack(spacing: 18) {
-                Image(systemName: "keyboard.fill").font(.system(size: 52))
+                EdithIconView(.keyboard).font(.system(size: 52))
+                    .foregroundStyle(themeColor(themeName))
                 if store.phase == .cleaning {
-                    Text("Keyboard is off - clean away").font(.edithText(.title))
-                    Text("Auto-restores in \(store.failsafeRemaining)s")
-                        .font(.edithText(.callout)).foregroundStyle(.white.opacity(0.7))
-                        .monospacedDigit()
+                    Text("Keyboard locked. Wipe it clean.").font(.edithText(.title))
+                    Text(
+                        "Unlocks automatically in \(store.failsafeRemaining)s, or click Done cleaning."
+                    )
+                    .font(.edithText(.callout)).foregroundStyle(.white.opacity(0.7))
+                    .monospacedDigit()
                     Button("Done cleaning") { store.stopCleaning() }
                         .buttonStyle(.edith(.primary)).tint(themeColor(themeName)).controlSize(
                             .large)

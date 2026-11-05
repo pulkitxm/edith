@@ -1,3 +1,4 @@
+import EdithIcons
 import AppKit
 import EdithExtensionCore
 import SwiftUI
@@ -48,7 +49,7 @@ public struct ExportCardButton: View {
     }
 
     public var body: some View {
-        Button(action: action) { Label("Share", systemImage: "square.and.arrow.up") }
+        Button(action: action) { Label("Share", edith: .share) }
             .buttonStyle(.edith(.secondary))
             .disabled(!isEnabled)
             .keyboardShortcut("e", modifiers: .command)
@@ -70,7 +71,6 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
     @State private var index = 0
     @State private var direction = 1
     @State private var copied = false
-    @State private var copyCount = 0
     @State private var previews: [Deck.Card: NSImage] = [:]
     @State private var previewErrors: [Deck.Card: String] = [:]
     @State private var previewAttempt = 0
@@ -86,7 +86,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
             HStack {
                 Text(title).font(ExportCardStyle.heading(18))
                 Spacer()
-                Button(action: onDismiss) { Image(systemName: "xmark") }
+                Button(action: onDismiss) { EdithIconView(.close) }
                     .buttonStyle(.edith(.iconOnly))
                     .disabled(busy)
                     .accessibilityLabel("Close export")
@@ -98,14 +98,14 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             HStack(spacing: UIScale.pt(12)) {
-                arrow("chevron.left", shortcut: .leftArrow, movement: -1)
+                arrow(.chevronLeft, shortcut: .leftArrow, movement: -1)
                 Text(deck.title(for: card))
                     .font(ExportCardStyle.heading(14))
                     .lineLimit(1)
                 Text("\(index + 1) / \(deck.cards.count)")
                     .font(ExportCardStyle.mono(11))
                     .foregroundStyle(ExportCardStyle.inkSoft(dark, theme: theme))
-                arrow("chevron.right", shortcut: .rightArrow, movement: 1)
+                arrow(.chevronRight, shortcut: .rightArrow, movement: 1)
             }
             pagination
             HStack(spacing: UIScale.pt(12)) {
@@ -114,11 +114,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                 } label: {
                     HStack(spacing: UIScale.pt(6)) {
                         Text(copied ? "Copied!" : "Copy image")
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                            .symbolEffect(
-                                .bounce, options: .nonRepeating, value: reduceMotion ? 0 : copyCount
-                            )
+                        EdithIconView(copied ? .check : .copy)
                     }
                 }
                 .buttonStyle(.edith(.primary))
@@ -127,7 +123,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                 Button {
                     deliver(save: true)
                 } label: {
-                    Label("Save PNG", systemImage: "arrow.down.to.line")
+                    Label("Save PNG", edith: .arrowDown)
                 }
                 .buttonStyle(.edith(.secondary))
                 .keyboardShortcut("s", modifiers: .command)
@@ -139,7 +135,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                 if let status {
                     Label(
                         status.message,
-                        systemImage: status.failed ? "exclamationmark.triangle" : "checkmark.circle"
+                        edith: status.failed ? .warning : .success
                     )
                     .foregroundStyle(
                         status.failed
@@ -221,11 +217,11 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
             })
     }
 
-    private func arrow(_ symbol: String, shortcut: KeyEquivalent, movement: Int) -> some View {
+    private func arrow(_ icon: EdithIcon, shortcut: KeyEquivalent, movement: Int) -> some View {
         Button {
             move(movement)
         } label: {
-            Image(systemName: symbol)
+            EdithIconView(icon)
         }
         .buttonStyle(.edith(.iconOnly))
         .keyboardShortcut(shortcut, modifiers: [])
@@ -309,7 +305,6 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
             if result.copied {
                 withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
                     copied = true
-                    copyCount += 1
                 }
             }
             showStatus(result.status)

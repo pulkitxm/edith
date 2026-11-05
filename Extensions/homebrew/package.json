@@ -1,7 +1,7 @@
 {
   "id": "homebrew",
   "title": "Homebrew",
-  "symbolName": "cube.box",
+  "icon": "box",
   "category": "utilities",
   "background": false,
   "commands": [
@@ -12,7 +12,7 @@
       "page": "appMaintenance",
       "id": "Packages",
       "title": "Packages",
-      "symbolName": "shippingbox",
+      "icon": "box",
       "summary": "Manage installed and discoverable Homebrew packages.",
       "order": 2
     }
@@ -23,5 +23,32 @@
   "notchCards": [
     "extension:homebrew"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Install, update and remove Homebrew packages without the terminal.",
+    "summary": "Browse the command line tools (formulae) and Mac apps (casks) Homebrew offers, see what you have installed, and update or uninstall them in one click. Edith needs Homebrew already installed on this Mac.",
+    "steps": [
+      {
+        "icon": "list",
+        "title": "See what is installed",
+        "detail": "Switch between Formulae and Casks. Updates show up as soon as they exist."
+      },
+      {
+        "icon": "search",
+        "title": "Discover packages",
+        "detail": "Search by name, look at a package, then install it."
+      },
+      {
+        "icon": "arrowUp",
+        "title": "Upgrade or uninstall",
+        "detail": "Use the buttons beside a package. Uninstalling asks you to confirm first."
+      }
+    ],
+    "examples": [
+      "ed brew ls",
+      "ed brew ls --outdated",
+      "ed brew search ripgrep",
+      "ed brew install ripgrep"
+    ]
+  }
 }

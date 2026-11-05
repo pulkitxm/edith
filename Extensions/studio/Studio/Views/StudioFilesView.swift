@@ -10,39 +10,31 @@ struct StudioFilesView: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var columns: [GridItem] {
-        PageMetrics.cardColumns(compact, minimum: 222, spacing: 14)
-    }
-
     var body: some View {
         if model.files.isEmpty {
             ScrollView {
                 StudioDropHero(model: model)
-                    .pageContent(compact, width: .readable)
+                    .pageContent(compact)
             }
             .scrollIndicators(.never)
         } else {
             VStack(spacing: 0) {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
                         StudioFileFilters(model: model)
                         if model.visibleFiles.isEmpty {
                             ContentUnavailableView {
                                 Label(
                                     "No files match this filter",
-                                    systemImage: "line.3.horizontal.decrease.circle")
+                                    edith: .filter)
                             } description: {
                                 Text("Choose another file type or show all files.")
                             } actions: {
                                 Button("Show all files") { model.kindFilter = nil }
                             }
                         } else {
-                            LazyVGrid(
-                                columns: columns, alignment: .leading, spacing: UIScale.pt(14)
-                            ) {
-                                ForEach(model.visibleFiles) { item in
-                                    StudioFileCard(model: model, item: item)
-                                }
+                            StudioTileGrid(items: model.visibleFiles) { item in
+                                StudioFileCard(model: model, item: item)
                             }
                         }
                     }
@@ -69,6 +61,18 @@ struct StudioDropHero: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private static let steps = [
+        PageGuideStep(
+            icon: .addFilled, title: "Add files",
+            detail: "Drop them here, choose them, paste, or scan with your iPhone."),
+        PageGuideStep(
+            icon: .adjust, title: "Pick a tool",
+            detail: "Select files and choose a tool, or start from a popular one below."),
+        PageGuideStep(
+            icon: .success, title: "Get the result",
+            detail: "Results are listed under Projects, ready to open or show in Finder."),
+    ]
+
     private let popular = [
         "pdf.merge", "pdf.compress", "pdf.edit", "pdf.sign", "image.compress",
         "image.remove-background", "image.convert", "video.compress", "video.to-gif",
@@ -76,21 +80,21 @@ struct StudioDropHero: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(22)) {
-            VStack(spacing: UIScale.pt(14)) {
-                Image(systemName: "square.and.arrow.down.on.square")
-                    .font(.system(size: UIScale.pt(40), weight: .ultraLight))
-                    .foregroundStyle(DashSkin.accent(scheme == .dark))
-                Text("Drop files here to start")
-                    .font(.system(size: UIScale.pt(20), weight: .semibold))
+        VStack(alignment: .leading, spacing: UIScale.pt(32)) {
+            VStack(spacing: UIScale.pt(16)) {
+                PageGuideBadge(icon: .saveTo)
+                Text("Drop a file here to get started")
+                    .font(.edithText(.title2)).fontWeight(.semibold)
                     .multilineTextAlignment(.center)
                 Text(
-                    "Images, PDFs, videos, audio and documents. Edit, compress, convert, merge, split and more, all on this Mac."
+                    "Studio edits, compresses, converts, merges and splits images, PDFs, videos, audio and documents. Everything runs on this Mac, nothing is uploaded."
                 )
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.body))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: UIScale.pt(440))
+                .frame(maxWidth: UIScale.pt(compact ? 460 : 540))
+                PageGuideSteps(steps: Self.steps, columns: compact ? 1 : 3)
+                    .frame(maxWidth: UIScale.pt(compact ? 460 : 700))
                 let actions =
                     compact
                     ? AnyLayout(VStackLayout(spacing: UIScale.pt(8)))
@@ -99,47 +103,43 @@ struct StudioDropHero: View {
                     Button {
                         model.chooseFiles()
                     } label: {
-                        Label("Choose files", systemImage: "plus")
+                        Label("Choose files", edith: .plus)
                     }
                     .buttonStyle(.edith(.primary))
                     Button {
                         model.paste()
                     } label: {
-                        Label("Paste", systemImage: "doc.on.clipboard")
+                        Label("Paste", edith: .clipboard)
                     }
                     .buttonStyle(.edith(.secondary))
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, UIScale.pt(12))
-            .padding(.vertical, UIScale.pt(40))
+            .padding(.horizontal, UIScale.pt(16))
+            .padding(.vertical, UIScale.pt(32))
             .background(
-                DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(18))
+                DashSkin.paper2(scheme == .dark),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(18))
+                RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius))
                     .strokeBorder(
                         DashSkin.lineStrong(scheme == .dark),
                         style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])))
-            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                Text("POPULAR TOOLS")
-                    .font(DashSkin.mono(10, weight: .semibold))
-                    .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
-                LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 10),
-                    spacing: UIScale.pt(10)
-                ) {
-                    ForEach(popular, id: \.self) { id in
-                        if let tool = StudioCatalog.tool(id) {
-                            StudioToolRow(tool: tool, environment: model.environment) {
-                                model.open(tool, with: [])
-                            }
-                        }
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                PageSectionHeader(
+                    "Popular tools",
+                    subtitle: "Pick one to start, then add the files it should work on.")
+                StudioTileGrid(
+                    items: popular.compactMap(StudioCatalog.tool),
+                    maximumColumns: compact ? 1 : .max
+                ) { tool in
+                    StudioToolRow(tool: tool, environment: model.environment) {
+                        model.open(tool, with: [])
                     }
                 }
             }
         }
-        .padding(.top, UIScale.pt(6))
     }
 }
 
@@ -147,29 +147,32 @@ struct StudioFileFilters: View {
     let model: StudioModel
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(6)) {
-                StudioChip(
-                    title: "All", count: model.files.count, selected: model.kindFilter == nil
-                ) {
-                    model.kindFilter = nil
-                }
-                ForEach(model.kindsPresent, id: \.self) { kind in
-                    StudioChip(
-                        title: kind.pluralTitle,
-                        count: StudioLibraryQuery.kindCount(model.files, kind),
-                        selected: model.kindFilter == kind
-                    ) {
-                        model.kindFilter = model.kindFilter == kind ? nil : kind
+        HStack(spacing: UIScale.pt(8)) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UIScale.pt(8)) {
+                    PageChip("All \(model.files.count)", active: model.kindFilter == nil) {
+                        model.kindFilter = nil
+                    }
+                    .accessibilityAddTraits(model.kindFilter == nil ? .isSelected : [])
+                    ForEach(model.kindsPresent, id: \.self) { kind in
+                        PageChip(
+                            "\(kind.pluralTitle) \(StudioLibraryQuery.kindCount(model.files, kind))",
+                            active: model.kindFilter == kind
+                        ) {
+                            model.kindFilter = model.kindFilter == kind ? nil : kind
+                        }
+                        .accessibilityAddTraits(model.kindFilter == kind ? .isSelected : [])
                     }
                 }
-                Spacer(minLength: UIScale.pt(8))
-                Button("Select all") { model.selectAll() }
-                    .buttonStyle(.edith(.toolbar))
-                    .keyboardShortcut("a", modifiers: .command)
-                    .foregroundStyle(.secondary)
+                .fixedSize(horizontal: true, vertical: false)
             }
-            .fixedSize(horizontal: true, vertical: false)
+            Button("Select all") { model.selectAll() }
+                .buttonStyle(.edith(.toolbar))
+                .font(.edithText(.callout))
+                .keyboardShortcut("a", modifiers: .command)
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .padding(.trailing, -UIScale.pt(StudioLayoutMetrics.toolbarInset))
         }
     }
 }
@@ -205,7 +208,7 @@ struct StudioFileCard: View {
                     Button {
                         model.toggleSelection(item.url)
                     } label: {
-                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        EdithIconView(selected ? .success : .ring)
                             .font(.system(size: UIScale.pt(16)))
                             .foregroundStyle(
                                 selected ? DashSkin.accent(scheme == .dark) : Color.secondary
@@ -222,12 +225,12 @@ struct StudioFileCard: View {
             }
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(item.name)
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(privacy?.hides(.ability("studio")) == true ? "File" : item.url.path)
                 Text(StudioFileActions.describe(facts, kind: item.kind))
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -246,6 +249,7 @@ struct StudioFileCard: View {
             .disabled(missing)
         }
         .padding(UIScale.pt(10))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14))
         )
@@ -276,10 +280,12 @@ struct StudioQuickButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .lineLimit(1)
                 .fixedSize()
-                .foregroundStyle(primary ? Color.white : DashSkin.ink(scheme == .dark))
+                .foregroundStyle(
+                    primary ? DashSkin.onAccent(scheme == .dark) : DashSkin.ink(scheme == .dark)
+                )
                 .padding(.vertical, UIScale.pt(5))
                 .padding(.horizontal, UIScale.pt(8))
                 .background(
@@ -301,10 +307,9 @@ struct StudioFileMenu: View {
         Menu {
             StudioFileMenuItems(model: model, item: item)
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+            EdithIcon.more.image(size: 12)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .padding(.horizontal, UIScale.pt(6))
@@ -335,26 +340,44 @@ struct StudioFileMenuItems: View {
 
 struct StudioSelectionBar: View {
     let model: StudioModel
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         let urls = model.selectedURLs
         let suggestions = StudioCatalog.ranked(StudioToolGrouping.suggestions(for: urls))
-        HStack(spacing: UIScale.pt(10)) {
+        ViewThatFits(in: .horizontal) {
+            bar(urls: urls, suggestions: suggestions, shown: 4, labelled: true)
+            bar(urls: urls, suggestions: suggestions, shown: 2, labelled: true)
+            bar(urls: urls, suggestions: suggestions, shown: 1, labelled: false)
+            bar(urls: urls, suggestions: suggestions, shown: 0, labelled: false)
+        }
+        .pageGutter(compact)
+        .padding(.vertical, UIScale.pt(10))
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private func bar(
+        urls: [URL], suggestions: [StudioTool], shown: Int, labelled: Bool
+    ) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
             Text("\(urls.count) selected")
-                .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
+                .fixedSize()
             Divider().frame(height: UIScale.pt(18))
-            ForEach(suggestions.prefix(4)) { tool in
+            ForEach(suggestions.prefix(shown)) { tool in
                 Button {
                     model.open(tool, with: urls)
                 } label: {
-                    Label(tool.actionTitle, systemImage: tool.symbolName)
-                        .font(.system(size: UIScale.pt(12)))
+                    Label(tool.actionTitle, edith: tool.icon)
+                        .lineLimit(1)
                 }
                 .buttonStyle(.edith(.secondary))
+                .fixedSize()
             }
-            if suggestions.count > 4 {
-                Menu("More") {
+            if suggestions.count > shown {
+                Menu(shown == 0 ? "Tools" : "More") {
                     ForEach(StudioToolGrouping.byGroup(suggestions), id: \.group) { entry in
                         Section(entry.group.title) {
                             ForEach(entry.tools) { tool in
@@ -363,27 +386,46 @@ struct StudioSelectionBar: View {
                         }
                     }
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .fixedSize()
             }
             Spacer(minLength: UIScale.pt(8))
-            Button("Show in Finder") { StudioFileActions.reveal(urls, facade: model.facade) }
-                .buttonStyle(.edith(.toolbar))
-            Button("Remove") { model.remove(Set(urls)) }
-                .buttonStyle(.edith(.toolbar))
-                .keyboardShortcut(.delete, modifiers: .command)
+            Button {
+                StudioFileActions.reveal(urls, facade: model.facade)
+            } label: {
+                if labelled {
+                    Text("Show in Finder")
+                } else {
+                    EdithIconView(.folder)
+                }
+            }
+            .buttonStyle(.edith(labelled ? .toolbar : .iconOnly))
+            .help("Show in Finder")
+            .fixedSize()
+            Button {
+                model.remove(Set(urls))
+            } label: {
+                if labelled {
+                    Text("Remove")
+                } else {
+                    EdithIconView(.removeFilled)
+                }
+            }
+            .buttonStyle(.edith(labelled ? .toolbar : .iconOnly))
+            .keyboardShortcut(.delete, modifiers: .command)
+            .help("Remove from Studio. Files stay on your Mac.")
+            .fixedSize()
             Button {
                 model.selection.removeAll()
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
             }
             .buttonStyle(.edith(.iconOnly))
             .help("Clear selection")
+            .accessibilityLabel("Clear selection")
+            .padding(.trailing, -UIScale.pt(StudioLayoutMetrics.toolbarInset))
         }
-        .padding(.horizontal, UIScale.pt(18))
-        .padding(.vertical, UIScale.pt(10))
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
+        .font(.edithText(.callout))
     }
 }
 

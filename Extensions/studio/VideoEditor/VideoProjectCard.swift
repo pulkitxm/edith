@@ -54,7 +54,7 @@ struct VideoProjectCard: View {
                                 .resizable()
                                 .scaledToFill()
                         } else {
-                            Image(systemName: "film")
+                            EdithIconView(.film)
                                 .font(.system(size: UIScale.pt(26), weight: .light))
                                 .foregroundStyle(.white.opacity(0.35))
                         }

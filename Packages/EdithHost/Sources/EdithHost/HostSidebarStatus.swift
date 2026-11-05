@@ -46,7 +46,7 @@ struct HostSidebarGlyph: View {
             if let name = page.logoName, let image = HostSidebarLogo.image(named: name) {
                 Image(nsImage: image).resizable().renderingMode(.template).scaledToFit()
             } else {
-                Image(systemName: page.symbol).font(.system(size: size, weight: weight))
+                EdithIconView(page.icon).font(.system(size: size, weight: weight))
             }
         }
         .frame(width: size, height: size)

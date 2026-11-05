@@ -183,7 +183,7 @@ struct CompanionDeskScreen: View {
             PageLoading(
                 state: model.loading.state,
                 message: model.loading.errorMessage
-                    ?? "The companion desk could not be loaded.",
+                    ?? "The desk could not be loaded.",
                 layout: .cards, refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.refresh() } }
             ) {
@@ -217,7 +217,7 @@ struct CompanionDeskScreen: View {
                         .font(DashSkin.heading(16, weight: .medium))
                         .foregroundStyle(DashSkin.ink(dark))
                     Text(question.motive)
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     AnswerField(placeholder: "your answer", text: $model.draft) {
                         Task { await model.answer() }
@@ -240,7 +240,7 @@ struct CompanionDeskScreen: View {
                     }
                 } else if let resolution = model.lastResolution {
                     Text(resolution)
-                        .font(.system(size: UIScale.pt(13)))
+                        .font(.edithText(.body))
                         .foregroundStyle(DashSkin.ink(dark))
                     CompanionButton(title: "Anything else?", disabled: model.busy) {
                         Task { await model.askNext() }
@@ -251,14 +251,14 @@ struct CompanionDeskScreen: View {
                             ? "That is all it will ask today."
                             : "Nothing pressing. It keeps to \(model.budget.total) a day."
                     )
-                    .font(.system(size: UIScale.pt(12.5)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     CompanionButton(title: "What do you want to know?", disabled: model.busy) {
                         Task { await model.askNext() }
                     }
                 }
                 Text("\(model.budget.asked) of \(model.budget.total) asked today")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -273,22 +273,22 @@ struct CompanionDeskScreen: View {
                     ForEach(model.beliefs.prefix(6), id: \.id) { belief in
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(belief.statement)
-                                .font(.system(size: UIScale.pt(12.5)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                                 .lineLimit(2)
                             Text("\(Int(belief.confidence * 100))% confident")
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                     }
                     ForEach(model.hypotheses.prefix(3), id: \.id) { hypothesis in
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(hypothesis.statement)
-                                .font(.system(size: UIScale.pt(12.5)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                                 .lineLimit(2)
                             Text("theory, \(hypothesis.status), because \(hypothesis.mechanism)")
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(2)
                         }
@@ -307,7 +307,7 @@ struct CompanionDeskScreen: View {
                     ForEach(model.resolvedPredictions.prefix(6), id: \.id) { prediction in
                         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
                             Text(prediction.statement)
-                                .font(.system(size: UIScale.pt(12.5)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                                 .lineLimit(2)
                             Spacer(minLength: 0)
@@ -331,11 +331,11 @@ struct CompanionDeskScreen: View {
                         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                 Text(discrepancy.claim)
-                                    .font(.system(size: UIScale.pt(12.5)))
+                                    .font(.edithText(.callout))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(2)
                                 Text(discrepancy.kind.replacingOccurrences(of: "_", with: " "))
-                                    .font(.system(size: UIScale.pt(11)))
+                                    .font(.edithText(.subheadline))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                             }
                             Spacer(minLength: 0)
@@ -344,7 +344,7 @@ struct CompanionDeskScreen: View {
                                 overrideTarget = discrepancy
                             }
                             .buttonStyle(.edith(.borderless))
-                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                            .font(.edithText(.subheadline).weight(.medium))
                             .foregroundStyle(DashSkin.accent(dark))
                         }
                     }
@@ -359,7 +359,7 @@ struct CompanionDeskScreen: View {
                 .font(DashSkin.heading(16, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text(discrepancy.claim)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             AnswerField(placeholder: "was pairing, not in git", text: $overrideNote) {
                 Task {
@@ -386,7 +386,7 @@ struct CompanionDeskScreen: View {
 
     private func emptyText(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: UIScale.pt(12)))
+            .font(.edithText(.callout))
             .foregroundStyle(DashSkin.inkFaint(dark))
     }
 }

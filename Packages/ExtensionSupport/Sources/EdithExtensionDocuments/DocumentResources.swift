@@ -3,9 +3,22 @@ import Foundation
 private final class DocumentResourceMarker: NSObject {}
 
 enum DocumentResources {
+    private static let highlightName = "highlight.min.js"
+    private static let highlightExtension = "lzma"
+
+    static func highlightScript(in bundle: Bundle) throws -> String? {
+        guard let url = bundle.url(forResource: highlightName, withExtension: highlightExtension)
+        else { return nil }
+        let compressed = try Data(contentsOf: url)
+        let script = try (compressed as NSData).decompressed(using: .lzma) as Data
+        return String(data: script, encoding: .utf8)
+    }
+
     static var bundle: Bundle? {
         let marker = Bundle(for: DocumentResourceMarker.self)
-        if marker.url(forResource: "highlight.min", withExtension: "js") != nil { return marker }
+        if marker.url(forResource: highlightName, withExtension: highlightExtension) != nil {
+            return marker
+        }
         let loaded = Bundle.allBundles + Bundle.allFrameworks
         let directories =
             [
@@ -18,7 +31,9 @@ enum DocumentResources {
             + loaded.flatMap { [$0.bundleURL, $0.bundleURL.deletingLastPathComponent()] }
         for directory in directories {
             if FileManager.default.fileExists(
-                atPath: directory.appendingPathComponent("highlight.min.js").path),
+                atPath: directory.appendingPathComponent(
+                    "\(highlightName).\(highlightExtension)"
+                ).path),
                 let bundle = Bundle(url: directory)
             {
                 return bundle
@@ -31,7 +46,8 @@ enum DocumentResources {
                 && child.pathExtension == "bundle"
             {
                 if let bundle = Bundle(url: child),
-                    bundle.url(forResource: "highlight.min", withExtension: "js") != nil
+                    bundle.url(forResource: highlightName, withExtension: highlightExtension)
+                        != nil
                 {
                     return bundle
                 }

@@ -1,5 +1,7 @@
 import EdithExtensionSupport
+import EdithIcons
 import Foundation
+import os
 import ExtensionMarketplace
 
 public enum HostContract {
@@ -67,18 +69,18 @@ public struct HostLaunchCondition: Codable, Hashable, Sendable {
 public struct HostPage: Codable, Hashable, Sendable, Identifiable {
     public let id: String
     public let title: String
-    public let symbolName: String
+    public let icon: EdithIcon
     public let order: Int
     public let detachable: Bool
     public let logoName: String?
 
     public init(
-        id: String, title: String, symbolName: String, order: Int, detachable: Bool = true,
+        id: String, title: String, icon: EdithIcon, order: Int, detachable: Bool = true,
         logoName: String? = nil
     ) {
         self.id = id
         self.title = title
-        self.symbolName = symbolName
+        self.icon = icon
         self.order = order
         self.detachable = detachable
         self.logoName = logoName
@@ -89,26 +91,52 @@ public struct HostPageSection: Codable, Hashable, Sendable, Identifiable {
     public let page: String
     public let id: String
     public let title: String
-    public let symbolName: String
+    public let icon: EdithIcon
     public let summary: String
     public let order: Int
 
     public init(
-        page: String, id: String, title: String, symbolName: String, summary: String, order: Int
+        page: String, id: String, title: String, icon: EdithIcon, summary: String, order: Int
     ) {
         self.page = page
         self.id = id
         self.title = title
-        self.symbolName = symbolName
+        self.icon = icon
         self.summary = summary
         self.order = order
+    }
+}
+
+public struct HostGuideStep: Codable, Hashable, Sendable {
+    public let icon: EdithIcon
+    public let title: String
+    public let detail: String
+
+    public init(icon: EdithIcon, title: String, detail: String) {
+        self.icon = icon
+        self.title = title
+        self.detail = detail
+    }
+}
+
+public struct HostExtensionGuide: Codable, Hashable, Sendable {
+    public let tagline: String
+    public let summary: String
+    public let steps: [HostGuideStep]
+    public let examples: [String]
+
+    public init(tagline: String, summary: String, steps: [HostGuideStep], examples: [String] = []) {
+        self.tagline = tagline
+        self.summary = summary
+        self.steps = steps
+        self.examples = examples
     }
 }
 
 public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let id: String
     public let title: String
-    public let symbolName: String
+    public let icon: EdithIcon
     public let category: String
     public let background: Bool
     public let commands: [String]
@@ -119,17 +147,18 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let homeCards: [String]
     public let notchCards: [String]
     public let notchTabs: [String]
+    public let guide: HostExtensionGuide?
 
     public init(
-        id: String, title: String, symbolName: String, category: String,
+        id: String, title: String, icon: EdithIcon, category: String,
         background: Bool = true, commands: [String] = [], hotkeys: [HostHotKey] = [],
         launchWhen: [HostLaunchCondition] = [], pages: [HostPage] = [],
         sections: [HostPageSection] = [], homeCards: [String] = [],
-        notchCards: [String] = [], notchTabs: [String] = []
+        notchCards: [String] = [], notchTabs: [String] = [], guide: HostExtensionGuide? = nil
     ) {
         self.id = id
         self.title = title
-        self.symbolName = symbolName
+        self.icon = icon
         self.category = category
         self.background = background
         self.commands = commands
@@ -140,6 +169,7 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
         self.homeCards = homeCards
         self.notchCards = notchCards
         self.notchTabs = notchTabs
+        self.guide = guide
     }
 }
 
@@ -152,7 +182,7 @@ public enum HostIndex {
             entries.allSatisfy({
                 !$0.id.isEmpty && $0.id.utf8.count <= 80
                     && $0.id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }
-                    && !$0.title.isEmpty && !$0.symbolName.isEmpty && !$0.category.isEmpty
+                    && !$0.title.isEmpty && !$0.category.isEmpty
                     && validSurfaces($0)
             })
         else { throw CocoaError(.fileReadCorruptFile) }
@@ -188,8 +218,13 @@ public enum HostIndex {
             !["app", "appex"].contains(main.pathExtension)
                 && owner.pathExtension == "xctest" ? owner : main
         let url = try resourceURL(bundleURL: bundle, executableURL: executableURL)
-        return try load(data: Data(contentsOf: url))
+        if let cached = bundledCache.withLock({ $0[url] }) { return cached }
+        let entries = try load(data: Data(contentsOf: url))
+        bundledCache.withLock { $0[url] = entries }
+        return entries
     }
+
+    private static let bundledCache = OSAllocatedUnfairLock(initialState: [URL: [HostExtension]]())
 
     static func resourceURL(bundleURL: URL, executableURL: URL) throws -> URL {
         let resource: URL

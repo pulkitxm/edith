@@ -44,6 +44,7 @@ public enum ContentActivity: Equatable, Sendable {
 
 public enum ContentActivityTiming {
     public static let revealDelay = Duration.milliseconds(180)
+    public static let placeholderDelay = Duration.milliseconds(250)
 }
 
 public struct ContentActivityBadge: View {
@@ -77,6 +78,10 @@ public struct ContentActivityBadge: View {
     }
 }
 
+enum ContentStatusCopy {
+    static let errorTitle = "Couldn’t load content"
+}
+
 public struct LoadingContainer<Content: View, Placeholder: View>: View {
     public let state: ContentLoadingState
     public let title: String
@@ -85,6 +90,7 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
     public let cancel: (() -> Void)?
     public let refreshing: Bool
     public let updating: Bool
+    private let errorTitle: String?
     @State private var dimmed = false
     private let content: () -> Content
     private let placeholder: () -> Placeholder
@@ -93,7 +99,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
 
     public init(
         state: ContentLoadingState,
-        title: String = "No Content",
+        title: String? = nil,
+        errorTitle: String? = nil,
         message: String = "There is nothing to show yet.",
         retry: (() -> Void)? = nil,
         cancel: (() -> Void)? = nil,
@@ -103,7 +110,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.state = state
-        self.title = title
+        self.title = title ?? "No Content"
+        self.errorTitle = errorTitle ?? title
         self.message = message
         self.retry = retry
         self.cancel = cancel
@@ -121,12 +129,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
                     .saturation(dimmed ? 0.4 : 1)
                     .accessibilityValue(dimmed ? "Updating results" : "")
                     .overlay(alignment: .topTrailing) {
-                        if refreshing, !updating {
-                            LoadingIndicator("Refreshing")
-                                .padding(8)
-                                .background(DashSkin.panel, in: Capsule())
-                                .allowsHitTesting(false)
-                        }
+                        ContentActivityBadge(refreshing && !updating ? .refreshing : .idle)
+                            .padding(UIScale.pt(8))
                     }
             } else if state == .loading {
                 DeferredPlaceholder { SkeletonGroup { placeholder() } }
@@ -151,47 +155,68 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
 
     private var unavailable: some View {
         ContentStatusView(
-            unavailableTitle, message: message, symbol: unavailableSymbol,
+            unavailableTitle, message: message, icon: unavailableIcon,
             actionTitle: "Retry", action: state.permitsRetry ? retry : nil,
             secondaryTitle: "Cancel", secondaryAction: cancel)
     }
 
-    private var unavailableTitle: String {
+    var unavailableTitle: String {
         switch state {
-        case .offline: "Offline"
-        case .error: "Couldn’t Load Content"
-        case .cancelled: "Loading Cancelled"
+        case .offline: "You’re offline"
+        case .error: errorTitle ?? ContentStatusCopy.errorTitle
+        case .cancelled: "Loading cancelled"
         default: title
         }
     }
 
-    private var unavailableSymbol: String {
+    private var unavailableIcon: EdithIcon {
         switch state {
-        case .offline: "wifi.slash"
-        case .error: "exclamationmark.triangle"
-        case .cancelled: "xmark.circle"
-        default: "tray"
+        case .offline: .wifiOff
+        case .error: .warning
+        case .cancelled: .closeFilled
+        default: .tray
         }
+    }
+}
+
+extension LoadingContainer where Placeholder == PageSkeleton {
+    public init(
+        state: ContentLoadingState,
+        title: String? = nil,
+        errorTitle: String? = nil,
+        message: String = "There is nothing to show yet.",
+        layout: PageSkeletonLayout = .list,
+        retry: (() -> Void)? = nil,
+        cancel: (() -> Void)? = nil,
+        refreshing: Bool = false,
+        updating: Bool = false,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.init(
+            state: state, title: title, errorTitle: errorTitle, message: message, retry: retry,
+            cancel: cancel,
+            refreshing: refreshing, updating: updating, content: content,
+            placeholder: { PageSkeleton(layout: layout) })
     }
 }
 
 public struct ContentStatusView: View {
     public let title: String
     public let message: String
-    public let symbol: String
+    public let icon: EdithIcon
     public let actionTitle: String
     public let action: (() -> Void)?
     public let secondaryTitle: String
     public let secondaryAction: (() -> Void)?
 
     public init(
-        _ title: String, message: String, symbol: String = "tray",
+        _ title: String, message: String, icon: EdithIcon = .tray,
         actionTitle: String = "Retry", action: (() -> Void)? = nil,
         secondaryTitle: String = "Cancel", secondaryAction: (() -> Void)? = nil
     ) {
         self.title = title
         self.message = message
-        self.symbol = symbol
+        self.icon = icon
         self.actionTitle = actionTitle
         self.action = action
         self.secondaryTitle = secondaryTitle
@@ -199,32 +224,21 @@ public struct ContentStatusView: View {
     }
 
     public var body: some View {
-        VStack(spacing: UIScale.pt(12)) {
-            Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(32), weight: .light))
-                .foregroundStyle(.secondary)
-            Text(title).font(.edithText(.title2)).fontWeight(.semibold)
-            Text(message)
-                .font(.edithText(.body))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: UIScale.pt(8)) { actions }
-                VStack(spacing: UIScale.pt(8)) { actions }
-            }.fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(UIScale.pt(24))
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(220))
-        .accessibilityElement(children: .contain)
+        PageEmptyState(
+            icon: icon, title: title, message: message, tint: tint,
+            leading: secondaryAction.map { PageAction(secondaryTitle, perform: $0) },
+            trailing: action.map {
+                PageAction(actionTitle, icon: .refresh, perform: $0)
+            }
+        )
+        .frame(minHeight: UIScale.pt(260))
     }
 
-    @ViewBuilder private var actions: some View {
-        if let action {
-            Button(actionTitle, action: action).buttonStyle(.edith(.secondary))
-        }
-        if let secondaryAction {
-            Button(secondaryTitle, action: secondaryAction).buttonStyle(.edith(.borderless))
+    private var tint: Color? {
+        switch icon {
+        case .warning, .error: .orange
+        case .wifiOff, .closeFilled, .tray: .secondary
+        default: nil
         }
     }
 }
@@ -431,8 +445,7 @@ public struct SkeletonBlock: View {
     public var body: some View {
         RoundedRectangle(cornerRadius: UIScale.pt(corner))
             .fill(Color.primary.opacity(0.07))
-            .frame(maxWidth: scaledWidth)
-            .frame(height: UIScale.pt(height))
+            .frame(width: scaledWidth, height: UIScale.pt(height))
             .overlay {
                 LoadingShimmer()
                     .mask(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
@@ -454,7 +467,9 @@ private struct DeferredPlaceholder<Placeholder: View>: View {
             }
         }
         .task {
-            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            do { try await Task.sleep(for: ContentActivityTiming.placeholderDelay) } catch {
+                return
+            }
             shown = true
         }
     }

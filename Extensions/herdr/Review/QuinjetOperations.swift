@@ -1,6 +1,8 @@
+import AppKit
 import EdithExtensionUI
 import EdithExtensionSupport
 import Foundation
+import SwiftUI
 
 public enum QuinjetTerminal: String, CaseIterable, Identifiable, Sendable {
     case embedded
@@ -158,19 +160,58 @@ public struct QuinjetHostTheme: Equatable, Sendable {
         case .red: accents = (0xd70015, 0xff453a)
         case .orange: accents = (0xc93400, 0xff9f0a)
         }
+        let light = neutrals(appTheme, dark: false)
+        let dark = neutrals(appTheme, dark: true)
         return QuinjetHostTheme(
             light: QuinjetHostPalette(
-                background: 0xf7f3ec, panel: 0xfffdf8, panelAlt: 0xece5d8,
-                border: 0xd6cbb8, muted: 0x5c5247, text: 0x241f1a,
-                textStrong: 0x100f0d, contrast: 0x000000, removed: 0xc93c37,
+                background: light.background, panel: light.panel, panelAlt: light.panelAlt,
+                border: light.border, muted: light.muted, text: light.text,
+                textStrong: light.textStrong, contrast: 0x000000, removed: 0xc93c37,
                 orange: 0xc46b32, modified: 0x9a6700, added: 0x2f7d42, cyan: 0x1b7c83,
                 accent: accents.0, purple: 0x8250df, brown: 0x8f5e15),
             dark: QuinjetHostPalette(
-                background: 0x1a1714, panel: 0x221d19, panelAlt: 0x2b2620,
-                border: 0x5f5549, muted: 0xbcae9c, text: 0xf1e9dc,
-                textStrong: 0xfffdf8, contrast: 0xffffff, removed: 0xff6961,
+                background: dark.background, panel: dark.panel, panelAlt: dark.panelAlt,
+                border: dark.border, muted: dark.muted, text: dark.text,
+                textStrong: dark.textStrong, contrast: 0xffffff, removed: 0xff6961,
                 orange: 0xf0a35e, modified: 0xe5c07b, added: 0x78c091, cyan: 0x70c5ce,
                 accent: accents.1, purple: 0xc792ea, brown: 0xd7a65c))
+    }
+
+    private struct Neutrals {
+        let background: UInt32
+        let panel: UInt32
+        let panelAlt: UInt32
+        let border: UInt32
+        let muted: UInt32
+        let text: UInt32
+        let textStrong: UInt32
+    }
+
+    private static func neutrals(_ theme: AppTheme, dark: Bool) -> Neutrals {
+        guard theme != .accent else {
+            return dark
+                ? Neutrals(
+                    background: 0x1a1714, panel: 0x221d19, panelAlt: 0x2b2620, border: 0x5f5549,
+                    muted: 0xbcae9c, text: 0xf1e9dc, textStrong: 0xfffdf8)
+                : Neutrals(
+                    background: 0xf7f3ec, panel: 0xfffdf8, panelAlt: 0xece5d8, border: 0xd6cbb8,
+                    muted: 0x5c5247, text: 0x241f1a, textStrong: 0x100f0d)
+        }
+        return Neutrals(
+            background: rgb(DashSkin.paper(dark)),
+            panel: rgb(DashSkin.paper2(dark)),
+            panelAlt: rgb(DashSkin.grid(dark)),
+            border: rgb(DashSkin.lineStrong(dark)),
+            muted: rgb(DashSkin.inkSoft(dark)),
+            text: rgb(DashSkin.ink(dark)),
+            textStrong: rgb(DashSkin.ink(dark)))
+    }
+
+    private static func rgb(_ color: Color) -> UInt32 {
+        let resolved = NSColor(color).usingColorSpace(.sRGB) ?? .black
+        return UInt32((resolved.redComponent * 255).rounded()) << 16
+            | UInt32((resolved.greenComponent * 255).rounded()) << 8
+            | UInt32((resolved.blueComponent * 255).rounded())
     }
 }
 

@@ -62,10 +62,10 @@ struct BudgetCardView: View {
                 Text(
                     enabled
                         ? "Waiting for usage data…"
-                        : "Set a personal cap in Settings › Usage to pace your Claude spend."
+                        : "Set a personal cap in Settings > Usage to pace your Claude spend."
                 )
-                .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(maxWidth: .infinity, minHeight: UIScale.pt(60), alignment: .leading)
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .pageTask {
@@ -84,12 +84,12 @@ struct BudgetCardView: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
                 Text("\(Int(status.actualPercent.rounded()))%")
-                    .font(.system(size: UIScale.pt(26), weight: .semibold, design: .rounded))
+                    .font(DashSkin.heading(26))
                     .monospacedDigit()
                 statePill(status.state)
                 Spacer()
                 Text("cap \(Int(cap))% · \(kind == .session ? "session" : "week")")
-                    .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.inkFaint(dark))
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             meter(status)
             HStack(spacing: UIScale.pt(16)) {
@@ -120,15 +120,15 @@ struct BudgetCardView: View {
 
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(label).font(.system(size: UIScale.pt(10))).foregroundStyle(DashSkin.inkFaint(dark))
-            Text(value).font(.system(size: UIScale.pt(14), weight: .medium)).monospacedDigit()
+            PageCapsLabel(label)
+            Text(value).font(.edithText(.callout).weight(.medium)).monospacedDigit()
         }
     }
 
     private func statePill(_ state: BudgetState) -> some View {
         Text(label(state))
-            .font(.system(size: UIScale.pt(11), weight: .semibold))
-            .padding(.horizontal, UIScale.pt(9)).padding(.vertical, UIScale.pt(3))
+            .font(.edithText(.caption).weight(.semibold))
+            .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(4))
             .background(color(state).opacity(0.18), in: Capsule())
             .foregroundStyle(color(state))
     }

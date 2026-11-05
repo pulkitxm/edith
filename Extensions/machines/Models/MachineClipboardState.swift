@@ -1,3 +1,4 @@
+import EdithIcons
 import Foundation
 
 enum SSHClipboardSyncState: Codable, Equatable, Sendable {
@@ -15,12 +16,12 @@ enum SSHClipboardSyncState: Codable, Equatable, Sendable {
         }
     }
 
-    var symbol: String {
+    var icon: EdithIcon {
         switch self {
-        case .disabled: return "clipboard"
-        case .configuring: return "arrow.triangle.2.circlepath"
-        case .active: return "clipboard.fill"
-        case .failed: return "exclamationmark.triangle.fill"
+        case .disabled: return .clipboard
+        case .configuring: return .sync
+        case .active: return .clipboard
+        case .failed: return .warning
         }
     }
 }

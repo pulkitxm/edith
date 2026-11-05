@@ -15,6 +15,7 @@ const checkTargets = [
   "ci-comments",
   "ci-secrets",
   "ci-duplicate-keys",
+  "ci-icons",
   "ci-lint",
   "ci-scripts",
   "ci-docs",

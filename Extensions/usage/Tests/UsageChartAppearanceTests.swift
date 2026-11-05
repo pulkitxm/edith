@@ -40,7 +40,7 @@ import Testing
             try JSONDecoder().decode(
                 DashUsage.self,
                 from: UsageSyntheticYear.document(days: days, projects: 120, sessions: 1_000)))
-        model.range = .all
+        model.range = .preset(.allTime)
         await model.awaitPendingComputation()
         let data = model.chartData
         let palette: [Color] = [.blue, .green, .orange, .purple, .pink, .teal, .gray]

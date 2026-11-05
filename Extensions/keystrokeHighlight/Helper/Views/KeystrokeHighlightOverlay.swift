@@ -29,29 +29,32 @@ struct KeystrokeHighlightOverlay: View {
     let runtime: KeystrokeHighlightRuntime
     @AppStorage(AppStorageKeys.KeystrokeHighlight.position, store: SharedDefaults.store) private
         var position = KeystrokeHighlightPosition.bottom.rawValue
+
+    var body: some View {
+        KeystrokeHighlightStage(
+            entries: runtime.entries,
+            position: KeystrokeHighlightPosition(rawValue: position) ?? .bottom)
+    }
+}
+
+struct KeystrokeHighlightStage: View {
+    let entries: [KeystrokeHighlightEntry]
+    let position: KeystrokeHighlightPosition
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
-            if resolvedPosition == .bottom { Spacer(minLength: 0) }
-            HStack(alignment: .bottom, spacing: 14) {
-                ForEach(runtime.entries) { entry in
-                    KeystrokeHighlightEntryView(entry: entry)
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .asymmetric(
-                                    insertion: .scale(scale: 0.84).combined(with: .opacity),
-                                    removal: .move(
-                                        edge: resolvedPosition == .top ? .top : .bottom
-                                    ).combined(with: .opacity)))
+            if position == .bottom { Spacer(minLength: 0) }
+            ViewThatFits(in: .horizontal) {
+                ForEach(Array(stride(from: entries.count, to: 0, by: -1)), id: \.self) { count in
+                    row(Array(entries.suffix(count)))
                 }
             }
             .padding(.horizontal, 36)
             .animation(
                 reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.76),
-                value: runtime.entries)
-            if resolvedPosition == .top { Spacer(minLength: 0) }
+                value: entries)
+            if position == .top { Spacer(minLength: 0) }
         }
         .padding(.top, 72)
         .padding(.bottom, 72)
@@ -59,8 +62,19 @@ struct KeystrokeHighlightOverlay: View {
         .preferredColorScheme(.dark)
     }
 
-    private var resolvedPosition: KeystrokeHighlightPosition {
-        KeystrokeHighlightPosition(rawValue: position) ?? .bottom
+    private func row(_ visible: [KeystrokeHighlightEntry]) -> some View {
+        HStack(alignment: .bottom, spacing: 14) {
+            ForEach(visible) { entry in
+                KeystrokeHighlightEntryView(entry: entry)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .scale(scale: 0.84).combined(with: .opacity),
+                                removal: .move(edge: position == .top ? .top : .bottom)
+                                    .combined(with: .opacity)))
+            }
+        }
     }
 }
 
@@ -68,7 +82,8 @@ private struct KeystrokeHighlightEntryView: View {
     let entry: KeystrokeHighlightEntry
 
     var body: some View {
-        HStack(spacing: 5) {
+        let accent = DashSkin.accent(true)
+        return HStack(spacing: 5) {
             ForEach(Array(entry.keys.enumerated()), id: \.offset) { _, key in
                 Text(key)
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
@@ -83,9 +98,9 @@ private struct KeystrokeHighlightEntryView: View {
                     )
                     .overlay {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.32), lineWidth: 1)
+                            .strokeBorder(accent.opacity(0.75), lineWidth: 1)
                     }
-                    .shadow(color: .black.opacity(0.7), radius: 0, y: 4)
+                    .shadow(color: accent.opacity(0.6), radius: 0, y: 4)
                     .shadow(color: .black.opacity(0.32), radius: 14, y: 7)
             }
         }

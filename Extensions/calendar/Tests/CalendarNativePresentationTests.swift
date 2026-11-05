@@ -26,7 +26,7 @@ import Testing
             rootView:
                 CalendarAgendaView(
                     days: CalendarDayEvents.groupedByDay([event]),
-                    style: .page(compact: width < 800, rowBackground: .clear, strokeColor: .gray),
+                    style: CalendarAgendaStyle(compact: width < 800),
                     accentColor: .blue, blurEvents: false, onLoadMore: { loaded += 1 },
                     onOpenMeeting: { joined.append($0.id) },
                     onDirections: { directed.append($0.id) }
@@ -53,23 +53,6 @@ import Testing
         host.cacheDisplay(in: host.bounds, to: bitmap)
         #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
         #expect(loaded <= 1)
-    }
-
-    @Test func originalPermissionPromptUsesOnlyItsInjectedCallback() async throws {
-        var grants = 0
-        let host = NSHostingView(
-            rootView:
-                CalendarPermissionPrompt(
-                    style: .page(compact: true, rowBackground: .clear, strokeColor: .gray),
-                    accentColor: .blue, onGrant: { grants += 1 }
-                )
-                .environment(\.automaticViewActionsEnabled, false))
-        let fixture = UnorderedCalendarWindow(host: host, width: 420)
-        defer { fixture.close() }
-        await fixture.layout()
-        let grant = try #require(find(host, label: "Grant…"))
-        _ = (grant as AnyObject).accessibilityPerformPress?()
-        #expect(grants == 1 && !fixture.window.isVisible)
     }
 
     @Test func originalScopedControllerFactoryMatchesItsPresentationAndShutsDownOnlyTheFacade()

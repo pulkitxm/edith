@@ -56,20 +56,32 @@ struct SystemStatsRows: View {
             set: { presentation.setPreference($0.hex6, for: AppStorageKeys.MenuBar.statsColorHex) })
     }
 
+    private var running: Bool { presentation.active && presentation.running }
+
     var body: some View {
         Section {
-            Picker("Color", selection: modeBinding) {
+            Picker(selection: modeBinding) {
                 Text("Automatic").tag("auto")
                 Text("Custom").tag("custom")
+            } label: {
+                Text("Color")
+                Text("Automatic matches the other items in your menu bar.")
             }
+            .disabled(!running)
             if statsColorMode == "custom" {
                 ColorPicker("Custom color", selection: colorBinding, supportsOpacity: false)
+                    .disabled(!running)
             }
-            Text("Sampled every couple of seconds; costs nothing measurable.")
-                .settingsCaption()
+        } header: {
+            Text("Menu bar appearance")
+        } footer: {
+            Text(
+                running
+                    ? "CPU and memory update every couple of seconds and pause while your Mac sleeps or is locked."
+                    : "Menu Bar Stats is turned off. Turn it on in Extensions to change these."
+            )
+            .settingsCaption()
         }
-        .disabled(!presentation.active || !presentation.running)
-        .opacity(presentation.active ? 1 : 0.5)
     }
 }
 
@@ -85,8 +97,11 @@ enum SystemStatsSettingsScene {
         NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    Form { SystemStatsRows(presentation: presentation, defaults: defaults) }
-                        .edithForm()
+                    Form {
+                        SettingsIssueSection()
+                        SystemStatsRows(presentation: presentation, defaults: defaults)
+                    }
+                    .settingsForm()
                 }
             })
     }

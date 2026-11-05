@@ -159,7 +159,7 @@ struct CameraOnCommand: AsyncParsableCommand {
         discussion: """
             Turn the virtual camera on.
 
-            Changes the machine by opening one saved port forward.
+            Starts the camera output so meeting apps can use it.
 
             ed camera on
             ed camera on --json
@@ -179,7 +179,7 @@ struct CameraOffCommand: AsyncParsableCommand {
         discussion: """
             Turn the virtual camera off.
 
-            Changes the machine by closing one saved port forward.
+            Stops the camera output. Meeting apps see no video until you turn it on again.
 
             ed camera off
             ed camera off --json
@@ -452,7 +452,7 @@ struct CameraPauseCommand: AsyncParsableCommand {
         discussion: """
             Hide the camera behind a card, a blank frame, or a frozen frame.
 
-            Changes the container by freezing its processes.
+            Changes what meeting participants see. Capture can continue behind it.
 
             ed camera pause
             ed camera pause --json

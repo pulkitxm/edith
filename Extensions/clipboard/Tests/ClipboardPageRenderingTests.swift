@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -31,14 +32,14 @@ import Testing
                     .environment(\.colorScheme, scheme)
                     .environment(\.automaticViewActionsEnabled, false))
             host.frame = CGRect(x: 0, y: 0, width: width, height: 900)
-            let window = ClipboardTestWindowHost.window(contentRect: host.frame)
+            let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host; window.orderBack(nil)
             for _ in 0..<5 {
                 window.layoutIfNeeded(); host.layoutSubtreeIfNeeded();
                 try await Task.sleep(for: .milliseconds(30))
             }
             #expect(model.entries.isEmpty)
-            #expect(!ClipboardTestWindowHost.isExposedOnDesktop(window))
+            #expect(!TestWindowHost.isExposedOnDesktop(window))
             let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
             host.cacheDisplay(in: host.bounds, to: bitmap)
             #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)

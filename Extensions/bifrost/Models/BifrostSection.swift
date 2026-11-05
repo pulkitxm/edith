@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionUI
 import CoreGraphics
 import Foundation
 import SwiftUI
@@ -56,6 +57,8 @@ public enum BifrostPanelMetrics {
     public static let rowHeight: CGFloat = 44
     public static let footerHeight: CGFloat = 36
     public static let listPadding: CGFloat = 6
+    public static let rowInset: CGFloat = 6
+    public static let contentInset: CGFloat = 18
     public static let answerHeight: CGFloat = 132
     public static let cornerRadius: CGFloat = 14
     public static let topFraction: CGFloat = 0.147
@@ -66,6 +69,7 @@ public enum BifrostPanelMetrics {
     public static let resizeThreshold: CGFloat = 0.5
     public static let detailFraction: CGFloat = 0.52
     public static let bottomFraction: CGFloat = 0.084
+    public static let noMatchesHeight: CGFloat = 72
 
     public static func defaultAnchorTop(in visibleFrame: CGRect) -> CGPoint {
         CGPoint(
@@ -75,6 +79,7 @@ public enum BifrostPanelMetrics {
     public static let scrimOpacity: Double = 0.84
 
     public static var scrim: Color { Color.black.opacity(scrimOpacity) }
+    public static var selection: Color { DashSkin.accent(true).opacity(0.3) }
 
     public static var nominalHeight: CGFloat {
         headerHeight + listPadding + footerHeight + sectionHeaderHeight + 5 * rowHeight

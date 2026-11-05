@@ -42,14 +42,14 @@ struct DatabaseRecordInspector: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(source, forType: .string)
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    EdithIconView(.copy)
                 }
                 .help("Copy \(noun) as JSON").accessibilityLabel("Copy \(noun) as JSON")
                 if canUpdate && data.canMutateSelectedRecord(.update, connection: connection) {
                     Button {
                         data.beginEditingSelectedRow(connection)
                     } label: {
-                        Image(systemName: "pencil")
+                        EdithIconView(.edit)
                     }
                     .disabled(mutations.hasTrackedMutation).help("Edit \(noun)").accessibilityLabel(
                         "Edit \(noun)")
@@ -60,7 +60,7 @@ struct DatabaseRecordInspector: View {
                             mutations.requestSafetyReview(for: request)
                         }
                     } label: {
-                        Image(systemName: "trash")
+                        EdithIconView(.trash)
                     }
                     .disabled(mutations.hasTrackedMutation).help("Delete \(noun)")
                     .accessibilityLabel("Delete \(noun)")
@@ -68,7 +68,7 @@ struct DatabaseRecordInspector: View {
                 Button {
                     if let index = data.selectedRecordIndex { data.selectRecord(at: index) }
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                 }
                 .keyboardShortcut(.cancelAction).help("Close \(noun) details").accessibilityLabel(
                     "Close \(noun) details")
@@ -158,7 +158,7 @@ struct DatabaseRecordInspector: View {
             }.padding(UIScale.pt(12))
             Divider()
             if let error = data.editorError {
-                Label(error, systemImage: "exclamationmark.circle.fill")
+                Label(error, edith: .alert)
                     .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.danger)
                     .fixedSize(horizontal: false, vertical: true).padding(UIScale.pt(12))
             }
@@ -209,7 +209,7 @@ struct DatabaseRecordInspector: View {
                         Button {
                             data.resetEditorField(field.id)
                         } label: {
-                            Image(systemName: "arrow.uturn.backward")
+                            EdithIconView(.undo)
                         }
                         .buttonStyle(.edith(.borderless)).help("Reset \(field.id)")
                     }

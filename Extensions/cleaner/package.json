@@ -1,7 +1,7 @@
 {
   "id": "cleaner",
   "title": "Cleaner",
-  "symbolName": "sparkles.rectangle.stack",
+  "icon": "broom",
   "category": "utilities",
   "background": false,
   "commands": [
@@ -12,7 +12,7 @@
       "page": "appMaintenance",
       "id": "Cleaner",
       "title": "Cleaner",
-      "symbolName": "sparkles.rectangle.stack",
+      "icon": "broom",
       "summary": "Find reclaimable space and remove it after review.",
       "order": 4
     }
@@ -23,5 +23,32 @@
   "notchCards": [
     "extension:cleaner"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Get back disk space from caches and leftovers, safely.",
+    "summary": "Cleaner finds build caches, package downloads, old Xcode data and unused git worktrees. You review the list first, and everything you clean goes to the Trash so you can undo it.",
+    "steps": [
+      {
+        "icon": "search",
+        "title": "Scan your Mac",
+        "detail": "Pick where to search. A scan only reads folders and never changes anything."
+      },
+      {
+        "icon": "stepTools",
+        "title": "Review what it found",
+        "detail": "Open a category to see every item, and untick anything you want to keep."
+      },
+      {
+        "icon": "trash",
+        "title": "Move it to the Trash",
+        "detail": "Confirm once, then restore anything from the Trash until you empty it."
+      }
+    ],
+    "examples": [
+      "ed cleaner scan",
+      "ed cleaner categories",
+      "ed cleaner drives",
+      "ed cleaner clean --yes"
+    ]
+  }
 }

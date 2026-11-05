@@ -103,7 +103,7 @@ struct HerdrDragOverlay: View {
                     .lineLimit(1)
                 if highlighted, let hint = hint(target) {
                     Text(hint)
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .font(.edithText(.subheadline).weight(.medium))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
@@ -162,7 +162,7 @@ struct HerdrDragOverlay: View {
             }
             .overlay {
                 Text(label)
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
             }
             .frame(width: max(0, rect.width), height: max(0, rect.height))
@@ -194,11 +194,11 @@ struct HerdrDragOverlay: View {
             }
         } else {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "square.grid.2x2")
+                EdithIconView(.grid)
                     .font(.system(size: UIScale.pt(10), weight: .semibold))
                 Text("Layouts")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                Image(systemName: "chevron.up")
+                    .font(.edithText(.subheadline).weight(.semibold))
+                EdithIconView(.chevronUp)
                     .font(.system(size: UIScale.pt(8), weight: .bold))
             }
             .foregroundStyle(DashSkin.inkSoft(dark))
@@ -233,7 +233,7 @@ struct HerdrDragOverlay: View {
             }
             HStack(spacing: UIScale.pt(2)) {
                 if thumbnail.template.isSaved {
-                    Image(systemName: "bookmark.fill")
+                    EdithIconView(.bookmark)
                         .font(.system(size: UIScale.pt(7)))
                         .foregroundStyle(accent)
                 }
@@ -262,11 +262,11 @@ struct HerdrDragOverlay: View {
                     .foregroundStyle(DashSkin.ink(dark))
             }
             Text(ghostTitle(item, panes: panes, tearing: tearing))
-                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             if drag.target == nil {
-                Image(systemName: "nosign")
+                EdithIconView(.blocked)
                     .font(.system(size: UIScale.pt(10), weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }

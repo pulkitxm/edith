@@ -32,10 +32,10 @@ final class HerdrNewAgentPopupModel {
             }
         }
 
-        var symbolName: String {
+        var icon: EdithIcon {
             switch self {
-            case .newTab: "plus.rectangle"
-            case .sideBySide: "rectangle.split.2x1"
+            case .newTab: .plus
+            case .sideBySide: .layoutLeft
             }
         }
     }

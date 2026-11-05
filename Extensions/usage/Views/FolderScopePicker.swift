@@ -27,7 +27,7 @@ struct FolderScopePicker: View {
             }
             if model.allProjectPaths.isEmpty {
                 Text("Usage data has no folder paths yet. Hit refresh to rebuild it.")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, UIScale.pt(6))
@@ -49,7 +49,7 @@ struct FolderScopePicker: View {
                     }
                     if matches.isEmpty {
                         Text("No folders match")
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .padding(UIScale.pt(8))
                     }
@@ -58,12 +58,12 @@ struct FolderScopePicker: View {
             .frame(maxHeight: UIScale.pt(280))
             HStack {
                 Text(scopeSummary)
-                    .font(DashSkin.mono(10))
+                    .font(.edithText(.caption).monospacedDigit())
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer(minLength: 0)
                 Button("Done") { dismiss() }
                     .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.accent(dark))
             }
             .padding(.horizontal, UIScale.pt(6))
@@ -92,21 +92,18 @@ struct FolderScopePicker: View {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "folder")
-                    .font(.system(size: UIScale.pt(10)))
+                EdithIconView(selected ? .success : .folder)
+                    .font(.edithText(.caption))
                     .foregroundStyle(
                         selected || tint ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                     Text(label)
-                        .font(
-                            .system(
-                                size: UIScale.pt(11.5), weight: selected ? .semibold : .regular)
-                        )
+                        .font(.edithText(.subheadline).weight(selected ? .semibold : .regular))
                         .foregroundStyle(DashSkin.ink(dark))
                         .presenterBlur(.agents)
                     if let detail {
                         Text(detail)
-                            .font(DashSkin.mono(9.5))
+                            .font(.edithText(.caption).monospacedDigit())
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .lineLimit(1)
                             .presenterBlur(.agents)

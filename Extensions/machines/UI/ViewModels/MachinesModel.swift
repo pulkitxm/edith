@@ -286,7 +286,7 @@ final class MachinesModel {
             containersTotal: session.containers.count,
             updatesAvailable: session.facts.updatesAvailable,
             hottestTemperature: slow?.temps.map(\.c).max(),
-            os: session.hello?.os ?? "")
+            os: session.hello?.os ?? "", connectionFailure: session.state.failureMessage)
     }
 
     var snapshots: [MachineSnapshot] {
@@ -388,14 +388,14 @@ enum MachineTab: String, CaseIterable, Identifiable {
         }
     }
 
-    var icon: String {
+    var icon: EdithIcon {
         switch self {
-        case .overview: return "gauge.with.needle"
-        case .processes: return "list.bullet.rectangle"
-        case .docker: return "shippingbox"
-        case .terminal: return "terminal"
-        case .files: return "folder"
-        case .tools: return "wrench.and.screwdriver"
+        case .overview: return .gauge
+        case .processes: return .list
+        case .docker: return .box
+        case .terminal: return .terminal
+        case .files: return .folder
+        case .tools: return .wrench
         }
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionUI
 import GhosttyTerminal
 import Observation
 
@@ -107,7 +108,8 @@ import Observation
                     bytes: 0)
             }, failure: { [weak self] in self?.fail("The terminal input queue is full.") })
         let view = GhosttyTerminalView(
-            externalIO: io, workingDirectory: session.directory, theme: theme)
+            externalIO: io, workingDirectory: session.directory, theme: theme,
+            overlayIcons: EdithIcon.terminalOverlay(TerminalOverlayIcons.init))
         ghosttyView = view
         if let hostWindowState {
             view.setHostWindowState(active: hostWindowState.active, key: hostWindowState.key)

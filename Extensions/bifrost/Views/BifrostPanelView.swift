@@ -34,13 +34,21 @@ struct BifrostPanelView: View {
                 Divider().opacity(0.25)
                 content
                 footer
+            } else if showsNoMatches {
+                Divider().opacity(0.25)
+                BifrostNoMatches(
+                    title: BifrostMode.launcher.emptyTitle, message: BifrostMode.launcher.emptyHint
+                )
+                .frame(height: BifrostPanelMetrics.noMatchesHeight)
             }
         }
         .frame(width: BifrostPanelMetrics.width, height: height, alignment: .top)
-        .background(BifrostPanelMetrics.scrim)
-        .edithGlass(in: shape)
+        .background {
+            shape.fill(BifrostPanelMetrics.scrim).background { Color.clear.edithGlass(in: shape) }
+        }
         .clipShape(shape)
         .overlay(shape.strokeBorder(.white.opacity(0.14), lineWidth: 1))
+        .environment(\.colorScheme, .dark)
         .onAppear {
             searchFocused = true
             lastMouse = NSEvent.mouseLocation
@@ -72,11 +80,17 @@ struct BifrostPanelView: View {
         }
     }
 
+    private var showsNoMatches: Bool {
+        store.mode == .launcher && model.sections.isEmpty && !store.isIndexing
+            && !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var height: CGFloat {
-        store.mode == .launcher
-            ? model.height
-            : BifrostPanelMetrics.headerHeight + BifrostPanelMetrics.modeHeight
+        guard store.mode == .launcher else {
+            return BifrostPanelMetrics.headerHeight + BifrostPanelMetrics.modeHeight
                 + BifrostPanelMetrics.footerHeight
+        }
+        return model.height + (showsNoMatches ? BifrostPanelMetrics.noMatchesHeight : 0)
     }
 
     private func watchModifiers() {
@@ -115,7 +129,7 @@ struct BifrostPanelView: View {
                 Button {
                     leaveMode()
                 } label: {
-                    Image(systemName: "chevron.backward")
+                    EdithIconView(.chevronLeft)
                         .font(.system(size: 13, weight: .semibold))
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(.white.opacity(0.10)))
@@ -157,7 +171,7 @@ struct BifrostPanelView: View {
                 scopePicker
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, BifrostPanelMetrics.contentInset)
         .frame(height: BifrostPanelMetrics.headerHeight)
     }
 
@@ -168,15 +182,14 @@ struct BifrostPanelView: View {
             }
         } label: {
             HStack(spacing: 5) {
+                EdithIconView(.chevronUpDown, size: 12)
                 Text(store.scope.title)
                     .font(.system(size: 12))
                     .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(.secondary)
+            .padding(.trailing, 3)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
     }
@@ -190,15 +203,14 @@ struct BifrostPanelView: View {
             }
         } label: {
             HStack(spacing: 5) {
+                EdithIconView(.chevronUpDown, size: 12)
                 Text(title)
                     .font(.system(size: 12))
                     .lineLimit(1)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
             }
-            .foregroundStyle(.secondary)
+            .padding(.trailing, 3)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
     }
@@ -217,6 +229,9 @@ struct BifrostPanelView: View {
     private var content: some View {
         if store.mode == .launcher {
             resultList.frame(height: model.listHeight)
+        } else if model.sections.isEmpty && !store.isLoadingMode {
+            BifrostNoMatches(title: store.mode.emptyTitle, message: store.mode.emptyHint)
+                .frame(height: BifrostPanelMetrics.modeHeight)
         } else {
             HStack(spacing: 0) {
                 resultList
@@ -283,7 +298,7 @@ struct BifrostPanelView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Image(systemName: store.mode.symbolName)
+            EdithIconView(store.mode.icon)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
             Text(store.mode.title)
@@ -291,12 +306,14 @@ struct BifrostPanelView: View {
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
             BifrostHint(label: primaryLabel, keys: "return")
-            BifrostHint(label: "Copy", keys: "option return")
+            if primaryLabel != "Copy" {
+                BifrostHint(label: "Copy", keys: "option return")
+            }
             if store.mode != .launcher {
                 BifrostHint(label: "Back", keys: "escape")
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, BifrostPanelMetrics.contentInset)
         .frame(height: BifrostPanelMetrics.footerHeight)
     }
 
@@ -365,7 +382,7 @@ struct BifrostDetailPane: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            .padding(18)
+            .padding(BifrostPanelMetrics.contentInset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task(id: detail?.clipboardPreviewID) {
@@ -402,6 +419,25 @@ struct BifrostDetailPane: View {
     }
 }
 
+struct BifrostNoMatches: View {
+    let title: String
+    let message: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .lineLimit(1)
+            Text(message)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct BifrostSectionHeader: View {
     let title: String
 
@@ -410,7 +446,7 @@ struct BifrostSectionHeader: View {
             .font(.system(size: 10, weight: .semibold))
             .kerning(0.6)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 18)
+            .padding(.horizontal, BifrostPanelMetrics.contentInset)
             .frame(height: BifrostPanelMetrics.sectionHeaderHeight, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -457,15 +493,15 @@ struct BifrostResultRow: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, BifrostPanelMetrics.contentInset - BifrostPanelMetrics.rowInset)
         .frame(height: BifrostPanelMetrics.rowHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(.white.opacity(isSelected ? 0.14 : 0))
+                .fill(isSelected ? BifrostPanelMetrics.selection : Color.clear)
         )
-        .padding(.horizontal, 6)
+        .padding(.horizontal, BifrostPanelMetrics.rowInset)
     }
 }
 
@@ -477,7 +513,7 @@ struct BifrostAnswerCard: View {
         HStack(spacing: 0) {
             side(answer.input, caption: answer.inputCaption)
             VStack(spacing: 5) {
-                Image(systemName: "arrow.right")
+                EdithIconView(.arrowRight)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.secondary)
                 if let footnote = answer.footnote {
@@ -495,13 +531,15 @@ struct BifrostAnswerCard: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(.white.opacity(isSelected ? 0.10 : 0.05))
+                .fill(isSelected ? BifrostPanelMetrics.selection : Color.white.opacity(0.05))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(.white.opacity(isSelected ? 0.16 : 0.07), lineWidth: 1)
+                .strokeBorder(
+                    isSelected ? DashSkin.accent(true).opacity(0.6) : Color.white.opacity(0.07),
+                    lineWidth: 1)
         )
-        .padding(.horizontal, 10)
+        .padding(.horizontal, BifrostPanelMetrics.rowInset)
         .padding(.vertical, 6)
     }
 
@@ -539,8 +577,7 @@ struct BifrostResultIcon: View {
             } else if result.iconPath != nil {
                 BifrostSkeletonSquare()
             } else {
-                Image(systemName: result.symbolName)
-                    .font(.system(size: 15, weight: .medium))
+                EdithIconView(result.icon, size: 16)
                     .foregroundStyle(.secondary)
             }
         }

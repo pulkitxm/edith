@@ -16,47 +16,74 @@ struct ColorPickerRows: View {
 
     @State private var historyObserver: NSObjectProtocol?
 
+    private static let sample = ColorSwatch(
+        red: 0.1, green: 0.45, blue: 0.91, profile: .sRGB)
+
     var body: some View {
         Group {
-            Section {
-                Button("Pick now") {
-                    presentation.perform("pick")
+            if !presentation.active {
+                Section {
+                    SettingsNoticeRow(
+                        "Color Picker is off",
+                        message: "Turn it on to pick colors and change these settings.",
+                        icon: .power)
                 }
-                LabeledContent {
-                    HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Pick hotkey")
-                        InfoDot("Summons the magnifier from anywhere.")
-                    }
+            } else if presentation.ready, let error = presentation.error {
+                Section {
+                    SettingsErrorRow(
+                        "Color Picker is not responding", message: error,
+                        retry: presentation.retry)
                 }
-                Picker(
-                    "Copy format",
-                    selection: $copyFormat.notifyingSettingsChange()
-                ) {
-                    ForEach(ColorCopyFormat.allCases, id: \.self) { format in
-                        Text(format.displayName).tag(format)
-                    }
-                }
-                Picker(selection: $profile.notifyingSettingsChange()) {
-                    ForEach(ColorProfile.allCases, id: \.self) { option in
-                        Text(option.displayName).tag(option)
-                    }
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Color profile")
-                        InfoDot(
-                            "Compute values in sRGB or Display P3 - they differ on wide-gamut screens like this MacBook's."
+            }
+            Group {
+                Section {
+                    LabeledContent {
+                        Button("Pick Color") { presentation.perform("pick") }
+                            .buttonStyle(.edith(.primary))
+                    } label: {
+                        Text("Pick a color")
+                        Text(
+                            "Opens a magnifier over your screen. Click any pixel to copy its color."
                         )
                     }
+                    SettingsShortcutRow(
+                        keyPrefix: "colorPickerHotKey", defaultLabel: "\u{2303}\u{2325}\u{2318}C",
+                        purpose: "Opens the magnifier from any app.")
                 }
-                Stepper(
-                    value: $historySize.notifyingSettingsChange(),
-                    in: 1...100
-                ) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("History size: \(historySize)")
-                        InfoDot("How many past colors to keep.")
+                Section("Copying") {
+                    Picker(selection: $copyFormat.notifyingSettingsChange()) {
+                        ForEach(ColorCopyFormat.allCases, id: \.self) { format in
+                            Text(format.displayName).tag(format)
+                        }
+                    } label: {
+                        Text("Copy as")
+                        Text("A picked color pastes as \(Self.sample.string(for: copyFormat)).")
+                    }
+                    Picker(selection: $profile.notifyingSettingsChange()) {
+                        ForEach(ColorProfile.allCases, id: \.self) { option in
+                            Text(option.displayName).tag(option)
+                        }
+                    } label: {
+                        Text("Color space")
+                        Text(
+                            "sRGB matches the web. Display P3 keeps the extra colors of wide-color screens."
+                        )
+                    }
+                    SettingsRow(
+                        "Colors to remember",
+                        subtitle: "Older colors are removed once the list is full."
+                    ) {
+                        HStack(spacing: UIScale.pt(8)) {
+                            Text("\(historySize)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: UIScale.pt(28), alignment: .trailing)
+                            Stepper(
+                                "Colors to remember", value: $historySize.notifyingSettingsChange(),
+                                in: 1...100
+                            )
+                            .labelsHidden()
+                        }
                     }
                 }
             }
@@ -66,16 +93,29 @@ struct ColorPickerRows: View {
             if presentation.active {
                 Section {
                     if history.isEmpty {
-                        Label(
-                            "No colors picked yet. Choose Pick now to start.",
-                            systemImage: "eyedropper"
-                        )
-                        .settingsCaption()
+                        VStack(spacing: UIScale.pt(2)) {
+                            Text("No colors yet")
+                            Text(
+                                "Colors you pick appear here, newest first. Click one to copy it again."
+                            )
+                            .settingsCaption()
+                        }
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityElement(children: .combine)
                     } else {
                         ColorSwatchGrid(history: history, defaultFormat: copyFormat)
                     }
                 } header: {
-                    Text("Recent Colors")
+                    Text("Recent colors")
+                } footer: {
+                    if !history.isEmpty {
+                        Text(
+                            "Click a swatch to copy it as \(copyFormat.displayName). Right-click for other formats."
+                        )
+                        .font(.edithText(.subheadline))
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -91,14 +131,16 @@ struct ColorPickerRows: View {
         }
     }
 }
+
 private struct ColorSwatchGrid: View {
     let history: [ColorSwatch]
     let defaultFormat: ColorCopyFormat
 
-    private let columns = [GridItem(.adaptive(minimum: 28), spacing: UIScale.pt(6))]
-
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(6)) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: UIScale.pt(28)), spacing: UIScale.pt(8))],
+            alignment: .leading, spacing: UIScale.pt(8)
+        ) {
             ForEach(history) { swatch in
                 ColorSwatchChip(swatch: swatch, defaultFormat: defaultFormat)
             }
@@ -115,11 +157,11 @@ private struct ColorSwatchChip: View {
         Button {
             copy(defaultFormat)
         } label: {
-            RoundedRectangle(cornerRadius: UIScale.pt(5))
+            RoundedRectangle(cornerRadius: UIScale.pt(6))
                 .fill(swatch.color)
-                .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .overlay(
-                    RoundedRectangle(cornerRadius: UIScale.pt(5)).strokeBorder(
+                    RoundedRectangle(cornerRadius: UIScale.pt(6)).strokeBorder(
                         .primary.opacity(0.12))
                 )
                 .contentShape(Rectangle())
@@ -133,14 +175,14 @@ private struct ColorSwatchChip: View {
         }
         .help(swatch.string(for: defaultFormat))
         .alert(
-            "Could not copy colour",
+            "Could not copy color",
             isPresented: Binding(
                 get: { copyError != nil },
                 set: { if !$0 { copyError = nil } })
         ) {
             Button("OK") { copyError = nil }
         } message: {
-            Text(copyError ?? "The pasteboard refused the colour value.")
+            Text(copyError ?? "The clipboard did not accept the color. Try again.")
         }
     }
 

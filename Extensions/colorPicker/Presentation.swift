@@ -1,5 +1,6 @@
 import CoreFoundation
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 import Observation
 
@@ -323,6 +324,11 @@ final class ControlPresentation {
         while let task = actions.values.first { await task.value }
     }
 
+    func retry() {
+        changed()
+        Task { await refresh() }
+    }
+
     func stop() {
         guard !stopped else { return }
         stopped = true
@@ -337,33 +343,4 @@ final class ControlPresentation {
     }
 }
 
-import EdithExtensionUI
-import SwiftUI
-
-struct ControlSettingsHost<Content: View>: View {
-    let presentation: ControlPresentation
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if presentation.ready, let error = presentation.error {
-                HStack {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                    Button("Retry", action: retry)
-                }.padding()
-            }
-            content()
-        }
-        .pageRefresh(
-            active: presentation.active && presentation.running,
-            interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
-        ) {
-            await presentation.refresh()
-        }
-    }
-
-    private func retry() {
-        presentation.changed()
-        Task { await presentation.refresh() }
-    }
-}
+extension ControlPresentation: ControlSettingsPresenting {}

@@ -9,7 +9,7 @@ enum FocusDimSurface {
             actions: [
                 .init(
                     active ? "disable" : "enable", active ? "Turn off" : "Turn on",
-                    "circle.lefthalf.filled")
+                    .contrast)
             ], updatedAt: Date())
     }
 }

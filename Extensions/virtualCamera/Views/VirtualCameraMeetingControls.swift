@@ -9,10 +9,13 @@ struct VirtualCameraMeetingControls: View {
     @State private var choosingScreen = false
     @Environment(\.compactLayout) private var compact
 
+    private static let menuInset = 5.0
+
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(12)) {
                 sourceMenu.frame(maxWidth: UIScale.pt(280), alignment: .leading)
+                    .padding(.leading, -UIScale.pt(Self.menuInset))
                 Spacer(minLength: 0)
                 Menu {
                     if model.state.media.kind != .camera {
@@ -30,11 +33,11 @@ struct VirtualCameraMeetingControls: View {
                     Divider()
                     Button("Stop capture") { model.pause(.stopped) }
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .frame(width: UIScale.pt(24), height: UIScale.pt(24))
+                    EdithIcon.more.image()
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .fixedSize()
+                .padding(.trailing, -UIScale.pt(Self.menuInset))
                 .help("Preview, playback and pause options")
                 .accessibilityLabel("Meeting options")
             }
@@ -70,11 +73,11 @@ struct VirtualCameraMeetingControls: View {
         } label: {
             Label(
                 model.meetingPlaying ? "Pause" : "Play",
-                systemImage: model.meetingPlaying ? "pause.fill" : "play.fill"
+                edith: model.meetingPlaying ? .pause : .play
             )
             .frame(minWidth: UIScale.pt(88), minHeight: UIScale.pt(28))
         }
-        .buttonStyle(.edith(.primary))
+        .buttonStyle(.edith(model.meetingPlaying ? .secondary : .primary))
         .help(
             model.meetingPlaying ? "Pause your meeting video" : "Resume your meeting video")
     }
@@ -85,8 +88,7 @@ struct VirtualCameraMeetingControls: View {
         } label: {
             Label(
                 model.snapshot?.recordingPath == nil ? "Record" : "Stop recording",
-                systemImage: model.snapshot?.recordingPath == nil
-                    ? "record.circle" : "stop.circle.fill"
+                edith: model.snapshot?.recordingPath == nil ? .record : .stop
             )
             .frame(minHeight: UIScale.pt(28))
         }
@@ -96,7 +98,7 @@ struct VirtualCameraMeetingControls: View {
 
     private var zoomSlider: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "magnifyingglass")
+            EdithIconView(.search)
             Slider(
                 value: Binding(get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
                 in: VirtualCameraFraming.zoomRange
@@ -119,12 +121,15 @@ struct VirtualCameraMeetingControls: View {
             Divider()
             Button("Refresh cameras") { model.refreshSources() }
         } label: {
-            Label(sourceTitle, systemImage: sourceSymbol)
-                .lineLimit(1).truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: UIScale.pt(28))
+            Label {
+                Text(sourceTitle)
+            } icon: {
+                sourceIcon.image()
+            }
+            .lineLimit(1).truncationMode(.middle)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .help("Choose your video source")
         .accessibilityLabel("Video source: \(sourceTitle)")
     }
@@ -138,11 +143,11 @@ struct VirtualCameraMeetingControls: View {
         }
     }
 
-    private var sourceSymbol: String {
+    private var sourceIcon: EdithIcon {
         switch model.state.media.kind {
-        case .camera: "video"
-        case .video: "film"
-        case .screen: "display"
+        case .camera: .video
+        case .video: .film
+        case .screen: .display
         }
     }
 }
@@ -246,5 +251,18 @@ extension VirtualCameraPageModel {
             $0.composition.framing = VirtualCameraFraming()
             $0.mirrorPreview = false
         }
+    }
+}
+
+extension VirtualCameraPageModel {
+    var meetingAppHint: String {
+        if state.privacy == .stopped {
+            return "Capture is stopped. Press Play to start your camera again."
+        }
+        guard snapshot?.extensionInstalled == true else {
+            return
+                "Install Edith Camera in Output so Zoom, Meet and FaceTime can show this picture."
+        }
+        return "In Zoom, Meet or FaceTime, choose Edith Camera as your camera."
     }
 }

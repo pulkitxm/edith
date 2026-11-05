@@ -17,6 +17,10 @@ let package = Package(
             ], path: ".", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "AudioMixerExtensionTests", dependencies: ["AudioMixerExtension"],
+            name: "AudioMixerExtensionTests",
+            dependencies: [
+                "AudioMixerExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ],
             path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

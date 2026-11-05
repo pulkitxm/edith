@@ -275,7 +275,7 @@ final class TerminalSessionHolder {
             externalIO: io, workingDirectory: descriptor?.directory,
             allowsLocalFileLinks: descriptor?.allowsLocalFileLinks ?? false,
             resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt ?? false,
-            theme: theme)
+            theme: theme, overlayIcons: EdithIcon.terminalOverlay(TerminalOverlayIcons.init))
         if let hostWindowState {
             view.setHostWindowState(
                 active: hostWindowState.active, key: hostWindowState.key && hostWindowState.visible)

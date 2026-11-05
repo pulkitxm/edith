@@ -370,7 +370,7 @@ private actor RequirementsCalls {
         marketplace = try HostMarketplace(
             identity: identity,
             entries: HostExtensionRequirementCatalog.entries.map {
-                .init(id: $0.id, title: $0.title, symbolName: "circle", category: "Synthetic")
+                .init(id: $0.id, title: $0.title, icon: .ring, category: "Synthetic")
             },
             store: store, catalogClient: client, installer: installer, sessions: sessions)
         permissions = HostPermissions(

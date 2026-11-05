@@ -92,17 +92,17 @@ struct DatabaseWorkbenchTabView: View {
     private var toolbarActions: some View {
         HStack(spacing: UIScale.pt(10)) {
             if connection.environmentKind == .production {
-                Image(systemName: "exclamationmark.shield.fill").foregroundStyle(DashSkin.warn)
+                EdithIconView(.shield).foregroundStyle(DashSkin.warn)
                     .help("Production connection").accessibilityLabel("Production connection")
             } else if connection.readOnlyPolicy != .disabled {
-                Image(systemName: "lock.fill").foregroundStyle(palette.inkFaint)
+                EdithIconView(.lock).foregroundStyle(palette.inkFaint)
                     .help("Read-only connection").accessibilityLabel("Read-only connection")
             }
             if mode == .browse {
                 Button {
                     data.browse(connection)
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    EdithIconView(.refresh)
                 }
                 .buttonStyle(.edith(.iconOnly)).help("Refresh data")
                 .accessibilityLabel("Refresh selected object")
@@ -111,7 +111,7 @@ struct DatabaseWorkbenchTabView: View {
                     Button {
                         data.beginInsert(connection)
                     } label: {
-                        Label(newItemTitle, systemImage: "plus")
+                        Label(newItemTitle, edith: .plus)
                     }
                     .buttonStyle(.edith(.primary, tint: palette.accent))
                     .disabled(
@@ -120,14 +120,14 @@ struct DatabaseWorkbenchTabView: View {
                 }
             }
             Menu {
-                Button("Disconnect", systemImage: "power") {
+                Button("Disconnect", edith: .power) {
                     data.cancel()
                     Task { await connections.disconnectSelected() }
                 }
             } label: {
-                Image(systemName: "ellipsis")
+                EdithIcon.more.image()
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .borderlessMenu().menuIndicator(.hidden).fixedSize()
             .accessibilityLabel("More database actions")
         }
     }
@@ -135,7 +135,7 @@ struct DatabaseWorkbenchTabView: View {
     private var queryEditor: some View {
         VStack(spacing: UIScale.pt(8)) {
             WrapHStack(spacing: UIScale.pt(10)) {
-                Label("Read-only query", systemImage: "terminal")
+                Label("Read-only query", edith: .terminal)
                     .font(.system(size: UIScale.pt(10.5), weight: .medium)).foregroundStyle(
                         palette.inkSoft)
                 Spacer()
@@ -165,9 +165,9 @@ struct DatabaseWorkbenchTabView: View {
                         Button("Clear history") { tab.history.clear() }
                     }
                 } label: {
-                    Label("History", systemImage: "clock.arrow.circlepath")
+                    Label("History", edith: .history)
                 }
-                .menuStyle(.borderlessButton).fixedSize()
+                .borderlessMenu().fixedSize()
                 .disabled(data.isLoading || tab?.history.entries.isEmpty != false)
                 .help("Recent queries for this tab, kept in memory only")
                 Button(data.isLoading ? "Cancel" : "Run") {
@@ -201,7 +201,7 @@ struct DatabaseWorkbenchTabView: View {
                 loadingResults(label: "Loading database objects", cancel: explorer.cancel)
             } else {
                 DatabaseWorkbenchEmptyState(
-                    symbol: mode == .query ? "terminal" : "sidebar.left",
+                    icon: mode == .query ? .terminal : .sidebarLeft,
                     title: mode == .query ? "Run a query" : "Select an object",
                     detail: mode == .query
                         ? "Press Command-Return to run the query above."
@@ -250,7 +250,7 @@ struct DatabaseWorkbenchTabView: View {
             }
             if case .failed(let message) = data.state {
                 HStack(spacing: UIScale.pt(8)) {
-                    Label(message, systemImage: "exclamationmark.circle").lineLimit(2)
+                    Label(message, edith: .alert).lineLimit(2)
                     Spacer()
                     if data.hasActiveFilters && mode == .browse {
                         Button("Clear filters") {
@@ -353,7 +353,7 @@ struct DatabaseWorkbenchTabView: View {
             } label: {
                 Text("\(data.pageSize) per page").font(.system(size: UIScale.pt(10)))
             }
-            .menuStyle(.borderlessButton).fixedSize().disabled(data.isLoading)
+            .borderlessMenu().fixedSize().disabled(data.isLoading)
             .accessibilityLabel("Page size, \(data.pageSize) rows")
         }.padding(.horizontal, UIScale.pt(12)).frame(height: UIScale.pt(36)).background(
             palette.panel)

@@ -45,7 +45,7 @@ struct HostStoragePage: View {
         PageScaffold(width: .fluid, header: {}) {
             PageLoading(
                 state: model.load.state, message: "Refresh to measure storage.", layout: .list,
-                retry: { revision += 1 }
+                showsSkeletonControls: false, retry: { revision += 1 }
             ) {
                 if let inventory = model.inventory, let measurement = model.measurement {
                     let usage = inventory.usage(in: measurement)

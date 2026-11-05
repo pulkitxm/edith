@@ -125,7 +125,7 @@ struct NotchRemoteCameraTab: View {
                             Button {
                                 model.cycle()
                             } label: {
-                                Image(systemName: "arrow.triangle.2.circlepath.camera").font(
+                                EdithIconView(.sync).font(
                                     .system(size: 13, weight: .medium)
                                 )
                                 .foregroundStyle(.white).frame(width: 32, height: 32)
@@ -136,37 +136,22 @@ struct NotchRemoteCameraTab: View {
                     }
                 }
             } else if model.state?.authorization == AVAuthorizationStatus.notDetermined.rawValue {
-                VStack(spacing: 8) {
-                    Image(systemName: "camera.fill").font(.system(size: 20)).foregroundStyle(
-                        .white.opacity(0.7))
-                    Text("Mirror check, right in the notch").font(
-                        .system(size: 12, weight: .semibold)
-                    ).foregroundStyle(.white.opacity(0.9))
-                    Text("macOS asks for camera access once. Nothing is recorded or sent anywhere.")
-                        .font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.5))
-                        .multilineTextAlignment(.center).padding(.horizontal, 24)
-                    HStack(spacing: 8) {
-                        Button("Allow Camera") { model.perform(.permission) }.buttonStyle(
-                            .edith(.primary)
-                        ).controlSize(.small)
-                        Button("All Permissions") { model.perform(.overview) }.buttonStyle(
-                            .edith(.borderless)
-                        )
-                        .font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
-                    }.padding(.top, 2)
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                NotchTabMessage(
+                    icon: .camera, title: "Mirror check, right in the notch",
+                    detail:
+                        "macOS asks for camera access once. Nothing is recorded or sent anywhere."
+                ) {
+                    Button("Allow Camera") { model.perform(.permission) }
+                        .buttonStyle(.edith(.primary)).controlSize(.small)
+                }
             } else if model.state != nil {
-                Button {
-                    model.perform(.privacy)
-                } label: {
-                    VStack(spacing: 6) {
-                        Image(systemName: "camera.metering.none").font(.system(size: 20))
-                        Text("Camera access is off").font(.system(size: 12))
-                        Text("Open System Settings").font(.system(size: 10)).foregroundStyle(
-                            .white.opacity(0.5))
-                    }.foregroundStyle(.white.opacity(0.7)).frame(
-                        maxWidth: .infinity, maxHeight: .infinity)
-                }.buttonStyle(.edith(.borderless))
+                NotchTabMessage(
+                    icon: .scan, title: "Camera access is off",
+                    detail: "Allow Edith under Camera in Privacy settings to see yourself here."
+                ) {
+                    Button("Open Privacy Settings") { model.perform(.privacy) }
+                        .buttonStyle(.edith(.secondary)).controlSize(.small)
+                }
             } else {
                 Color.black
             }

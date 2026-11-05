@@ -1,7 +1,7 @@
 {
   "id": "seoAudit",
   "title": "Site Audit",
-  "symbolName": "doc.text.magnifyingglass",
+  "icon": "seoAudit",
   "category": "developer",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "seoAudit",
       "title": "Site Audit",
-      "symbolName": "doc.text.magnifyingglass",
+      "icon": "seoAudit",
       "order": 3
     }
   ],
@@ -21,5 +21,37 @@
   "notchCards": [
     "extension:seoAudit"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Find SEO problems on your website, page by page.",
+    "summary": "Add your site's address and Edith lists its pages from the sitemap, then checks titles, descriptions, headings and share cards. Add Lighthouse for performance scores. Reports are saved on this Mac so you can compare runs. Your site is only read, never changed.",
+    "steps": [
+      {
+        "icon": "link",
+        "title": "Add your site",
+        "detail": "Enter a URL like example.com or localhost:3000."
+      },
+      {
+        "icon": "nodes",
+        "title": "Find pages",
+        "detail": "Edith reads your sitemap and lists what it finds."
+      },
+      {
+        "icon": "stepTools",
+        "title": "Choose and run",
+        "detail": "Pick the pages to check and start the audit."
+      },
+      {
+        "icon": "clipboard",
+        "title": "Read the report",
+        "detail": "Open a page to see its issues and how it looks when shared."
+      }
+    ],
+    "examples": [
+      "ed seo create https://example.com --name Example --json",
+      "ed seo start PROJECT --json",
+      "ed seo ls --json",
+      "ed seo pages PROJECT --json"
+    ]
+  }
 }

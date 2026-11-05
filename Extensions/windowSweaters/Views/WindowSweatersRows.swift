@@ -32,146 +32,159 @@ struct WindowSweatersRows: View {
 
     var body: some View {
         Section {
-            Toggle("Sweaters on", isOn: $active.notifyingSettingsChange())
-            Text(
-                "Takes the knitting off every window without removing the extension. Your colourways are kept."
-            )
-            .settingsCaption()
-
-            SweaterPreviewStrip(
-                pattern: selection, stitch: stitch, basket: basket, borderWidth: borderWidth,
-                gauge: max(gauge, minimumGauge), anchor: anchor,
-                appTheme: AppTheme(storedName: appTheme))
-
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                Picker("Pattern", selection: $pattern.notifyingSettingsChange()) {
-                    Text("By App").tag("by-app")
-                    Text("Plain").tag("none")
-                    Divider()
-                    ForEach(SweaterPatternCatalog.featured, id: \.name) { entry in
-                        Text(entry.title).tag(entry.name)
-                    }
-                }
-                Text(
-                    "By App gives each app its own knitting. Plain leaves a single stitch, and the named patterns knit every window the same way in its own colour."
-                )
-                .settingsCaption()
+            Toggle(isOn: $active.notifyingSettingsChange()) {
+                Text("Sweaters on")
+                Text("Shows or hides the knitting on every window. Your colours are kept.")
             }
-
+            if active && !presentation.active {
+                SettingsNoticeRow(
+                    "Starts when this extension is enabled",
+                    message: "Your choice is saved and takes effect as soon as it runs.",
+                    icon: .clock)
+            }
+            Picker(selection: $pattern.notifyingSettingsChange()) {
+                Text("By App").tag("by-app")
+                Text("Plain").tag("none")
+                Divider()
+                ForEach(SweaterPatternCatalog.featured, id: \.name) { entry in
+                    Text(entry.title).tag(entry.name)
+                }
+            } label: {
+                Text("Pattern")
+                Text(
+                    "By App gives each app its own knitting. Plain uses one stitch, and a named pattern knits every window the same way."
+                )
+            }
             if selection == .plain {
-                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                LabeledContent {
                     EdithSegmentedPicker(
                         "Stitch", selection: $stitch.notifyingSettingsChange(),
-                        options: SweaterStitch.allCases, label: { $0.title })
-                    Text("How the plain knitting is worked.")
-                        .settingsCaption()
-                }
-            }
-
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                Picker("Spare wool", selection: $basket.notifyingSettingsChange()) {
-                    ForEach(SweaterBaskets.all) { entry in
-                        Text(entry.title).tag(entry.name)
-                    }
-                }
-                Text(
-                    "Apps without a sweater of their own take a colour from this basket, picked from their name so it never changes."
-                )
-                .settingsCaption()
-            }
-
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                LabeledContent("Border width") {
-                    Text(
-                        Self.label(
-                            for: borderWidth, in: SweaterLimits.borderWidthPresets, unit: "pt")
+                        options: SweaterStitch.allCases, label: { $0.title }
                     )
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                    .frame(width: UIScale.pt(252))
+                } label: {
+                    Text("Stitch")
+                    Text("How the plain knitting is worked.")
                 }
-                Slider(
-                    value: $borderWidth.notifyingSettingsChange(),
-                    in: SweaterLimits.borderWidthRange, step: 1)
-                Text("How wide a band is knitted around each window.")
-                    .settingsCaption()
             }
-
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                LabeledContent("Stitch size") {
-                    Text(Self.label(for: gauge, in: SweaterLimits.gaugePresets, unit: "rows"))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+            Picker(selection: $basket.notifyingSettingsChange()) {
+                ForEach(SweaterBaskets.all) { entry in
+                    Text(entry.title).tag(entry.name)
                 }
-                Slider(
-                    value: $gauge.notifyingSettingsChange(),
-                    in: minimumGauge...SweaterLimits.gaugeRange.upperBound, step: 1)
+            } label: {
+                Text("Spare wool")
                 Text(
-                    "Stitch rows across the band. Fewer rows knit chunkier; a pattern needs at least \(Int(minimumGauge)) to read."
+                    "Apps without a sweater of their own take a colour from this basket. It never changes for the same app."
                 )
-                .settingsCaption()
             }
+        } header: {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                SweaterIntro(
+                    preview: SweaterPreviewStrip(
+                        pattern: selection, stitch: stitch, basket: basket,
+                        borderWidth: borderWidth, gauge: max(gauge, minimumGauge), anchor: anchor,
+                        appTheme: AppTheme(storedName: appTheme))
+                )
+                .padding(.horizontal, -SweaterIntro.formHeaderInset)
+                if presentation.ready, let error = presentation.error {
+                    PageNotice(error, title: "Settings could not be saved", tone: .warning) {
+                        EmptyView()
+                    } actions: {
+                        Button("Try again") { presentation.retry() }
+                    }
+                    .padding(.horizontal, -SweaterIntro.formHeaderInset)
+                }
+                Text("Knitting")
+            }
+        }
 
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+        Section("Fit") {
+            sliderRow(
+                "Border width",
+                detail: "How wide a band is knitted around each window.",
+                value: $borderWidth, range: SweaterLimits.borderWidthRange, step: 1,
+                readout: Self.label(
+                    for: borderWidth, in: SweaterLimits.borderWidthPresets, unit: "pt"))
+            sliderRow(
+                "Stitch size",
+                detail:
+                    "Fewer rows knit chunkier. This pattern needs at least \(Int(minimumGauge)) rows to read.",
+                value: $gauge, range: minimumGauge...SweaterLimits.gaugeRange.upperBound, step: 1,
+                readout: Self.label(for: gauge, in: SweaterLimits.gaugePresets, unit: "rows"))
+            LabeledContent {
                 EdithSegmentedPicker(
                     "Sits", selection: $order.notifyingSettingsChange(),
                     options: [SweaterOrder.below, .above],
-                    label: { $0 == .below ? "Behind" : "In front" })
-                Text(
-                    "Behind tucks the knitting under the window edge. In front lays it over the edge, which reads more strongly but covers a sliver of the window."
+                    label: { $0 == .below ? "Behind" : "In front" }
                 )
-                .settingsCaption()
+                .frame(width: UIScale.pt(184))
+            } label: {
+                Text("Sits")
+                Text("In front reads more strongly but covers a sliver of the window edge.")
             }
-
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                LabeledContent("Unfocused") {
-                    Text("\(Int(unfocusedDim * 100))%")
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                Slider(
-                    value: $unfocusedDim.notifyingSettingsChange(),
-                    in: SweaterLimits.dimRange)
-                Text("Darkens the sweater on every window except the one you are using.")
-                    .settingsCaption()
-            }
-
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            LabeledContent {
                 EdithSegmentedPicker(
                     "Repeat starts", selection: $anchor.notifyingSettingsChange(),
                     options: [SweaterAnchor.corner, .centre],
-                    label: { $0 == .corner ? "At the corner" : "Centred" })
-                Text(
-                    "Anchoring at the corner holds the pattern still while a window resizes. Centring composes each side, but slides as the window grows."
+                    label: { $0 == .corner ? "At the corner" : "Centred" }
                 )
-                .settingsCaption()
+                .frame(width: UIScale.pt(184))
+            } label: {
+                Text("Repeat starts")
+                Text("At the corner holds the pattern still while a window resizes.")
             }
+            sliderRow(
+                "Unfocused",
+                detail: "Darkens the sweater on every window except the one you are using.",
+                value: $unfocusedDim, range: SweaterLimits.dimRange, step: nil,
+                readout: "\(Int(unfocusedDim * 100))%")
+        }
 
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                LabeledContent {
-                    TextField(
-                        "Terminal, Preview", text: $excludedApps.notifyingSettingsChange()
-                    )
-                    .textFieldStyle(.roundedBorder)
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Never knit")
-                        InfoDot("Comma-separated app names that stay bare.")
+        Section("Apps") {
+            SettingsRow(
+                "Never knit",
+                subtitle: "App names, separated by commas, that keep their plain window edges."
+            ) {
+                TextField(
+                    "Apps to skip", text: $excludedApps.notifyingSettingsChange(),
+                    prompt: Text("Terminal, Preview")
+                )
+                .labelsHidden()
+                .multilineTextAlignment(.leading)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: UIScale.pt(260))
+            }
+            Toggle(isOn: $accessibilityFocus.notifyingSettingsChange()) {
+                Text("Follow focus through Accessibility")
+                Text(
+                    "Asks each app which window is focused. More accurate in apps with panels, and needs Accessibility access."
+                )
+            }
+        }
+    }
+
+    private func sliderRow(
+        _ title: String, detail: String, value: Binding<Double>, range: ClosedRange<Double>,
+        step: Double?, readout: String
+    ) -> some View {
+        SettingsRow(title, subtitle: detail) {
+            HStack(spacing: UIScale.pt(12)) {
+                Group {
+                    if let step {
+                        Slider(value: value.notifyingSettingsChange(), in: range, step: step)
+                    } else {
+                        Slider(value: value.notifyingSettingsChange(), in: range)
                     }
                 }
-                Text("Apps listed here keep their plain window edges.")
-                    .settingsCaption()
+                .labelsHidden()
+                .frame(width: UIScale.pt(PageMetrics.settingsSliderWidth))
+                Text(readout)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .frame(width: UIScale.pt(116), alignment: .trailing)
             }
-
-            Toggle(
-                "Follow focus through Accessibility",
-                isOn: $accessibilityFocus.notifyingSettingsChange())
-            Text(
-                "Reads the focused window from the app itself rather than the window server. More accurate in apps with panels, and needs Accessibility."
-            )
-            .settingsCaption()
         }
-        .disabled(!presentation.active)
-        .opacity(presentation.active ? 1 : 0.5)
     }
 
     private static func label(
@@ -185,6 +198,40 @@ struct WindowSweatersRows: View {
     }
 }
 
+private struct SweaterIntro: View {
+    static let formHeaderInset = 10.0
+
+    let preview: SweaterPreviewStrip
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let dark = scheme == .dark
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            preview
+                .padding(UIScale.pt(12))
+                .frame(maxWidth: .infinity)
+                .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                Text("A knitted border around every window")
+                    .font(.edithText(.title3)).fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Each app gets its own colours, so you can tell windows apart at a glance. It is drawn around the edges only: your windows and apps are never changed. The preview above follows your choices."
+                )
+                .font(.edithText(.body))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, UIScale.pt(16))
+        .padding(.horizontal, Self.formHeaderInset)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark)))
+    }
+}
+
 private struct SweaterPreviewStrip: View {
     let pattern: SweaterPattern
     let stitch: SweaterStitch
@@ -195,6 +242,7 @@ private struct SweaterPreviewStrip: View {
     let appTheme: AppTheme
 
     private static let sampleApps = ["Edith", "Claude", "Finder", "Spotify"]
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
@@ -209,7 +257,6 @@ private struct SweaterPreviewStrip: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, UIScale.pt(4))
     }
 
     private func swatch(for app: String) -> NSImage? {
@@ -226,7 +273,10 @@ private struct SweaterPreviewStrip: View {
         context.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
 
         let window = CGRect(x: 22, y: 16, width: 66, height: 24)
-        context.setFillColor(NSColor.textBackgroundColor.cgColor)
+        context.setFillColor(
+            scheme == .dark
+                ? CGColor(srgbRed: 0.17, green: 0.17, blue: 0.18, alpha: 1)
+                : CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
         let panel = CGPath(
             roundedRect: window, cornerWidth: 6, cornerHeight: 6, transform: nil)
         context.addPath(panel)

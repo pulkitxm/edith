@@ -53,6 +53,49 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
         guard dark else { return base }
         return base.blended(withFraction: 0.12, of: .white) ?? base
     }
+
+    public func onAccent(dark: Bool) -> Color {
+        Color(OnAccent.foreground(on: accentNSColor(dark: dark)))
+    }
+
+    public var onAccent: Color {
+        Color(
+            nsColor: NSColor(name: nil) { appearance in
+                OnAccent.foreground(on: accentNSColor(dark: appearance.isDark))
+            })
+    }
+}
+
+public enum OnAccent {
+    static let ink = ThemeColor.nsColor("#121214")
+    static let whiteLuminanceLimit = 0.3
+
+    static func luminance(_ color: NSColor) -> Double {
+        func linear(_ channel: CGFloat) -> Double {
+            let value = Double(channel)
+            return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        let srgb = color.usingColorSpace(.sRGB) ?? .black
+        return 0.2126 * linear(srgb.redComponent) + 0.7152 * linear(srgb.greenComponent)
+            + 0.0722 * linear(srgb.blueComponent)
+    }
+
+    static func contrast(_ first: NSColor, _ second: NSColor) -> Double {
+        let (lhs, rhs) = (luminance(first), luminance(second))
+        return (max(lhs, rhs) + 0.05) / (min(lhs, rhs) + 0.05)
+    }
+
+    static func foreground(on background: NSColor) -> NSColor {
+        luminance(background) > whiteLuminanceLimit ? ink : .white
+    }
+
+    public static func foreground(on background: Color, dark: Bool) -> Color {
+        var resolved = NSColor.black
+        NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance {
+            resolved = NSColor(background).usingColorSpace(.sRGB) ?? .black
+        }
+        return Color(foreground(on: resolved))
+    }
 }
 
 extension NSAppearance {
@@ -138,6 +181,7 @@ private final class ThemeDefaultsObserver: NSObject, @unchecked Sendable {
 
 extension Color {
     public static var themeAccent: Color { ThemeStore.current.accent }
+    public static var themeOnAccent: Color { ThemeStore.current.onAccent }
 }
 
 public let themePalette: [(name: String, color: Color)] = AppTheme.allCases.dropFirst().map {
@@ -148,8 +192,18 @@ public func themeColor(_ name: String) -> Color {
     AppTheme(storedName: name).accent
 }
 
+public func themeOnAccentColor(_ name: String) -> Color {
+    AppTheme(storedName: name).onAccent
+}
+
+private struct ThemedControls: ViewModifier {
+    func body(content: Content) -> some View {
+        content.tint(ThemeStore.shared.theme.accent)
+    }
+}
+
 extension View {
     public func themedControls() -> some View {
-        tint(Color.themeAccent)
+        modifier(ThemedControls())
     }
 }

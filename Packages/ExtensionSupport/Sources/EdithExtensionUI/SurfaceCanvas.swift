@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -139,7 +140,7 @@ public struct SurfaceCanvas<Content: View>: View {
                                     style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                         }
                         .overlay(alignment: .topLeading) {
-                            Label("Add " + widget.title, systemImage: "plus.circle.fill")
+                            Label("Add " + widget.title, edith: .addFilled)
                                 .font(.edithText(.caption)).padding(UIScale.pt(8))
                                 .background(
                                     DashSkin.panel,
@@ -174,7 +175,7 @@ public struct SurfaceCanvas<Content: View>: View {
                 }
             }
             if editing {
-                Label("Drop a widget to add it", systemImage: "plus.circle")
+                Label("Drop a widget to add it", edith: .addFilled)
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(UIScale.pt(20))
                     .background(
@@ -390,7 +391,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             if editing {
                 HStack {
-                    Image(systemName: tile.locked ? "lock.fill" : "line.3.horizontal")
+                    EdithIconView(tile.locked ? .lock : .menu)
                     Text(tile.displayTitle).lineLimit(1)
                     Spacer(minLength: 0)
                     Text("\(tile.span)/\(layout.columns)").foregroundStyle(.secondary)
@@ -471,7 +472,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
                 HStack {
                     Button("Configure", action: inspect).font(.edithText(.caption))
                     Spacer()
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    EdithIconView(.expand)
                         .font(.edithText(.caption)).foregroundStyle(Color.themeAccent)
                         .frame(width: UIScale.pt(28), height: UIScale.pt(22))
                         .contentShape(Rectangle())

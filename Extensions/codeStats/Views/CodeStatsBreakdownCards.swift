@@ -9,15 +9,19 @@ struct CodeStatsLanguageCards: View {
     @Environment(\.codeStatsActions) private var actions
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                shares.frame(minWidth: UIScale.pt(320))
-                overTime.frame(minWidth: UIScale.pt(420))
+        if projection.showsStackedTrend {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                    shares.frame(minWidth: UIScale.pt(320))
+                    overTime.frame(minWidth: UIScale.pt(420))
+                }
+                VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                    shares
+                    overTime
+                }
             }
-            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                shares
-                overTime
-            }
+        } else {
+            shares
         }
     }
 
@@ -44,7 +48,7 @@ struct CodeStatsLanguageCards: View {
                 }
                 if projection.languageShares.isEmpty {
                     Text("No language data in this range.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
@@ -53,8 +57,10 @@ struct CodeStatsLanguageCards: View {
 
     private var overTime: some View {
         CodeStatsStackedCard(
-            title: "Languages over time", note: "Monthly share", points: projection.languageMonthly,
-            series: projection.languageSeries, percent: true, dark: dark)
+            title: "Languages over time",
+            note: projection.stackGranularity == .daily ? "Daily share" : "Monthly share",
+            points: projection.languageMonthly, series: projection.languageSeries, percent: true,
+            granularity: projection.stackGranularity, dark: dark)
     }
 }
 
@@ -68,14 +74,14 @@ private struct CodeStatsShareRow: View {
             HStack {
                 Circle().fill(color).frame(width: UIScale.pt(8), height: UIScale.pt(8))
                 Text(share.name)
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 Text(CodeStatsNumberFormat.compact(share.lines) + " lines")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Text(CodeStatsNumberFormat.percent(share.share * 100))
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                     .frame(width: UIScale.pt(40), alignment: .trailing)
             }
@@ -97,18 +103,28 @@ private struct CodeStatsShareRow: View {
 struct CodeStatsHabitCards: View {
     let projection: CodeStatsProjection
     let dark: Bool
+    var showsTopDays = true
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                punchcard.frame(minWidth: UIScale.pt(560))
-                topDays.frame(width: UIScale.pt(300))
+        if showsTopDays {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                    punchcard.frame(minWidth: UIScale.pt(560))
+                    topDays.frame(width: UIScale.pt(CodeStatsTopDaysCard.width))
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                    punchcard
+                    topDays
+                }
             }
-            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                punchcard
-                topDays
-            }
+        } else {
+            punchcard
         }
+    }
+
+    private var topDays: some View {
+        CodeStatsTopDaysCard(days: projection.topDays, dark: dark)
     }
 
     private var punchcard: some View {
@@ -128,7 +144,7 @@ struct CodeStatsHabitCards: View {
             ForEach(Array(projection.punchcardRows.enumerated()), id: \.offset) { row, name in
                 GridRow {
                     Text(name)
-                        .font(.system(size: UIScale.pt(9)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: UIScale.pt(28), alignment: .leading)
                     ForEach(projection.punchcard[(row * 24)..<(row * 24 + 24)]) { cell in
@@ -146,40 +162,49 @@ struct CodeStatsHabitCards: View {
                 Text("")
                 ForEach(0..<24, id: \.self) { hour in
                     Text(hour.isMultiple(of: 6) ? "\(hour)" : "")
-                        .font(.system(size: UIScale.pt(9)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
         }
     }
 
-    private var topDays: some View {
+}
+
+struct CodeStatsTopDaysCard: View {
+    static let width = 300.0
+
+    let days: [CodeStatsTopDay]
+    let dark: Bool
+
+    var body: some View {
         PageCard(title: "Top days", note: "By lines authored", fill: true) {
-            VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-                ForEach(Array(projection.topDays.enumerated()), id: \.element.id) { index, day in
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
                     HStack(spacing: UIScale.pt(8)) {
                         Text("\(index + 1)")
-                            .font(DashSkin.mono(10))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(width: UIScale.pt(16), alignment: .trailing)
                         Text(
                             day.date?.formatted(date: .abbreviated, time: .omitted) ?? day.day
                         )
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .foregroundStyle(DashSkin.ink(dark))
-                        Spacer()
+                        .lineLimit(1)
+                        Spacer(minLength: UIScale.pt(8))
                         Text(CodeStatsNumberFormat.grouped(day.commits) + " commits")
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                         Text(CodeStatsNumberFormat.compact(day.lines))
-                            .font(.system(size: UIScale.pt(12), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                     }
                     .monospacedDigit()
                 }
-                if projection.topDays.isEmpty {
+                if days.isEmpty {
                     Text("No commits in this range.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }

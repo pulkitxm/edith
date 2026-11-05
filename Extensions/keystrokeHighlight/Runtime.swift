@@ -133,7 +133,7 @@ final class KeystrokeHighlightService: ExtensionService {
         return NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    Form { KeystrokeHighlightRows(presentation: presentation) }.edithForm()
+                    Form { KeystrokeHighlightRows(presentation: presentation) }.settingsForm()
                 }
             })
     }

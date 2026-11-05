@@ -8,17 +8,34 @@ struct MicMuteRows: View {
         var inMenuBar = true
 
     var body: some View {
+        SettingsIssueSection()
         Section {
-            LabeledContent("Shortcut") {
-                HotKeyRecorderControl(keyPrefix: "micHotKey", defaultLabel: "⌘⇧M")
+            if presentation.active {
+                SettingsRow("Microphones") {
+                    Label(
+                        presentation.state.muted ? "Muted" : "Live",
+                        edith: presentation.state.muted ? .micMute : .mic
+                    )
+                    .foregroundStyle(presentation.state.muted ? Color.red : Color.secondary)
+                }
             }
-            Text("Use this shortcut to mute or unmute every microphone system-wide.")
-                .settingsCaption()
-            Toggle("Show in the menu bar", isOn: $inMenuBar.notifyingSettingsChange())
-            Text("The menu bar icon shows the current mute state and toggles it on click.")
-                .settingsCaption()
+            SettingsShortcutRow(
+                keyPrefix: "micHotKey", defaultLabel: "⌘⇧M",
+                purpose: "Mutes or unmutes every microphone from any app."
+            )
+            .disabled(!presentation.active)
+            Toggle(isOn: $inMenuBar.notifyingSettingsChange()) {
+                Text("Show in the menu bar")
+                Text("The icon shows whether you are muted. Click it to switch.")
+            }
+            .disabled(!presentation.active)
+        } header: {
+            Text("Mute all microphones")
+        } footer: {
+            if !presentation.active {
+                Text("Mic Mute is turned off. Turn it on in Extensions to use these controls.")
+                    .settingsCaption()
+            }
         }
-        .disabled(!presentation.active)
-        .opacity(presentation.active ? 1 : 0.5)
     }
 }

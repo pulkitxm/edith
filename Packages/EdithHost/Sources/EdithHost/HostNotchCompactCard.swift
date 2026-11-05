@@ -37,7 +37,7 @@ struct HostNotchCompactCard: View {
             if tile.showTitle || tile.showActions {
                 HStack {
                     if tile.showTitle {
-                        Label(tile.displayTitle, systemImage: tile.widget.icon)
+                        Label(tile.displayTitle, edith: tile.widget.icon)
                             .font(.edithText(.headline)).lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -45,7 +45,7 @@ struct HostNotchCompactCard: View {
                         Button {
                             model.requestRefresh()
                         } label: {
-                            Image(systemName: "arrow.clockwise")
+                            EdithIconView(.refresh)
                         }
                         .help("Refresh widget").accessibilityLabel("Refresh " + tile.displayTitle)
                         Button {
@@ -53,7 +53,7 @@ struct HostNotchCompactCard: View {
                                 model.requestOpen(providerID: provider)
                             }
                         } label: {
-                            Image(systemName: "arrow.up.right")
+                            EdithIconView(.arrowUpRight)
                         }
                         .help("Open " + tile.widget.title).accessibilityLabel(
                             "Open " + tile.widget.title
@@ -113,7 +113,7 @@ struct HostNotchCompactCard: View {
                 let row = scoped.row
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                        Image(systemName: row.icon).foregroundStyle(tile.highlightColor).frame(
+                        EdithIconView(row.icon).foregroundStyle(tile.highlightColor).frame(
                             width: UIScale.pt(16))
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             Text(row.title).font(.edithText(.callout)).lineLimit(tile.dense ? 1 : 2)
@@ -186,7 +186,7 @@ struct HostNotchCompactCard: View {
         Button {
             model.requestAction(providerID: providerID, actionID: action.id)
         } label: {
-            Label(action.title, systemImage: action.icon).font(.edithText(.caption))
+            Label(action.title, edith: action.icon).font(.edithText(.caption))
         }.buttonStyle(.edith(.secondary))
     }
     private struct ScopedMetric: Identifiable {

@@ -87,6 +87,13 @@ struct Sparkline: View {
     var body: some View {
         let samples = SparkSamples(values: values)
         ZStack {
+            if values.count < 2 {
+                SparkBaseline()
+                    .stroke(
+                        color.opacity(0.35),
+                        style: StrokeStyle(
+                            lineWidth: UIScale.pt(1), dash: [UIScale.pt(3), UIScale.pt(4)]))
+            }
             SparkShape(samples: samples, maximum: maximum, capacity: capacity, filled: true)
                 .fill(
                     LinearGradient(
@@ -96,6 +103,28 @@ struct Sparkline: View {
                 .stroke(color, style: StrokeStyle(lineWidth: UIScale.pt(1.6), lineJoin: .round))
         }
         .animation(.linear(duration: cadence), value: values)
+    }
+}
+
+enum MachineConnectionPrompt: Equatable {
+    case connect
+    case retry
+
+    static func resolve(_ state: MachineConnectionState) -> MachineConnectionPrompt? {
+        switch state {
+        case .disconnected: return .connect
+        case let .failed(_, recoverable): return recoverable ? .retry : .connect
+        case .connected, .connecting, .reconnecting: return nil
+        }
+    }
+}
+
+struct SparkBaseline: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY - 0.5))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - 0.5))
+        return path
     }
 }
 
@@ -131,10 +160,7 @@ struct MetricCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title.uppercased())
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                    .tracking(UIScale.pt(0.7))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                PageCapsLabel(title)
                 Spacer()
                 Text(value)
                     .font(DashSkin.heading(21))
@@ -150,13 +176,16 @@ struct MetricCard: View {
                 .frame(height: UIScale.pt(46))
             if !footnote.isEmpty {
                 Text(footnote)
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption).monospacedDigit())
                     .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
             }
         }
-        .padding(UIScale.pt(14))
+        .padding(UIScale.pt(PageMetrics.cardPadding))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+        .widgetBar(
+            cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark))
     }
 }
 
@@ -176,14 +205,14 @@ struct NetworkSparkline: View {
             )
             .fill(
                 LinearGradient(
-                    colors: [DashSkin.networkDownload.opacity(0.18), .clear],
+                    colors: [Color.themeAccent.opacity(0.18), .clear],
                     startPoint: .top, endPoint: .bottom))
             SparkShape(
                 samples: SparkSamples(values: downloadValues), maximum: maximum,
                 capacity: MachineSession.historyLength, filled: false
             )
             .stroke(
-                DashSkin.networkDownload,
+                Color.themeAccent,
                 style: StrokeStyle(lineWidth: UIScale.pt(1.6), lineJoin: .round))
             SparkShape(
                 samples: SparkSamples(values: uploadValues), maximum: maximum,
@@ -248,7 +277,7 @@ struct NetworkMetricCard: View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(alignment: .center) {
                 Text("INTERNET SPEED")
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .tracking(UIScale.pt(0.7))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
@@ -256,7 +285,7 @@ struct NetworkMetricCard: View {
                     SkeletonBlock(width: 13, height: 13, corner: 4)
                 } else {
                     Button(action: refresh) {
-                        Image(systemName: "arrow.clockwise")
+                        EdithIconView(.refresh)
                     }
                     .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -271,10 +300,10 @@ struct NetworkMetricCard: View {
                 HStack(spacing: UIScale.pt(12)) {
                     speed(
                         "Download", value: measurement?.downloadBitsPerSecond,
-                        systemImage: "arrow.down", color: DashSkin.networkDownload)
+                        icon: .arrowDown, color: Color.themeAccent)
                     speed(
                         "Upload", value: measurement?.uploadBitsPerSecond,
-                        systemImage: "arrow.up", color: DashSkin.networkUpload)
+                        icon: .arrowUp, color: DashSkin.networkUpload)
                 }
                 NetworkSparkline(
                     downloadValues: downloadHistory, uploadValues: uploadHistory
@@ -286,11 +315,11 @@ struct NetworkMetricCard: View {
     }
 
     private func speed(
-        _ title: String, value: Double?, systemImage: String, color: Color
+        _ title: String, value: Double?, icon: EdithIcon, color: Color
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+            Label(title, edith: icon)
+                .font(.edithText(.caption).weight(.medium))
                 .foregroundStyle(color)
             Text(value.map(InternetSpeedFormatter.string) ?? "–")
                 .font(DashSkin.heading(17))
@@ -315,17 +344,17 @@ struct NetworkMetricCard: View {
             .accessibilityLabel("Testing internet speed again")
         } else if let error {
             Text(error)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.danger)
                 .lineLimit(1)
                 .help(error)
         } else if let measurement {
             Text("Tested \(measurement.measuredAt, style: .relative)")
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         } else {
             Text("Waiting to test this machine")
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
@@ -389,26 +418,41 @@ struct MetricsGridLayout: Layout {
 struct MachineOverviewTab: View {
     let session: MachineSession
     let model: MachinesModel
+    var editConnection: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+
+    @State private var viewportHeight: CGFloat = 0
 
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                if session.sample == nil, !session.state.isConnected {
-                    connectionNotice
-                }
-                if session.sample == nil {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                if session.sample == nil,
+                    let prompt = MachineConnectionPrompt.resolve(session.state)
+                {
+                    connectionPrompt(prompt)
+                } else if session.sample == nil {
                     MachineOverviewSkeleton(dark: dark)
                 } else {
                     loaded
                 }
             }
+            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
             .pageContent(compact)
         }
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+        } action: {
+            viewportHeight = $0
+        }
         .machineActivity(session, kind: .internetSpeed)
+    }
+
+    private var promptHeight: CGFloat {
+        let chrome = UIScale.pt(PageMetrics.pinnedContentTop) + UIScale.pt(PageMetrics.bottom)
+        return max(UIScale.pt(360), viewportHeight - chrome)
     }
 
     @ViewBuilder
@@ -430,51 +474,56 @@ struct MachineOverviewTab: View {
         }
     }
 
-    private var connectionNotice: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            if session.state.isBusy {
-                SkeletonGroup {
-                    HStack(spacing: UIScale.pt(10)) {
-                        SkeletonBlock(width: 13, height: 13, corner: 6.5)
-                        SkeletonBlock(width: 226, height: 10, corner: 2)
-                    }
-                }
-                .accessibilityLabel(MachineStatusStyle.detail(session.state))
-            } else {
-                Image(systemName: "bolt.horizontal.circle")
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                Text(MachineStatusStyle.detail(session.state))
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
+    private func connectionPrompt(_ prompt: MachineConnectionPrompt) -> some View {
+        let name = session.machine.name
+        let action: PageAction
+        switch prompt {
+        case .connect:
+            action = PageAction("Connect") {
+                model.performConnection(.connect, for: session)
             }
-            Spacer(minLength: 0)
-            if case .disconnected = session.state {
-                Button("Connect") { model.performConnection(.connect, for: session) }
-            }
+        case .retry:
+            action = PageAction("Try again", icon: .refresh) { session.retry() }
         }
-        .padding(UIScale.pt(14))
-        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark))
+        return PageEmptyState(
+            icon: prompt == .retry ? .warning : .bolt,
+            title: prompt == .retry ? "Edith could not reach \(name)" : "\(name) is not connected",
+            message: prompt == .retry
+                ? MachineStatusStyle.detail(session.state)
+                : "Connect to see its CPU, memory and disk, open a terminal and browse its files.",
+            primary: action,
+            secondary: editConnection.map { PageAction("Edit connection", perform: $0) },
+            footnote: prompt == .retry ? "Check that the machine is on and on your network." : nil,
+            tint: prompt == .retry ? DashSkin.warn : nil
+        )
+        .frame(minHeight: promptHeight)
+        .widgetBar(
+            cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark))
     }
 
     private var identityCard: some View {
         HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: UIScale.pt(12)))
+            EdithIconView(.history)
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(uptimeText)
-                .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .foregroundStyle(DashSkin.ink(dark))
-            Spacer(minLength: 0)
+                .lineLimit(1)
+            Spacer(minLength: UIScale.pt(8))
             if let hello = session.hello {
                 Text("\(hello.os)  ·  \(hello.arch)")
-                    .font(DashSkin.mono(10.5))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, UIScale.pt(14))
-        .padding(.vertical, UIScale.pt(10))
-        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+        .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
+        .padding(.vertical, UIScale.pt(12))
+        .widgetBar(
+            cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark))
     }
 
     private var uptimeText: String {
@@ -530,7 +579,7 @@ struct MachineOverviewTab: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     HStack {
                         Text(disk.mount)
-                            .font(.system(size: UIScale.pt(12), weight: .medium))
+                            .font(.edithText(.callout).weight(.medium))
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                         Spacer()
@@ -557,13 +606,13 @@ struct MachineOverviewTab: View {
             ForEach(sample.net.ifaces.filter { !$0.virtual }, id: \.n) { iface in
                 HStack {
                     Text(iface.n)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
-                    Label(ByteFormatter.rate(iface.rxBps), systemImage: "arrow.down")
+                    Label(ByteFormatter.rate(iface.rxBps), edith: .arrowDown)
                         .font(DashSkin.mono(10.5))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                    Label(ByteFormatter.rate(iface.txBps), systemImage: "arrow.up")
+                    Label(ByteFormatter.rate(iface.txBps), edith: .arrowUp)
                         .font(DashSkin.mono(10.5))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
@@ -576,7 +625,7 @@ struct MachineOverviewTab: View {
             if let gpu = slow.gpu {
                 HStack {
                     Text(gpu.name)
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
                     Text(
@@ -589,7 +638,7 @@ struct MachineOverviewTab: View {
             if let battery = slow.battery {
                 HStack {
                     Text("Battery")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
                     Text("\(battery.percent)%  ·  \(battery.status)")
@@ -605,7 +654,7 @@ struct MachineOverviewTab: View {
                     ForEach(slow.temps, id: \.label) { temp in
                         HStack(spacing: UIScale.pt(6)) {
                             Text(temp.label)
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                                 .lineLimit(1)
                             Spacer(minLength: 0)
@@ -625,14 +674,14 @@ struct MachineOverviewTab: View {
             if let updates = session.facts.updatesAvailable, updates > 0 {
                 Label(
                     "\(updates) package update\(updates == 1 ? "" : "s") available",
-                    systemImage: "shippingbox.and.arrow.backward"
+                    edith: .appMaintenance
                 )
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             }
             ForEach(session.facts.who, id: \.self) { line in
-                Label(line, systemImage: "person")
-                    .font(.system(size: UIScale.pt(11.5)))
+                Label(line, edith: .person)
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }

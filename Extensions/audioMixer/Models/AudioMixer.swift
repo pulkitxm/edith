@@ -291,6 +291,7 @@ final class MixerEngine: AudioMixerPresenting {
     private(set) var isMonitoring = false
 
     var errorMessage: String? { actionError ?? discoveryError }
+    var loaded: Bool { true }
     var hasActiveTaps: Bool { !taps.isEmpty }
 
     private let snapshotLoader: AudioMixerSnapshotLoader

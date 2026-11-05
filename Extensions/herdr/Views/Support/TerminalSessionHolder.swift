@@ -368,7 +368,7 @@ final class TerminalSessionHolder {
                 ?? terminalLaunch?.allowsLocalFileLinks ?? false,
             resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt
                 ?? terminalLaunch?.resetTerminalAfterInterrupt ?? false,
-            theme: theme)
+            theme: theme, overlayIcons: EdithIcon.terminalOverlay(TerminalOverlayIcons.init))
         view.fileLinks = fileLinks
         view.setRenderingActive(renderingActive)
         if let hostWindowState {

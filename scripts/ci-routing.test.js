@@ -267,7 +267,7 @@ test("Swift lanes exercise only independent host and extension packages", () => 
     { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
     {
       lane: "feature-models",
-      targets: "ci-extension-support ci-extension-docs",
+      targets: "ci-extension-support ci-edith-icons ci-extension-docs",
     },
     { lane: "native-music", targets: "ci-music-native" },
   ]);

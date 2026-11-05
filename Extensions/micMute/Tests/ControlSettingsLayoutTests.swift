@@ -17,7 +17,7 @@ import Testing
             rootView: state.withContext {
                 ExtensionPageHost {
                     ControlSettingsHost(presentation: model) {
-                        Form { MicMuteRows(presentation: model) }.edithForm()
+                        Form { MicMuteRows(presentation: model) }.settingsForm()
                     }
                 }
             })

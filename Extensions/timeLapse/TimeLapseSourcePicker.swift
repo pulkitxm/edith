@@ -104,9 +104,9 @@ struct ScreenCaptureSourcePicker: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             HStack {
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                     Text(title).font(.edithText(.title3)).fontWeight(.semibold)
                     Text(detail)
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -115,8 +115,9 @@ struct ScreenCaptureSourcePicker: View {
                 Button {
                     refresh += 1
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                }.buttonStyle(.edith(.borderless)).disabled(sources.sourceLoad.isRunning)
+                    EdithIconView(.refresh)
+                }.buttonStyle(.edith(.iconOnly)).disabled(sources.sourceLoad.isRunning)
+                    .padding(.trailing, -UIScale.pt(6))
                     .help("Refresh sources").accessibilityLabel("Refresh sources")
             }
             EdithSegmentedPicker(
@@ -124,7 +125,7 @@ struct ScreenCaptureSourcePicker: View {
                 options: ["windows", "displays"],
                 label: { $0 == "windows" ? "Windows" : "Displays" })
             if selection.mode == "windows" {
-                TextField("Search apps or windows", text: $search).textFieldStyle(.roundedBorder)
+                SearchField(placeholder: "Search apps or windows", text: $search)
             }
             ScrollView {
                 PageLoading(
@@ -135,13 +136,13 @@ struct ScreenCaptureSourcePicker: View {
                     retry: { refresh += 1 }
                 ) {
                     if choices.isEmpty && sources.sourceLoad.errorMessage == nil {
-                        ContentUnavailableView(
-                            search.isEmpty ? "No sources available" : "No matching windows",
-                            systemImage: selection.mode == "displays" ? "display" : "macwindow",
-                            description: Text(
-                                search.isEmpty
-                                    ? "Open a window or connect a display, then refresh."
-                                    : "Try another app or window name."))
+                        PageEmptyState(
+                            icon: selection.mode == "displays" ? .display : .window,
+                            title: search.isEmpty ? "No sources available" : "No matching windows",
+                            message: search.isEmpty
+                                ? "Open a window or connect a display, then refresh."
+                                : "Try another app or window name.",
+                            style: .compact)
                     } else {
                         LazyVGrid(columns: columns, spacing: UIScale.pt(16)) {
                             ForEach(choices) { choice in
@@ -160,7 +161,9 @@ struct ScreenCaptureSourcePicker: View {
                         }.padding(UIScale.pt(2))
                     }
                 }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).id(selection.mode)
+            }
+            .padding(.horizontal, -UIScale.pt(2))
+            .frame(maxWidth: .infinity, maxHeight: .infinity).id(selection.mode)
             if let error = sources.sourceLoad.errorMessage {
                 PageNotice(
                     error, tone: .error,
@@ -173,36 +176,37 @@ struct ScreenCaptureSourcePicker: View {
                 HStack {
                     Label(
                         selection.mode == "windows" ? "Selected app audio" : "System audio",
-                        systemImage: "speaker.wave.2")
+                        edith: .speaker)
                     Spacer()
                     Toggle(
                         selection.mode == "windows" ? "Selected app audio" : "System audio",
                         isOn: $selection.systemAudio
                     ).labelsHidden()
-                        .toggleStyle(.switch)
+                        .toggleStyle(.edithSwitch)
                 }.font(.edithText(.callout))
                 if selection.mode == "windows" {
                     Text("Audio follows the selected apps, including their other windows.")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }
-            PageSectionHeader(selectionSummary) {
-                HStack {
-                    Button("Cancel") { dismiss() }.buttonStyle(.edith(.secondary))
-                        .keyboardShortcut(.cancelAction)
-                    Button("Use selection") {
-                        onSelection(selection)
-                        dismiss()
-                    }.buttonStyle(.edith(.primary)).keyboardShortcut(.defaultAction)
-                        .disabled(
-                            sources.sourceLoad.isRunning || sources.captureSelectionBlocked
-                                || selection.selected.isEmpty
-                                || selection.selected.count > maximumCount
-                        )
-                }
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                Text(selectionSummary)
+                    .font(.edithText(.callout)).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: UIScale.pt(PageMetrics.cardSpacing))
+                Button("Cancel") { dismiss() }.buttonStyle(.edith(.secondary))
+                    .keyboardShortcut(.cancelAction)
+                Button("Use selection") {
+                    onSelection(selection)
+                    dismiss()
+                }.buttonStyle(.edith(.primary)).keyboardShortcut(.defaultAction)
+                    .disabled(
+                        sources.sourceLoad.isRunning || sources.captureSelectionBlocked
+                            || selection.selected.isEmpty
+                            || selection.selected.count > maximumCount
+                    )
             }
         }
-        .padding(UIScale.pt(24))
+        .padding(UIScale.pt(PageMetrics.gutter))
         .frame(
             width: PresentationMetrics.width(compact ? 500 : 700),
             height: min(PresentationMetrics.height(600), maximumHeight ?? .infinity)
@@ -234,14 +238,14 @@ struct ScreenCaptureSourcePicker: View {
             return sources.displays.enumerated().map { index, display in
                 .init(
                     id: display.id, title: "Display \(index + 1)",
-                    subtitle: "\(display.width) × \(display.height)", symbol: "display")
+                    subtitle: "\(display.width) × \(display.height)", icon: .display)
             }
         }
         return sources.windows.filter {
             search.isEmpty
                 || "\($0.application) \($0.title)".localizedCaseInsensitiveContains(search)
         }.map {
-            .init(id: $0.id, title: $0.title, subtitle: $0.application, symbol: "macwindow")
+            .init(id: $0.id, title: $0.title, subtitle: $0.application, icon: .window)
         }
     }
 }
@@ -251,7 +255,7 @@ private struct TimeLapseSourceCard: View {
         let id: UInt32
         let title: String
         let subtitle: String
-        let symbol: String
+        let icon: EdithIcon
     }
 
     let choice: Choice
@@ -273,16 +277,19 @@ private struct TimeLapseSourceCard: View {
                             Image(image, scale: 1, label: Text(choice.title))
                                 .resizable().scaledToFit().padding(UIScale.pt(5))
                         } else if loading.state == .loading {
-                            SkeletonBlock(height: 100, corner: 10)
+                            GeometryReader { proxy in
+                                SkeletonBlock(
+                                    height: proxy.size.height / UIScale.current, corner: 10)
+                            }
                         } else {
                             VStack(spacing: UIScale.pt(6)) {
-                                Image(systemName: choice.symbol).font(.edithText(.title2))
+                                EdithIconView(choice.icon).font(.edithText(.title2))
                                 Text("Preview unavailable").font(.edithText(.caption2))
                             }.foregroundStyle(.secondary)
                         }
                     }
                     .overlay(alignment: .topTrailing) {
-                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        EdithIconView(selected ? .success : .ring)
                             .font(.edithText(.title3)).foregroundStyle(
                                 selected ? Color.themeAccent : .secondary
                             )
@@ -295,7 +302,7 @@ private struct TimeLapseSourceCard: View {
                                 lineWidth: UIScale.pt(selected ? 2 : 1))
                     }
                 Text(choice.title).font(.edithText(.callout)).fontWeight(.medium).lineLimit(1)
-                Label(choice.subtitle, systemImage: choice.symbol)
+                Label(choice.subtitle, edith: choice.icon)
                     .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
             }.contentShape(Rectangle())
         }

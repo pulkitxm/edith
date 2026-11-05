@@ -30,7 +30,7 @@ import EdithExtensionSupport
 
     @Test func clipboardStatesExposeUsefulStatus() {
         #expect(SSHClipboardSyncState.disabled.label == "Clipboard sync disabled")
-        #expect(SSHClipboardSyncState.configuring.symbol == "arrow.triangle.2.circlepath")
+        #expect(SSHClipboardSyncState.configuring.icon == .sync)
         #expect(SSHClipboardSyncState.active.label == "Clipboard sync active")
         #expect(
             SSHClipboardSyncState.failed("offline").label

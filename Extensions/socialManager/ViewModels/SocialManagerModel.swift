@@ -97,8 +97,9 @@ final class SocialManagerModel {
     }
 
     func accountTitle(_ account: SocialAccount) -> String {
-        [profile(for: account)?.name, account.handle ?? account.name].compactMap { $0 }.joined(
-            separator: " / ")
+        let name = account.handle ?? account.name
+        guard let profile = profile(for: account)?.name, profile != name else { return name }
+        return "\(profile) / \(name)"
     }
 
     @discardableResult

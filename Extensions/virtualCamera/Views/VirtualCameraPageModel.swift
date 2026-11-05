@@ -25,13 +25,13 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbolName: String {
+    var icon: EdithIcon {
         switch self {
-        case .frame: "crop"
-        case .look: "camera.filters"
-        case .background: "person.crop.rectangle"
-        case .overlays: "text.below.photo"
-        case .output: "video.badge.checkmark"
+        case .frame: .crop
+        case .look: .filters
+        case .background: .person
+        case .overlays: .photo
+        case .output: .video
         }
     }
 }
@@ -421,7 +421,7 @@ final class VirtualCameraPageModel: ObservableObject {
             !needsCameraAccess || snapshot?.live == true, !hasPreviewFrame
         else { return nil }
         if !sourcesLoaded { return "Finding cameras" }
-        if previewFeed == .pending { return "Connecting to Edith Bar" }
+        if previewFeed == .pending { return "Connecting to the camera service" }
         switch state.media.kind {
         case .camera: return "Starting camera"
         case .video: return "Starting video"
@@ -454,13 +454,14 @@ final class VirtualCameraPageModel: ObservableObject {
     static let frameInterval = Duration.milliseconds(33)
     static let idleFrameInterval = Duration.milliseconds(250)
     static let statusInterval = Duration.milliseconds(250)
+    static let idleStatusInterval = Duration.milliseconds(1000)
 
     var statusHeadline: String {
         if state.privacy == .stopped { return "Stopped" }
         if state.media.kind == .video, !meetingPlaying { return "Paused" }
         if let snapshot, helperReachable { return snapshot.headline }
-        if statusPending || helperReachable { return "Checking Edith Bar" }
-        return "Edith Bar is not answering"
+        if statusPending || helperReachable { return "Starting camera service" }
+        return "Camera service is not responding"
     }
 
     var isLive: Bool { state.privacy != .stopped && snapshot?.live == true }
@@ -498,7 +499,11 @@ final class VirtualCameraPageModel: ObservableObject {
                 while !Task.isCancelled {
                     guard let self, visible, !stopped else { return }
                     await refreshRemote()
-                    do { try await Task.sleep(for: Self.statusInterval) } catch { return }
+                    let busy = snapshot == nil || snapshot?.live == true || hasPreviewFrame
+                    do {
+                        try await Task.sleep(
+                            for: busy ? Self.statusInterval : Self.idleStatusInterval)
+                    } catch { return }
                 }
             }; return
         }

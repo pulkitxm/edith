@@ -154,17 +154,26 @@ public actor ExtensionPackageInstaller {
         defer { try? FileManager.default.removeItem(at: temporary) }
         let snapshot = try store.installedPackages()
         var staged: [String: URL] = [:]
-        for (index, package) in plan.enumerated() {
-            try Task.checkCancellation()
-            if snapshot.contains(package),
-                (try? PackageDirectory(store.root, create: true).contains(package)) == true
-            {
-                downloaded(Double(index + 1) / Double(plan.count))
-                continue
+        let pending = plan.filter { package in
+            !(snapshot.contains(package)
+                && (try? PackageDirectory(store.root, create: true).contains(package)) == true)
+        }
+        var finished = plan.count - pending.count
+        if finished > 0 { downloaded(Double(finished) / Double(plan.count)) }
+        try await withThrowingTaskGroup(of: (String, URL).self) { group in
+            for package in pending {
+                group.addTask {
+                    (
+                        package.id,
+                        try await self.stage(package, in: temporary, source: source, admit: admit)
+                    )
+                }
             }
-            staged[package.id] = try await stage(
-                package, in: temporary, source: source, admit: admit)
-            downloaded(Double(index + 1) / Double(plan.count))
+            for try await (id, directory) in group {
+                staged[id] = directory
+                finished += 1
+                downloaded(Double(finished) / Double(plan.count))
+            }
         }
         return try await exclusive {
             try await commit(

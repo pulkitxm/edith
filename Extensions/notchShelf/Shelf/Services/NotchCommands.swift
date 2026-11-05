@@ -42,10 +42,10 @@ extension NotchShelfController {
             rows: hidden
                 ? []
                 : items.prefix(request.tile.itemLimit).map {
-                    .init($0.id.uuidString, title: $0.name, icon: "doc.fill")
+                    .init($0.id.uuidString, title: $0.name, icon: .doc)
                 },
             actions: request.tile.showActions
-                ? [.init("customize", "Customize", "slider.horizontal.3")] : [],
+                ? [.init("customize", "Customize", .adjust)] : [],
             message: hidden ? "Hidden while presenting" : nil
         )
     }

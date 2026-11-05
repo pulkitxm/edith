@@ -12,6 +12,89 @@ enum DatabaseConnectionCardAction: Hashable {
     case delete
 }
 
+enum DatabaseConnectionRowMetrics {
+    static let icon = 32.0
+    static let horizontalPadding = 14.0
+    static let verticalPadding = 10.0
+    static let spacing = 12.0
+    static let sessionWidth = 150.0
+    static let menuSize = 28.0
+    static var dividerInset: Double { horizontalPadding + icon + spacing }
+}
+
+struct DatabaseConnectionListSurface<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        LazyVStack(spacing: 0) { content() }
+            .frame(maxWidth: .infinity)
+            .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
+    }
+}
+
+struct DatabaseConnectionRowDivider: View {
+    var body: some View {
+        Divider().padding(.leading, UIScale.pt(DatabaseConnectionRowMetrics.dividerInset))
+    }
+}
+
+struct DatabaseConnectionRowSkeleton: View {
+    let index: Int
+    let accent: Color
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(DatabaseConnectionRowMetrics.spacing)) {
+            ZStack {
+                RoundedRectangle(cornerRadius: UIScale.pt(8)).fill(accent.opacity(0.11))
+                EdithIconView(.database)
+                    .font(.edithText(.callout).weight(.semibold))
+                    .foregroundStyle(accent)
+            }
+            .frame(
+                width: UIScale.pt(DatabaseConnectionRowMetrics.icon),
+                height: UIScale.pt(DatabaseConnectionRowMetrics.icon))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
+                    .font(.edithText(.body).weight(.semibold))
+                    .lineLimit(1)
+                Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
+                    .font(.edithText(.caption))
+                    .lineLimit(1)
+                if compact { namespace }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !compact {
+                namespace.frame(maxWidth: .infinity, alignment: .leading)
+                Text("Ready to connect")
+                    .font(.edithText(.caption))
+                    .frame(
+                        width: UIScale.pt(DatabaseConnectionRowMetrics.sessionWidth),
+                        alignment: .trailing)
+            }
+            EdithIconView(.more)
+                .font(.edithText(.body).weight(.semibold))
+                .frame(
+                    width: UIScale.pt(DatabaseConnectionRowMetrics.menuSize),
+                    height: UIScale.pt(DatabaseConnectionRowMetrics.menuSize))
+        }
+        .padding(.horizontal, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
+        .padding(.vertical, UIScale.pt(DatabaseConnectionRowMetrics.verticalPadding))
+    }
+
+    private var namespace: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            EdithIconView(.database).font(.edithText(.caption).weight(.medium))
+                .frame(width: UIScale.pt(16))
+            Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
+                .font(.edithText(.caption)).lineLimit(1)
+        }
+    }
+}
+
 struct DatabaseConnectionGallery: View {
     @Bindable var model: DatabaseConnectionWorkspaceModel
     let createConnection: () -> Void
@@ -23,6 +106,7 @@ struct DatabaseConnectionGallery: View {
     var performConnectionAction:
         ((DatabaseConnectionCardAction, DatabaseConnectionSummary) -> Void)? = nil
     @State private var hoveredConnectionID: DatabaseConnectionID?
+    @State private var scrollHeight: CGFloat = 0
     @FocusState private var focusedConnectionID: DatabaseConnectionID?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -32,17 +116,20 @@ struct DatabaseConnectionGallery: View {
     private var palette: DatabaseThemePalette {
         DatabaseThemePalette(dark: dark, theme: appTheme)
     }
-    private var columns: [GridItem] {
-        PageMetrics.cardColumns(compact, minimum: 270, maximum: 360, spacing: 14, alignment: .top)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             catalogHeader
-            Divider().opacity(0.35)
+            PageHeaderDivider()
             ScrollView {
                 content
+                    .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                     .pageContent(compact)
+            }
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.height
+            } action: {
+                scrollHeight = $0
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -51,39 +138,49 @@ struct DatabaseConnectionGallery: View {
         .accessibilityLabel("Saved database connections")
     }
 
+    private var showsCatalogControls: Bool {
+        if case .empty = model.listState { return false }
+        return true
+    }
+
     private var catalogHeader: some View {
-        PageHeader("Database") {
-            HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                Button(action: reload) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.edith(.secondary))
-                .help("Reload saved connections")
-                .accessibilityLabel("Reload saved database connections")
-                connectionFilterMenu
-                Button(action: createConnection) {
-                    if compact {
-                        Image(systemName: "plus")
-                    } else {
-                        Label("Add connection", systemImage: "plus")
+        PageHeader(
+            "Database",
+            trailing: {
+                if showsCatalogControls {
+                    HStack(alignment: .center, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                        Button(action: reload) {
+                            EdithIconView(.refresh)
+                        }
+                        .buttonStyle(.edith(.secondary))
+                        .help("Reload saved connections")
+                        .accessibilityLabel("Reload saved database connections")
+                        connectionFilterMenu
+                        Button(action: createConnection) {
+                            if compact {
+                                EdithIconView(.plus)
+                            } else {
+                                Label("Add connection", edith: .plus)
+                            }
+                        }
+                        .buttonStyle(.edith(.primary, tint: palette.accent))
+                        .accessibilityLabel("Add a database connection")
                     }
                 }
-                .buttonStyle(.edith(.primary, tint: palette.accent))
-                .accessibilityLabel("Add a database connection")
-            }
-        } accessory: {
-            EdithTextField(
-                placeholder: "Search saved connections",
-                text: $model.searchText,
-                icon: "magnifyingglass",
-                compact: true,
-                clearable: true,
-                onSubmit: reload
-            )
-            .frame(maxWidth: UIScale.pt(560))
-            .accessibilityLabel("Search saved database connections")
-        }
-        .background(palette.panel.opacity(0.64))
+            },
+            accessory: {
+                if showsCatalogControls {
+                    EdithTextField(
+                        placeholder: "Search saved connections",
+                        text: $model.searchText,
+                        icon: .search,
+                        compact: true,
+                        clearable: true,
+                        onSubmit: reload
+                    )
+                    .accessibilityLabel("Search saved database connections")
+                }
+            })
     }
 
     private var connectionFilterMenu: some View {
@@ -93,7 +190,7 @@ struct DatabaseConnectionGallery: View {
             } label: {
                 Label(
                     "Favorites only",
-                    systemImage: model.favoritesOnly ? "checkmark" : "star")
+                    edith: model.favoritesOnly ? .check : .heart)
             }
             if !model.availableGroups.isEmpty {
                 Divider()
@@ -101,7 +198,7 @@ struct DatabaseConnectionGallery: View {
                     model.selectedGroup = nil
                 } label: {
                     if model.selectedGroup == nil {
-                        Label("All groups", systemImage: "checkmark")
+                        Label("All groups", edith: .check)
                     } else {
                         Text("All groups")
                     }
@@ -112,7 +209,7 @@ struct DatabaseConnectionGallery: View {
                     } label: {
                         Label(
                             group.label,
-                            systemImage: model.selectedGroup == group.id ? "checkmark" : "folder")
+                            edith: model.selectedGroup == group.id ? .check : .folder)
                     }
                 }
             }
@@ -123,12 +220,11 @@ struct DatabaseConnectionGallery: View {
                 }
             }
         } label: {
-            Image(
-                systemName: model.favoritesOnly || model.selectedGroup != nil
-                    ? "line.3.horizontal.decrease.circle.fill"
-                    : "line.3.horizontal.decrease.circle")
+            EdithIcon.filter.image(
+                tone: model.favoritesOnly || model.selectedGroup != nil ? .duotone : .muted)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.edith(.secondary))
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Filter saved connections")
@@ -139,20 +235,33 @@ struct DatabaseConnectionGallery: View {
     private var content: some View {
         switch model.listState {
         case .idle:
-            loadingConnectionCards([])
+            loadingConnectionRows([])
         case .loading(let connections):
-            loadingConnectionCards(connections)
+            loadingConnectionRows(connections)
         case .empty:
             emptyState(
-                symbol: "cylinder.split.1x2",
+                icon: .database,
                 title: "Connect your first database",
                 detail:
-                    "Add a saved connection to browse tables, inspect records, and edit supported data.",
+                    "Save a connection once, then browse tables, search records and edit data with a preview before every change.",
                 actionTitle: "Add connection",
-                action: createConnection)
+                action: createConnection,
+                steps: [
+                    PageGuideStep(
+                        icon: .server, title: "Choose a database",
+                        detail: "PostgreSQL, MySQL, SQLite, MongoDB, Redis and more."),
+                    PageGuideStep(
+                        icon: .key, title: "Enter its details",
+                        detail:
+                            "Host and login, or a file for SQLite. Passwords go to your Keychain."),
+                    PageGuideStep(
+                        icon: .shield, title: "Edit with confidence",
+                        detail: "Every change is previewed and needs your confirmation."),
+                ],
+                footnote: "Nothing connects until you open a saved connection.")
         case .filteredEmpty(let search):
             emptyState(
-                symbol: "magnifyingglass",
+                icon: .search,
                 title: "No matching connections",
                 detail: hasStructuredFilters
                     ? "No saved connection matches the current filters."
@@ -160,184 +269,141 @@ struct DatabaseConnectionGallery: View {
                 actionTitle: hasStructuredFilters ? "Clear filters" : "Clear search",
                 action: clearFilters)
         case .loaded(let connections):
-            connectionCards(connections)
+            connectionRows(connections)
         case .partial(let connections):
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 stateNotice(
-                    symbol: "exclamationmark.circle.fill",
+                    icon: .alert,
                     title: "Partial connection list",
                     detail: "Some saved connections could not be loaded.",
                     tint: DashSkin.warn)
-                connectionCards(connections)
+                connectionRows(connections)
             }
         case .stale(let connections):
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 stateNotice(
-                    symbol: "clock.arrow.circlepath",
+                    icon: .history,
                     title: "Stale connection list",
                     detail: "The saved connection information may be out of date.",
                     tint: DashSkin.warn)
-                connectionCards(connections)
+                connectionRows(connections)
             }
         case .failed(let connections, let message):
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 stateNotice(
-                    symbol: "exclamationmark.triangle.fill",
+                    icon: .warning,
                     title: "Connections unavailable",
                     detail: message,
                     tint: DashSkin.danger,
                     retry: true)
-                connectionCards(connections)
+                connectionRows(connections)
             }
         }
     }
 
-    private func loadingConnectionCards(_ connections: [DatabaseConnectionSummary]) -> some View {
+    private func loadingConnectionRows(_ connections: [DatabaseConnectionSummary]) -> some View {
         SkeletonReplica("Loading saved database connections") {
             Group {
                 if connections.isEmpty {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(14)) {
+                    DatabaseConnectionListSurface {
                         ForEach(0..<6, id: \.self) { index in
-                            loadingConnectionCard(index)
+                            if index > 0 { DatabaseConnectionRowDivider() }
+                            DatabaseConnectionRowSkeleton(index: index, accent: palette.accent)
                         }
                     }
                 } else {
-                    connectionCards(connections)
+                    connectionRows(connections)
                 }
             }
         }
-    }
-
-    private func loadingConnectionCard(_ index: Int) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(alignment: .top, spacing: UIScale.pt(11)) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: UIScale.pt(9))
-                        .fill(palette.accent.opacity(0.11))
-                    Image(systemName: "cylinder")
-                        .font(.system(size: UIScale.pt(16), weight: .semibold))
-                        .foregroundStyle(palette.accent)
-                }
-                .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
-                        .font(.system(size: UIScale.pt(14), weight: .semibold))
-                        .lineLimit(2)
-                    Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "ellipsis.circle")
-                    .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-            }
-            HStack(spacing: UIScale.pt(7)) {
-                Image(systemName: "cylinder")
-                    .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
-                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                Text("Connected")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
-            }
-        }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
-        .background(
-            palette.panel.opacity(0.74),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(13)))
     }
 
     @ViewBuilder
-    private func connectionCards(_ connections: [DatabaseConnectionSummary]) -> some View {
+    private func connectionRows(_ connections: [DatabaseConnectionSummary]) -> some View {
         if connections.isEmpty {
             Text("No connection entries are available in this result.")
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("No connection entries are available in this result")
         } else {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(14)) {
-                ForEach(connections) { connection in
-                    connectionCard(connection)
+            DatabaseConnectionListSurface {
+                ForEach(Array(connections.enumerated()), id: \.element.id) { index, connection in
+                    if index > 0 { DatabaseConnectionRowDivider() }
+                    connectionRow(connection)
                 }
             }
         }
     }
 
-    private func connectionCard(_ connection: DatabaseConnectionSummary) -> some View {
+    private func connectionRow(_ connection: DatabaseConnectionSummary) -> some View {
         let session = model.sessionState(for: connection.id)
         let hovered = hoveredConnectionID == connection.id
         let focused = focusedConnectionID == connection.id
         let highlighted = hovered || focused
         let accent = connectionAccent(connection)
-        return ZStack(alignment: .topTrailing) {
+        return ZStack(alignment: .trailing) {
             Button {
                 openConnection(connection)
             } label: {
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    HStack(alignment: .top, spacing: UIScale.pt(11)) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: UIScale.pt(9))
-                                .fill(accent.opacity(highlighted ? 0.15 : 0.11))
-                            Image(systemName: connection.product.gallerySymbolName)
-                                .font(.system(size: UIScale.pt(16), weight: .semibold))
-                                .foregroundStyle(accent)
-                        }
-                        .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-                        .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            HStack(spacing: UIScale.pt(6)) {
-                                Text(connection.name)
-                                    .font(.system(size: UIScale.pt(14), weight: .semibold))
-                                    .foregroundStyle(palette.ink)
-                                    .lineLimit(2)
-                                if connection.isFavorite {
-                                    Image(systemName: "star.fill")
-                                        .font(.system(size: UIScale.pt(9)))
-                                        .foregroundStyle(DashSkin.gold)
-                                        .accessibilityHidden(true)
-                                }
-                            }
-                            Text(connectionSubtitle(connection))
-                                .font(.system(size: UIScale.pt(10.5), weight: .medium))
-                                .foregroundStyle(palette.inkSoft)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        Color.clear
-                            .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-                            .accessibilityHidden(true)
+                HStack(spacing: UIScale.pt(DatabaseConnectionRowMetrics.spacing)) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: UIScale.pt(8))
+                            .fill(accent.opacity(highlighted ? 0.15 : 0.11))
+                        EdithIconView(connection.product.galleryIcon)
+                            .font(.edithText(.callout).weight(.semibold))
+                            .foregroundStyle(accent)
                     }
-                    HStack(spacing: UIScale.pt(7)) {
-                        Image(systemName: namespaceSymbol(connection))
-                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                            .foregroundStyle(palette.inkFaint)
-                            .accessibilityHidden(true)
-                        Text(namespaceTitle(connection))
-                            .font(.system(size: UIScale.pt(10.5), design: .monospaced))
+                    .frame(
+                        width: UIScale.pt(DatabaseConnectionRowMetrics.icon),
+                        height: UIScale.pt(DatabaseConnectionRowMetrics.icon)
+                    )
+                    .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text(connection.name)
+                                .font(.edithText(.body).weight(.semibold))
+                                .foregroundStyle(palette.ink)
+                                .lineLimit(1)
+                            if connection.isFavorite {
+                                EdithIconView(.heart)
+                                    .font(.edithText(.caption))
+                                    .foregroundStyle(palette.accent)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        Text(connectionSubtitle(connection))
+                            .font(.edithText(.caption))
                             .foregroundStyle(palette.inkSoft)
                             .lineLimit(1)
-                        Spacer(minLength: 0)
-                        connectionSessionSlot(session)
-                    }
-                }
-                .padding(UIScale.pt(14))
-                .frame(maxWidth: .infinity, minHeight: UIScale.pt(126), alignment: .topLeading)
-                .background {
-                    RoundedRectangle(cornerRadius: UIScale.pt(13))
-                        .fill(palette.panel.opacity(highlighted ? 0.86 : 0.74))
-                        .overlay {
-                            if highlighted {
-                                RoundedRectangle(cornerRadius: UIScale.pt(13))
-                                    .fill(accent.opacity(dark ? 0.045 : 0.035))
+                        if compact {
+                            HStack(spacing: UIScale.pt(DatabaseConnectionRowMetrics.spacing)) {
+                                namespaceLabel(connection)
+                                HStack(spacing: UIScale.pt(6)) { connectionSessionSlot(session) }
                             }
                         }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if !compact {
+                        namespaceLabel(connection)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: UIScale.pt(6)) { connectionSessionSlot(session) }
+                            .frame(
+                                width: UIScale.pt(DatabaseConnectionRowMetrics.sessionWidth),
+                                alignment: .trailing)
+                    }
+                    Color.clear
+                        .frame(
+                            width: UIScale.pt(DatabaseConnectionRowMetrics.menuSize),
+                            height: UIScale.pt(DatabaseConnectionRowMetrics.menuSize)
+                        )
+                        .accessibilityHidden(true)
                 }
-                .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(13)))
+                .padding(.horizontal, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
+                .padding(.vertical, UIScale.pt(DatabaseConnectionRowMetrics.verticalPadding))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(highlighted ? accent.opacity(dark ? 0.045 : 0.035) : .clear)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
             .focused($focusedConnectionID, equals: connection.id)
@@ -381,57 +447,69 @@ struct DatabaseConnectionGallery: View {
         }
     }
 
+    private func namespaceLabel(_ connection: DatabaseConnectionSummary) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            EdithIconView(namespaceIcon(connection))
+                .font(.edithText(.caption).weight(.medium))
+                .foregroundStyle(palette.inkFaint)
+                .frame(width: UIScale.pt(16))
+                .accessibilityHidden(true)
+            Text(namespaceTitle(connection))
+                .font(.edithText(.caption))
+                .foregroundStyle(palette.inkSoft)
+                .lineLimit(1)
+        }
+    }
+
     @ViewBuilder
     private func connectionSessionSlot(_ session: DatabaseConnectionSessionState) -> some View {
         switch session {
         case .disconnected:
-            EmptyView()
+            Text(sessionTitle(session))
+                .font(.edithText(.caption))
+                .foregroundStyle(palette.inkSoft)
         case .connecting, .disconnecting:
             SkeletonReplica(sessionTitle(session)) {
                 HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    EdithIconView(.success)
+                        .font(.edithText(.caption).weight(.semibold))
                     Text("Connected")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                 }
             }
         case .connected, .failed, .outcomeUnknown:
-            Image(systemName: sessionSymbol(session))
-                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+            EdithIconView(sessionIcon(session))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(sessionColor(session))
                 .accessibilityHidden(true)
             Text(sessionTitle(session))
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(palette.inkSoft)
         }
     }
 
     private func loadingConnectionAction(_ connection: DatabaseConnectionSummary) -> some View {
         SkeletonReplica("Updating \(connection.name)") {
-            Image(systemName: "ellipsis.circle")
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+            EdithIconView(.more)
+                .font(.edithText(.body).weight(.semibold))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .background(palette.panel.opacity(0.94), in: Circle())
                 .overlay(Circle().stroke(palette.line, lineWidth: 1))
         }
-        .padding(UIScale.pt(10))
+        .padding(.trailing, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
     }
 
     private func connectionActionMenu(_ connection: DatabaseConnectionSummary) -> some View {
         Menu {
             connectionActions(connection)
         } label: {
-            Image(systemName: busyConnectionID == connection.id ? "ellipsis" : "ellipsis.circle")
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+            EdithIcon.more.image()
                 .foregroundStyle(palette.inkSoft)
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
-                .background(palette.panel.opacity(0.94), in: Circle())
-                .overlay(Circle().stroke(palette.line, lineWidth: 1))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
-        .padding(UIScale.pt(10))
+        .padding(.trailing, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
         .disabled(busyConnectionID != nil)
         .help("Manage \(connection.name)")
         .accessibilityLabel("Actions for \(connection.name)")
@@ -442,56 +520,56 @@ struct DatabaseConnectionGallery: View {
         Button {
             openConnection(connection)
         } label: {
-            Label("Open", systemImage: "arrow.up.right.square")
+            Label("Open", edith: .external)
         }
         Button {
             performConnectionAction?(.favorite, connection)
         } label: {
             Label(
                 connection.isFavorite ? "Remove from favorites" : "Add to favorites",
-                systemImage: connection.isFavorite ? "star.slash" : "star")
+                edith: .heart, tone: connection.isFavorite ? .muted : .duotone)
         }
         Divider()
         Button {
             performConnectionAction?(.rename, connection)
         } label: {
-            Label("Rename", systemImage: "pencil")
+            Label("Rename", edith: .edit)
         }
         Button {
             performConnectionAction?(.edit, connection)
         } label: {
-            Label("Edit metadata and safety", systemImage: "slider.horizontal.3")
+            Label("Edit metadata and safety", edith: .adjust)
         }
         Button {
             performConnectionAction?(.duplicate, connection)
         } label: {
-            Label("Duplicate", systemImage: "plus.square.on.square")
+            Label("Duplicate", edith: .plus)
         }
         Divider()
         Button(role: .destructive) {
             performConnectionAction?(.delete, connection)
         } label: {
-            Label("Delete", systemImage: "trash")
+            Label("Delete", edith: .trash)
         }
     }
 
     private func stateNotice(
-        symbol: String,
+        icon: EdithIcon,
         title: String,
         detail: String,
         tint: Color,
         retry: Bool = false
     ) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(10)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(title)
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(palette.ink)
                 Text(detail)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -509,39 +587,30 @@ struct DatabaseConnectionGallery: View {
     }
 
     private func emptyState(
-        symbol: String,
+        icon: EdithIcon,
         title: String,
         detail: String,
         actionTitle: String,
-        action: @escaping () -> Void
+        action: @escaping () -> Void,
+        steps: [PageGuideStep] = [],
+        footnote: String? = nil
     ) -> some View {
-        VStack(spacing: UIScale.pt(14)) {
-            ZStack {
-                RoundedRectangle(cornerRadius: UIScale.pt(14))
-                    .fill(palette.accent.opacity(0.1))
-                Image(systemName: symbol)
-                    .font(.system(size: UIScale.pt(28), weight: .light))
-                    .foregroundStyle(palette.accent)
-            }
-            .frame(width: UIScale.pt(60), height: UIScale.pt(60))
-            .accessibilityHidden(true)
-            VStack(spacing: UIScale.pt(6)) {
-                Text(title)
-                    .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    .foregroundStyle(palette.ink)
-                Text(detail)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(palette.inkSoft)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button(actionTitle, action: action)
-                .buttonStyle(.edith(.primary, tint: palette.accent))
-        }
-        .frame(maxWidth: UIScale.pt(480))
-        .padding(.vertical, UIScale.pt(56))
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .contain)
+        PageEmptyState(
+            icon: icon,
+            title: title,
+            message: detail,
+            steps: steps,
+            primary: PageAction(
+                actionTitle, icon: steps.isEmpty ? nil : .plus, perform: action),
+            footnote: footnote
+        )
+        .frame(minHeight: emptyStateHeight)
+    }
+
+    private var emptyStateHeight: CGFloat {
+        max(
+            UIScale.pt(320),
+            scrollHeight - UIScale.pt(PageMetrics.pinnedContentTop + PageMetrics.bottom))
     }
 
     private func reload() {
@@ -585,8 +654,8 @@ struct DatabaseConnectionGallery: View {
             ?? "Default namespace"
     }
 
-    private func namespaceSymbol(_ connection: DatabaseConnectionSummary) -> String {
-        connection.product.family == .relational ? "cylinder" : "square.stack.3d.up"
+    private func namespaceIcon(_ connection: DatabaseConnectionSummary) -> EdithIcon {
+        connection.product.family == .relational ? .database : .layers
     }
 
     private func sessionTitle(_ state: DatabaseConnectionSessionState) -> String {
@@ -600,13 +669,13 @@ struct DatabaseConnectionGallery: View {
         }
     }
 
-    private func sessionSymbol(_ state: DatabaseConnectionSessionState) -> String {
+    private func sessionIcon(_ state: DatabaseConnectionSessionState) -> EdithIcon {
         switch state {
-        case .disconnected: "circle"
-        case .connecting, .disconnecting: "arrow.triangle.2.circlepath"
-        case .connected: "checkmark.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        case .outcomeUnknown: "questionmark.circle.fill"
+        case .disconnected: .ring
+        case .connecting, .disconnecting: .sync
+        case .connected: .success
+        case .failed: .warning
+        case .outcomeUnknown: .help
         }
     }
 
@@ -647,7 +716,6 @@ struct DatabaseFocusedConnectionHeader: View {
         } trailing: {
             navigationRow
         }
-        .background(palette.panel.opacity(0.78))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Database workspace for \(connection.name)")
     }
@@ -666,8 +734,8 @@ struct DatabaseFocusedConnectionHeader: View {
     private var connectionActionSlot: some View {
         if busyConnectionID == connection.id {
             SkeletonReplica("Updating \(connection.name)") {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                EdithIconView(.more)
+                    .font(.edithText(.title3).weight(.semibold))
                     .frame(width: UIScale.pt(28), height: UIScale.pt(28))
             }
         } else {
@@ -677,8 +745,8 @@ struct DatabaseFocusedConnectionHeader: View {
 
     private var navigationButton: some View {
         Button(action: back) {
-            Label("All connections", systemImage: "chevron.left")
-                .font(.system(size: UIScale.pt(11), weight: .medium))
+            Label("All connections", edith: .chevronLeft)
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(backFocused ? palette.ink : palette.inkSoft)
                 .padding(.horizontal, UIScale.pt(8))
                 .frame(minHeight: UIScale.pt(28))
@@ -717,8 +785,8 @@ struct DatabaseFocusedConnectionHeader: View {
             ZStack {
                 RoundedRectangle(cornerRadius: UIScale.pt(8))
                     .fill(accent.opacity(0.11))
-                Image(systemName: connection.product.gallerySymbolName)
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                EdithIconView(connection.product.galleryIcon)
+                    .font(.edithText(.title3).weight(.semibold))
                     .foregroundStyle(accent)
             }
             .frame(width: UIScale.pt(34), height: UIScale.pt(34))
@@ -726,17 +794,18 @@ struct DatabaseFocusedConnectionHeader: View {
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 HStack(spacing: UIScale.pt(7)) {
                     Text(connection.name)
+                        .font(.edithText(.title2).weight(.semibold))
                         .foregroundStyle(palette.ink)
                         .lineLimit(2)
                     if connection.isFavorite {
-                        Image(systemName: "star.fill")
+                        EdithIconView(.heart)
                             .font(.system(size: UIScale.pt(8.5)))
-                            .foregroundStyle(DashSkin.gold)
+                            .foregroundStyle(palette.accent)
                             .accessibilityLabel("Favorite connection")
                     }
                 }
                 Text(contextTitle)
-                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .foregroundStyle(palette.inkSoft)
                     .lineLimit(compact ? 2 : 1)
             }
@@ -759,37 +828,35 @@ struct DatabaseFocusedConnectionHeader: View {
             } label: {
                 Label(
                     connection.isFavorite ? "Remove from favorites" : "Add to favorites",
-                    systemImage: connection.isFavorite ? "star.slash" : "star")
+                    edith: .heart, tone: connection.isFavorite ? .muted : .duotone)
             }
             Divider()
             Button {
                 performConnectionAction?(.rename, connection)
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label("Rename", edith: .edit)
             }
             Button {
                 performConnectionAction?(.edit, connection)
             } label: {
-                Label("Edit metadata and safety", systemImage: "slider.horizontal.3")
+                Label("Edit metadata and safety", edith: .adjust)
             }
             Button {
                 performConnectionAction?(.duplicate, connection)
             } label: {
-                Label("Duplicate", systemImage: "plus.square.on.square")
+                Label("Duplicate", edith: .plus)
             }
             Divider()
             Button(role: .destructive) {
                 performConnectionAction?(.delete, connection)
             } label: {
-                Label("Delete", systemImage: "trash")
+                Label("Delete", edith: .trash)
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
+            EdithIcon.more.image()
                 .foregroundStyle(palette.inkSoft)
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(busyConnectionID != nil)
@@ -809,20 +876,20 @@ struct DatabaseFocusedConnectionHeader: View {
         if sessionIsTransitioning {
             SkeletonReplica(sessionTitle) {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                    EdithIconView(.success)
+                        .font(.edithText(.caption).weight(.semibold))
                     Text("Connected")
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                 }
             }
         } else {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: sessionSymbol)
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                EdithIconView(sessionIcon)
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(sessionColor)
                     .accessibilityHidden(true)
                 Text(sessionTitle)
-                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(palette.inkSoft)
             }
             .accessibilityElement(children: .combine)
@@ -855,13 +922,13 @@ struct DatabaseFocusedConnectionHeader: View {
         }
     }
 
-    private var sessionSymbol: String {
+    private var sessionIcon: EdithIcon {
         switch sessionState {
-        case .disconnected: "circle"
-        case .connecting, .disconnecting: "arrow.triangle.2.circlepath"
-        case .connected: "checkmark.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        case .outcomeUnknown: "questionmark.circle.fill"
+        case .disconnected: .ring
+        case .connecting, .disconnecting: .sync
+        case .connected: .success
+        case .failed: .warning
+        case .outcomeUnknown: .help
         }
     }
 
@@ -877,13 +944,13 @@ struct DatabaseFocusedConnectionHeader: View {
 }
 
 private extension DatabaseProduct {
-    var gallerySymbolName: String {
+    var galleryIcon: EdithIcon {
         switch family {
-        case .relational: "tablecells"
-        case .keyValue: "key.horizontal"
-        case .document: "doc.text"
-        case .search: "magnifyingglass.circle"
-        case .analytical: "chart.xyaxis.line"
+        case .relational: .table
+        case .keyValue: .key
+        case .document: .docText
+        case .search: .search
+        case .analytical: .chartLine
         }
     }
 }

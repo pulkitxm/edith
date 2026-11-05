@@ -138,7 +138,7 @@ struct CompanionMindScreen: View {
             PageLoading(
                 state: model.loading.state,
                 message: model.loading.errorMessage
-                    ?? "The companion mind could not be loaded.",
+                    ?? "Mind could not be loaded.",
                 layout: .cards, refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.refresh() } }
             ) {
@@ -185,11 +185,11 @@ struct CompanionMindScreen: View {
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             HStack(spacing: UIScale.pt(8)) {
                                 Text(section.section.replacingOccurrences(of: "_", with: " "))
-                                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                                    .font(.edithText(.callout).weight(.semibold))
                                     .foregroundStyle(DashSkin.ink(dark))
                                 Spacer(minLength: 0)
                                 Text("by \(section.updatedBy)")
-                                    .font(.system(size: UIScale.pt(10.5)))
+                                    .font(.edithText(.caption))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                 CompanionLinkButton(
                                     title: editingSection == section.section ? "Cancel" : "Edit"
@@ -217,7 +217,7 @@ struct CompanionMindScreen: View {
                                 }
                             } else {
                                 Text(section.content)
-                                    .font(.system(size: UIScale.pt(12.5)))
+                                    .font(.edithText(.callout))
                                     .foregroundStyle(DashSkin.inkSoft(dark))
                             }
                         }
@@ -236,14 +236,14 @@ struct CompanionMindScreen: View {
                     ForEach(model.calibration, id: \.domain) { row in
                         HStack(spacing: UIScale.pt(8)) {
                             Text(row.domain.replacingOccurrences(of: "_", with: " "))
-                                .font(.system(size: UIScale.pt(12)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                             MindChip(
                                 label: row.direction.replacingOccurrences(of: "_", with: " "),
                                 tone: row.direction == "accurate" ? .green : .orange)
                             Spacer(minLength: 0)
                             Text("\(row.samples) times")
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                     }
@@ -274,7 +274,7 @@ struct CompanionMindScreen: View {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
                     Text(belief.statement)
-                        .font(.system(size: UIScale.pt(12.5)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(2)
                     Spacer(minLength: 0)
@@ -282,7 +282,7 @@ struct CompanionMindScreen: View {
                         MindChip(label: "superseded", tone: .orange)
                     } else {
                         Text("\(Int(belief.confidence * 100))%")
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.subheadline))
                             .monospacedDigit()
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
@@ -317,7 +317,7 @@ struct CompanionMindScreen: View {
                         } content: {
                             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
                                 Text(claim.statement)
-                                    .font(.system(size: UIScale.pt(12.5)))
+                                    .font(.edithText(.callout))
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Spacer(minLength: 0)
@@ -359,16 +359,16 @@ struct CompanionMindScreen: View {
                             } content: {
                                 HStack(spacing: UIScale.pt(8)) {
                                     Text(observation.kind)
-                                        .font(.system(size: UIScale.pt(10)))
+                                        .font(.edithText(.caption))
                                         .foregroundStyle(DashSkin.inkFaint(dark))
                                         .frame(width: UIScale.pt(84), alignment: .leading)
                                     Text(observation.summary)
-                                        .font(.system(size: UIScale.pt(12)))
+                                        .font(.edithText(.callout))
                                         .foregroundStyle(DashSkin.ink(dark))
                                         .lineLimit(1)
                                     Spacer(minLength: 0)
                                     Text(String(observation.observedAt.prefix(10)))
-                                        .font(.system(size: UIScale.pt(10.5)))
+                                        .font(.edithText(.caption))
                                         .monospacedDigit()
                                         .foregroundStyle(DashSkin.inkFaint(dark))
                                 }
@@ -384,7 +384,7 @@ struct CompanionMindScreen: View {
     private var nightlyCard: some View {
         PageCard(
             title: "Nightly run",
-            note: "02:00 on the companion"
+            note: "02:00 on the Memory machine"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 CompanionButton(
@@ -395,7 +395,7 @@ struct CompanionMindScreen: View {
                 }
                 if let run = model.runs.first {
                     Text(runSummary(run))
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     stepChips(run)
                 } else {
@@ -414,11 +414,11 @@ struct CompanionMindScreen: View {
         FlowChips(spacing: UIScale.pt(6)) {
             ForEach(Array(run.steps.enumerated()), id: \.offset) { _, step in
                 HStack(spacing: UIScale.pt(4)) {
-                    Image(systemName: step.ok ? "checkmark" : "xmark")
+                    EdithIconView(step.ok ? .check : .close)
                         .font(.system(size: UIScale.pt(8.5), weight: .bold))
                         .foregroundStyle(step.ok ? .green : .red)
                     Text(step.name.replacingOccurrences(of: "_", with: " "))
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
@@ -437,7 +437,7 @@ struct CompanionMindScreen: View {
 
     private func emptyText(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: UIScale.pt(12)))
+            .font(.edithText(.callout))
             .foregroundStyle(DashSkin.inkFaint(dark))
     }
 }
@@ -472,7 +472,7 @@ struct MindChip: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: UIScale.pt(9.5), weight: .bold))
+            .font(.edithText(.caption).weight(.bold))
             .tracking(0.4)
             .foregroundStyle(tone)
             .padding(.horizontal, UIScale.pt(7))
@@ -528,15 +528,15 @@ private struct MindDetailSheet: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline) {
                 Text(eyebrow)
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .tracking(1.2)
                     .foregroundStyle(DashSkin.accent(dark))
                 Spacer()
                 Button {
                     close()
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: UIScale.pt(15)))
+                    EdithIconView(.closeFilled)
+                        .font(.edithText(.title3))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 .buttonStyle(.edith(.borderless))
@@ -564,7 +564,7 @@ private struct MindDetailSheet: View {
     private func contextRows(_ label: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Text(label)
-                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .tracking(0.9)
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .padding(.top, UIScale.pt(4))
@@ -589,10 +589,10 @@ private struct MindDetailSheet: View {
                     openEpisode(ref.0)
                 } label: {
                     HStack(spacing: UIScale.pt(6)) {
-                        Image(systemName: "book.pages")
-                            .font(.system(size: UIScale.pt(10)))
+                        EdithIconView(.book)
+                            .font(.edithText(.caption))
                         Text(ref.1)
-                            .font(.system(size: UIScale.pt(11.5)))
+                            .font(.edithText(.subheadline))
                             .lineLimit(1)
                     }
                     .foregroundStyle(DashSkin.accent(dark))
@@ -636,11 +636,11 @@ private struct MindDetailSheet: View {
                 tone: belief.status == "active" ? .green : .orange)
             MindChip(label: belief.kind, tone: DashSkin.inkFaint(dark))
             Text("\(Int(belief.confidence * 100))% confident")
-                .font(.system(size: UIScale.pt(11.5)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
         Text("First formed \(String(belief.firstFormed.prefix(10)))")
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(DashSkin.inkFaint(dark))
         if !belief.evidenceEpisodeIds.isEmpty {
             ScrollView {
@@ -669,11 +669,11 @@ private struct MindDetailSheet: View {
             }
         }
         Text("Asserted \(String(claim.assertedAt.prefix(10)))")
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(DashSkin.inkFaint(dark))
         if let note = claim.verdictNote, !note.isEmpty {
             Text(note)
-                .font(.system(size: UIScale.pt(12.5)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
@@ -687,7 +687,7 @@ private struct MindDetailSheet: View {
         }
         if let observations = claim.observationIds, !observations.isEmpty {
             Text("Checked against \(observations.count) observations")
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }
@@ -704,7 +704,7 @@ private struct MindDetailSheet: View {
             MindChip(label: observation.source, tone: DashSkin.inkFaint(dark))
         }
         Text("Observed \(observation.observedAt)")
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(DashSkin.inkFaint(dark))
     }
 }

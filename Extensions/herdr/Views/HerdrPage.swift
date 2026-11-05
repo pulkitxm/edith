@@ -72,7 +72,7 @@ struct HerdrPage: View {
         } content: {
             GeometryReader { proxy in
                 HStack(spacing: 0) {
-                    if store.railOpen, !compact {
+                    if showsRail {
                         agentList
                             .frame(width: min(railDisplayWidth, proxy.size.width * 0.28))
                         HerdrResizeHandle(
@@ -234,8 +234,28 @@ struct HerdrPage: View {
         UIScale.pt(HerdrPaneSizing.rail(liveRailWidth ?? store.railWidth))
     }
 
+    private var inventoryLoading: Bool {
+        store.hosts.isEmpty && (!store.inventoryReceived || store.refreshing || store.settling)
+    }
+
+    private var boardLoading: Bool { inventoryLoading || store.settling }
+
+    private var herdrAvailable: Bool {
+        store.hosts.contains(where: \.herdrPresent) || !store.agents.isEmpty
+    }
+
+    private var showsRail: Bool {
+        store.railOpen && !compact && (inventoryLoading || herdrAvailable)
+    }
+
+    private var visibleColumns: [HerdrAgentStatus] {
+        store.columns.filter { status in
+            status != .unknown || (!boardLoading && listedAgents.contains { $0.status == status })
+        }
+    }
+
     private func railLeading(in size: CGSize) -> Double {
-        guard store.railOpen, !compact else { return 0 }
+        guard showsRail else { return 0 }
         return min(railDisplayWidth, size.width * 0.28) + UIScale.pt(9)
     }
 
@@ -266,20 +286,20 @@ struct HerdrPage: View {
         HStack(spacing: UIScale.pt(2)) {
             if activity != nil {
                 headerIcon(
-                    "link", "Agent connections",
+                    .link, "Agent connections",
                     "Configure provider activity and permission requests"
                 ) { connectionsPresented = true }
             }
             HerdrMessageMenu(store: store)
             headerIcon(
-                "magnifyingglass", "Search", "Search agent sessions on every machine (⌘K)"
+                .search, "Search", "Search agent sessions on every machine (⌘K)"
             ) {
                 store.searchPresented = true
             }
-            headerIcon("plus", "New Agent", "New agent (⌘N)") {
+            headerIcon(.plus, "New Agent", "New agent (⌘N)") {
                 newAgentPopupPresented = true
             }
-            headerIcon("arrow.clockwise", "Refresh", "Refresh sessions") {
+            headerIcon(.refresh, "Refresh", "Refresh sessions") {
                 HerdrWorkOwnership.start { await store.refresh() }
             }
             .disabled(store.refreshing)
@@ -287,11 +307,11 @@ struct HerdrPage: View {
     }
 
     private func headerIcon(
-        _ symbol: String, _ label: String, _ help: String, action: @escaping () -> Void
+        _ icon: EdithIcon, _ label: String, _ help: String, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+            EdithIconView(icon)
+                .font(.edithText(.headline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                 .contentShape(Rectangle())
@@ -333,8 +353,8 @@ struct HerdrPage: View {
                 }
             }
         } label: {
-            Image(systemName: "sidebar.left")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+            EdithIconView(.sidebarLeft)
+                .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                 .padding(UIScale.pt(4))
@@ -396,85 +416,213 @@ struct HerdrPage: View {
 
     private var board: some View {
         Group {
-            if store.hosts.isEmpty,
-                !store.inventoryReceived || store.refreshing || store.settling
-            {
-                PageLoading(state: .loading, layout: .cards) { EmptyView() }
-                    .pageContent(compact)
+            if boardLoading {
+                boardColumns
             } else if store.agents.isEmpty, let failure = store.inventoryFailureMessage {
-                emptyState(title: "Unable to load Herdr sessions", detail: failure)
-            } else if store.hosts.isEmpty {
-                emptyState(
-                    title: "No Herdr hosts found",
-                    detail: "Refresh to look for Herdr on this Mac and your configured machines.")
-            } else if store.hosts.allSatisfy({ !$0.herdrPresent }) && store.agents.isEmpty {
-                emptyState(
-                    title: "Herdr is not installed",
-                    detail:
-                        "Install Herdr on this Mac or an SSH machine, then refresh. Edith looks for the herdr binary on PATH, including ~/.local/bin."
+                PageEmptyState(
+                    icon: .warning,
+                    title: "Edith could not read your agents",
+                    message: failure,
+                    primary: refreshAction(title: "Try Again"),
+                    footnote:
+                        "Your running agents are unaffected. If this keeps happening, run herdr in Terminal to see the full error.",
+                    tint: DashSkin.danger
                 )
+                .pageContent(compact)
+            } else if store.hosts.isEmpty {
+                PageEmptyState(
+                    icon: .display,
+                    title: "No machines found yet",
+                    message:
+                        "Edith looks for Herdr on this Mac and on every machine you add in Machines. Check again once one is set up.",
+                    primary: refreshAction(title: "Check Again")
+                )
+                .pageContent(compact)
+            } else if !herdrAvailable {
+                PageEmptyState(
+                    icon: .box,
+                    title: "Install Herdr to start agents",
+                    message:
+                        "Herdr keeps coding agents like Claude Code and Codex running in terminal panes you can leave and come back to. Edith shows them here once the herdr command is installed.",
+                    steps: [
+                        PageGuideStep(
+                            icon: .arrowDown, title: "Install herdr",
+                            detail:
+                                "On this Mac or on a machine you reach over SSH. Edith checks your PATH, ~/.local/bin and Homebrew."
+                        ),
+                        PageGuideStep(
+                            icon: .refresh, title: "Check again",
+                            detail:
+                                "Edith finds the herdr command and lists every machine that has it."
+                        ),
+                        PageGuideStep(
+                            icon: .plus, title: "Start an agent",
+                            detail:
+                                "Pick a coding agent and a project, and it opens in its own pane."
+                        ),
+                    ],
+                    primary: refreshAction(title: "Check Again"),
+                    footnote: "Edith never installs anything for you."
+                )
+                .pageContent(compact)
+            } else if store.agents.isEmpty {
+                PageEmptyState(
+                    icon: .columns,
+                    title: "No agents running",
+                    message:
+                        "Start a coding agent and it shows up here, sorted by whether it needs you, is working or is done.",
+                    steps: [
+                        PageGuideStep(
+                            icon: .herdr, title: "Choose an agent",
+                            detail: "Claude Code, Codex or any other agent Herdr knows."),
+                        PageGuideStep(
+                            icon: .display, title: "Pick a machine",
+                            detail: "This Mac or any SSH machine that has herdr installed."),
+                        PageGuideStep(
+                            icon: .grid, title: "Name a space",
+                            detail:
+                                "A space groups the panes for one project. Reuse one or type a new name."
+                        ),
+                    ],
+                    primary: PageAction(
+                        "New Agent", icon: .plus, identifier: "herdr.empty.new-agent"
+                    ) { newAgentPopupPresented = true },
+                    footnote:
+                        "Agents keep running when you leave this page. Blocked agents move to the front so you can answer them."
+                )
+                .pageContent(compact)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                        ForEach(store.columns, id: \.self) { status in
-                            column(status)
-                        }
-                    }
-                    .pageContent(compact)
-                    .padding(.top, UIScale.pt(46))
-                }
+                boardColumns
             }
         }
     }
 
-    private func column(_ status: HerdrAgentStatus) -> some View {
-        let cards = listedAgents.filter { $0.status == status }
-        return VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(spacing: UIScale.pt(8)) {
-                Circle()
-                    .fill(HerdrStatusColor.color(status, dark: dark))
-                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                Text(status.title)
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                if !store.settling {
-                    Text("\(cards.count)")
-                        .font(DashSkin.mono(10, weight: .medium))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+    private var boardColumns: some View {
+        GeometryReader { proxy in
+            let available = proxy.size.width - 2 * PageMetrics.gutter(compact)
+            if compact || !lanesFit(available: available, count: visibleColumns.count) {
+                boardSections
+            } else {
+                boardLanes(available: available)
+            }
+        }
+    }
+
+    private func lanesFit(available: CGFloat, count: Int) -> Bool {
+        let gaps = UIScale.pt(PageMetrics.cardSpacing) * CGFloat(max(0, count - 1))
+        return (available - gaps) / CGFloat(max(1, count)) >= UIScale.pt(184)
+    }
+
+    private var boardSections: some View {
+        let populated = visibleColumns.filter { status in
+            listedAgents.contains { $0.status == status }
+        }
+        let statuses = boardLoading || populated.isEmpty ? visibleColumns : populated
+        return ScrollView {
+            VStack(alignment: .leading, spacing: UIScale.pt(24)) {
+                ForEach(statuses, id: \.self) { status in
+                    let cards = listedAgents.filter { $0.status == status }
+                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                        columnHeader(status, count: cards.count)
+                        LazyVStack(spacing: UIScale.pt(8)) {
+                            if boardLoading {
+                                HerdrSkeleton(dark: dark, rows: 1)
+                            } else if cards.isEmpty {
+                                emptyColumnSlot(status)
+                            } else {
+                                ForEach(cards) { agent in card(agent) }
+                            }
+                        }
+                    }
                 }
             }
+            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+            .pageContent(compact)
+        }
+    }
+
+    private func columnHeader(_ status: HerdrAgentStatus, count: Int) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Circle()
+                .fill(HerdrStatusColor.color(status, dark: dark))
+                .frame(width: UIScale.pt(8), height: UIScale.pt(8))
+            Text(status.title)
+                .font(.edithText(.callout)).fontWeight(.semibold)
+                .foregroundStyle(DashSkin.ink(dark))
+            if !boardLoading {
+                Text("\(count)")
+                    .font(.edithText(.caption)).monospacedDigit()
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+        }
+        .padding(.horizontal, UIScale.pt(4))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func boardLanes(available: CGFloat) -> some View {
+        let statuses = visibleColumns
+        let gaps = UIScale.pt(PageMetrics.cardSpacing) * CGFloat(max(0, statuses.count - 1))
+        let width = (available - gaps) / CGFloat(max(1, statuses.count))
+        return HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            ForEach(statuses, id: \.self) { status in
+                column(status, width: width)
+            }
+        }
+        .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+        .pageContent(compact)
+    }
+
+    private func column(_ status: HerdrAgentStatus, width: CGFloat) -> some View {
+        let cards = listedAgents.filter { $0.status == status }
+        return VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            columnHeader(status, count: cards.count)
             ScrollView {
                 VStack(spacing: UIScale.pt(8)) {
-                    if store.settling {
-                        HerdrSkeleton(dark: dark, rows: status == .idle ? 3 : 1)
+                    if boardLoading {
+                        HerdrSkeleton(dark: dark, rows: status == .working ? 2 : 1)
                     } else {
                         ForEach(cards) { agent in
                             card(agent)
                         }
                         if cards.isEmpty {
-                            emptyColumnSlot
+                            emptyColumnSlot(status)
                         }
                     }
                 }
+                .padding(.bottom, UIScale.pt(4))
             }
+            .scrollIndicators(.never)
         }
-        .frame(width: UIScale.pt(compact ? 220 : 240), alignment: .topLeading)
+        .frame(width: width, alignment: .topLeading)
         .frame(minHeight: UIScale.pt(220), alignment: .topLeading)
     }
 
-    private var emptyColumnSlot: some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
+    private func emptyColumnSlot(_ status: HerdrAgentStatus) -> some View {
+        let message =
+            switch status {
+            case .blocked: "Nothing needs you"
+            case .working: "Nothing running"
+            case .done: "Nothing finished yet"
+            case .idle: "No idle agents"
+            case .unknown: "Nothing here"
+            }
+        return RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous)
             .strokeBorder(
                 DashSkin.line(dark),
-                style: StrokeStyle(lineWidth: 1, dash: [UIScale.pt(5), UIScale.pt(4)])
+                style: StrokeStyle(lineWidth: 1, dash: [UIScale.pt(4), UIScale.pt(4)])
             )
             .frame(height: UIScale.pt(72))
             .overlay {
-                Text("No panes")
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                Text(message)
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .padding(.horizontal, UIScale.pt(12))
             }
-            .accessibilityLabel("No panes")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(status.title): \(message)")
     }
 
     private func card(_ agent: HerdrAgent) -> some View {
@@ -489,11 +637,11 @@ struct HerdrPage: View {
                         .foregroundStyle(
                             agent.isTerminal ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
                     Text(agent.kind)
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                     Spacer(minLength: 0)
                     if open {
                         Text("Open")
-                            .font(.system(size: UIScale.pt(9), weight: .semibold))
+                            .font(.edithText(.caption).weight(.semibold))
                             .foregroundStyle(DashSkin.accent(dark))
                             .padding(.horizontal, UIScale.pt(6))
                             .padding(.vertical, UIScale.pt(2))
@@ -504,7 +652,7 @@ struct HerdrPage: View {
                 }
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 Text(agent.title)
-                    .font(.system(size: UIScale.pt(13), weight: .medium))
+                    .font(.edithText(.body).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -548,17 +696,17 @@ struct HerdrPage: View {
                         store.terminalsCollapsed.toggle()
                     }
                     if !store.terminalsCollapsed {
-                        if store.settling {
+                        if boardLoading {
                             HerdrSkeleton(dark: dark, rows: 2, card: false)
                         } else {
                             railRows(machineTerminals)
                         }
                     }
                     agentsRailHeader
-                    if !store.agentsCollapsed, store.settling {
+                    if !store.agentsCollapsed, boardLoading {
                         HerdrSkeleton(dark: dark, rows: 4, card: false)
                     }
-                    if !store.agentsCollapsed, !store.settling {
+                    if !store.agentsCollapsed, !boardLoading {
                         if store.spaceGroupingEnabled {
                             ForEach(store.agentSpaces) { space in
                                 let visible = space.agents
@@ -579,8 +727,9 @@ struct HerdrPage: View {
                         }
                     }
                 }
-                .padding(.horizontal, UIScale.pt(6))
-                .padding(.vertical, UIScale.pt(6))
+                .padding(.horizontal, UIScale.pt(8))
+                .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop - 10))
+                .padding(.bottom, UIScale.pt(8))
             }
         }
         .frame(maxHeight: .infinity)
@@ -605,7 +754,7 @@ struct HerdrPage: View {
                     }
                 } label: {
                     Text(allCollapsed ? "Expand all" : "Collapse all")
-                        .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                        .font(.edithText(.caption).weight(.medium))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .contentShape(Rectangle())
                 }
@@ -630,12 +779,10 @@ struct HerdrPage: View {
             HerdrBroadcastMenuItems(
                 agents: space.agents, store: store, scopeTitle: space.title, redactScope: true)
         } label: {
-            Image(systemName: "paperplane")
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+            EdithIcon.send.image(size: 12)
                 .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Message agents in \(accessibleTitle)")
@@ -653,12 +800,12 @@ struct HerdrPage: View {
                 }
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(8), weight: .bold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .rotationEffect(.degrees(collapsed ? 0 : 90))
                     Text(space.title)
-                        .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                        .font(.edithText(.caption).weight(.semibold))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                         .lineLimit(1)
                         .presenterTextBlur(hideAgents, fontSize: 10.5)
@@ -692,8 +839,8 @@ struct HerdrPage: View {
             Button {
                 newAgentSpace = space
             } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                EdithIconView(.plus)
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             }
@@ -708,8 +855,8 @@ struct HerdrPage: View {
             Button {
                 openSpace(space)
             } label: {
-                Image(systemName: "macwindow")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                EdithIconView(.window)
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             }
@@ -739,16 +886,18 @@ struct HerdrPage: View {
             withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) { toggle() }
         } label: {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "chevron.right")
+                EdithIconView(.chevronRight)
                     .font(.system(size: UIScale.pt(9), weight: .bold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .rotationEffect(.degrees(collapsed ? 0 : 90))
                 Text(title)
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.callout)).fontWeight(.semibold)
                     .foregroundStyle(DashSkin.ink(dark))
-                Text("\(count)")
-                    .font(DashSkin.mono(10, weight: .medium))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                if !boardLoading {
+                    Text("\(count)")
+                        .font(.edithText(.caption)).monospacedDigit()
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, UIScale.pt(8))
@@ -809,22 +958,11 @@ struct HerdrPage: View {
         launchSettingsPresented = true
     }
 
-    private func emptyState(title: String, detail: String) -> some View {
-        VStack(spacing: UIScale.pt(8)) {
-            Text(title)
-                .font(DashSkin.heading(22))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text(detail)
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: UIScale.pt(420))
-            Button("Refresh") { HerdrWorkOwnership.start { await store.refresh() } }
-                .buttonStyle(.edith(.secondary))
-                .disabled(store.refreshing)
+    private func refreshAction(title: String) -> PageAction {
+        PageAction(title, icon: .refresh, identifier: "herdr.empty.refresh") {
+            guard !store.refreshing else { return }
+            HerdrWorkOwnership.start { await store.refresh() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .pageContent(compact)
     }
 }
 

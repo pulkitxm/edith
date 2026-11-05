@@ -19,11 +19,13 @@ public final class HostMarketplace {
     public private(set) var available: [String: ExtensionPackage] = [:]
     public private(set) var operations: [String: HostExtensionOperation] = [:]
     public private(set) var batch: HostExtensionBatch?
+    public private(set) var readyIDs: Set<String> = []
     public var failures: [String: String] {
         sessions.failureReasons.merging(operationFailures) { _, operation in operation }
     }
     private var operationFailures: [String: String] = [:]
     @ObservationIgnored private var idleShortcuts: HostIdleShortcuts?
+    @ObservationIgnored private nonisolated(unsafe) var settingsObserver: NSObjectProtocol?
     public private(set) var restoring = false
     public private(set) var refreshingCatalog = false
     public private(set) var error: String? {
@@ -40,10 +42,22 @@ public final class HostMarketplace {
     private var errorMessage: String?
     private var startupErrorID: String?
     public private(set) var offline = false
+    public var catalogKnown: Bool { catalog != nil }
     public var busy: Bool { restoring || !operations.isEmpty }
     public func isBusy(_ id: String) -> Bool { restoring || operations[id] != nil }
     public func progress(for id: String) -> Double { operations[id]?.fraction ?? 0 }
     public func hasPendingDownload(_ id: String) -> Bool { downloadJobs[id] != nil }
+    public func canCancelDownload(_ id: String) -> Bool {
+        guard downloadJobs[id] != nil, let phase = operations[id]?.phase else { return false }
+        return phase == .queued || phase == .downloading
+    }
+    @discardableResult public func cancelDownload(id: String) -> Bool {
+        guard canCancelDownload(id), let job = downloadJobs[id] else { return false }
+        job.cancel()
+        return true
+    }
+    public func markReady(_ id: String) { readyIDs.insert(id) }
+    public func acknowledgeReady(_ id: String) { readyIDs.remove(id) }
     public var batchProgress: Double {
         guard let batch, batch.total > 0 else { return 0 }
         let running = batch.ids.filter { !batch.isDone($0) }.map { progress(for: $0) }
@@ -52,6 +66,7 @@ public final class HostMarketplace {
     public var batchBytesPerSecond: Double {
         operations.values.filter { $0.phase == .downloading }.map(\.bytesPerSecond).reduce(0, +)
     }
+    public static let downloadCancelled = "Download cancelled."
     public static let operationInProgress =
         "Another operation is running for this extension. Try again when it finishes."
     public static let concurrentDownloads = 3
@@ -152,6 +167,18 @@ public final class HostMarketplace {
         try reloadInstalled()
         transferProgress.observe { [weak self] url, bytes in
             Task { @MainActor in self?.recordTransfer(url, bytes: bytes) }
+        }
+        settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+            MainActor.assumeIsolated { self?.settingsChanged() }
+        }
+    }
+
+    deinit { IPC.stopObserving(settingsObserver) }
+
+    private func settingsChanged() {
+        idleShortcuts?.synchronize()
+        for id in sessions.idleIDs where operations[id] == nil && sessions.startsAtLaunch(id) {
+            Task { try? await sessions.activate(id) }
         }
     }
 
@@ -336,7 +363,7 @@ public final class HostMarketplace {
             if let speed { operation.bytesPerSecond = speed }
             if operation.totalBytes > 0 {
                 operation.fraction = max(
-                    operation.fraction, 0.9 * Double(received) / Double(operation.totalBytes))
+                    operation.fraction, 0.8 * Double(received) / Double(operation.totalBytes))
             }
         }
     }
@@ -507,6 +534,7 @@ public final class HostMarketplace {
                         HostContract.compatibility, forKey: Self.lastCatalogCompatibilityKey)
                 }
             } catch {
+                offline = ExtensionCatalogClient.isOffline(error)
                 if self.error == nil {
                     self.error =
                         (error as? MarketplaceError) == .rateLimited
@@ -643,17 +671,29 @@ public final class HostMarketplace {
                 Task { @MainActor in
                     self?.updateOperation(id) { operation in
                         operation.fraction = max(operation.fraction, value)
-                        if installing { operation.phase = .installing }
+                        if installing,
+                            operation.phase == .downloading || operation.phase == .installing
+                        {
+                            operation.phase = .installing
+                        }
                     }
                 }
             }
             _ = try await Self.retryingTransfer {
                 try await installer.install(
                     plan, repository: MarketplaceConfiguration.repository,
-                    progress: { report(0.9 + $0 * 0.1, true) },
-                    downloaded: { report($0 * 0.9, $0 >= 1) })
+                    progress: { report(0.8 + $0 * 0.1, true) },
+                    downloaded: { report($0 * 0.8, $0 >= 1) })
+            }
+            updateOperation(id) { operation in
+                operation.phase = .verifying
+                operation.fraction = max(operation.fraction, 0.9)
             }
             await verifyInstalledBundles(plan)
+            updateOperation(id) { operation in
+                operation.phase = .starting
+                operation.fraction = max(operation.fraction, 0.95)
+            }
             var activationFailure: String?
             for package in plan {
                 if let failure = await activate(
@@ -673,6 +713,9 @@ public final class HostMarketplace {
             try reloadInstalled()
             if let activationFailure { return fail(id, activationFailure, announce: announce) }
             return failures[id]
+        } catch  where Task.isCancelled {
+            try? reloadInstalled()
+            return Self.downloadCancelled
         } catch MarketplaceError.packageCleanupPending {
             try? reloadInstalled()
             return fail(
@@ -708,7 +751,7 @@ public final class HostMarketplace {
                 attempt += 1
                 let transient =
                     (error as? MarketplaceError) == .downloadFailed || error is URLError
-                guard transient, attempt < 3 else { throw error }
+                guard transient, attempt < 3, !Task.isCancelled else { throw error }
                 try await Task.sleep(for: .milliseconds(300 * attempt))
             }
         }
@@ -813,6 +856,7 @@ public final class HostMarketplace {
     @discardableResult public func remove(id: String) async -> String? {
         guard begin(id) else { return Self.operationInProgress }
         defer { finish(id) }
+        readyIDs.remove(id)
         do {
             try await sessions.disable(id: id)
             try await mutateStore { [store] in _ = try store.requestRemoval(id: id) }

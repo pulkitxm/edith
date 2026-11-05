@@ -85,15 +85,13 @@ struct NotchBrowserSetupView: View {
         action: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 10) {
-            Image(
-                systemName: ok
-                    ? "checkmark.circle.fill"
-                    : warning ? "exclamationmark.triangle.fill" : "xmark.octagon.fill"
-            )
-            .font(.system(size: 14))
-            .foregroundStyle(
-                ok ? Color.green : warning ? Color.orange : Color(red: 0.93, green: 0.36, blue: 0.3)
-            )
+            EdithIconView(ok ? .success : warning ? .warning : .error)
+                .font(.system(size: 14))
+                .foregroundStyle(
+                    ok
+                        ? Color.green
+                        : warning ? Color.orange : Color(red: 0.93, green: 0.36, blue: 0.3)
+                )
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
@@ -109,10 +107,10 @@ struct NotchBrowserSetupView: View {
                 Button(actionTitle, action: action)
                     .buttonStyle(.edith(.borderless))
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(DashSkin.onAccent(true))
                     .padding(.horizontal, 12)
                     .frame(height: 26)
-                    .background(Color.white.opacity(0.92), in: Capsule())
+                    .background(DashSkin.accent(true), in: Capsule())
             }
         }
         .padding(.horizontal, 12)
@@ -184,7 +182,7 @@ struct NotchBrowserSetupView: View {
             status(message)
         case .failed(let message):
             HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                EdithIconView(.warning)
                     .foregroundStyle(.orange)
                 Text(message)
                     .font(.system(size: 11.5))
@@ -198,7 +196,7 @@ struct NotchBrowserSetupView: View {
             }
         case .idle:
             HStack(spacing: 8) {
-                Image(systemName: "lock.shield")
+                EdithIconView(.shield)
                     .foregroundStyle(.white.opacity(0.45))
                 Text(
                     "Cookies and site storage are copied from Chrome on this Mac. Nothing leaves it."
@@ -217,7 +215,7 @@ struct NotchBrowserSetupView: View {
     private func status(_ message: String) -> some View {
         HStack(spacing: 8) {
             SkeletonReplica(message) {
-                Image(systemName: "key.horizontal.fill")
+                EdithIconView(.key)
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.8))
             }
@@ -257,7 +255,7 @@ struct ChromeProfileAvatar: View {
     private var tint: Color { Self.tint(for: profile) }
 
     static func tint(for profile: ChromeProfile) -> Color {
-        guard let argb = profile.colorARGB else { return Color(red: 0.26, green: 0.52, blue: 0.96) }
+        guard let argb = profile.colorARGB else { return DashSkin.accent(true) }
         return Color(
             red: Double((argb >> 16) & 0xFF) / 255, green: Double((argb >> 8) & 0xFF) / 255,
             blue: Double(argb & 0xFF) / 255)
@@ -273,7 +271,8 @@ struct ChromeProfileAvatar: View {
     @MainActor private static var badges: [String: NSImage] = [:]
 
     @MainActor static func badge(for profile: ChromeProfile, diameter: CGFloat) -> NSImage {
-        let key = "\(profile.id)|\(profile.pictureURL?.path ?? "")|\(diameter)"
+        let key =
+            "\(profile.id)|\(profile.pictureURL?.path ?? "")|\(diameter)|\(ThemeStore.current)"
         if let cached = badges[key] { return cached }
         let picture = image(for: profile)
         let fill = NSColor(tint(for: profile))

@@ -10,6 +10,7 @@ struct QuinjetPage: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var appThemeName = AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
@@ -41,7 +42,7 @@ struct QuinjetPage: View {
             await model.refreshProjects()
             if model.isRemote {
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(1))
+                    try? await Task.sleep(for: .seconds(1), tolerance: .milliseconds(500))
                     guard !Task.isCancelled else { return }
                     await model.refreshUI()
                 }
@@ -80,7 +81,7 @@ struct QuinjetPage: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: UIScale.pt(5)) {
+        HStack(spacing: UIScale.pt(4)) {
             PageTabStrip(selection: model.selected) {
                 HStack(spacing: UIScale.pt(4)) {
                     ForEach(model.tabs) { tab in
@@ -111,15 +112,17 @@ struct QuinjetPage: View {
                         QuinjetSessionRequest(operation: .create))
                 }
             } label: {
-                Image(systemName: "plus")
+                EdithIconView(.plus)
             }
             .buttonStyle(.edith(.toolbar))
-            .help("New Quinjet review")
+            .help("Start another review in a new tab")
+            .accessibilityLabel("New review tab")
             terminalMenu
             themeMenu
         }
-        .padding(.horizontal, UIScale.pt(12))
-        .padding(.vertical, UIScale.pt(9))
+        .padding(.leading, UIScale.pt(12))
+        .padding(.trailing, PageMetrics.gutter(compact))
+        .padding(.vertical, UIScale.pt(8))
         .background(DashSkin.panel)
     }
 
@@ -159,19 +162,20 @@ struct QuinjetPage: View {
                     model.preferences.setTerminal(terminal.rawValue)
                 } label: {
                     if terminal == configuration.terminal {
-                        Label(terminal.label, systemImage: "checkmark")
+                        Label(terminal.label, edith: .check)
                     } else {
-                        Label(terminal.label, systemImage: terminal.icon)
+                        Label(terminal.label, edith: terminal.icon)
                     }
                 }
                 .disabled(!terminalAvailable(terminal))
             }
         } label: {
-            QuinjetMenuLabel(
-                icon: configuration.terminal.icon, title: configuration.terminal.label)
+            PageChipLabel(
+                configuration.terminal.label, icon: configuration.terminal.icon, menu: true)
         }
+        .menuStyle(.button)
+        .buttonStyle(.pageChip())
         .menuIndicator(.hidden)
-        .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Choose the terminal renderer")
         .disabled(model.preferences.loading || model.preferences.state == nil)
@@ -183,7 +187,7 @@ struct QuinjetPage: View {
                 model.preferences.setTheme(QuinjetThemePreference.app)
             } label: {
                 if themeName == QuinjetThemePreference.app {
-                    Label("App theme", systemImage: "checkmark")
+                    Label("App theme", edith: .check)
                 } else {
                     Text("App theme")
                 }
@@ -194,20 +198,20 @@ struct QuinjetPage: View {
                     model.preferences.setTheme(theme.rawValue)
                 } label: {
                     if themeName == theme.rawValue {
-                        Label(theme.label, systemImage: "checkmark")
+                        Label(theme.label, edith: .check)
                     } else {
                         Text(theme.label)
                     }
                 }
             }
         } label: {
-            QuinjetMenuLabel(
-                icon: "paintpalette",
-                title: themeName == QuinjetThemePreference.app
-                    ? "App theme" : configuration.theme.label)
+            PageChipLabel(
+                themeName == QuinjetThemePreference.app ? "App theme" : configuration.theme.label,
+                icon: .palette, menu: true)
         }
+        .menuStyle(.button)
+        .buttonStyle(.pageChip())
         .menuIndicator(.hidden)
-        .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Quinjet theme")
         .disabled(model.preferences.loading || model.preferences.state == nil)
@@ -222,39 +226,6 @@ struct QuinjetPage: View {
                 model: model, tab: tab, presented: presented,
                 useEmbedded: { model.preferences.setTerminal(QuinjetTerminal.embedded.rawValue) })
         }
-    }
-}
-
-private struct QuinjetMenuLabel: View {
-    let icon: String
-    let title: String
-    @State private var hovered = false
-    @Environment(\.colorScheme) private var scheme
-
-    private var dark: Bool { scheme == .dark }
-
-    var body: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: icon)
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
-            Text(title)
-                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
-            Image(systemName: "chevron.down")
-                .font(.system(size: UIScale.pt(7), weight: .bold))
-        }
-        .foregroundStyle(DashSkin.ink(dark))
-        .padding(.horizontal, UIScale.pt(9))
-        .padding(.vertical, UIScale.pt(6))
-        .background(
-            hovered ? DashSkin.inkFaint(dark).opacity(0.12) : DashSkin.paper2(dark),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(6))
-                .stroke(DashSkin.lineStrong(dark), lineWidth: UIScale.pt(1))
-        }
-        .contentShape(Rectangle())
-        .onHover { hovered = $0 }
     }
 }
 
@@ -273,13 +244,10 @@ private struct QuinjetTabButton: View {
         ZStack(alignment: .trailing) {
             Button(action: select) {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(
-                        systemName: tab.worktree == nil
-                            ? "plus.square" : "arrow.triangle.branch"
-                    )
-                    .font(.system(size: UIScale.pt(9.5)))
+                    EdithIconView(tab.worktree == nil ? .plus : .quinjet)
+                        .font(.edithText(.caption))
                     Text(tab.title)
-                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                        .font(.edithText(.callout).weight(.medium))
                         .lineLimit(1)
                     if canClose {
                         Color.clear.frame(width: UIScale.pt(16), height: UIScale.pt(16))
@@ -290,14 +258,15 @@ private struct QuinjetTabButton: View {
                 .padding(.vertical, UIScale.pt(6))
                 .background(
                     selected ? DashSkin.paper2(dark) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    in: RoundedRectangle(
+                        cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius), style: .continuous)
                 )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
             if canClose {
                 Button(action: close) {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(7.5), weight: .bold))
                 }
                 .buttonStyle(.edith(.borderless))
@@ -326,23 +295,29 @@ private struct QuinjetTerminalWorkspace: View {
             workspaceBar
             if let error = tab.errorMessage {
                 HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    EdithIconView(.warning)
                     Text(error)
                     Spacer(minLength: 0)
                 }
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.warn)
                 .padding(.horizontal, PageMetrics.gutter(compact))
-                .padding(.vertical, UIScale.pt(7))
+                .padding(.vertical, UIScale.pt(8))
                 .background(DashSkin.warn.opacity(0.1))
             }
             if tab.launchConfiguration.terminal == .embedded {
-                TerminalPane(
-                    holder: tab.holder,
-                    palette: palette,
-                    active: presented
-                )
-                .id(tab.holder.generation)
+                ZStack {
+                    Color.clear
+                    TerminalPane(
+                        holder: tab.holder,
+                        palette: palette,
+                        active: presented
+                    )
+                    .id(tab.holder.generation)
+                    if !tab.holder.started, tab.errorMessage == nil {
+                        TerminalLoadingSkeleton(palette: palette)
+                    }
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 externalWorkspace
@@ -352,15 +327,15 @@ private struct QuinjetTerminalWorkspace: View {
     }
 
     private var workspaceBar: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: tab.launchConfiguration.terminal.icon)
+        HStack(spacing: UIScale.pt(12)) {
+            EdithIconView(tab.launchConfiguration.terminal.icon)
                 .foregroundStyle(DashSkin.inkFaint(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(tab.title)
-                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text(tab.worktree?.path ?? "")
-                    .font(DashSkin.mono(9.5))
+                    .font(.edithText(.caption2, design: .monospaced))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -368,24 +343,24 @@ private struct QuinjetTerminalWorkspace: View {
             Spacer(minLength: 0)
             if let message = tab.holder.exitMessage {
                 Text(message)
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.warn)
                 Button("Restart", action: restart)
                     .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                    .font(.edithText(.caption).weight(.semibold))
             }
             if let message = tab.externalLaunchMessage {
                 Text(message)
-                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Button {
                 QuinjetWorkOwnership.start { await model.presentWorktrees(for: tab) }
             } label: {
                 Text(worktreeCount)
-                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                    .padding(.horizontal, UIScale.pt(11))
-                    .padding(.vertical, UIScale.pt(7))
+                    .font(.edithText(.callout).weight(.semibold))
+                    .padding(.horizontal, UIScale.pt(12))
+                    .padding(.vertical, UIScale.pt(8))
             }
             .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
             .popover(isPresented: $tab.showsWorktrees, arrowEdge: .bottom) {
@@ -393,7 +368,7 @@ private struct QuinjetTerminalWorkspace: View {
             }
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
-        .padding(.vertical, UIScale.pt(9))
+        .padding(.vertical, UIScale.pt(8))
         .background(DashSkin.panel)
     }
 
@@ -403,7 +378,7 @@ private struct QuinjetTerminalWorkspace: View {
             QuinjetWorktreePickerSkeleton(dark: dark)
         } else if let error = tab.errorMessage, tab.worktrees.isEmpty {
             ContentStatusView(
-                "Worktrees unavailable", message: error, symbol: "exclamationmark.triangle"
+                "Worktrees unavailable", message: error, icon: .warning
             )
             .padding(UIScale.pt(16))
             .frame(width: UIScale.pt(360), height: UIScale.pt(220))
@@ -430,27 +405,25 @@ private struct QuinjetTerminalWorkspace: View {
     }
 
     private var externalWorkspace: some View {
-        let palette = TerminalPalette.quinjet(
-            theme: tab.launchConfiguration.theme,
-            appearance: tab.launchConfiguration.appearance)
+        let palette = TerminalPalette.quinjet(configuration: tab.launchConfiguration)
         return ZStack {
             Color(nsColor: palette.background)
-            VStack(spacing: UIScale.pt(18)) {
-                Image(systemName: "macwindow.on.rectangle")
-                    .font(.system(size: UIScale.pt(30), weight: .medium))
+            VStack(spacing: UIScale.pt(20)) {
+                EdithIconView(.windows)
+                    .font(.edithText(.largeTitle).weight(.medium))
                     .foregroundStyle(Color(nsColor: palette.caret))
                 VStack(spacing: UIScale.pt(6)) {
                     Text("Open in cmux")
-                        .font(.system(size: UIScale.pt(22), weight: .bold))
+                        .font(.edithText(.title2).weight(.semibold))
                     Text(tab.title)
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .font(.edithText(.body).weight(.semibold))
                     Text(tab.worktree?.path ?? "")
-                        .font(DashSkin.mono(10.5))
+                        .font(.edithText(.caption, design: .monospaced))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 .foregroundStyle(Color(nsColor: palette.foreground))
-                HStack(spacing: UIScale.pt(10)) {
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                     Button("Show in cmux") {
                         QuinjetWorkOwnership.start {
                             _ = try? await model.performSessionOperation(
@@ -458,15 +431,15 @@ private struct QuinjetTerminalWorkspace: View {
                                     operation: .focus, session: tab.id.uuidString))
                         }
                     }
-                    .buttonStyle(QuinjetToolbarButtonStyle())
+                    .buttonStyle(.edith(.primary))
                     Button("Use embedded terminal", action: useEmbedded)
-                        .buttonStyle(QuinjetToolbarButtonStyle())
+                        .buttonStyle(.edith(.secondary))
                 }
                 Text("Theme: \(tab.launchConfiguration.theme.label)")
-                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .foregroundStyle(Color(nsColor: palette.foreground).opacity(0.65))
             }
-            .padding(UIScale.pt(30))
+            .padding(UIScale.pt(32))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

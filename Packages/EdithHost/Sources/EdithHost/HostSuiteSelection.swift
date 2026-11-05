@@ -48,6 +48,7 @@ import Observation
 
     func select(_ entry: HostExtension, enabled: Bool) async {
         guard !marketplace.isBusy(entry.id) else { return }
+        let wasInstalled = marketplace.installed[entry.id] != nil
         if enabled {
             if marketplace.installed[entry.id] == nil {
                 guard await marketplace.download(id: entry.id) == nil,
@@ -55,7 +56,11 @@ import Observation
                 else { return }
             }
             await marketplace.enable(id: entry.id)
+            if !wasInstalled, marketplace.surfaceAvailability.activeIDs.contains(entry.id) {
+                marketplace.markReady(entry.id)
+            }
         } else {
+            marketplace.acknowledgeReady(entry.id)
             await marketplace.disable(id: entry.id)
         }
         guard let suite = HostMarketplaceCatalog.suites.first(where: { $0.id == entry.category })

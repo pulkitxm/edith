@@ -11,7 +11,14 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     var notificationClick: (@MainActor (HostHerdrNotificationRequest) async throws -> Void)?
     var shutdown: (@MainActor () async -> Void)?
     var stopWorkers: (@MainActor () -> Void)?
-    var preventsQuit: (@MainActor () async -> Bool)?
+    var quitBlockers: (@MainActor () async -> [String])?
+    var presentQuitWait: @MainActor (HostQuitWaitModel) -> () -> Void = { model in
+        let panel = HostQuitWaitPanel.present(model)
+        return { panel.close() }
+    }
+    var terminate: @MainActor () -> Void = { HostQuit.terminate() }
+    var conceal: @MainActor () -> Void = { HostQuit.conceal() }
+    var quitPollInterval: Duration = .milliseconds(250)
     var openMainWindow: (@MainActor () -> Void)?
     var activate: @MainActor () -> Void = {
         guard !HostBackgroundTesting.enabled else { return }
@@ -26,6 +33,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     private var deferringQuit = false
     private var quitConfirmed = false
     private var quitCancelled = false
+    private var quitForced = false
     private(set) var launchedAtLogin = false
     private var windowCloseObserver: NSObjectProtocol?
     private var windowKeyObserver: NSObjectProtocol?
@@ -42,6 +50,15 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
 
     static func presentsApplication(_ window: NSWindow) -> Bool {
         window.canBecomeMain && !(window is NSPanel)
+    }
+
+    static func isPresenting(_ windows: [NSWindow]) -> Bool {
+        windows.contains { ($0.isVisible || $0.isMiniaturized) && presentsApplication($0) }
+    }
+
+    static func dropToAccessoryIfWindowless() {
+        guard !isPresenting(NSApp.windows) else { return }
+        NSApp.setActivationPolicy(.accessory)
     }
 
     private func appearInDockWhilePresenting() {
@@ -61,12 +78,7 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         windowCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: nil, queue: .main
         ) { _ in
-            DispatchQueue.main.async {
-                let presenting = NSApp.windows.contains {
-                    ($0.isVisible || $0.isMiniaturized) && Self.presentsApplication($0)
-                }
-                if !presenting { NSApp.setActivationPolicy(.accessory) }
-            }
+            DispatchQueue.main.async { Self.dropToAccessoryIfWindowless() }
         }
     }
 
@@ -142,23 +154,12 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let shutdown else { return .terminateNow }
         guard !terminating else { return .terminateCancel }
-        if let preventsQuit, !quitConfirmed {
+        if let quitBlockers, !quitConfirmed {
             guard !deferringQuit else { return .terminateCancel }
             deferringQuit = true
             quitCancelled = false
-            Task {
-                if await preventsQuit() {
-                    NSApp.hide(nil)
-                    while !quitCancelled, await preventsQuit() {
-                        try? await Task.sleep(for: .seconds(1))
-                    }
-                }
-                deferringQuit = false
-                guard !quitCancelled else { return }
-                quitConfirmed = true
-                HostQuit.terminate()
-                quitConfirmed = false
-            }
+            quitForced = false
+            Task { await waitForBlockers(quitBlockers) }
             return .terminateCancel
         }
         terminating = true
@@ -174,5 +175,34 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) { finish() }
         return .terminateCancel
+    }
+
+    private func waitForBlockers(_ quitBlockers: @MainActor () async -> [String]) async {
+        var blockers = await quitBlockers()
+        if !blockers.isEmpty {
+            let model = HostQuitWaitModel(blockers: blockers)
+            model.quitNow = { [weak self] in self?.quitForced = true }
+            model.keepOpen = { [weak self] in self?.quitCancelled = true }
+            conceal()
+            let dismiss = presentQuitWait(model)
+            var polls = 0
+            while !quitCancelled, !quitForced {
+                try? await Task.sleep(for: quitPollInterval)
+                polls += 1
+                guard polls % 4 == 0, !quitCancelled, !quitForced else { continue }
+                blockers = await quitBlockers()
+                if blockers.isEmpty { break }
+                if blockers != model.blockers { model.blockers = blockers }
+            }
+            dismiss()
+        }
+        deferringQuit = false
+        guard !quitCancelled else {
+            showMainWindow()
+            return
+        }
+        quitConfirmed = true
+        terminate()
+        quitConfirmed = false
     }
 }

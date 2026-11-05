@@ -44,7 +44,7 @@ struct WorkspaceFilterList<Row: Identifiable, RowContent: View>: View {
 
     private var search: some View {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: "magnifyingglass")
+            EdithIconView(.search)
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             TextField("Filter", text: $query)
@@ -86,7 +86,7 @@ struct WorkspaceFilterList<Row: Identifiable, RowContent: View>: View {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         if index == 0 || section(rows[index - 1]) != section(row) {
                             Text(section(row))
-                                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                                .font(.edithText(.caption).weight(.semibold))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .padding(.horizontal, UIScale.pt(8))
                                 .padding(.top, UIScale.pt(index == 0 ? 2 : 10))

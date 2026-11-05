@@ -1,7 +1,7 @@
 {
   "id": "codeStats",
   "title": "Code Stats",
-  "symbolName": "chart.line.uptrend.xyaxis",
+  "icon": "chartLine",
   "category": "developer",
   "background": true,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "codeStats",
       "title": "Code Stats",
-      "symbolName": "chart.line.uptrend.xyaxis",
+      "icon": "chartLine",
       "order": 2
     }
   ],
@@ -23,5 +23,37 @@
     "codeStats",
     "extension:codeStats"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "See how much code you write, across every GitHub repository you own.",
+    "summary": "Code Stats keeps a read-only copy of your GitHub repositories on a folder you choose, counts your commits and lines, and turns them into streaks, languages and a daily heatmap. Nothing is changed on GitHub.",
+    "steps": [
+      {
+        "icon": "folder",
+        "title": "Choose a storage folder",
+        "detail": "Pick where repository copies are kept; an external drive works."
+      },
+      {
+        "icon": "person",
+        "title": "Confirm it is you",
+        "detail": "Sign in with the GitHub CLI and confirm which emails count as your commits."
+      },
+      {
+        "icon": "sync",
+        "title": "Run the first sync",
+        "detail": "Edith copies and reads your repositories in the background; the first run takes the longest."
+      },
+      {
+        "icon": "chartLine",
+        "title": "Explore your stats",
+        "detail": "Filter by range, repository or language, and share cards as images."
+      }
+    ],
+    "examples": [
+      "ed code-stats status",
+      "ed code-stats run --wait",
+      "ed code-stats report --range 30d",
+      "ed code-stats audit"
+    ]
+  }
 }

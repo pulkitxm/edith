@@ -254,14 +254,14 @@ final class EmojiPanelModel {
             built.append(
                 EmojiSection(
                     id: EmojiPanelView.frequentSectionID, title: "Frequently used",
-                    symbolName: "clock", emoji: frequent))
+                    icon: .clock, emoji: frequent))
         }
         for (index, group) in catalog.groups.enumerated() {
             let emoji = catalog.emoji(inGroup: index)
             guard !emoji.isEmpty else { continue }
             built.append(
                 EmojiSection(
-                    id: group.id, title: group.name, symbolName: group.symbolName, emoji: emoji))
+                    id: group.id, title: group.name, icon: group.icon, emoji: emoji))
         }
         return built
     }
@@ -277,7 +277,7 @@ final class EmojiPanelModel {
             : [
                 EmojiSection(
                     id: EmojiPanelView.resultsSectionID, title: "Results",
-                    symbolName: "magnifyingglass", emoji: result)
+                    icon: .search, emoji: result)
             ]
         isSearching = false
         searchTask = nil
@@ -349,7 +349,7 @@ final class EmojiPanelModel {
     private func syncRenderedSections() {
         renderedSections = sections.map { section in
             EmojiSection(
-                id: section.id, title: section.title, symbolName: section.symbolName,
+                id: section.id, title: section.title, icon: section.icon,
                 emoji: Array(section.emoji.prefix(renderedCounts[section.id, default: 0])))
         }
     }

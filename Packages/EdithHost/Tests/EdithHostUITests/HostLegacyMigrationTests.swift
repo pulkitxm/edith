@@ -37,7 +37,7 @@ import Testing
         let model = suite.model(ids: ids)
         #expect(model.incomplete)
         model.present()
-        #expect(model.stage == .review)
+        #expect(model.stage == .tools)
         #expect(model.workflow == .custom)
         #expect(model.selected == selection)
         model.dismiss()
@@ -79,7 +79,7 @@ import Testing
         let model = suite.model(ids: ["usage"])
         #expect(model.incomplete)
         model.present()
-        #expect(model.stage == .workflows)
+        #expect(model.stage == .welcome)
     }
 
     @Test func helperMusicPlayerStateIsCopiedOnceWithoutOverwriting() {
@@ -122,7 +122,7 @@ import Testing
         func model(ids: Set<String>) -> HostWorkflowOnboardingModel {
             HostWorkflowOnboardingModel(
                 entries: ids.sorted().map {
-                    HostExtension(id: $0, title: $0, symbolName: "square", category: "agents")
+                    HostExtension(id: $0, title: $0, icon: .checkbox, category: "agents")
                 }, defaults: defaults,
                 environment: HostWorkflowEnvironment(
                     available: { [:] }, installed: { [] }, active: { [] }, refresh: {},

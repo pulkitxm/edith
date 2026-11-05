@@ -10,7 +10,7 @@ private struct ClaudeStatusLineRow: View {
     @State private var operation: Task<Void, Never>?
 
     var body: some View {
-        LabeledContent("Claude Code status line") {
+        LabeledContent("Show limits inside Claude Code") {
             HStack(spacing: 8) {
                 if let failure {
                     Text(failure).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -19,6 +19,13 @@ private struct ClaudeStatusLineRow: View {
                     .foregroundStyle(.secondary)
                 Button(connected == true ? "Disconnect" : "Connect") { toggle() }
                     .disabled(connected == nil)
+                    .help(
+                        connected == nil
+                            ? "Checking Claude Code's settings"
+                            : connected == true
+                                ? "Remove the Edith status line from Claude Code"
+                                : "Add a status line to Claude Code that reports your limits to Edith"
+                    )
             }
         }
         .onDisappear {
@@ -157,6 +164,10 @@ struct UsageSettingsRows: View {
         UsageMachineSettingsRows()
         Section {
             Group {
+                Text(
+                    "Limits show how much of each plan's allowance you have used. Edith checks only the providers you leave on, using the sign-ins already on this Mac."
+                )
+                .settingsCaption()
                 Toggle(
                     "Claude limits",
                     isOn: $claudeEnabled
@@ -274,7 +285,7 @@ struct UsageSettingsRows: View {
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
             if !hasProvider {
-                Label("Agent Usage is paused", systemImage: "pause.circle.fill")
+                Label("Agent Usage is paused", edith: .pause)
                     .foregroundStyle(.secondary)
                 Text(
                     "Turn on Agent Usage above to restore \(selectedProvider.label) limits. Menu bar limits and alerts are off."
@@ -290,7 +301,7 @@ struct UsageSettingsRows: View {
                         ? "The percentage shifts from Low to High risk as usage climbs. Smart color drives that shift by time-aware pacing instead of the raw percentage."
                         : "White and Black force a single tint. Pick Custom to color by risk stage."
                 )
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
             }
         }
 
@@ -440,7 +451,7 @@ struct UsageSettingsRows: View {
             Text(
                 "Alerts use your local clock and fire once per window. With Jev enabled, on-pace, outlook and headroom alerts only go out when Jev thinks they are worth the interruption."
             )
-            .font(.system(size: UIScale.pt(10)))
+            .font(.edithText(.caption))
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

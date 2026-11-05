@@ -34,7 +34,7 @@ final class StudioWorkflowDraft: Identifiable {
             jobs.append(
                 StudioJob(
                     tool: tool, inputs: [],
-                    settings: step.settings.merged(over: tool.defaultSettings)))
+                    settings: step.settings.merged(over: tool.themedDefaultSettings())))
         }
         return jobs
     }
@@ -68,46 +68,63 @@ final class StudioWorkflowDraft: Identifiable {
 }
 
 struct StudioWorkflowSection: View {
-    let model: StudioModel
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
+    private enum Tile: Identifiable {
+        case workflow(StudioWorkflow)
+        case new
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Text("WORKFLOWS")
-                .font(DashSkin.mono(10, weight: .semibold))
-                .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
-            LazyVGrid(
-                columns: PageMetrics.cardColumns(compact, minimum: 240, spacing: 12),
-                alignment: .leading, spacing: UIScale.pt(12)
-            ) {
-                ForEach(model.workflows) { workflow in
-                    StudioWorkflowCard(model: model, workflow: workflow)
-                }
-                Button {
-                    model.editWorkflow(nil)
-                } label: {
-                    VStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: "plus")
-                            .font(.system(size: UIScale.pt(20), weight: .light))
-                        Text("New workflow")
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
-                        Text("Chain tools and reuse them on any files.")
-                            .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: UIScale.pt(12))
-                            .strokeBorder(
-                                DashSkin.lineStrong(scheme == .dark),
-                                style: StrokeStyle(lineWidth: 1.2, dash: [6, 4]))
-                    )
-                    .edithButtonTarget(.borderless)
-                }
-                .buttonStyle(.edith(.borderless))
+        var id: String {
+            switch self {
+            case let .workflow(workflow): workflow.id.uuidString
+            case .new: "new"
             }
         }
+    }
+
+    let model: StudioModel
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            PageCapsLabel("Workflows")
+            StudioTileGrid(items: model.workflows.map(Tile.workflow) + [.new]) { tile in
+                switch tile {
+                case let .workflow(workflow):
+                    StudioWorkflowCard(model: model, workflow: workflow)
+                case .new:
+                    newWorkflow
+                }
+            }
+        }
+    }
+
+    private var newWorkflow: some View {
+        Button {
+            model.editWorkflow(nil)
+        } label: {
+            VStack(spacing: UIScale.pt(8)) {
+                EdithIconView(.plus)
+                    .font(.system(size: UIScale.pt(20), weight: .light))
+                Text("New workflow")
+                    .font(.edithText(.callout).weight(.semibold))
+                Text("Chain tools and reuse them on any files.")
+                    .font(.edithText(.caption))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(UIScale.pt(14))
+            .frame(
+                maxWidth: .infinity, minHeight: UIScale.pt(StudioCardMetrics.toolCardHeight),
+                maxHeight: .infinity
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: UIScale.pt(12))
+                    .strokeBorder(
+                        DashSkin.lineStrong(scheme == .dark),
+                        style: StrokeStyle(lineWidth: 1.2, dash: [6, 4]))
+            )
+            .edithButtonTarget(.borderless)
+        }
+        .buttonStyle(.edith(.borderless))
     }
 }
 
@@ -123,9 +140,9 @@ struct StudioWorkflowCard: View {
             }
             .scrollIndicators(.automatic)
             Text(workflow.name)
-                .font(.system(size: UIScale.pt(13.5), weight: .semibold))
+                .font(.edithText(.body).weight(.semibold))
             Text(workflow.summary)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
             HStack {
@@ -137,14 +154,14 @@ struct StudioWorkflowCard: View {
                 Button {
                     model.deleteWorkflow(workflow)
                 } label: {
-                    Image(systemName: "trash")
+                    EdithIconView(.trash)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .help("Delete workflow")
             }
         }
         .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12))
         )
@@ -157,7 +174,7 @@ struct StudioWorkflowCard: View {
         HStack(spacing: UIScale.pt(4)) {
             ForEach(Array(workflow.tools.enumerated()), id: \.offset) { index, tool in
                 if index > 0 {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(9), weight: .bold))
                         .foregroundStyle(.tertiary)
                 }
@@ -175,20 +192,26 @@ struct StudioWorkflowEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            Text("Workflow").font(.system(size: UIScale.pt(17), weight: .semibold))
-            TextField("Name", text: Binding(get: { draft.name }, set: { draft.name = $0 }))
-                .textFieldStyle(.roundedBorder)
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
+                Text("Workflow").font(.edithText(.title2)).fontWeight(.semibold)
+                Text("Run these tools in order on the files you choose.")
+                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+            }
+            EdithTextField(
+                placeholder: "Workflow name",
+                text: Binding(get: { draft.name }, set: { draft.name = $0 }))
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     ForEach(Array(draft.steps.enumerated()), id: \.element.id) { index, step in
                         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                             HStack(spacing: UIScale.pt(8)) {
                                 Text("\(index + 1)")
-                                    .font(DashSkin.mono(11, weight: .bold))
+                                    .font(.edithText(.callout)).fontWeight(.semibold)
+                                    .monospacedDigit()
                                     .frame(width: UIScale.pt(20))
                                 StudioToolIcon(tool: step.tool, size: 26)
-                                Text(step.tool.title).font(
-                                    .system(size: UIScale.pt(12.5), weight: .medium))
+                                Text(step.tool.title)
+                                    .font(.edithText(.callout)).fontWeight(.medium)
                                 Spacer()
                                 if !step.tool.options.isEmpty {
                                     Button(expanded == index ? "Done" : "Settings") {
@@ -199,17 +222,19 @@ struct StudioWorkflowEditor: View {
                                 Button {
                                     draft.move(index, by: -1)
                                 } label: {
-                                    Image(systemName: "arrow.up")
+                                    EdithIconView(.arrowUp)
                                 }
                                 .buttonStyle(.edith(.iconOnly))
                                 .disabled(index == 0)
+                                .accessibilityLabel("Move step up")
                                 Button {
                                     draft.remove(at: index)
                                     expanded = nil
                                 } label: {
-                                    Image(systemName: "trash")
+                                    EdithIconView(.trash)
                                 }
                                 .buttonStyle(.edith(.iconOnly))
+                                .accessibilityLabel("Remove step")
                             }
                             if expanded == index {
                                 StudioOptionsForm(job: step)
@@ -238,16 +263,16 @@ struct StudioWorkflowEditor: View {
                     } label: {
                         Label(
                             draft.steps.isEmpty ? "Choose the first tool" : "Add a step",
-                            systemImage: "plus")
+                            edith: .plus)
                     }
-                    .menuStyle(.borderlessButton)
+                    .buttonStyle(.edith(.secondary))
                     .fixedSize()
                     .padding(.top, UIScale.pt(4))
                 }
             }
             .frame(minHeight: UIScale.pt(220), maxHeight: UIScale.pt(420))
             if let failure = draft.failure {
-                Text(failure).font(.system(size: UIScale.pt(11.5))).foregroundStyle(DashSkin.danger)
+                Text(failure).font(.edithText(.callout)).foregroundStyle(DashSkin.danger)
             }
             HStack {
                 Spacer()
@@ -257,9 +282,12 @@ struct StudioWorkflowEditor: View {
                 Button("Save workflow") { model.saveWorkflow(draft) }
                     .buttonStyle(.edith(.primary))
                     .keyboardShortcut(.defaultAction)
+                    .disabled(
+                        draft.steps.isEmpty
+                            || draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(UIScale.pt(22))
+        .padding(UIScale.pt(PageMetrics.gutter))
         .frame(width: UIScale.pt(560))
     }
 }

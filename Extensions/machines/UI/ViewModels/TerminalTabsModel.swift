@@ -114,6 +114,7 @@ final class TerminalTabsModel {
 }
 
 struct TerminalTabsView: View {
+    @Environment(\.compactLayout) private var compact
     let session: MachineSession
     var presented = true
     @State var model = TerminalTabsModel()
@@ -140,7 +141,7 @@ struct TerminalTabsView: View {
                 }
                 if model.tabs.isEmpty {
                     Text("No terminals open.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -191,15 +192,15 @@ struct TerminalTabsView: View {
                             model.selected = tab.id
                         } label: {
                             HStack(spacing: UIScale.pt(6)) {
-                                Image(systemName: "terminal")
+                                EdithIconView(.terminal)
                                     .font(.system(size: UIScale.pt(9.5)))
                                 Text(tab.title)
-                                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                                    .font(.edithText(.subheadline).weight(.medium))
                                 if model.tabs.count > 1 {
                                     Button {
                                         model.closeTab(tab.id)
                                     } label: {
-                                        Image(systemName: "xmark")
+                                        EdithIconView(.close)
                                             .font(.system(size: UIScale.pt(7.5), weight: .bold))
                                     }
                                     .buttonStyle(.edith(.borderless))
@@ -224,32 +225,33 @@ struct TerminalTabsView: View {
             Button {
                 model.addTab(named: "Shell \(model.tabs.count + 1)")
             } label: {
-                Image(systemName: "plus")
+                EdithIconView(.plus)
             }
             .buttonStyle(.edith(.toolbar))
             .help("New terminal (⌘T)")
 
             Toggle("Broadcast", isOn: $model.broadcast)
                 .toggleStyle(.checkbox)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
                 .help("Type once, send to every tab")
 
             Button {
                 TerminalWindow.open(session: session)
             } label: {
-                Image(systemName: "macwindow")
+                EdithIconView(.window)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Open terminals in their own window")
         }
-        .padding(.horizontal, UIScale.pt(12))
+        .padding(.leading, UIScale.pt(12))
+        .padding(.trailing, PageMetrics.gutter(compact))
         .padding(.vertical, UIScale.pt(9))
         .background(DashSkin.panel)
     }
 
     private var broadcastBar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "dot.radiowaves.left.and.right")
+            EdithIconView(.signal)
                 .foregroundStyle(DashSkin.warn)
             TextField("Send to every tab", text: $command)
                 .textFieldStyle(.roundedBorder)
@@ -257,11 +259,11 @@ struct TerminalTabsView: View {
             Button("Send", action: sendBroadcast)
             if let broadcastError {
                 Text(broadcastError)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.danger)
             }
         }
-        .padding(.horizontal, UIScale.pt(12))
+        .padding(.horizontal, PageMetrics.gutter(compact))
         .padding(.vertical, UIScale.pt(7))
         .background(DashSkin.warn.opacity(0.1))
     }

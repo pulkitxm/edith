@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithIcons
 import Foundation
 
 public struct BifrostEntry: Identifiable, Equatable, Sendable {
@@ -6,7 +7,7 @@ public struct BifrostEntry: Identifiable, Equatable, Sendable {
     public let kind: BifrostResultKind
     public let title: String
     public let subtitle: String
-    public let symbolName: String
+    public let icon: EdithIcon
     public let iconPath: String?
     public let terms: [String]
     public let action: BifrostAction
@@ -15,14 +16,14 @@ public struct BifrostEntry: Identifiable, Equatable, Sendable {
 
     public init(
         id: String, kind: BifrostResultKind, title: String, subtitle: String,
-        symbolName: String, iconPath: String? = nil, terms: [String] = [],
+        icon: EdithIcon, iconPath: String? = nil, terms: [String] = [],
         action: BifrostAction, copyText: String, keyword: String? = nil
     ) {
         self.id = id
         self.kind = kind
         self.title = title
         self.subtitle = subtitle
-        self.symbolName = symbolName
+        self.icon = icon
         self.iconPath = iconPath
         self.terms = terms
         self.action = action

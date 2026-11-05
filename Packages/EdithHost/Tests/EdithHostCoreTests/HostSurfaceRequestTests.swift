@@ -119,7 +119,7 @@ import Testing
         await gate.open()
         let requests = fixture(versions, gate)
         let snapshot = SurfaceSnapshot(
-            providerID: "calendar", actions: [.init("join:synthetic", "Join", "video")])
+            providerID: "calendar", actions: [.init("join:synthetic", "Join", .video)])
         await #expect(throws: (any Error).self) {
             try await requests.perform(
                 providerID: "calendar", target: .home, tile: .init(.calendar), snapshot: snapshot,

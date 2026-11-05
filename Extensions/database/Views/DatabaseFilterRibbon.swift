@@ -104,9 +104,9 @@ struct DatabaseFilterRibbon: View {
                 }
             }
         } label: {
-            railControlLabel(condensedFilterTitle, systemImage: "line.3.horizontal.decrease")
+            railControlLabel(condensedFilterTitle, icon: .filter)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(availableFilterFields.isEmpty && !supportsRelatedFields)
@@ -147,9 +147,9 @@ struct DatabaseFilterRibbon: View {
                         columns.toggleVisibility(column.id)
                     } label: {
                         if column.isVisible {
-                            Label("Hide", systemImage: "eye.slash")
+                            Label("Hide", edith: .eyeOff)
                         } else {
-                            Label("Show", systemImage: "eye")
+                            Label("Show", edith: .eye)
                         }
                     }
                     .disabled(column.isVisible && !columns.canHide(column.id))
@@ -164,16 +164,16 @@ struct DatabaseFilterRibbon: View {
                     .disabled(index == columns.columns.count - 1)
                 } label: {
                     if column.isVisible {
-                        Label(column.field.displayName, systemImage: "checkmark")
+                        Label(column.field.displayName, edith: .check)
                     } else {
                         Text(column.field.displayName)
                     }
                 }
             }
         } label: {
-            railControlLabel("Columns", systemImage: "rectangle.split.3x1")
+            railControlLabel("Columns", icon: .columns)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(columns.columns.isEmpty)
@@ -191,9 +191,9 @@ struct DatabaseFilterRibbon: View {
                 }
             }
         } label: {
-            railControlLabel("Filter", systemImage: "plus")
+            railControlLabel("Filter", icon: .plus)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(availableFilterFields.isEmpty && !supportsRelatedFields)
@@ -222,7 +222,7 @@ struct DatabaseFilterRibbon: View {
                         apply()
                     } label: {
                         if data.filterConjunction == conjunction {
-                            Label(conjunction.title, systemImage: "checkmark")
+                            Label(conjunction.title, edith: .check)
                         } else {
                             Text(conjunction.title)
                         }
@@ -231,12 +231,13 @@ struct DatabaseFilterRibbon: View {
             } label: {
                 conjunctionLabel(data.filterConjunction.title)
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
             .help("Match all filters or any filter")
         } else {
             conjunctionLabel("AND")
+                .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
                 .help("Redis combines key and type filters")
         }
     }
@@ -245,7 +246,6 @@ struct DatabaseFilterRibbon: View {
         Text(title)
             .font(.system(size: UIScale.pt(9), weight: .medium, design: .monospaced))
             .foregroundStyle(palette.inkFaint)
-            .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
     }
 
     private func filterChip(_ clause: DatabaseWorkspaceFilterClause) -> some View {
@@ -258,7 +258,7 @@ struct DatabaseFilterRibbon: View {
                         .fill(accent)
                         .frame(width: UIScale.pt(5), height: UIScale.pt(5))
                 } else {
-                    Image(systemName: "pause.fill")
+                    EdithIconView(.pause)
                         .font(.system(size: UIScale.pt(7.5), weight: .semibold))
                 }
                 Text(clause.field)
@@ -273,7 +273,7 @@ struct DatabaseFilterRibbon: View {
                         .font(.system(size: UIScale.pt(10), design: .monospaced))
                         .lineLimit(1)
                 }
-                Image(systemName: "chevron.down")
+                EdithIconView(.chevronDown)
                     .font(.system(size: UIScale.pt(7), weight: .bold))
                     .foregroundStyle(palette.inkFaint)
             }
@@ -346,9 +346,9 @@ struct DatabaseFilterRibbon: View {
                 }
             }
         } label: {
-            railControlLabel(sortMenuTitle, systemImage: "arrow.up.arrow.down")
+            railControlLabel(sortMenuTitle, icon: .arrowSort)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(sortableFields.isEmpty)
@@ -362,20 +362,11 @@ struct DatabaseFilterRibbon: View {
             .frame(width: UIScale.pt(1), height: UIScale.pt(18))
     }
 
-    private func railControlLabel(_ title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
+    private func railControlLabel(_ title: String, icon: EdithIcon) -> some View {
+        Label(title, edith: icon)
             .font(.system(size: UIScale.pt(10), weight: .medium))
             .foregroundStyle(palette.inkSoft)
             .lineLimit(1)
-            .padding(.horizontal, UIScale.pt(6))
-            .frame(height: UIScale.pt(28))
-            .background(
-                palette.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(6))
-                    .strokeBorder(palette.line.opacity(0.68), lineWidth: 1)
-            }
     }
 
     private var condensedFilterTitle: String {
@@ -444,7 +435,7 @@ struct DatabaseFilterRibbon: View {
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
                     Spacer(minLength: 0)
                     Toggle("Enabled", isOn: clauseEnabledBinding(id))
-                        .toggleStyle(.switch)
+                        .toggleStyle(.edithSwitch)
                         .controlSize(.small)
                 }
                 filterEditorControl("Field") {

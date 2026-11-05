@@ -7,6 +7,9 @@ struct VideoTimeline: View {
     @State private var scale = 80.0
     @State private var snapping = true
     @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
 
     private struct Item: Identifiable {
         let id: String
@@ -21,10 +24,10 @@ struct VideoTimeline: View {
         let canDelete = model.selection != nil
         return VStack(spacing: 0) {
             WrapHStack(spacing: UIScale.pt(12)) {
-                Label("Timeline", systemImage: "rectangle.stack").font(.edithText(.headline))
+                Label("Timeline", edith: .layers).font(.edithText(.headline))
                     .fixedSize().help("Drag to move · edges to trim")
-                Button("Split", systemImage: "scissors", action: model.splitAtPlayhead)
-                Button("Delete", systemImage: "trash", action: model.deleteSelection)
+                Button("Split", edith: .scissors, action: model.splitAtPlayhead)
+                Button("Delete", edith: .trash, action: model.deleteSelection)
                     .disabled(!canDelete)
                 Toggle("Snap", isOn: $snapping).toggleStyle(.button)
                 Button("Fit") { scale = max(8, min(180, 900 / max(1, model.duration))) }
@@ -45,22 +48,26 @@ struct VideoTimeline: View {
                 ZStack(alignment: .topLeading) {
                     VStack(alignment: .leading, spacing: 6) {
                         ruler(width: width)
-                        lane("VIDEO", color: .blue, items: clips, width: width, snaps: snaps)
+                        lane(
+                            "VIDEO", color: DashSkin.accent(dark), items: clips, width: width,
+                            snaps: snaps)
                         zoomLane(width: width)
                         ForEach(packed(annotations), id: \.first?.id) { items in
                             lane(
-                                "OVERLAYS", color: .orange, items: items, width: width, snaps: snaps
-                            )
+                                "OVERLAYS", color: DashSkin.heat(3, dark), items: items,
+                                width: width, snaps: snaps)
                         }
                         ForEach(audioLanes, id: \.first?.id) { items in
-                            lane("AUDIO", color: .green, items: items, width: width, snaps: snaps)
+                            lane(
+                                "AUDIO", color: DashSkin.heat(1, dark), items: items,
+                                width: width, snaps: snaps)
                         }
                         lane(
-                            "SPEED", color: .purple, items: regions("speedRegions"), width: width,
-                            snaps: snaps)
-                        lane(
-                            "CAMERA", color: .pink, items: regions("cameraFullscreenRegions"),
+                            "SPEED", color: DashSkin.heat(2, dark), items: regions("speedRegions"),
                             width: width, snaps: snaps)
+                        lane(
+                            "CAMERA", color: DashSkin.heat(3, dark),
+                            items: regions("cameraFullscreenRegions"), width: width, snaps: snaps)
                     }
                     VideoTimelinePlayhead(model: model, scale: scale)
                 }
@@ -69,8 +76,7 @@ struct VideoTimeline: View {
             .coordinateSpace(name: "editTimeline")
         }
         .frame(
-            minHeight: UIScale.pt(compact ? 200 : 100),
-            idealHeight: UIScale.pt(compact ? 260 : 200),
+            minHeight: UIScale.pt(180), idealHeight: UIScale.pt(260),
             maxHeight: UIScale.pt(320))
     }
 
@@ -99,7 +105,7 @@ struct VideoTimeline: View {
         _ title: String, color: Color, items: [Item], width: Double, snaps: [Double]
     ) -> some View {
         HStack(spacing: 0) {
-            Text(title).font(.system(size: UIScale.pt(10), weight: .semibold)).foregroundStyle(
+            Text(title).font(.edithText(.caption).weight(.semibold)).foregroundStyle(
                 .secondary
             )
             .frame(width: UIScale.pt(90))
@@ -132,12 +138,12 @@ struct VideoTimeline: View {
 
     private func zoomLane(width: Double) -> some View {
         HStack(spacing: 0) {
-            Text("ZOOM").font(.system(size: UIScale.pt(10), weight: .semibold)).foregroundStyle(
+            Text("ZOOM").font(.edithText(.caption).weight(.semibold)).foregroundStyle(
                 .secondary
             )
             .frame(width: UIScale.pt(90))
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 5).fill(Color.blue.opacity(0.06))
+                RoundedRectangle(cornerRadius: 5).fill(Color.themeAccent.opacity(0.06))
                 ForEach(model.project?.zooms ?? []) { zoom in
                     let start = model.outputTime(forRulerTime: zoom.startMs / 1000)
                     let end = model.outputTime(forRulerTime: zoom.endMs / 1000)
@@ -275,9 +281,10 @@ struct VideoTimeline: View {
 private struct VideoTimelinePlayhead: View {
     let model: VideoEditorModel
     let scale: Double
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        Rectangle().fill(.red).frame(width: UIScale.pt(1.5))
+        Rectangle().fill(DashSkin.accentDeep(scheme == .dark)).frame(width: UIScale.pt(1.5))
             .offset(x: UIScale.pt(90) + model.playhead * scale).allowsHitTesting(false)
     }
 }

@@ -74,14 +74,14 @@ struct EmbeddedMusicSpotifyWorkspace: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            navigation("Home", symbol: "house", destination: .home)
-            navigation("Search", symbol: "magnifyingglass", destination: .search(search))
+            navigation("Home", icon: .home, destination: .home)
+            navigation("Search", icon: .search, destination: .search(search))
             Divider()
             HStack {
-                Label("Your library", systemImage: "books.vertical")
+                Label("Your library", edith: .books)
                     .font(.edithText(.headline))
                 Spacer()
-                icon("plus", label: "Create playlist") { playlistPresented = true }
+                iconButton(.plus, label: "Create playlist") { playlistPresented = true }
                     .disabled(!library.libraryReady)
             }
             VStack(spacing: UIScale.pt(6)) {
@@ -92,7 +92,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                     "Library categories", selection: $libraryFilter,
                     options: ["artists", "shows"], label: { Self.category($0) })
             }.font(.edithText(.caption))
-            navigation("Liked Songs", symbol: "heart.fill", destination: .library("liked"))
+            navigation("Liked Songs", icon: .heart, destination: .library("liked"))
             HStack {
                 Text(Self.category(libraryFilter)).font(.edithText(.caption)).foregroundStyle(
                     .secondary)
@@ -169,6 +169,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                         }
                         PageLoading(
                             state: library.load.state, title: "No music found",
+                            errorTitle: "Your music could not be loaded",
                             message: emptyMessage, layout: .cards,
                             refreshing: library.load.isRefreshing,
                             retry: { library.refresh() }
@@ -186,21 +187,21 @@ struct EmbeddedMusicSpotifyWorkspace: View {
 
     private func toolbar(showsQueue: Bool) -> some View {
         HStack(spacing: UIScale.pt(8)) {
-            icon("sidebar.left", label: "Open music library") { libraryPresented = true }
-            icon("chevron.left", label: "Back") {
+            iconButton(.sidebarLeft, label: "Open music library") { libraryPresented = true }
+            iconButton(.chevronLeft, label: "Back") {
                 navigationRevision += 1; library.back()
             }.disabled(!library.canGoBack)
             if !compact {
-                icon("chevron.right", label: "Forward") {
+                iconButton(.chevronRight, label: "Forward") {
                     navigationRevision += 1; library.forward()
                 }.disabled(!library.canGoForward)
             }
             EdithTextField(
                 placeholder: "Search songs, artists, albums", text: $search,
-                icon: "magnifyingglass", onSubmit: { library.search(search) }
+                icon: .search, onSubmit: { library.search(search) }
             )
             .disabled(!library.libraryReady)
-            icon("list.bullet", label: "Show queue") {
+            iconButton(.list, label: "Show queue") {
                 if !showsQueue {
                     queuePresented = true; library.showQueue()
                 } else {
@@ -217,9 +218,9 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                 Divider()
                 Button("Disconnect Spotify") { Task { await accounts.spotify.disconnect() } }
             } label: {
-                Image(systemName: "person.crop.circle").font(.edithText(.title3))
+                EdithIcon.person.image(size: 20)
             }
-            .menuStyle(.borderlessButton).fixedSize().help("Music source and account")
+            .borderlessMenu().fixedSize().help("Music source and account")
         }
         .padding(.horizontal, UIScale.pt(16)).padding(.vertical, UIScale.pt(12))
     }
@@ -248,11 +249,11 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                     navigate(.library("liked"))
                 } label: {
                     HStack {
-                        Image(systemName: "heart.fill").foregroundStyle(.white)
+                        EdithIconView(.heart).foregroundStyle(Color.themeOnAccent)
                             .frame(width: UIScale.pt(48), height: UIScale.pt(48))
                             .background(
                                 LinearGradient(
-                                    colors: [.purple, .indigo], startPoint: .topLeading,
+                                    colors: [accent, accent.opacity(0.72)], startPoint: .topLeading,
                                     endPoint: .bottomTrailing))
                         Text("Liked Songs").font(.edithText(.subheadline)).fontWeight(.semibold)
                         Spacer(minLength: 0)
@@ -344,17 +345,17 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                     Button {
                         library.play(item)
                     } label: {
-                        Image(systemName: "play.fill").foregroundStyle(.white)
+                        EdithIconView(.play).foregroundStyle(Color.themeOnAccent)
                             .frame(width: UIScale.pt(48), height: UIScale.pt(48)).background(
                                 accent, in: Circle())
                     }.buttonStyle(.edith(.borderless)).accessibilityLabel("Play \(item.title)")
                         .disabled(!item.playable)
-                    icon("shuffle", label: "Shuffle collection") {
+                    iconButton(.shuffle, label: "Shuffle collection") {
                         library.setShuffle(!library.shuffle); library.play(item)
                     }
                     .foregroundStyle(library.shuffle ? accent : .secondary)
-                    icon(
-                        library.savedURIs.contains(item.uri) ? "heart.fill" : "heart",
+                    iconButton(
+                        .heart, tone: library.savedURIs.contains(item.uri) ? .duotone : .muted,
                         label: "Save collection"
                     ) { toggleSaved(item) }
                 }
@@ -375,7 +376,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
             HStack {
                 EdithSegmentedPicker(
                     "Queue", selection: $queueTab, options: ["Queue", "Recent"], label: { $0 })
-                icon("xmark", label: "Close queue") {
+                iconButton(.close, label: "Close queue") {
                     library.hideQueue(); queuePresented = false
                 }
             }
@@ -395,7 +396,12 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                     }.presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                 }
             }
-            if queueTab == "Queue", library.queueLoading { LoadingIndicator() }
+            if queueTab == "Queue", library.queueLoading {
+                VStack(spacing: UIScale.pt(8)) {
+                    ForEach(0..<3, id: \.self) { _ in SkeletonBlock(height: 36, corner: 6) }
+                }
+                .accessibilityLabel("Loading queue")
+            }
             if queueTab == "Queue", let error = library.queueError {
                 PageNotice(
                     error, tone: .error, actions: { Button("Retry") { library.showQueue() } })
@@ -440,21 +446,25 @@ struct EmbeddedMusicSpotifyWorkspace: View {
     }
 
     private var authorization: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-            Text("Your Spotify library").font(.edithText(.largeTitle)).fontWeight(.bold)
-            Text(
-                "Connect your library to browse playlists, Liked Songs, albums, and artists, or search for something new."
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            PageEmptyState(
+                icon: .playlist,
+                title: library.authorizing
+                    ? "Finish connecting in your browser" : "Connect your Spotify library",
+                message: library.authorizing
+                    ? "Approve Edith in the browser window that opened. This page updates by itself when you are done."
+                    : "Browse your playlists, Liked Songs, albums and artists, or search for something new. Edith only reads your library to show it here.",
+                primary: library.authorizing
+                    ? nil
+                    : PageAction(
+                        "Connect library", icon: .arrowRight,
+                        identifier: "music.spotify.connect-library"
+                    ) { library.authorize() },
+                footnote: "Spotify Premium is required to play music."
             )
-            .foregroundStyle(.secondary)
-            if library.authorizing {
-                HStack {
-                    LoadingIndicator(); Text("Finish connecting your library in your browser.")
-                }
-            } else {
-                Button("Connect library") { library.authorize() }.buttonStyle(.edith(.primary))
-            }
+            .frame(minHeight: UIScale.pt(360))
             if let error = library.error { PageNotice(error, tone: .error) }
-        }.padding(.vertical, UIScale.pt(40))
+        }
     }
 
     private var emptyMessage: String {
@@ -515,14 +525,14 @@ struct EmbeddedMusicSpotifyWorkspace: View {
     }
 
     private func navigation(
-        _ title: String, symbol: String, destination: EmbeddedMusicSpotifyDestination
+        _ title: String, icon: EdithIcon, destination: EmbeddedMusicSpotifyDestination
     )
         -> some View
     {
         Button {
             navigate(destination)
         } label: {
-            Label(title, systemImage: symbol).font(.edithText(.headline))
+            Label(title, edith: icon).font(.edithText(.headline))
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, UIScale.pt(7))
                 .foregroundStyle(library.currentDestination == destination ? accent : .primary)
         }.buttonStyle(.edith(.borderless))
@@ -549,9 +559,13 @@ struct EmbeddedMusicSpotifyWorkspace: View {
         library.setSaved(item, saved: !library.savedURIs.contains(item.uri))
     }
 
-    private func icon(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    private func iconButton(
+        _ icon: EdithIcon, tone: EdithIconTone = .duotone, label: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).frame(width: UIScale.pt(24), height: UIScale.pt(26))
+            EdithIconView(icon, tone: tone).frame(
+                width: UIScale.pt(24), height: UIScale.pt(26))
         }
         .buttonStyle(.edith(.toolbar)).accessibilityLabel(label).help(label)
     }
@@ -560,7 +574,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
         VStack(alignment: .leading, spacing: UIScale.pt(20)) {
             Text("Create playlist").font(.edithText(.title2)).fontWeight(.semibold)
             EdithTextField(
-                placeholder: "Playlist name", text: $playlistName, icon: "music.note.list")
+                placeholder: "Playlist name", text: $playlistName, icon: .playlist)
             HStack {
                 Button("Cancel") { playlistPresented = false }.buttonStyle(.edith(.secondary))
                 Spacer()

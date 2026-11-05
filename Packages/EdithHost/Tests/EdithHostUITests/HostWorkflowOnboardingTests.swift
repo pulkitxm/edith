@@ -67,8 +67,10 @@ import HostAccessibilityFixtureSupport
             #expect(text.contains { $0.contains("to download · about") && $0.contains("on disk") })
             #expect(!text.contains { $0.contains("APFS") || $0.contains("unpacked package") })
             #expect(
-                text.contains(
-                    ByteCountFormatter.string(fromByteCount: 2_000_000, countStyle: .file)))
+                text.contains {
+                    $0.contains(
+                        ByteCountFormatter.string(fromByteCount: 2_000_000, countStyle: .file))
+                })
             if let capture = ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"] {
                 let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
                 host.cacheDisplay(in: host.bounds, to: bitmap)
@@ -152,7 +154,7 @@ import HostAccessibilityFixtureSupport
         model.installSelection()
         await finish(model)
         #expect(fixture.installs.isEmpty)
-        #expect(model.stage == .review && model.selected == ["usage"])
+        #expect(model.stage == .tools && model.selected == ["usage"])
         #expect(model.reviewMetadata(for: "usage").version == "2.0.0")
         #expect(model.reviewMetadata(for: "usage").downloadBytes == 500)
         #expect(model.reviewMetadata(for: "usage").installedBytes == 1000)
@@ -276,7 +278,7 @@ import HostAccessibilityFixtureSupport
         model.restoreSelection()
         await finish(model)
         #expect(model.selected == ["usage"])
-        #expect(model.stage == .review)
+        #expect(model.stage == .tools)
         #expect(fixture.installs.isEmpty)
         #expect(fixture.active.isEmpty)
         #expect(model.incomplete)
@@ -343,7 +345,7 @@ import HostAccessibilityFixtureSupport
         model.installSelection()
         await finish(model)
         #expect(fixture.installs.isEmpty)
-        #expect(model.stage == .review)
+        #expect(model.stage == .tools)
         #expect(model.incomplete)
         #expect(model.cost.downloadBytes == 500)
     }
@@ -379,7 +381,7 @@ import HostAccessibilityFixtureSupport
         original.toggle("herdr")
         let reopened = fixture.model()
         reopened.present()
-        #expect(reopened.stage == .review)
+        #expect(reopened.stage == .tools)
         #expect(reopened.selected == ["usage"])
         #expect(reopened.workflow == .agents)
         #expect(reopened.incomplete)
@@ -430,7 +432,7 @@ import HostAccessibilityFixtureSupport
         model.toggle("herdr")
         model.installSelection()
         await finish(model)
-        #expect(model.stage == .review)
+        #expect(model.stage == .tools)
         #expect(model.failure?.contains("Review your selection") == true)
         #expect(fixture.installed.isEmpty && fixture.active.isEmpty)
         #expect(!fixture.defaults.bool(forKey: HostSettingsCatalog.onboardingCompletedKey))
@@ -441,7 +443,7 @@ import HostAccessibilityFixtureSupport
         defer { fixture.remove() }
         let model = fixture.model()
         model.present()
-        #expect(model.skipTitle == "Start without extensions")
+        #expect(model.skipTitle == "Start without tools")
         model.skip()
         #expect(fixture.active.isEmpty)
         #expect(fixture.installs.isEmpty)
@@ -543,9 +545,9 @@ import HostAccessibilityFixtureSupport
             HostWorkflowOnboardingModel(
                 entries: entries ?? [
                     HostExtension(
-                        id: "usage", title: "Usage", symbolName: "chart.bar", category: "agents"),
+                        id: "usage", title: "Usage", icon: .chartBar, category: "agents"),
                     HostExtension(
-                        id: "herdr", title: "Sessions", symbolName: "terminal", category: "agents"),
+                        id: "herdr", title: "Sessions", icon: .terminal, category: "agents"),
                 ], defaults: defaults,
                 environment: HostWorkflowEnvironment(
                     available: { self.available }, installed: { self.installed },

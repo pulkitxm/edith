@@ -58,7 +58,7 @@ enum HerdrAgentWindow {
         let hosting = NSHostingController(
             rootView: HerdrDetachedView(
                 store: store, agentID: tab.id, launchEnabled: launchEnabled
-            ).themedControls())
+            ))
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 1000, height: 640))
@@ -78,7 +78,6 @@ enum HerdrAgentWindow {
             rootView: HerdrTitlebarViewPicker(store: store, agentID: agentID)
                 .frame(width: viewControlsContentWidth, height: UIScale.pt(28))
                 .padding(.trailing, 8)
-                .themedControls()
         )
         hosting.frame = NSRect(x: 0, y: 0, width: viewControlsWidth, height: 28)
         accessory.view = hosting
@@ -121,6 +120,7 @@ struct HerdrDetachedView: View {
         .agentTopic(.sessions, as: SessionsSnapshot.self, active: store.uiClient == nil) {
             store.adopt($0)
         }
+        .themedControls()
     }
 }
 
@@ -166,8 +166,8 @@ struct HerdrTitlebarViewPicker: View {
                     store.detailOpen.toggle()
                 }
             } label: {
-                Image(systemName: "sidebar.right")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                EdithIconView(.sidebarRight)
+                    .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark).opacity(0.72))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
                     .padding(UIScale.pt(2))
@@ -204,8 +204,8 @@ private struct HerdrTitlebarViewButton: View {
 
     var body: some View {
         Button(action: select) {
-            Label(mode.shortTitle, systemImage: mode.icon)
-                .font(.system(size: UIScale.pt(10), weight: selected ? .semibold : .medium))
+            Label(mode.shortTitle, edith: mode.icon)
+                .font(.edithText(.caption).weight(selected ? .semibold : .medium))
                 .foregroundStyle(foreground)
                 .padding(.horizontal, UIScale.pt(7))
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(22))

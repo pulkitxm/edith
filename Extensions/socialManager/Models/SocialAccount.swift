@@ -1,42 +1,60 @@
+import EdithExtensionSupport
 import Foundation
 
 public struct SocialPlatform: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public var name: String
     public var website: URL
-    public var symbol: String
+    public var icon: EdithIcon
 
-    public init(id: UUID = UUID(), name: String, website: URL, symbol: String = "globe") {
+    public init(id: UUID = UUID(), name: String, website: URL, icon: EdithIcon = .globe) {
         self.id = id
         self.name = name
         self.website = website
-        self.symbol = symbol
+        self.icon = icon
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case website
+        case icon
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try container.decode(UUID.self, forKey: .id)
+        self.id = id
+        name = try container.decode(String.self, forKey: .name)
+        website = try container.decode(URL.self, forKey: .website)
+        icon =
+            try container.decodeIfPresent(EdithIcon.self, forKey: .icon)
+            ?? (Self.presets + [Self.gmail]).first { $0.id == id }?.icon ?? .globe
     }
 
     public static let presets: [SocialPlatform] = [
         SocialPlatform(
             id: UUID(uuidString: "A0000000-0000-0000-0000-000000000001")!,
-            name: "Instagram", website: URL(string: "https://www.instagram.com")!, symbol: "camera"),
+            name: "Instagram", website: URL(string: "https://www.instagram.com")!, icon: .camera),
         SocialPlatform(
             id: UUID(uuidString: "A0000000-0000-0000-0000-000000000002")!,
-            name: "Facebook", website: URL(string: "https://www.facebook.com")!, symbol: "person.2"),
+            name: "Facebook", website: URL(string: "https://www.facebook.com")!, icon: .people),
         SocialPlatform(
             id: UUID(uuidString: "A0000000-0000-0000-0000-000000000003")!,
             name: "X / Twitter", website: URL(string: "https://x.com")!,
-            symbol: "bubble.left.and.bubble.right"),
+            icon: .messages),
         SocialPlatform(
             id: UUID(uuidString: "A0000000-0000-0000-0000-000000000004")!,
             name: "YouTube", website: URL(string: "https://www.youtube.com")!,
-            symbol: "play.rectangle"),
+            icon: .play),
         SocialPlatform(
             id: UUID(uuidString: "A0000000-0000-0000-0000-000000000005")!,
-            name: "LinkedIn", website: URL(string: "https://www.linkedin.com")!, symbol: "briefcase"
-        ),
+            name: "LinkedIn", website: URL(string: "https://www.linkedin.com")!, icon: .briefcase),
     ]
 
     public static let gmail = SocialPlatform(
         id: UUID(uuidString: "A0000000-0000-0000-0000-000000000006")!,
-        name: "Gmail", website: URL(string: "https://mail.google.com")!, symbol: "envelope")
+        name: "Gmail", website: URL(string: "https://mail.google.com")!, icon: .mail)
 
     public var isGoogleService: Bool {
         guard let host = website.host?.lowercased() else { return false }

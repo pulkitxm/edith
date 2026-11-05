@@ -26,7 +26,7 @@ enum WebTools {
     static let toPDF = StudioTool(
         id: "web.to-pdf", title: "HTML to PDF",
         summary: "Save any web page as a PDF, split into printable pages or as one long page.",
-        symbol: "globe", group: .convert, inputs: [], arity: .none, produces: .kind(.pdf),
+        iconName: "globe", group: .convert, inputs: [], arity: .none, produces: .kind(.pdf),
         options: [urlOption, widthOption, pagesOption],
         keywords: ["web", "url", "website", "html", "page", "save"], actionTitle: "Convert to PDF",
         family: .document
@@ -42,7 +42,7 @@ enum WebTools {
     static let toImage = StudioTool(
         id: "web.to-image", title: "HTML to image",
         summary: "Capture a web page as a PNG or JPG screenshot, including the full scroll height.",
-        symbol: "camera.viewfinder", group: .convert, inputs: [], arity: .none,
+        iconName: "scan", group: .convert, inputs: [], arity: .none,
         produces: .kind(.image),
         options: [
             urlOption, widthOption,
@@ -70,7 +70,7 @@ enum WebTools {
     static let htmlToPDF = StudioTool(
         id: "web.html-to-pdf", title: "HTML file to PDF",
         summary: "Render saved HTML pages to PDF with the same engine as Safari.",
-        symbol: "chevron.left.forwardslash.chevron.right", group: .convert, inputs: [],
+        iconName: "code", group: .convert, inputs: [],
         extraExtensions: ["html", "htm", "xhtml", "webarchive"], produces: .kind(.pdf),
         options: [widthOption, pagesOption],
         keywords: ["html", "web", "page", "convert"], actionTitle: "Convert to PDF",

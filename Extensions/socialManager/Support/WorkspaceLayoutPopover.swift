@@ -35,7 +35,7 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Layout")
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 Text(count == 1 ? "1 \(itemName)" : "\(count) \(itemName)s")
@@ -72,13 +72,13 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
                                 selected: template == current, dark: dark)
                             HStack(spacing: UIScale.pt(3)) {
                                 if template.isSaved {
-                                    Image(systemName: "bookmark.fill")
+                                    EdithIconView(.bookmark)
                                         .font(.system(size: UIScale.pt(8)))
                                         .foregroundStyle(DashSkin.accent(dark))
                                 }
                                 Text(template.title)
                             }
-                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                            .font(.edithText(.caption).weight(.medium))
                             .foregroundStyle(
                                 template == current ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
                             )
@@ -106,22 +106,22 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
     private var adjustments: some View {
         section("Adjust") {
             HStack(spacing: UIScale.pt(6)) {
-                action("rotate.right", "Rotate") { store.rotate(tab.id) }
-                action("arrow.left.and.right.righttriangle.left.righttriangle.right", "Flip") {
+                action(.rotate, "Rotate") { store.rotate(tab.id) }
+                action(.resizeHorizontal, "Flip") {
                     store.mirror(tab.id, .horizontal)
                 }
-                action("arrow.up.and.down.righttriangle.up.righttriangle.down", "Flip Up") {
+                action(.resizeVertical, "Flip Up") {
                     store.mirror(tab.id, .vertical)
                 }
-                action("equal.square", "Even Out") { store.equalize(tab.id) }
+                action(.grid, "Even Out") { store.equalize(tab.id) }
                 action(
                     tab.zoomed == nil
-                        ? "arrow.up.left.and.arrow.down.right"
-                        : "arrow.down.right.and.arrow.up.left",
+                        ? .expand
+                        : .collapse,
                     tab.zoomed == nil ? "Zoom" : "Restore"
                 ) { store.toggleZoom(tab.focused) }
-                action("rectangle.split.3x1", "Separate") { store.separate(tab.id) }
-                action("bookmark", "Save") {
+                action(.columns, "Separate") { store.separate(tab.id) }
+                action(.bookmark, "Save") {
                     layoutName = ""
                     naming = true
                 }
@@ -144,13 +144,13 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
         HStack(spacing: UIScale.pt(8)) {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("Animate Changes")
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text(
                     store.animatesLayout
                         ? "Tabs and panes glide into place" : "Tabs and panes switch instantly"
                 )
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Spacer(minLength: 0)
@@ -159,7 +159,7 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
                 isOn: Binding(get: { store.animatesLayout }, set: { store.animatesLayout = $0 })
             )
             .labelsHidden()
-            .toggleStyle(.switch)
+            .toggleStyle(.edithSwitch)
             .controlSize(.mini)
         }
         .help("Glide tabs and panes into place instead of switching instantly")
@@ -173,18 +173,17 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
         WorkspaceLayoutSection(title: title, content: content)
     }
 
-    private func action(_ systemImage: String, _ title: String, run: @escaping () -> Void)
+    private func action(_ icon: EdithIcon, _ title: String, run: @escaping () -> Void)
         -> some View
     {
         Button {
             perform(run)
         } label: {
             VStack(spacing: UIScale.pt(3)) {
-                Image(systemName: systemImage)
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                EdithIconView(icon, size: UIScale.pt(16))
                     .frame(height: UIScale.pt(16))
                 Text(title)
-                    .font(.system(size: UIScale.pt(9), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -210,7 +209,7 @@ struct WorkspaceLayoutSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-            Text(title).font(.system(size: UIScale.pt(10.5), weight: .semibold))
+            Text(title).font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
             content()
         }
@@ -225,13 +224,14 @@ struct HerdrArrangementThumbnail: View {
     var highlightedSlot: Int? = 0
 
     var body: some View {
+        let accent = DashSkin.accent(dark)
         Canvas { context, size in
             let rect = CGRect(origin: .zero, size: size).insetBy(dx: 4, dy: 4)
             let frames = template.slotFrames(count: count, in: rect, gap: 2)
             for (index, frame) in frames.enumerated() {
                 let tint =
                     index == highlightedSlot
-                    ? DashSkin.accent(dark).opacity(selected ? 0.85 : 0.55)
+                    ? accent.opacity(selected ? 0.85 : 0.55)
                     : DashSkin.ink(dark).opacity(selected ? 0.28 : 0.16)
                 context.fill(Path(roundedRect: frame, cornerRadius: 2), with: .color(tint))
             }
@@ -240,7 +240,7 @@ struct HerdrArrangementThumbnail: View {
         .widgetBar(
             cornerRadius: 7,
             fill: DashSkin.paper2(dark),
-            stroke: selected ? DashSkin.accent(dark).opacity(0.7) : DashSkin.line(dark),
+            stroke: selected ? accent.opacity(0.7) : DashSkin.line(dark),
             strokeWidth: selected ? 1.4 : 1)
     }
 }

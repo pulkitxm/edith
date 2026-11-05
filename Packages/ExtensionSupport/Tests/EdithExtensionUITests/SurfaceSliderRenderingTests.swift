@@ -1,3 +1,4 @@
+import EdithExtensionTestSupport
 import AppKit
 import EdithExtensionCore
 import SwiftUI
@@ -24,7 +25,7 @@ extension SurfaceGridRenderingTests {
         let snapshot = SurfaceSnapshot(
             providerID: "music",
             sliders: [
-                .init("volume", "Synthetic volume", "speaker.wave.2", value: 0.7, field: "volume")
+                .init("volume", "Synthetic volume", .speaker, value: 0.7, field: "volume")
             ])
         for width in [320.0, 780.0] {
             for zoom in [1.0, 1.5] {

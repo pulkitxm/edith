@@ -41,6 +41,7 @@ struct ClaudeAccountSettings: View {
                 }
                 HStack {
                     Button("Add account") { draft = ClaudeAccount(name: "New account") }
+                        .buttonStyle(.edith(.secondary))
                     Button("Use current CLI account") {
                         Task {
                             if let account = await accounts.importCurrentCLIAccount(
@@ -72,7 +73,7 @@ struct ClaudeAccountSettings: View {
                     if draft?.authentication == .browserLogin, draft?.loginData != nil {
                         Text("Full OAuth token").font(.edithText(.caption))
                         Text(draft?.credential ?? "")
-                            .font(.system(size: UIScale.pt(11), design: .monospaced))
+                            .font(.edithText(.subheadline, design: .monospaced))
                             .textSelection(.enabled)
                     }
                     if draft?.authentication != .browserLogin {
@@ -150,6 +151,7 @@ struct ClaudeAccountSettings: View {
                     )
                     .frame(height: UIScale.pt(200))
                     Button("Cancel sign-in") { accounts.subscriptionLogin.cancel() }
+                        .buttonStyle(.edith(.secondary))
                 }
             }
             if let error = accounts.subscriptionLogin.error {
@@ -289,6 +291,7 @@ struct ClaudeAccountLaunchPicker: View {
                     ClaudeSharedLaunchSettings(accounts: accounts)
                         .disabled(accounts.subscriptionLogin.running)
                     Button("Done") { editing = false }
+                        .buttonStyle(.edith(.secondary))
                         .disabled(accounts.subscriptionLogin.running)
                 }
                 .padding(UIScale.pt(18))

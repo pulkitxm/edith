@@ -13,54 +13,57 @@ struct CodeStatsHeader: View {
 
     private var shareSnapshot: CodeStatsExportSnapshot? {
         guard let report = model.report else { return nil }
-        let snapshot = CodeStatsExportSnapshot(report: report)
+        let snapshot = CodeStatsExportSnapshot(
+            report: report,
+            rangeLabel: model.showsPreviousRange
+                ? nil : model.selection.title(calendar: model.dateFilterCalendar))
         return snapshot.hasActivity ? snapshot : nil
     }
 
+    private var runSummary: String? {
+        guard model.phase != .setup, let status = model.status else { return nil }
+        return status.runSummary(now: Date())
+    }
+
     var body: some View {
-        PageHeader("Code Stats") {
-            HStack(spacing: UIScale.pt(8)) {
-                ExportCardButton(
-                    isEnabled: shareSnapshot != nil, help: "Share code stats as images"
-                ) {
-                    guard let shareSnapshot else { return }
-                    sharePresentation = ExportCardPresentation(
-                        deck: CodeStatsExportDeck(snapshot: shareSnapshot, remote: model.remote),
-                        title: "Share code stats")
-                }
+        PageHeader("Code Stats", subtitle: runSummary) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 if model.phase != .setup {
+                    ExportCardButton(
+                        isEnabled: shareSnapshot != nil, help: "Share code stats as images"
+                    ) {
+                        guard let shareSnapshot else { return }
+                        sharePresentation = ExportCardPresentation(
+                            deck: CodeStatsExportDeck(
+                                snapshot: shareSnapshot, remote: model.remote),
+                            title: "Share code stats")
+                    }
                     Button {
                         settingsPresented = true
                     } label: {
-                        Label("Settings", systemImage: "gearshape")
+                        Label("Settings", edith: .gear)
                     }
                     .help("Code Stats settings")
-                }
-                if model.isRunning {
-                    Button {
-                        Task { await model.cancel() }
-                    } label: {
-                        Label("Cancel", systemImage: "stop.circle")
-                    }
-                    .disabled(model.isCancelling)
-                } else {
                     Button {
                         Task { await model.start() }
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(
+                            model.isRunning ? "Refreshing" : "Refresh",
+                            edith: .refresh)
                     }
                     .buttonStyle(.edith(.primary))
                     .disabled(!model.canStart)
+                    .help(model.startBlocker ?? "Fetch new commits and update your stats")
                 }
             }
         } accessory: {
-            HStack(spacing: UIScale.pt(12)) {
-                ForEach(model.status?.state.profiles ?? [], id: \.id) { profile in
-                    CodeStatsProfileBadge(profile: profile, dark: dark)
-                }
-                Spacer(minLength: UIScale.pt(8))
-                if let status = model.status {
-                    CodeStatsRunTimes(status: status, dark: dark)
+            if model.phase != .setup, let profiles = model.status?.state.profiles,
+                !profiles.isEmpty
+            {
+                HStack(spacing: UIScale.pt(12)) {
+                    ForEach(profiles, id: \.id) { profile in
+                        CodeStatsProfileBadge(profile: profile, dark: dark)
+                    }
                 }
             }
         }
@@ -80,49 +83,21 @@ struct CodeStatsProfileBadge: View {
             AsyncImage(url: profile.avatarURL.flatMap(URL.init(string:))) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
+                EdithIconView(.person, size: UIScale.pt(24))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
             .clipShape(Circle())
             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                 Text(profile.name ?? profile.login)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text("@" + profile.login)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
         }
         .accessibilityElement(children: .combine)
-    }
-}
-
-private struct CodeStatsRunTimes: View {
-    let status: CodeStatsStatus
-    let dark: Bool
-
-    var body: some View {
-        HStack(spacing: UIScale.pt(14)) {
-            label(
-                "Last updated",
-                status.state.reportedAt.map {
-                    $0.formatted(.relative(presentation: .named))
-                } ?? "Never")
-            label("Next run", status.nextRunLabel(now: Date()))
-        }
-    }
-
-    private func label(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .trailing, spacing: UIScale.pt(1)) {
-            Text(title.uppercased())
-                .font(DashSkin.mono(9)).tracking(UIScale.pt(1))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(value)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
-                .foregroundStyle(DashSkin.ink(dark))
-        }
     }
 }
 
@@ -136,14 +111,14 @@ struct CodeStatsBannerView: View {
         let dark = scheme == .dark
         PageNotice(
             banner.message, title: banner.title,
-            tone: banner.tone == .danger ? .error : .warning, symbol: banner.symbol
+            tone: banner.tone == .danger ? .error : .warning, icon: banner.icon
         ) {
             if let command = banner.command {
                 CodeStatsCommandHint(command: command, dark: dark)
             }
         } actions: {
             if banner.choosesFolder {
-                Button("Choose folder...", action: choose)
+                Button("Choose folder…", action: choose)
             }
             if banner.retriesReport {
                 Button("Retry", action: retry)
@@ -166,7 +141,7 @@ struct CodeStatsCommandHint: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(command, forType: .string)
             } label: {
-                Image(systemName: "doc.on.doc")
+                EdithIconView(.copy)
             }
             .buttonStyle(.edith(.borderless))
             .help("Copy")

@@ -44,7 +44,7 @@ struct PresenterSidebarScene: View {
                 HStack(spacing: UIScale.pt(12)) {
                     Text("Presenter mode").font(.system(size: UIScale.pt(12.5)))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Toggle("", isOn: binding).labelsHidden().toggleStyle(.switch)
+                    Toggle("", isOn: binding).labelsHidden().toggleStyle(.edithSwitch)
                         .controlSize(.small).allowsHitTesting(false)
                 }.frame(maxWidth: .infinity).padding(.horizontal, UIScale.pt(8))
                     .padding(.vertical, UIScale.pt(8))

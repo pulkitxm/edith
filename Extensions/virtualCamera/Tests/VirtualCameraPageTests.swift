@@ -1,4 +1,5 @@
 import AVFoundation
+import EdithExtensionTestSupport
 import AppKit
 import CoreImage
 import CoreText
@@ -74,7 +75,7 @@ import Testing
                     UIScale.apply(zoom)
                     let host = try auditHost(
                         VirtualCameraOutputPanel(model: model, dark: true),
-                        size: CGSize(width: width, height: 900))
+                        size: CGSize(width: width, height: 1400))
                     let text = try auditText(host).split(whereSeparator: \.isWhitespace).joined(
                         separator: " ")
                     #expect(text.contains("Edith Camera: " + model.cameraExtension.title))
@@ -389,7 +390,7 @@ import Testing
         }
         model.appear()
         #expect(!model.previewRunning)
-        #expect(model.previewLoadingTitle == "Connecting to Edith Bar")
+        #expect(model.previewLoadingTitle == "Connecting to the camera service")
         model.receive(
             VirtualCameraSnapshot(
                 enabled: true, helperRunning: true, extensionInstalled: true, live: true,
@@ -452,7 +453,7 @@ import Testing
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
         model.injectForTesting(snapshot: nil, sources: [])
-        #expect(model.statusHeadline == "Edith Bar is not answering")
+        #expect(model.statusHeadline == "Camera service is not responding")
         var snapshot = VirtualCameraSnapshot(
             enabled: true, helperRunning: true, extensionInstalled: true,
             clients: [VirtualCameraClient(id: "us.zoom.xos", name: "zoom.us")], live: true,
@@ -466,6 +467,22 @@ import Testing
         #expect(!model.isLive)
         model.receive(nil)
         #expect(model.snapshot == snapshot)
+    }
+
+    @Test func meetingHintNamesTheCameraToChooseInTheMeetingApp() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.injectForTesting(snapshot: nil, sources: [])
+        #expect(model.meetingAppHint.contains("Install Edith Camera"))
+        let snapshot = VirtualCameraSnapshot(
+            enabled: true, helperRunning: true, extensionInstalled: true,
+            clients: [], live: false, format: .hd720, state: model.state)
+        model.receive(snapshot)
+        #expect(
+            model.meetingAppHint == "In Zoom, Meet or FaceTime, choose Edith Camera as your camera."
+        )
+        model.pause(.stopped)
+        #expect(model.meetingAppHint.contains("stopped"))
     }
 
     @Test func appearingKeepsEditsThatWereNotSavedYet() {
@@ -591,6 +608,18 @@ import Testing
             Timer(timeInterval: 0.1, repeats: false) { _ in }, forMode: .eventTracking)
         RunLoop.main.run(mode: .eventTracking, before: Date(timeIntervalSinceNow: 0.1))
         #expect(display.current === buffer)
+    }
+}
+
+@Suite struct VirtualCameraNameTagThemeTests {
+    @MainActor @Test func untouchedDefaultAccentFollowsTheThemeAndChosenColorsStay() throws {
+        let themed = VirtualCameraPageModel.nameTagAccent(.accent, theme: .teal)
+        let expected = try #require(
+            NSColor(AppTheme.teal.accent(dark: true)).usingColorSpace(.sRGB))
+        #expect(themed != .accent)
+        #expect(abs(themed.green - Double(expected.greenComponent)) < 0.01)
+        let chosen = try #require(VirtualCameraColor(hex: "#112233"))
+        #expect(VirtualCameraPageModel.nameTagAccent(chosen, theme: .teal) == chosen)
     }
 }
 
@@ -920,6 +949,7 @@ enum VirtualCameraSyntheticStudio {
 @Suite(.serialized) struct VirtualCameraEvidenceTests {
     nonisolated static let directory =
         ProcessInfo.processInfo.environment["EDITH_VIRTUAL_CAMERA_EVIDENCE_DIR"]
+        ?? ProcessInfo.processInfo.environment["EDITH_TEST_CAPTURE_SURFACES"]
 
     @Test func syntheticStudioAndMaskAreDistinct() throws {
         let frame = try #require(VirtualCameraSyntheticStudio.frame())
@@ -1057,6 +1087,7 @@ enum VirtualCameraSyntheticStudio {
         for dark in [true, false] {
             for (label, size, compact, zoom, controls) in [
                 ("meeting", CGSize(width: 1440, height: 900), false, 1.0, false),
+                ("wide", CGSize(width: 1800, height: 1000), false, 1.0, true),
                 ("controls", CGSize(width: 1440, height: 900), false, 1.0, true),
                 ("compact", CGSize(width: 620, height: 720), true, 1.0, false),
                 ("zoom", CGSize(width: 1440, height: 1000), false, 1.3, true),
@@ -1069,6 +1100,17 @@ enum VirtualCameraSyntheticStudio {
                     model, preview: preview, renderer: renderer,
                     to: output.appendingPathComponent("ux-\(label)-\(dark ? "dark" : "light").png"),
                     size: size, compact: compact, dark: dark, controlsVisible: controls)
+            }
+        }
+        for tab in VirtualCameraInspectorTab.allCases {
+            for section in VirtualCameraInspectorTab.allCases {
+                model.setInspectorExpanded(section, section == tab)
+            }
+            for (label, zoom, dark) in [("compact", 1.0, false), ("zoom", 1.6, true)] {
+                UIScale.apply(zoom)
+                try renderInspector(
+                    model, zoom: zoom, dark: dark,
+                    to: output.appendingPathComponent("inspector-\(tab.rawValue)-\(label).png"))
             }
         }
         UIScale.apply(previousZoom)
@@ -1104,6 +1146,127 @@ enum VirtualCameraSyntheticStudio {
             to: output.appendingPathComponent("page-stopped.png"))
     }
 
+    @Test func setupStatesExplainTheNextStepAtEverySizeThemeAndZoom() async throws {
+        let previousZoom = UIScale.current
+        defer { UIScale.apply(previousZoom) }
+        let cases: [(String, AVAuthorizationStatus, [VirtualCameraSource], Bool, String)] = [
+            (
+                "first-run", .notDetermined, VirtualCameraPageModelTests.sources, true,
+                "Allow camera"
+            ),
+            (
+                "access-denied", .denied, VirtualCameraPageModelTests.sources, true,
+                "Open System Settings"
+            ),
+            ("loading", .authorized, VirtualCameraPageModelTests.sources, false, "Finding cameras"),
+            ("no-camera", .authorized, [], true, "No camera connected"),
+        ]
+        for (label, access, sources, loaded, expected) in cases {
+            let (model, defaults, name) = VirtualCameraPageModelTests.model(
+                access: access, sourceProvider: { sources })
+            defer { defaults.removePersistentDomain(forName: name) }
+            if loaded { model.refreshSources() }
+            for (sizeLabel, size, zoom) in [
+                ("regular", CGSize(width: 1100, height: 760), 1.0),
+                ("wide", CGSize(width: 1600, height: 1000), 1.0),
+                ("compact", CGSize(width: 640, height: 700), 1.0),
+                ("zoom", CGSize(width: 1100, height: 760), 1.6),
+            ] {
+                UIScale.apply(zoom)
+                for dark in [true, false] where sizeLabel != "zoom" || dark {
+                    let host = try await captureSetup(
+                        model, size: size, compact: size.width < UIScale.pt(720), dark: dark,
+                        name: "setup-\(label)-\(sizeLabel)-\(dark ? "dark" : "light")")
+                    if dark {
+                        let text = try auditText(host).split(whereSeparator: \.isWhitespace)
+                            .joined(separator: " ")
+                        #expect(text.contains(expected), "\(label) \(sizeLabel): \(text)")
+                    }
+                }
+            }
+            UIScale.apply(1)
+        }
+    }
+
+    private func captureSetup(
+        _ model: VirtualCameraPageModel, size: CGSize, compact: Bool, dark: Bool, name: String
+    ) async throws -> NSHostingView<AnyView> {
+        let host = NSHostingView(
+            rootView: AnyView(
+                VirtualCameraPage(model: model)
+                    .environment(\.compactLayout, compact)
+                    .environment(\.automaticViewActionsEnabled, false)
+                    .environment(\.windowVisible, false)
+                    .environment(\.controlActiveState, .key)
+                    .environment(\.colorScheme, dark ? .dark : .light)
+                    .themedControls()
+                    .transaction { $0.animation = nil }))
+        host.frame = CGRect(origin: .zero, size: size)
+        host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        defer { window.orderOut(nil); window.contentView = nil }
+        window.appearance = host.appearance
+        window.contentView = host
+        window.orderBack(nil)
+        for _ in 0..<3 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+        #expect(abs(host.bounds.width - size.width) < 1)
+        if let directory = Self.directory {
+            let output = URL(fileURLWithPath: directory, isDirectory: true)
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            try #require(bitmap.representation(using: .png, properties: [:]))
+                .write(to: output.appendingPathComponent(name + ".png"))
+        }
+        return host
+    }
+
+    private func renderInspector(
+        _ model: VirtualCameraPageModel, zoom: Double, dark: Bool, to url: URL
+    ) throws {
+        let host = NSHostingView(
+            rootView: VStack(spacing: UIScale.pt(12)) {
+                HStack {
+                    Text("Adjust your meeting").font(.edithText(.headline))
+                    Spacer()
+                    Button("Done") {}.buttonStyle(.edith(.secondary))
+                }
+                VirtualCameraInspector(model: model, dark: dark)
+            }
+            .padding(UIScale.pt(16))
+            .environment(\.compactLayout, true)
+            .environment(\.automaticViewActionsEnabled, false)
+            .environment(\.windowVisible, false)
+            .environment(\.controlActiveState, .key)
+            .environment(\.colorScheme, dark ? .dark : .light)
+            .background(DashSkin.paper(dark))
+            .themedControls()
+            .transaction { $0.animation = nil })
+        host.sizingOptions = []
+        host.frame = CGRect(x: 0, y: 0, width: 440 * zoom, height: 580 * zoom)
+        host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        defer { window.orderOut(nil) }
+        window.appearance = host.appearance
+        window.contentView = host
+        window.orderBack(nil)
+        for _ in 0..<3 {
+            window.layoutIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            host.displayIfNeeded()
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        #expect(bitmap.pixelsWide > 0)
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
+    }
+
     private func renderPage(
         _ model: VirtualCameraPageModel, preview: CIImage, renderer: VirtualCameraRenderer,
         to url: URL, size: CGSize = CGSize(width: 1440, height: 1060),
@@ -1114,7 +1277,9 @@ enum VirtualCameraSyntheticStudio {
                 .environment(\.compactLayout, compact)
                 .environment(\.automaticViewActionsEnabled, false)
                 .environment(\.windowVisible, false)
+                .environment(\.controlActiveState, .key)
                 .environment(\.colorScheme, dark ? .dark : .light)
+                .themedControls()
                 .transaction { $0.animation = nil })
         host.frame = CGRect(origin: .zero, size: size)
         host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)

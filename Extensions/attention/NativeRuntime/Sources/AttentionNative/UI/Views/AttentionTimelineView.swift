@@ -56,27 +56,15 @@ struct AttentionTimelineBlock: Identifiable, Equatable, Sendable {
     }
 }
 
-struct AttentionFilterBar: View {
-    @Bindable var model: AttentionPageModel
-    var showsSearch = true
-    @Environment(\.colorScheme) private var scheme
+struct AttentionFilterMenu: View {
+    let model: AttentionPageModel
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                filterMenu; search; reset
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    filterMenu; Spacer(); reset
-                }
-                search
-            }
-        }
-    }
-
-    private var filterMenu: some View {
-        Menu {
+        PageMenuChip(
+            model.categoryFilter.map { model.category($0).name }
+                ?? model.levelFilter?.title ?? model.sphereFilter?.title ?? "All activity",
+            icon: .filter, active: model.hasFilters
+        ) {
             Button("All activity") { model.clearFilters() }
             Section("Productivity") {
                 ForEach(AttentionPalette.levels, id: \.self) { level in
@@ -93,31 +81,8 @@ struct AttentionFilterBar: View {
                     Button(category.name) { model.filter(category: category.id, navigate: false) }
                 }
             }
-        } label: {
-            Label(
-                model.categoryFilter.map { model.category($0).name }
-                    ?? model.levelFilter?.title ?? model.sphereFilter?.title ?? "All activity",
-                systemImage: "line.3.horizontal.decrease")
-        }
-        .menuStyle(.button).buttonStyle(.edith(.secondary)).fixedSize()
-    }
-
-    @ViewBuilder private var search: some View {
-        if showsSearch {
-            SearchField(placeholder: "Search names and titles", text: $model.searchText)
-                .frame(maxWidth: UIScale.pt(360))
-        } else {
-            Spacer(minLength: 0)
         }
     }
-
-    @ViewBuilder private var reset: some View {
-        if model.hasFilters {
-            Button("Clear filters") { model.clearFilters() }
-                .buttonStyle(.edith(.borderless)).fixedSize()
-        }
-    }
-
 }
 
 struct AttentionTimelineView: View {
@@ -129,11 +94,11 @@ struct AttentionTimelineView: View {
                 AttentionEmpty(
                     text:
                         "The timeline shows up to eight days at a time. Pick a shorter range above.",
-                    symbol: "calendar")
+                    icon: .calendar)
             }
         } else {
             AttentionPanel("Timeline") {
-                AttentionEmpty(text: "No activity in this period", symbol: "moon.zzz")
+                AttentionEmpty(text: "No activity in this period", icon: .moon)
             }
         }
     }

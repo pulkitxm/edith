@@ -45,18 +45,12 @@ public enum EmojiSkinTone: Int, CaseIterable, Identifiable, Sendable {
 public struct EmojiGroup: Identifiable, Hashable, Sendable, Codable {
     public let id: String
     public let name: String
-    public let symbolName: String
+    public let icon: EdithIcon
 
-    public init(id: String, name: String, symbolName: String) {
+    public init(id: String, name: String, icon: EdithIcon) {
         self.id = id
         self.name = name
-        self.symbolName = symbolName
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case symbolName = "symbol"
+        self.icon = icon
     }
 }
 

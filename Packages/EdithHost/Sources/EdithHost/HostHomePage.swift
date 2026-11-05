@@ -12,6 +12,7 @@ struct HostHomePage: View {
     var openExtension: ((String) -> Void)? = nil
     var presenter: (any HostExtensionContentPresenting)? = nil
     var workflowSetup: AnyView? = nil
+    var getStarted: AnyView? = nil
     @Environment(\.compactLayout) private var compact
 
     @State private var editing = false
@@ -29,57 +30,71 @@ struct HostHomePage: View {
         PageScaffold(pinnedHeader: true) {
             HostHomeHeader(
                 dark: scheme == .dark, editing: $editing, layouts: marketplace.surfaceLayouts,
-                customize: { customize(nil) })
+                showsLayoutControls: workflowSetup == nil, customize: { customize(nil) })
         } content: {
-            if let workflowSetup { workflowSetup }
-            SurfaceCanvas(
-                layout: layout, singleColumn: compact, editing: editing, selected: selectedTile,
-                select: { selectedTile = $0 },
-                place: { widget, anchor in
-                    marketplace.surfaceLayouts.update(.home) { layout in
-                        let id = layout.add(widget);
-                        if let anchor { layout.move(id, before: anchor) }; selectedTile = id
-                    }
-                },
-                inspect: { customize($0) },
-                reorder: { id, anchor in
-                    marketplace.surfaceLayouts.update(.home) { $0.move(id, before: anchor) }
-                },
-                configure: { tile in
-                    marketplace.surfaceLayouts.update(.home) { layout in
-                        guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
-                        else { return }
-                        if compact { layout.tiles[index] = tile } else { layout.position(tile) }
-                    }
-                },
-                placeAt: { widget, column, row in
-                    marketplace.surfaceLayouts.update(.home) {
-                        selectedTile = $0.add(widget, column: column, row: row)
-                    }
-                }
-            ) { tile in
-                if tile.widget != .clocks
-                    && Set(tile.widget.providerIDs).isDisjoint(
-                        with: marketplace.surfaceAvailability.activeIDs)
-                {
-                    PageCard(title: tile.displayTitle) {
-                        Text("Enable this integration in Extensions.").font(.edithText(.callout))
-                            .foregroundStyle(.secondary)
-                        Button("Open Extensions", action: extensions)
-                    }
-                } else {
-                    HostSurfaceCard(
-                        marketplace: marketplace, target: .home, tile: tile,
-                        openExtension: openExtension, presenter: presenter,
-                        openExtensions: extensions)
-                }
-            }
-            if layout.visible.isEmpty, !editing, workflowSetup == nil {
-                ContentUnavailableView(
-                    "Make yourself at home", systemImage: "rectangle.3.group",
-                    description: Text("Add widgets in the Home & Notch editor."))
+            if let workflowSetup {
+                workflowSetup
+            } else {
+                dashboard
             }
         }.navigationTitle("Home")
+    }
+
+    @ViewBuilder private var dashboard: some View {
+        if let getStarted { getStarted }
+        SurfaceCanvas(
+            layout: layout, singleColumn: compact, editing: editing, selected: selectedTile,
+            select: { selectedTile = $0 },
+            place: { widget, anchor in
+                marketplace.surfaceLayouts.update(.home) { layout in
+                    let id = layout.add(widget);
+                    if let anchor { layout.move(id, before: anchor) }; selectedTile = id
+                }
+            },
+            inspect: { customize($0) },
+            reorder: { id, anchor in
+                marketplace.surfaceLayouts.update(.home) { $0.move(id, before: anchor) }
+            },
+            configure: { tile in
+                marketplace.surfaceLayouts.update(.home) { layout in
+                    guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                    else { return }
+                    if compact { layout.tiles[index] = tile } else { layout.position(tile) }
+                }
+            },
+            placeAt: { widget, column, row in
+                marketplace.surfaceLayouts.update(.home) {
+                    selectedTile = $0.add(widget, column: column, row: row)
+                }
+            }
+        ) { tile in
+            if tile.widget != .clocks
+                && Set(tile.widget.providerIDs).isDisjoint(
+                    with: marketplace.surfaceAvailability.activeIDs)
+            {
+                PageCard(title: tile.displayTitle) {
+                    Text("Turn on the extension behind this widget to see it here.")
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Extensions", action: extensions)
+                        .buttonStyle(.edith(.secondary))
+                }
+            } else {
+                HostSurfaceCard(
+                    marketplace: marketplace, target: .home, tile: tile,
+                    openExtension: openExtension, presenter: presenter,
+                    openExtensions: extensions)
+            }
+        }
+        if layout.visible.isEmpty, !editing {
+            PageEmptyState(
+                icon: .window,
+                title: "Make Home yours",
+                message:
+                    "Home shows live widgets from your extensions, like your next meeting or the song that is playing.",
+                primary: PageAction("Add widgets", icon: .plus) { customize(nil) },
+                secondary: PageAction("Browse extensions", perform: extensions))
+        }
     }
 }
 
@@ -87,6 +102,7 @@ private struct HostHomeHeader: View {
     let dark: Bool
     @Binding var editing: Bool
     let layouts: SurfaceLayoutStore
+    let showsLayoutControls: Bool
     let customize: () -> Void
     @Environment(\.surfaceSampleContent) private var sampleContent
 
@@ -113,12 +129,11 @@ private struct HostHomeHeader: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             let now = context.date
-            PageHeader {
+            PageHeader(subtitle: now.formatted(.dateTime.weekday(.wide).month(.wide).day())) {
                 greeting(now)
             } trailing: {
-                layoutControls
+                if showsLayoutControls { layoutControls }
             } accessory: {
-                subtitle(now)
                 if editing {
                     Text("Drag a widget handle to place it. Drag a corner to resize.")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -149,10 +164,6 @@ private struct HostHomeHeader: View {
         (Text("\(salutation(now)), ")
             + Text(firstName).italic().foregroundColor(DashSkin.accentDeep(dark))
             + Text("."))
-    }
-
-    private func subtitle(_ now: Date) -> some View {
-        PageSubtitle(now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
     }
 }
 
@@ -203,7 +214,7 @@ struct HostSurfaceCard: View {
     private var genericCard: some View {
         PageCard(
             title: tile.showTitle ? title : nil,
-            note: tile.widget == .clocks ? "hover a clock to remove" : nil,
+            note: tile.widget == .clocks ? "Hover a clock to remove it" : nil,
             fill: fillHeight
         ) {
             if tile.widget == .clocks {
@@ -258,7 +269,7 @@ private struct HostSurfaceProviderCard: View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack {
                 if showProvider {
-                    Label(provider.title, systemImage: provider.symbolName).font(
+                    Label(provider.title, edith: provider.icon).font(
                         .edithText(.callout))
                 }
                 Spacer(minLength: 0)
@@ -266,7 +277,7 @@ private struct HostSurfaceProviderCard: View {
                     Button {
                         retry += 1
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        EdithIconView(.refresh)
                     }
                     .accessibilityLabel("Refresh " + provider.title)
                     if let openExtension {
@@ -282,7 +293,7 @@ private struct HostSurfaceProviderCard: View {
                 }
             }.buttonStyle(.edith(.borderless))
             if hidden {
-                Label("Hidden while presenting", systemImage: "eye.slash").font(
+                Label("Hidden while presenting", edith: .eyeOff).font(
                     .edithText(.caption)
                 ).foregroundStyle(.secondary)
             } else if let snapshot {
@@ -290,12 +301,26 @@ private struct HostSurfaceProviderCard: View {
                     tile: tile, snapshot: snapshot, perform: perform, adjust: adjust
                 )
                 .disabled(actionTask != nil)
-            } else if load.isRunning {
-                LoadingIndicator()
+            } else if load.errorMessage == nil {
+                SkeletonGroup {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 140, height: 14)
+                        SkeletonBlock(height: 10)
+                        SkeletonBlock(width: 180, height: 10)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading " + provider.title)
             }
             if let error = actionError ?? load.errorMessage {
-                Text(error).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(3)
-                Button("Retry") { retry += 1 }.buttonStyle(.edith(.secondary))
+                Label {
+                    Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    EdithIconView(.warning).foregroundStyle(.orange)
+                }
+                .font(.edithText(.caption))
+                Button("Try again") { retry += 1 }.buttonStyle(.edith(.secondary))
             }
         }
         .background(HostSurfaceNavigationAnchor(origin: navigationOrigin))

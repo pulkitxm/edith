@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionCore
 import SwiftUI
 
@@ -36,21 +37,20 @@ public struct EdithDisclosureGroupStyle: DisclosureGroupStyle {
                 HStack(spacing: UIScale.pt(12)) {
                     configuration.label
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
                         .frame(width: UIScale.pt(16), height: UIScale.pt(20))
                         .accessibilityHidden(true)
                 }
-                .padding(UIScale.pt(8))
+                .padding(.vertical, UIScale.pt(8))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
             .accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
             if configuration.isExpanded {
                 configuration.content
-                    .padding(.horizontal, UIScale.pt(8))
                     .padding(.bottom, UIScale.pt(10))
             }
         }

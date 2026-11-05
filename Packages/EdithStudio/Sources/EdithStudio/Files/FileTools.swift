@@ -9,7 +9,7 @@ enum FileTools {
     static let zip = StudioTool(
         id: "files.zip", title: "Compress to ZIP",
         summary: "Bundle files and folders into one ZIP archive that opens anywhere.",
-        symbol: "doc.zipper", group: .optimize, inputs: anyKind,
+        iconName: "archive", group: .optimize, inputs: anyKind,
         arity: .combine(minimum: 1, maximum: nil), produces: .kind(.archive),
         options: [
             .choice(
@@ -35,7 +35,7 @@ enum FileTools {
     static let unzip = StudioTool(
         id: "files.unzip", title: "Extract archive",
         summary: "Open ZIP, TAR, GZ, BZ2, XZ, 7Z, RAR and other archives into a folder.",
-        symbol: "archivebox", group: .convert, inputs: [.archive], produces: .kind(.other),
+        iconName: "archive", group: .convert, inputs: [.archive], produces: .kind(.other),
         keywords: ["unzip", "decompress", "extract", "open", "untar", "rar", "7z"],
         actionTitle: "Extract", family: .archive
     ) { run in
@@ -61,7 +61,7 @@ enum FileTools {
     static let tar = StudioTool(
         id: "files.tar", title: "Create TAR archive",
         summary: "Pack files into a .tar.gz or .tar.xz archive for Unix and Linux systems.",
-        symbol: "shippingbox", group: .optimize, inputs: anyKind,
+        iconName: "box", group: .optimize, inputs: anyKind,
         arity: .combine(minimum: 1, maximum: nil), produces: .kind(.archive),
         options: [
             .choice(

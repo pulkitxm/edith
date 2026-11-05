@@ -19,7 +19,6 @@ struct MachineProcessesTab: View {
     private var model: MachineProcessListModel { MachineProcessModels.model(for: session.id) }
 
     var body: some View {
-        @Bindable var model = model
         PageWorkspace {
             controls
             if let message {
@@ -33,7 +32,7 @@ struct MachineProcessesTab: View {
                 message: model.loading.errorMessage ?? "Waiting for a process sample.",
                 refreshing: model.loading.isRefreshing
             ) {
-                Table(model.rows, selection: $model.selectedPID, columnCustomization: $columns) {
+                Table(model.rows, columnCustomization: $columns) {
                     SwiftUI.TableColumn("Process") { process in
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(process.name.isEmpty ? process.cmd : process.name)
@@ -62,7 +61,7 @@ struct MachineProcessesTab: View {
                         Button {
                             pendingKill = process
                         } label: {
-                            Image(systemName: "xmark.circle")
+                            EdithIconView(.closeFilled)
                         }
                         .buttonStyle(.edith(.iconOnly))
                         .help("End \(process.name), PID \(process.pid)")
@@ -73,6 +72,8 @@ struct MachineProcessesTab: View {
                     .defaultVisibility(session.isLocal ? .hidden : .visible)
                     .disabledCustomizationBehavior(.visibility)
                 }
+                .themedSelection()
+                .alternatingRowBackgrounds(.disabled)
                 .font(.edithText(.callout))
                 .accessibilityLabel("Machine processes")
                 .onChange(of: compact, initial: true) { _, compact in

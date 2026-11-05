@@ -97,7 +97,7 @@ struct HerdrNotchAgentsCard: View {
                 Circle().fill(AgentActivityStyle.color(row.phase)).frame(width: 6, height: 6)
                 Text(row.title).font(.edithText(.callout)).fontWeight(.medium).lineLimit(2)
                     .multilineTextAlignment(.leading)
-                if row.isSubagent { Image(systemName: "arrow.turn.down.right") }
+                if row.isSubagent { EdithIconView(.arrowTurn) }
                 Spacer(minLength: 0)
             }
             HStack(spacing: UIScale.pt(6)) {

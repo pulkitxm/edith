@@ -64,15 +64,15 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate prepare-pdf-extract ci-pdf-source-preparation ci-tools verify-release-build-settings verify-bundle ci-shipping shipping-fixture shipping-appcast-fixture site-dev cli icon wiki wiki-push bench-cli performance-fixture
+.PHONY: build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-icons ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate prepare-pdf-extract ci-pdf-source-preparation ci-tools verify-release-build-settings verify-bundle ci-shipping shipping-fixture shipping-appcast-fixture site-dev cli icon wiki wiki-push bench-cli performance-fixture
 
 ci:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-swift
+	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-icons ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-swift
 
 ci-all:
 	bun install --frozen-lockfile
-	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-hygiene ci-security ci-companion ci-swift
+	$(MAKE) ci-comments ci-secrets ci-duplicate-keys ci-icons ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-hygiene ci-security ci-companion ci-swift
 
 .PHONY: ci-local ci-local-all
 ci-local:
@@ -139,6 +139,10 @@ ci-secrets:
 ci-duplicate-keys:
 	bun run check-duplicate-keys
 
+ci-icons:
+	bun test scripts/check-icons.test.js
+	bun scripts/check-icons.mjs
+
 ci-lint:
 	bun run lint
 
@@ -183,7 +187,7 @@ ci-promo:
 	cd apps/promo-video && npm ci && npx tsc --noEmit
 
 ci-swift-lint:
-	rg --files Packages/EdithHost Packages/ExtensionMarketplace Packages/ExtensionSupport Packages/EdithDocsWorker Extensions | rg '\.swift$$' | xargs swift format lint --strict --parallel
+	rg --files Packages/EdithHost Packages/EdithIcons Packages/ExtensionMarketplace Packages/ExtensionSupport Packages/EdithDocsWorker Extensions | rg '\.swift$$' | xargs swift format lint --strict --parallel
 
 ci-swift-build:
 	EDITH_RELEASE_ALLOW_DEV_SIGNING=1 ./build.sh --no-open --release
@@ -192,7 +196,7 @@ ci-swift-build:
 ci-swift-test:
 	$(MAKE) ci-marketplace-host ci-music-native
 
-.PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs
+.PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs ci-edith-icons
 
 .PHONY: ci-host-invocation
 ci-host-invocation:
@@ -314,6 +318,11 @@ ci-extension-usage-accounts:
 	$(call PREPARE_ARGUMENT_PARSER,Extensions/usage)
 	@set -eu; umask 077; fixture=$$(mktemp -d "$${TMPDIR:-/tmp}/edith-keep-awake-tests.XXXXXX"); trap 'status=$$?; if python3 -B scripts/cleanup-keep-awake-fixture.py "$$fixture" && rm -rf "$$fixture"; then exit "$$status"; else cleanup_status=$$?; if [ "$$status" -ne 0 ]; then exit "$$status"; fi; exit "$$cleanup_status"; fi' EXIT; fixture=$$(cd "$$fixture" && pwd -P); mkdir -p "$$fixture/tmp" "$$fixture/cache" "$$fixture/config" "$$fixture/Data/usage" "$$fixture/ExtensionState"; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL HOME="$$fixture" CFFIXED_USER_HOME="$$fixture" TMPDIR="$$fixture/tmp" XDG_CACHE_HOME="$$fixture/cache" XDG_CONFIG_HOME="$$fixture/config" EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/Data/usage" EDITH_EXTENSION_STATE_ROOT="$$fixture/ExtensionState" EDITH_EXTENSION_ID=usage EDITH_APPLICATION_IDENTIFIER=com.pulkit.edith.dev.accounts-contracts EDITH_SHARED_DEFAULTS_SUITE="edith.accounts.tests.$$(basename "$$fixture")" /usr/bin/time -p swift test --package-path Extensions/usage --filter 'UsageAccount|ClaudeAccountLimits|ClaudeLimitsReaderTests|LimitsProviderCollectionTests|UsageLimitsOwnershipTests|UsageWorkerControllerTests|UsageBackupTests|UsageSurfaceTests|LimitsStatusItemTests|ClaudeLimitsLoginTests|AccountQuotaCacheTests|UsageSelectionProjectionTests' --build-system native --no-parallel --jobs 1 -Xswiftc -j1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
+ci-edith-icons:
+	swift format lint --strict --parallel --recursive Packages/EdithIcons/Sources Packages/EdithIcons/Tests Packages/EdithIcons/Package.swift
+	cd Packages/EdithIcons && bun scripts/generate.ts --check
+	swift test --package-path Packages/EdithIcons --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
 ci-extension-support:
 	swift format lint --strict --parallel --recursive Packages/ExtensionSupport/Sources Packages/ExtensionSupport/Tests Packages/ExtensionSupport/Package.swift Extensions/keepAwake Extensions/focusDim Extensions/windowSweaters Extensions/colorPicker Extensions/keystrokeHighlight Extensions/systemStats Extensions/micMute Extensions/emoji Extensions/homebrew Extensions/calendar Extensions/jev Extensions/presenter Extensions/system Extensions/timeLapse Extensions/cleaner Extensions/appMaintenance Extensions/blitztree Extensions/socialManager Extensions/plugins Extensions/notchShelf Extensions/clipboard Extensions/music Extensions/docs Extensions/latex Extensions/usage Extensions/companion Extensions/bifrost Extensions/lidAwake Extensions/downloads Extensions/seoAudit Extensions/fixtureSupport Extensions/Package.swift Packages/EdithDocsWorker/Sources Packages/EdithDocsWorker/Tests Packages/EdithDocsWorker/Package.swift Extensions/hinge
 	$(call PREPARE_ARGUMENT_PARSER,Packages/ExtensionSupport)
@@ -374,7 +383,7 @@ ci-extension-audio-mixer:
 
 .PHONY: ci-extension-camera
 ci-extension-camera:
-	swift test --package-path Extensions/virtualCamera/Privileged --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel --force-resolved-versions
+	swift test --package-path Extensions/virtualCamera/Privileged --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel --force-resolved-versions -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 	$(call UTILITY_EXTENSION_NATIVE_TEST,virtualCamera)
 	swiftc -typecheck -swift-version 5 -module-name CameraCarrierRole -target arm64-apple-macos14.0 -I Extensions/virtualCamera/.build/arm64-apple-macosx/debug/Modules Extensions/virtualCamera/CameraCarrierRuntime.swift Extensions/virtualCamera/CameraCarrierLease.swift Extensions/virtualCamera/CameraCarrierProtocol.swift Extensions/virtualCamera/CameraCarrierSession.swift Extensions/virtualCamera/CameraSystemExtensionController.swift Extensions/virtualCamera/Carrier/Factory.swift
 	swiftc -typecheck -swift-version 5 -module-name CameraProviderRole -target arm64-apple-macos14.0 -I Extensions/virtualCamera/.build/arm64-apple-macosx/debug/Modules Extensions/virtualCamera/Provider/*.swift Extensions/virtualCamera/ProviderFactory/Factory.swift Extensions/virtualCamera/Support/*.swift

@@ -45,14 +45,14 @@ struct HostControlLayout: Layout {
 
 extension HostSidebarUtility {
     var cardTitle: String { self == .presenter ? "Presenter mode" : title }
-    var cardIcon: String {
+    var cardIcon: EdithIcon {
         switch self {
-        case .system: "keyboard"
-        case .keepAwake: "moon.zzz"
-        case .lidAwake: "laptopcomputer"
-        case .keystrokeHighlight: "keyboard.badge.ellipsis"
-        case .presenter: "person.wave.2"
-        case .micMute: "mic.slash"
+        case .system: .keyboard
+        case .keepAwake: .moon
+        case .lidAwake: .laptop
+        case .keystrokeHighlight: .keystrokeHighlight
+        case .presenter: .person
+        case .micMute: .micMute
         }
     }
     var cardSubtitle: String {
@@ -132,11 +132,9 @@ struct HostQuickActionsCard: View {
         } label: {
             VStack(spacing: UIScale.pt(6)) {
                 if tile.shows("icons") {
-                    Image(
-                        systemName: utility == .keepAwake && on ? "moon.zzz.fill" : utility.cardIcon
-                    )
-                    .font(.system(size: UIScale.pt(21)))
-                    .frame(height: UIScale.pt(26))
+                    EdithIconView(utility == .keepAwake && on ? .keepAwakeOn : utility.cardIcon)
+                        .font(.system(size: UIScale.pt(21)))
+                        .frame(height: UIScale.pt(26))
                 }
                 Text(utility.cardTitle)
                     .font(.system(size: UIScale.pt(12.5), weight: .medium))
@@ -145,7 +143,9 @@ struct HostQuickActionsCard: View {
                 if !compact, tile.showDetails, tile.shows("descriptions") {
                     Text(utility.cardSubtitle)
                         .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(on ? .white.opacity(0.8) : DashSkin.inkFaint(dark))
+                        .foregroundStyle(
+                            on ? DashSkin.onAccent(dark).opacity(0.8) : DashSkin.inkFaint(dark)
+                        )
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -154,7 +154,7 @@ struct HostQuickActionsCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.vertical, UIScale.pt(compact ? 8 : 16))
             .padding(.horizontal, UIScale.pt(8))
-            .foregroundStyle(on ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
+            .foregroundStyle(on ? DashSkin.onAccent(dark) : DashSkin.ink(dark))
             .background(
                 on ? AnyShapeStyle(theme) : AnyShapeStyle(.primary.opacity(0.05)),
                 in: RoundedRectangle(cornerRadius: UIScale.pt(12))

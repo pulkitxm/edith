@@ -26,7 +26,7 @@ struct UsageHomeUsageCard: View {
             if tile.showTitle || tile.showActions {
                 HStack {
                     if tile.showTitle {
-                        Label(tile.displayTitle, systemImage: tile.widget.icon)
+                        Label(tile.displayTitle, edith: tile.widget.icon)
                             .font(.edithText(.headline)).lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -34,13 +34,13 @@ struct UsageHomeUsageCard: View {
                         Button {
                             retry += 1
                         } label: {
-                            Image(systemName: "arrow.clockwise")
+                            EdithIconView(.refresh)
                         }
                         .help("Refresh usage").accessibilityLabel("Refresh usage")
                         Button {
                             if let scene { Task { try? await scene.open() } }
                         } label: {
-                            Image(systemName: "arrow.up.right")
+                            EdithIconView(.arrowUpRight)
                         }
                         .help("Open Agent Usage").accessibilityLabel("Open Agent Usage")
                     }
@@ -53,10 +53,26 @@ struct UsageHomeUsageCard: View {
                             || (scene?.presenter ?? UsagePresenterState.shared).usage)
                 )
             } else if load.isRunning {
-                LoadingIndicator()
+                SkeletonGroup {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        HStack(spacing: UIScale.pt(16)) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                                    SkeletonBlock(width: 56, height: 18)
+                                    SkeletonBlock(width: 44, height: 9)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading")
             } else if load.errorMessage == nil {
-                Text("No usage records yet. Refresh Agent Usage to collect your history.")
-                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                Text(
+                    "Nothing collected yet. Open Agent Usage and choose Collect usage now to read your agents' history on this Mac."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             if let error = load.errorMessage {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(3)

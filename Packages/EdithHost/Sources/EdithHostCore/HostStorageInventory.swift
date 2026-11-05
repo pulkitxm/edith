@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithIcons
 import ExtensionMarketplace
 import Foundation
 
@@ -49,7 +50,7 @@ public struct HostStorageCategory: Sendable, Identifiable {
 public struct HostStorageItem: Identifiable, Sendable {
     public let id: String
     public let title: String
-    public let symbolName: String
+    public let icon: EdithIcon
     public let extensionID: String?
     public let roots: [URL]
     public let scopeIDs: [String]
@@ -117,8 +118,8 @@ public struct HostStorageInventory: Sendable {
                         identity.applicationDefaultsSuite + ".plist")))
         }
         let known = Dictionary(uniqueKeysWithValues: marketplace.entries.map { ($0.id, $0.title) })
-        let symbols = Dictionary(
-            uniqueKeysWithValues: marketplace.entries.map { ($0.id, $0.symbolName) })
+        let icons = Dictionary(
+            uniqueKeysWithValues: marketplace.entries.map { ($0.id, $0.icon) })
         let ids = Set(known.keys).union(marketplace.installedVersions.keys).sorted()
         var extensions: [HostStorageExtension] = []
         var packageKeys: [String: [String]] = [:]
@@ -258,11 +259,11 @@ public struct HostStorageInventory: Sendable {
         self.categories = categories
         let scopeRoots = Dictionary(uniqueKeysWithValues: data.scopes.map { ($0.id, $0.root) })
         func item(
-            _ id: String, _ title: String, _ symbolName: String, extensionID: String? = nil,
+            _ id: String, _ title: String, _ icon: EdithIcon, extensionID: String? = nil,
             scopeIDs: [String], rootIDs: [String]? = nil
         ) -> HostStorageItem {
             HostStorageItem(
-                id: id, title: title, symbolName: symbolName, extensionID: extensionID,
+                id: id, title: title, icon: icon, extensionID: extensionID,
                 roots: (rootIDs ?? scopeIDs).compactMap { scopeRoots[$0] }, scopeIDs: scopeIDs)
         }
         func category(_ id: String) -> HostStorageCategory? {
@@ -270,28 +271,28 @@ public struct HostStorageInventory: Sendable {
         }
         let extensionItems = extensions.map { entry in
             item(
-                entry.id, entry.title, symbols[entry.id] ?? "puzzlepiece.extension",
+                entry.id, entry.title, icons[entry.id] ?? .puzzle,
                 extensionID: entry.id,
                 scopeIDs: entry.versions.flatMap(\.scopeIDs) + entry.dataScopeIDs,
                 rootIDs: (packageKeys[entry.id] ?? []) + entry.dataScopeIDs)
         }
         let general: [HostStorageItem] = [
-            category("app").map { item("app", "Edith app", "app", scopeIDs: $0.scopeIDs) },
+            category("app").map { item("app", "Edith app", .appTile, scopeIDs: $0.scopeIDs) },
             category("shared-extension-data").map {
                 item(
-                    "shared-extension-data", "Shared extension data", "square.on.square",
+                    "shared-extension-data", "Shared extension data", .copy,
                     scopeIDs: $0.scopeIDs)
             },
             category("selected-music-directory").map {
                 item(
-                    "selected-music-directory", "Music folder outside Edith", "music.note.list",
+                    "selected-music-directory", "Music folder outside Edith", .playlist,
                     scopeIDs: $0.scopeIDs)
             },
             category("cache").map {
-                item("cache", "Caches and downloads", "archivebox", scopeIDs: $0.scopeIDs)
+                item("cache", "Caches and downloads", .archive, scopeIDs: $0.scopeIDs)
             },
             category("host-data").map {
-                item("host-data", "Logs and other app data", "gearshape", scopeIDs: $0.scopeIDs)
+                item("host-data", "Logs and other app data", .gear, scopeIDs: $0.scopeIDs)
             },
         ].compactMap { $0 }
         items = (extensionItems + general).filter { !$0.scopeIDs.isEmpty }

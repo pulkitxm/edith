@@ -1,4 +1,5 @@
 import AppKit
+import GhosttyKit
 import Testing
 
 @testable import GhosttyTerminal
@@ -12,6 +13,30 @@ import Testing
         #expect(theme.background == "#171412")
         #expect(theme.foreground == "#ebe6db")
         #expect(theme.cursor == "#d7a65c")
+    }
+
+    @Test @MainActor func accentSurfacesFollowTheThemeInsteadOfTheSystemAccent() {
+        let view = GhosttyTerminalView(
+            externalIO: TestWindowHost.inertIO(),
+            theme: GhosttyTheme(background: "#101010", foreground: "#f0f0f0", cursor: "#1595a3"))
+        #expect(GhosttyTheme.hex(view.themeAccent) == "#1595a3")
+        #expect(GhosttyTheme.hex(view.progressStrip.accent) == "#1595a3")
+        #expect(GhosttyTheme.hex(view.copyConfirmation.accent) == "#1595a3")
+        view.apply(
+            theme: GhosttyTheme(background: "#101010", foreground: "#f0f0f0", cursor: "#34c759"))
+        #expect(GhosttyTheme.hex(view.themeAccent) == "#34c759")
+        #expect(GhosttyTheme.hex(view.progressStrip.accent) == "#34c759")
+        #expect(GhosttyTheme.hex(view.copyConfirmation.accent) == "#34c759")
+    }
+
+    @Test @MainActor func progressStripShowsProgressAndHidesWhenRemoved() {
+        let strip = TerminalProgressStrip(frame: NSRect(x: 0, y: 0, width: 200, height: 3))
+        #expect(strip.isHidden)
+        strip.update(GHOSTTY_PROGRESS_STATE_SET, progress: 40)
+        #expect(!strip.isHidden)
+        #expect(strip.accessibilityValue() as? Int == 40)
+        strip.update(GHOSTTY_PROGRESS_STATE_REMOVE, progress: 0)
+        #expect(strip.isHidden)
     }
 
     @Test func theConfigCarriesEveryColourItWasGiven() {

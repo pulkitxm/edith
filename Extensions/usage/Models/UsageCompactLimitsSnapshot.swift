@@ -30,12 +30,12 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
         let source: String
         let title: String
         let value: String
-        let icon: String
+        let icon: EdithIcon
         let progress: Double?
         let field: String
         let details: [Detail]
         init(
-            _ id: String, source: String, title: String, value: String, icon: String,
+            _ id: String, source: String, title: String, value: String, icon: EdithIcon,
             progress: Double?, field: String, details: [Detail]
         ) {
             self.id = id; self.source = source; self.title = title; self.value = value
@@ -58,7 +58,7 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
                     && ($0.fraction.map { $0.isFinite && (0...1).contains($0) } ?? true)
             }),
             rows.allSatisfy({
-                text($0.id) && text($0.title) && text($0.value) && text($0.icon) && text($0.source)
+                text($0.id) && text($0.title) && text($0.value) && text($0.source)
                     && text($0.field) && $0.details.count <= 16
                     && $0.details.allSatisfy { text($0.field) && text($0.text) }
                     && ($0.progress.map { $0.isFinite && (0...1).contains($0) } ?? true)
@@ -105,7 +105,7 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
                 rows.append(
                     .init(
                         id, source: source, title: label,
-                        value: quotas.min().map { "\($0)% left" } ?? "Unavailable", icon: "gauge",
+                        value: quotas.min().map { "\($0)% left" } ?? "Unavailable", icon: .gauge,
                         progress: [session.fraction, week.fraction].compactMap { $0 }.max(),
                         field: "weekly", details: details))
                 continue
@@ -150,9 +150,9 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
                         source: source,
                         title: label + " · " + title, value: quota.text,
                         icon: quota.expired
-                            ? "clock.badge.exclamationmark"
+                            ? .alert
                             : quota.percent == nil
-                                ? "questionmark.circle" : "gauge.with.dots.needle.50percent",
+                                ? .help : .gauge,
                         progress: quota.fraction, field: field, details: details))
             }
         }

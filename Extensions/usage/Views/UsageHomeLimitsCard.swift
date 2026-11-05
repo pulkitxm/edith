@@ -24,7 +24,7 @@ struct UsageHomeLimitsCard: View {
             if tile.showTitle || tile.showActions {
                 HStack {
                     if tile.showTitle {
-                        Label(tile.displayTitle, systemImage: tile.widget.icon)
+                        Label(tile.displayTitle, edith: tile.widget.icon)
                             .font(.edithText(.headline)).lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -32,13 +32,13 @@ struct UsageHomeLimitsCard: View {
                         Button {
                             retry += 1
                         } label: {
-                            Image(systemName: "arrow.clockwise")
+                            EdithIconView(.refresh)
                         }
                         .help("Refresh widget").accessibilityLabel("Refresh " + tile.displayTitle)
                         Button {
                             open()
                         } label: {
-                            Image(systemName: "arrow.up.right")
+                            EdithIconView(.arrowUpRight)
                         }
                         .help("Open " + tile.widget.title).accessibilityLabel(
                             "Open " + tile.widget.title)
@@ -48,7 +48,21 @@ struct UsageHomeLimitsCard: View {
             if let snapshot {
                 data(snapshot).presenterCover(scene.presenter.hides("Usage"))
             } else if load.isRunning {
-                LoadingIndicator()
+                SkeletonGroup {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        HStack(spacing: UIScale.pt(16)) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                                    SkeletonBlock(width: 56, height: 18)
+                                    SkeletonBlock(width: 44, height: 9)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading")
             } else if !active {
                 Text("Automatic updates are paused.").font(.edithText(.caption)).foregroundStyle(
                     .secondary)
@@ -115,7 +129,7 @@ struct UsageHomeLimitsCard: View {
                 }.joined(separator: " · ")
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                        Image(systemName: row.icon).foregroundStyle(tile.highlightColor).frame(
+                        EdithIconView(row.icon).foregroundStyle(tile.highlightColor).frame(
                             width: UIScale.pt(16))
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             Text(row.title).font(.edithText(.callout)).lineLimit(tile.dense ? 1 : 2)
@@ -144,7 +158,7 @@ struct UsageHomeLimitsCard: View {
             Button {
                 open()
             } label: {
-                Label("Open Agent Usage", systemImage: "arrow.up.right").font(.edithText(.caption))
+                Label("Open Agent Usage", edith: .arrowUpRight).font(.edithText(.caption))
             }
             .buttonStyle(.edith(.secondary))
         }

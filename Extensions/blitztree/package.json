@@ -1,7 +1,7 @@
 {
   "id": "blitztree",
   "title": "Disk Map",
-  "symbolName": "square.grid.3x3.fill",
+  "icon": "blitztree",
   "category": "utilities",
   "background": false,
   "commands": [],
@@ -9,7 +9,7 @@
     {
       "id": "blitztree",
       "title": "Disk Map",
-      "symbolName": "square.grid.3x3.fill",
+      "icon": "blitztree",
       "order": 2
     }
   ],
@@ -19,5 +19,27 @@
   "notchCards": [
     "extension:blitztree"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "See what is using your disk space, then free it up.",
+    "summary": "Disk Map measures any folder and draws it as blocks sized by space used. Click to dig into folders, spot large files and cleanup candidates, and move anything you choose to the Trash.",
+    "steps": [
+      {
+        "icon": "folder",
+        "title": "Choose a folder",
+        "detail": "Start with your home folder or a drive. Scanning only reads and never changes files."
+      },
+      {
+        "icon": "blitztree",
+        "title": "Explore the map",
+        "detail": "Bigger blocks use more space. Click a folder to look inside it."
+      },
+      {
+        "icon": "trash",
+        "title": "Move items to the Trash",
+        "detail": "Reveal an item in Finder to check it, then move it to the Trash. You can put it back."
+      }
+    ],
+    "examples": []
+  }
 }

@@ -91,7 +91,7 @@ struct AttentionDayRibbon: View {
             AxisMarks(values: .stride(by: .hour, count: hours > 13 ? 2 : 1)) { _ in
                 AxisGridLine().foregroundStyle(DashSkin.grid(dark))
                 AxisValueLabel(format: .dateTime.hour())
-                    .font(.system(size: UIScale.pt(9.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -112,16 +112,16 @@ private struct AttentionRibbonTooltip: View {
             Text(
                 "\(AttentionFormat.time(block.start)) to \(AttentionFormat.time(block.end)) · \(AttentionFormat.duration(block.duration))"
             )
-            .font(.system(size: UIScale.pt(9.5)))
+            .font(.edithText(.caption))
             .foregroundStyle(DashSkin.inkFaint(dark))
             ForEach(
                 block.names.sorted { $0.value > $1.value }.prefix(3).map(\.key), id: \.self
             ) { name in
-                Text(name).font(.system(size: UIScale.pt(11), weight: .medium))
+                Text(name).font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark)).lineLimit(1)
             }
             if let detail = block.top.detail, !detail.isEmpty {
-                Text(detail).font(.system(size: UIScale.pt(10)))
+                Text(detail).font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
             }
         }
@@ -160,7 +160,7 @@ struct AttentionLevelLegend: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .monospacedDigit()
                     }
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                 }
             }
         }
@@ -223,7 +223,7 @@ struct AttentionDailyStack: View {
                 AxisValueLabel {
                     if let minutes = value.as(Double.self) {
                         Text(AttentionFormat.duration(minutes * 60))
-                            .font(.system(size: UIScale.pt(9)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }
@@ -232,7 +232,7 @@ struct AttentionDailyStack: View {
         .chartXAxis {
             AxisMarks(values: .stride(by: .day, count: days.count > 10 ? 5 : 1)) { _ in
                 AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                    .font(.system(size: UIScale.pt(9.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -250,14 +250,14 @@ private struct AttentionDayTooltip: View {
         let dark = scheme == .dark
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             Text(day.day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.ink(dark))
             Text("\(AttentionFormat.duration(day.active)) active · \(day.switches) switches")
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             if day.agentWorking > 0 {
                 Text("\(AttentionFormat.duration(day.agentWorking)) agent work")
-                    .font(.system(size: UIScale.pt(10)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
         }
@@ -319,11 +319,11 @@ struct AttentionHourBars: View {
                     ) {
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(String(format: "%02d:00", selected))
-                                .font(.system(size: UIScale.pt(10), weight: .semibold))
+                                .font(.edithText(.caption).weight(.semibold))
                             ForEach(AttentionPalette.levels, id: \.self) { level in
                                 if let seconds = levels[level.key], seconds >= 30 {
                                     Text("\(level.title) \(AttentionFormat.duration(seconds))")
-                                        .font(.system(size: UIScale.pt(10)))
+                                        .font(.edithText(.caption))
                                 }
                             }
                         }
@@ -341,7 +341,7 @@ struct AttentionHourBars: View {
                 AxisValueLabel {
                     if let hour = value.as(Int.self) {
                         Text(String(format: "%02d", hour))
-                            .font(.system(size: UIScale.pt(9.5)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }
@@ -353,7 +353,7 @@ struct AttentionHourBars: View {
                 AxisValueLabel {
                     if let minutes = value.as(Double.self) {
                         Text(AttentionFormat.duration(minutes * 60))
-                            .font(.system(size: UIScale.pt(9)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }
@@ -379,7 +379,7 @@ struct AttentionWeekHeatmap: View {
             ForEach(order, id: \.self) { weekday in
                 HStack(spacing: UIScale.pt(3)) {
                     Text(symbols[weekday - 1])
-                        .font(.system(size: UIScale.pt(9.5)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: UIScale.pt(28), alignment: .leading)
                     ForEach(0..<24, id: \.self) { hour in
@@ -434,17 +434,17 @@ struct AttentionCategoryBars: View {
                     VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                         HStack(spacing: UIScale.pt(6)) {
                             Text(item.category.name)
-                                .font(.system(size: UIScale.pt(12)))
+                                .font(.edithText(.callout))
                                 .foregroundStyle(DashSkin.ink(dark))
                             Text(item.category.productivity.title)
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Spacer(minLength: UIScale.pt(6))
                             Text(AttentionFormat.percent(item.duration, of: total))
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Text(AttentionFormat.duration(item.duration))
-                                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                                .font(.edithText(.subheadline).weight(.medium))
                                 .monospacedDigit()
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                         }
@@ -463,7 +463,7 @@ struct AttentionCategoryBars: View {
             }
             if rest > 0 {
                 Text("\(categories.count - limit) more · \(AttentionFormat.duration(rest))")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -501,12 +501,12 @@ struct AttentionConcurrencyChart: View {
                     ) {
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(hovered.start.formatted(date: .abbreviated, time: .shortened))
-                                .font(.system(size: UIScale.pt(9.5)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             Text(String(format: "%.1f agents working", hovered.working))
-                                .font(.system(size: UIScale.pt(10.5), weight: .semibold))
+                                .font(.edithText(.caption).weight(.semibold))
                             Text("you: \(AttentionFormat.duration(hovered.attention)) active")
-                                .font(.system(size: UIScale.pt(10)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                         }
                         .foregroundStyle(DashSkin.ink(dark))
@@ -521,13 +521,13 @@ struct AttentionConcurrencyChart: View {
         .chartYAxis {
             AxisMarks(position: .leading) { _ in
                 AxisGridLine().foregroundStyle(DashSkin.grid(dark))
-                AxisValueLabel().font(.system(size: UIScale.pt(9)))
+                AxisValueLabel().font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
         .chartXAxis {
             AxisMarks { _ in
-                AxisValueLabel().font(.system(size: UIScale.pt(9.5)))
+                AxisValueLabel().font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
