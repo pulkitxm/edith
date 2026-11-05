@@ -203,80 +203,63 @@ final class ManualClock: @unchecked Sendable {
 
     static func engine(
         hardware: FakeCameraHardware = FakeCameraHardware(),
-        state: VirtualCameraState = VirtualCameraState(output: .automatic),
-        obsRunning: Bool = false,
-        frontmost: VirtualCameraRunningApplication? = nil
+        state: VirtualCameraState = VirtualCameraState()
     ) -> VirtualCameraEngine {
         VirtualCameraEngine(
             edithSink: VirtualCameraSink(extensionIdentifier: identifier, hardware: hardware),
-            obsSink: VirtualCameraSink(deviceUID: VirtualCameraOBS.deviceUID, hardware: hardware),
             state: state,
-            environment: VirtualCameraEngineEnvironment(
-                authorization: { .authorized }, obsRunning: { obsRunning },
-                frontmostApplication: { frontmost }),
+            environment: VirtualCameraEngineEnvironment(authorization: { .authorized }),
             previewBus: VirtualCameraPreviewBus(
                 file: FileManager.default.temporaryDirectory.appendingPathComponent(
                     "camera-preview-\(UUID().uuidString).bin"),
                 unlinkOnClose: true))
     }
 
-    static func obsHardware(watching: Bool) -> FakeCameraHardware {
+    static func edithHardware(inUse: Bool) -> FakeCameraHardware {
         let hardware = FakeCameraHardware()
-        hardware.devices = [40: VirtualCameraOBS.deviceUID]
+        hardware.devices = [40: VirtualCameraIdentity.deviceID(forExtension: identifier).uuidString]
         hardware.streams = [40: [41, 42]]
         hardware.directions = [41: 1, 42: 0]
         hardware.sinkCapacity = 4
-        if watching { hardware.running = [40] }
+        hardware.statuses = [
+            41: VirtualCameraExtensionStatus(
+                build: "1", clients: inUse ? ["com.example.VideoCall"] : [], format: .hd1080,
+                receivingFrames: false
+            ).encoded()
+        ]
         return hardware
     }
 
-    @Test func obsCameraStartsWhenAnAppOpensItAndStopsWhenThatAppQuits() {
-        let hardware = Self.obsHardware(watching: true)
-        let zoom = VirtualCameraRunningApplication(pid: 4242, bundleIdentifier: "us.zoom.xos")
-        let engine = Self.engine(hardware: hardware, frontmost: zoom)
-        engine.refreshExtension()
-        #expect(engine.route == .obs)
-        #expect(engine.streamingRoute == .obs)
-        #expect(hardware.started == [42])
-        #expect(engine.trigger == zoom)
-        let live = engine.snapshot()
-        #expect(live.headline == "Live as OBS Virtual Camera")
-        #expect(live.obsAvailable)
-        #expect(!live.extensionInstalled)
-        engine.applicationQuit(9999)
-        #expect(engine.streaming)
-        engine.applicationQuit(4242)
-        #expect(!engine.streaming)
-        #expect(hardware.stopped == [42])
-        engine.refreshExtension()
-        #expect(!engine.streaming)
-        engine.shutdown()
-    }
-
-    @Test(arguments: [VirtualCameraRoute.obs, .edithCamera])
-    func completeStopDisconnectsAndIgnoresDemandUntilExplicitResume(
-        route: VirtualCameraRoute
-    ) throws {
-        let saved = SharedDefaults.store.data(forKey: AppStorageKeys.VirtualCamera.state)
-        defer { SharedDefaults.store.set(saved, forKey: AppStorageKeys.VirtualCamera.state) }
-        let hardware = Self.obsHardware(watching: true)
-        if route == .edithCamera {
-            hardware.devices = [
-                40: VirtualCameraIdentity.deviceID(forExtension: Self.identifier).uuidString
-            ]
-            hardware.statuses = [
-                41: VirtualCameraExtensionStatus(
-                    build: "1", clients: ["com.example.VideoCall"], format: .hd1080,
-                    receivingFrames: false
-                ).encoded()
-            ]
-        }
-        let engine = Self.engine(
-            hardware: hardware,
-            state: VirtualCameraState(privacy: .card, output: route == .obs ? .obs : .edithCamera))
+    @Test func edithCameraStartsWhenAnAppOpensIt() {
+        let hardware = Self.edithHardware(inUse: true)
+        let engine = Self.engine(hardware: hardware)
         defer { engine.shutdown() }
         engine.refreshExtension()
-        #expect(engine.streamingRoute == route)
+        #expect(engine.streaming)
+        #expect(hardware.started == [42])
+        let live = engine.snapshot()
+        #expect(live.live && live.extensionInstalled)
+        #expect(live.clients.map(\.id) == ["com.example.VideoCall"])
+    }
+
+    @Test func edithCameraWaitsForAnApp() {
+        let hardware = Self.edithHardware(inUse: false)
+        let engine = Self.engine(hardware: hardware)
+        defer { engine.shutdown() }
+        engine.refreshExtension()
+        #expect(!engine.streaming)
+        #expect(hardware.started.isEmpty)
+        #expect(engine.snapshot().headline == "Ready, no app is using it")
+    }
+
+    @Test func completeStopDisconnectsAndIgnoresDemandUntilExplicitResume() throws {
+        let saved = SharedDefaults.store.data(forKey: AppStorageKeys.VirtualCamera.state)
+        defer { SharedDefaults.store.set(saved, forKey: AppStorageKeys.VirtualCamera.state) }
+        let hardware = Self.edithHardware(inUse: true)
+        let engine = Self.engine(hardware: hardware, state: VirtualCameraState(privacy: .card))
+        defer { engine.shutdown() }
+        engine.refreshExtension()
+        #expect(engine.streaming)
         let result = try engine.perform(.pause(.stopped, message: nil))
         #expect(!result.live)
         #expect(result.headline == "Stopped")
@@ -293,24 +276,8 @@ final class ManualClock: @unchecked Sendable {
         #expect(!restarted.streaming)
         restarted.shutdown()
         _ = try engine.perform(.resume)
-        #expect(engine.streamingRoute == route)
+        #expect(engine.streaming)
         #expect(hardware.started == [42, 42])
-    }
-
-    @Test func obsCameraWaitsForAnAppAndStepsAsideForOBS() {
-        let idle = Self.obsHardware(watching: false)
-        let waiting = Self.engine(hardware: idle)
-        waiting.refreshExtension()
-        #expect(waiting.route == .obs)
-        #expect(!waiting.streaming)
-        #expect(waiting.snapshot().headline == "Ready as OBS Virtual Camera")
-        waiting.shutdown()
-        let busy = Self.obsHardware(watching: true)
-        let deferring = Self.engine(hardware: busy, obsRunning: true)
-        deferring.refreshExtension()
-        #expect(!deferring.streaming)
-        #expect(busy.started.isEmpty)
-        deferring.shutdown()
     }
 
     @Test(arguments: [VirtualCameraPrivacy.live, .card, .freeze, .stopped])
@@ -319,7 +286,7 @@ final class ManualClock: @unchecked Sendable {
     ) throws {
         let saved = SharedDefaults.store.data(forKey: AppStorageKeys.VirtualCamera.state)
         defer { SharedDefaults.store.set(saved, forKey: AppStorageKeys.VirtualCamera.state) }
-        let hardware = Self.obsHardware(watching: true)
+        let hardware = Self.edithHardware(inUse: true)
         var state = VirtualCameraState(privacy: privacy)
         state.composition.framing.zoom = 2
         let engine = Self.engine(hardware: hardware, state: state)
@@ -337,29 +304,6 @@ final class ManualClock: @unchecked Sendable {
             #expect(hardware.stopped == [42])
             #expect(snapshot.live)
         }
-    }
-
-    @Test func edithAppsDoNotCountAsTheViewer() {
-        let edith = VirtualCameraRunningApplication(pid: 1, bundleIdentifier: "com.pulkit.edith")
-        let dev = VirtualCameraRunningApplication(
-            pid: 2, bundleIdentifier: "com.pulkit.edith.dev.main")
-        let meet = VirtualCameraRunningApplication(pid: 3, bundleIdentifier: "com.google.Chrome")
-        #expect(VirtualCameraEngine.trigger(from: edith) == nil)
-        #expect(VirtualCameraEngine.trigger(from: dev) == nil)
-        #expect(VirtualCameraEngine.trigger(from: meet) == meet)
-        #expect(VirtualCameraEngine.trigger(from: nil) == nil)
-    }
-
-    @Test func choosingEdithCameraIgnoresOBS() {
-        let hardware = Self.obsHardware(watching: true)
-        var state = VirtualCameraState()
-        state.output = .edithCamera
-        let engine = Self.engine(hardware: hardware, state: state)
-        engine.refreshExtension()
-        #expect(engine.route == nil)
-        #expect(!engine.streaming)
-        #expect(engine.snapshot().headline == "Camera extension not installed")
-        engine.shutdown()
     }
 
     static func payload(
@@ -477,7 +421,7 @@ final class ManualClock: @unchecked Sendable {
         let snapshot = engine.snapshot()
         #expect(!snapshot.extensionInstalled)
         #expect(!snapshot.live)
-        #expect(snapshot.headline == "Camera extension not installed")
+        #expect(snapshot.headline == "Edith Camera is not installed")
         engine.shutdown()
     }
 }

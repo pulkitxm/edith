@@ -163,6 +163,9 @@ public final class CameraSealedInstallation {
         let provider = url.appendingPathComponent(
             "Contents/Library/SystemExtensions/" + configuration.hostIdentifier
                 + ".camera.systemextension")
+        guard files.fileExists(atPath: provider.path) else {
+            throw failure("The carrier does not contain the camera provider.")
+        }
         let providerIdentity = try verify(provider)
         guard providerIdentity.identifier == configuration.hostIdentifier + ".camera",
             providerIdentity.team == ownIdentity.team

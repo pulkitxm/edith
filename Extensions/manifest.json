@@ -2576,7 +2576,6 @@
         "Extensions/virtualCamera/Core/Models/VirtualCameraMedia.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraOperations.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraRequest.swift",
-        "Extensions/virtualCamera/Core/Models/VirtualCameraRoute.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraSceneLibrary.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraState.swift",
         "Extensions/virtualCamera/Core/Models/VirtualCameraStore.swift",
