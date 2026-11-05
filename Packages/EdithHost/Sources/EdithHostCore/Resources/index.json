@@ -616,7 +616,7 @@
         "id": "Cleaner",
         "title": "Cleaner",
         "icon": "broom",
-        "summary": "Find reclaimable space and remove it after review.",
+        "summary": "Find build caches, downloads and old worktrees you can safely remove. Nothing is deleted until you confirm.",
         "order": 4
       }
     ],
