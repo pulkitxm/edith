@@ -32,5 +32,37 @@
     "media",
     "extension:virtualCamera"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Look your best in every video call, with one camera that works everywhere.",
+    "summary": "Edith adds a virtual camera you can pick in Zoom, Meet or FaceTime. Frame your shot, change your look or background, play a video or share a window, and step away behind a card. Nothing leaves your Mac.",
+    "steps": [
+      {
+        "symbolName": "web.camera",
+        "title": "Check your preview",
+        "detail": "Allow camera access and pick a camera, a video or a window as your source."
+      },
+      {
+        "symbolName": "slider.horizontal.3",
+        "title": "Frame and style it",
+        "detail": "Zoom, pan, change the look or background, and save the result as a scene."
+      },
+      {
+        "symbolName": "video.badge.checkmark",
+        "title": "Choose it in your meeting app",
+        "detail": "Select Edith Camera as the camera in Zoom, Meet or FaceTime."
+      },
+      {
+        "symbolName": "pause.circle",
+        "title": "Step away privately",
+        "detail": "Pause behind a card, a blank screen or a frozen frame, then go live again."
+      }
+    ],
+    "examples": [
+      "ed camera status",
+      "ed camera scene list",
+      "ed camera scene next",
+      "ed camera pause --style card"
+    ]
+  }
 }

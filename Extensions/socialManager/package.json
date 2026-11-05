@@ -20,5 +20,27 @@
   "notchCards": [
     "extension:socialManager"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "All your social accounts, signed in and side by side.",
+    "summary": "Group the accounts for each person, brand or client into a profile. Every account keeps its own login on this Mac, so you can open several at once without signing in and out.",
+    "steps": [
+      {
+        "symbolName": "person.crop.circle.badge.plus",
+        "title": "Create a profile",
+        "detail": "Name it after a person, brand or client."
+      },
+      {
+        "symbolName": "plus.app",
+        "title": "Add accounts",
+        "detail": "Pick Instagram, YouTube, X, LinkedIn or any website and sign in once."
+      },
+      {
+        "symbolName": "rectangle.split.2x1",
+        "title": "Open them side by side",
+        "detail": "Use tabs or resizable panes to work across platforms."
+      }
+    ],
+    "examples": []
+  }
 }

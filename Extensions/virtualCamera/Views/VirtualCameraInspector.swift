@@ -577,19 +577,23 @@ struct VirtualCameraOutputPanel: View {
         return nil
     }
 
-    private var routeTitle: String {
-        guard let route = model.snapshot?.route else { return "Sends to: nothing yet" }
-        return "Sends to: \(route.cameraName)"
-    }
-
     private var routeDetail: String {
-        model.snapshot?.obsAvailable == true
+        if model.snapshot?.route == .edithCamera {
+            return
+                "Choose Edith Camera as the camera in your meeting app. Edith starts sending when an app opens it and stops when that app quits."
+        }
+        return model.snapshot?.obsAvailable == true
             ? "Pick OBS Virtual Camera in your meeting app. Keep OBS Studio closed. Edith starts output when an app opens the camera and stops when that app quits."
             : "Install OBS Studio and its Virtual Camera, then close OBS. Choose OBS Virtual Camera in your meeting app."
     }
 
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
+            VirtualCameraPanelSection(
+                title: "Edith Camera", detail: extensionManager.phase.detail, dark: dark
+            ) {
+                VirtualCameraFact(title: "Status", value: extensionManager.phase.title, dark: dark)
+            }
             VirtualCameraPanelSection(title: "OBS Virtual Camera", detail: routeDetail, dark: dark)
             {
                 HStack {
@@ -605,11 +609,14 @@ struct VirtualCameraOutputPanel: View {
                         .buttonStyle(.edith(.borderless))
                 }
             }
-            VirtualCameraPanelSection(title: "In use by", dark: dark) {
+            VirtualCameraPanelSection(
+                title: "In use by", detail: "Meeting apps currently receiving your picture.",
+                dark: dark
+            ) {
                 let clients = model.snapshot?.clients ?? []
                 if clients.isEmpty {
                     Text(
-                        "No app is using OBS Virtual Camera. Edith keeps your camera off until one does."
+                        "No app is using the virtual camera yet. Edith keeps your real camera off until one does."
                     )
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkFaint(dark))

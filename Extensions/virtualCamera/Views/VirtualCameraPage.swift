@@ -67,7 +67,13 @@ struct VirtualCameraPage: View {
                                 systemImage: "slider.horizontal.3")
                         }
                         .buttonStyle(.edith(.secondary))
+                        .help("Frame, look, background, overlays and output settings")
                     }
+                },
+                accessory: {
+                    Text(model.meetingAppHint)
+                        .font(.edithText(.subheadline)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 })
         } content: {
             GeometryReader { geometry in
@@ -193,7 +199,7 @@ struct VirtualCameraStage: View {
                         .font(.system(size: UIScale.pt(32)))
                     Text("Camera stopped")
                         .font(.system(size: UIScale.pt(18), weight: .semibold))
-                    Text("Capture is off. Press Play to resume.")
+                    Text("Capture is off and meeting apps see no video. Press Play to start again.")
                         .font(.system(size: UIScale.pt(12)))
                 }
                 .foregroundStyle(.white.opacity(0.7))
@@ -205,10 +211,16 @@ struct VirtualCameraStage: View {
                         .font(.system(size: UIScale.pt(32)))
                     Text("No camera connected")
                         .font(.system(size: UIScale.pt(18), weight: .semibold))
-                    Text("Connect a camera, then refresh the camera list.")
-                        .font(.system(size: UIScale.pt(12)))
-                    Button("Refresh cameras") { model.refreshSources() }
-                        .buttonStyle(.edith(.secondary))
+                    Text(
+                        "Plug in a webcam, or use a video file or a window instead. Then refresh the camera list."
+                    )
+                    .font(.system(size: UIScale.pt(12)))
+                    HStack(spacing: UIScale.pt(8)) {
+                        Button("Choose video…") { model.chooseVideo() }
+                            .buttonStyle(.edith(.secondary))
+                        Button("Refresh cameras") { model.refreshSources() }
+                            .buttonStyle(.edith(.primary))
+                    }
                 }
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -228,12 +240,15 @@ struct VirtualCameraStage: View {
                 .multilineTextAlignment(.center)
                 .padding(UIScale.pt(16))
             } else if let title = model.previewLoadingTitle {
-                LoadingContainer(state: .loading) {
-                    EmptyView()
-                } placeholder: {
-                    LoadingIndicator(title).foregroundStyle(.white.opacity(0.7))
+                VStack(spacing: UIScale.pt(10)) {
+                    SkeletonBlock(width: 56, height: 56, corner: 14)
+                    SkeletonBlock(width: 160, height: 12)
+                    Text(title)
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(.white.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityElement(children: .combine)
             } else if model.needsCameraAccess && !model.hasPreviewFrame {
                 VirtualCameraAccessPrompt(model: model)
             }
@@ -331,9 +346,14 @@ struct VirtualCameraAccessPrompt: View {
             )
             .font(.system(size: UIScale.pt(15), weight: .semibold))
             .foregroundStyle(.white)
-            Text("Allow camera access to see the preview and frame your shot.")
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(.white.opacity(0.7))
+            Text(
+                model.cameraAccess == .notDetermined
+                    ? "Edith uses your camera only to show this preview and to send it to your meeting apps. Nothing is uploaded."
+                    : "Camera access was turned off for Edith. Turn it back on in System Settings, under Privacy & Security, Camera."
+            )
+            .padding(.horizontal, UIScale.pt(16))
+            .font(.system(size: UIScale.pt(12)))
+            .foregroundStyle(.white.opacity(0.7))
             Button(model.cameraAccess == .notDetermined ? "Allow camera" : "Open System Settings") {
                 model.requestCameraAccess()
             }
@@ -358,7 +378,7 @@ struct VirtualCameraSceneStrip: View {
                 Text("Scenes")
                     .font(.system(size: UIScale.pt(13), weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
-                Text("Switch with ⌘1 to ⌘9 or ed camera scene apply")
+                Text("A scene saves your framing, look and overlays. Switch with ⌘1 to ⌘9.")
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)

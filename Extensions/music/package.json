@@ -25,5 +25,32 @@
     "media",
     "extension:music"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Your music in one place, with playback that never gets in your way.",
+    "summary": "Play the songs in your music folder, save audio from YouTube links, or connect Spotify or YouTube Music. Playback keeps going when you close the window, and you control it from the menu bar, the notch or the terminal.",
+    "steps": [
+      {
+        "symbolName": "music.note.house",
+        "title": "Pick your music source",
+        "detail": "Use your local library, or connect Spotify or YouTube Music."
+      },
+      {
+        "symbolName": "arrow.down.circle",
+        "title": "Add songs",
+        "detail": "Download audio from a YouTube link, or copy files into your music folder."
+      },
+      {
+        "symbolName": "play.fill",
+        "title": "Press play",
+        "detail": "Open a folder or favourites and play it. Control it from the menu bar too."
+      }
+    ],
+    "examples": [
+      "ed music status",
+      "ed music play",
+      "ed music next",
+      "ed music volume 0.5"
+    ]
+  }
 }

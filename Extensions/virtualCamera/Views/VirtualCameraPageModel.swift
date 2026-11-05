@@ -429,6 +429,7 @@ final class VirtualCameraPageModel: ObservableObject {
     static let frameInterval = Duration.milliseconds(33)
     static let idleFrameInterval = Duration.milliseconds(250)
     static let statusInterval = Duration.milliseconds(250)
+    static let idleStatusInterval = Duration.milliseconds(1000)
 
     var statusHeadline: String {
         if state.privacy == .stopped { return "Stopped" }
@@ -473,7 +474,11 @@ final class VirtualCameraPageModel: ObservableObject {
                 while !Task.isCancelled {
                     guard let self, visible, !stopped else { return }
                     await refreshRemote()
-                    do { try await Task.sleep(for: Self.statusInterval) } catch { return }
+                    let busy = snapshot == nil || snapshot?.live == true || hasPreviewFrame
+                    do {
+                        try await Task.sleep(
+                            for: busy ? Self.statusInterval : Self.idleStatusInterval)
+                    } catch { return }
                 }
             }; return
         }

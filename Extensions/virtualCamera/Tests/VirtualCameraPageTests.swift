@@ -451,6 +451,22 @@ import Testing
         #expect(model.snapshot == snapshot)
     }
 
+    @Test func meetingHintNamesTheCameraToChooseInTheMeetingApp() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.injectForTesting(snapshot: nil, sources: [])
+        #expect(model.meetingAppHint.contains("Install Edith Camera"))
+        let snapshot = VirtualCameraSnapshot(
+            enabled: true, helperRunning: true, extensionInstalled: true, route: .edithCamera,
+            clients: [], live: false, format: .hd720, state: model.state)
+        model.receive(snapshot)
+        #expect(
+            model.meetingAppHint == "In Zoom, Meet or FaceTime, choose Edith Camera as your camera."
+        )
+        model.pause(.stopped)
+        #expect(model.meetingAppHint.contains("stopped"))
+    }
+
     @Test func appearingKeepsEditsThatWereNotSavedYet() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }

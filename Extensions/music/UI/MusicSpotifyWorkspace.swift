@@ -395,7 +395,12 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                     }.presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                 }
             }
-            if queueTab == "Queue", library.queueLoading { LoadingIndicator() }
+            if queueTab == "Queue", library.queueLoading {
+                VStack(spacing: UIScale.pt(8)) {
+                    ForEach(0..<3, id: \.self) { _ in SkeletonBlock(height: 36, corner: 6) }
+                }
+                .accessibilityLabel("Loading queue")
+            }
             if queueTab == "Queue", let error = library.queueError {
                 PageNotice(
                     error, tone: .error, actions: { Button("Retry") { library.showQueue() } })
@@ -440,21 +445,25 @@ struct EmbeddedMusicSpotifyWorkspace: View {
     }
 
     private var authorization: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-            Text("Your Spotify library").font(.edithText(.largeTitle)).fontWeight(.bold)
-            Text(
-                "Connect your library to browse playlists, Liked Songs, albums, and artists, or search for something new."
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            PageEmptyState(
+                symbolName: "music.note.list",
+                title: library.authorizing
+                    ? "Finish connecting in your browser" : "Connect your Spotify library",
+                message: library.authorizing
+                    ? "Approve Edith in the browser window that opened. This page updates by itself when you are done."
+                    : "Browse your playlists, Liked Songs, albums and artists, or search for something new. Edith only reads your library to show it here.",
+                primary: library.authorizing
+                    ? nil
+                    : PageAction(
+                        "Connect library", symbolName: "arrow.right",
+                        identifier: "music.spotify.connect-library"
+                    ) { library.authorize() },
+                footnote: "Spotify Premium is required to play music."
             )
-            .foregroundStyle(.secondary)
-            if library.authorizing {
-                HStack {
-                    LoadingIndicator(); Text("Finish connecting your library in your browser.")
-                }
-            } else {
-                Button("Connect library") { library.authorize() }.buttonStyle(.edith(.primary))
-            }
+            .frame(minHeight: UIScale.pt(360))
             if let error = library.error { PageNotice(error, tone: .error) }
-        }.padding(.vertical, UIScale.pt(40))
+        }
     }
 
     private var emptyMessage: String {

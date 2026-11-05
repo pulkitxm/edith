@@ -46,6 +46,9 @@ struct SocialManagerPage: View {
                     Label("Add", systemImage: "plus")
                 }
                 .disabled(!model.load.hasContent || model.busy)
+                .help(
+                    model.busy
+                        ? "Wait for the current change to finish" : "Add a profile or an account")
             } accessory: {
                 Text("Your profiles. Every platform. One workspace.")
                     .font(.edithText(.subheadline)).foregroundStyle(.secondary)
@@ -291,47 +294,96 @@ struct SocialManagerPage: View {
                 message: model.load.errorMessage ?? "Loading your profiles and connected accounts.",
                 layout: .cards, retry: { model.start() }
             ) {
-                VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                    if model.libraryView != .profiles {
-                        allAccounts
-                    } else if let profile = model.selectedProfile {
-                        Button("All profiles", systemImage: "chevron.left") {
-                            model.profileID = nil
+                if model.catalog.profiles.isEmpty {
+                    firstProfileState
+                } else if model.catalog.accounts.isEmpty, model.libraryView != .profiles {
+                    firstAccountState
+                } else {
+                    VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+                        if model.libraryView != .profiles {
+                            allAccounts
+                        } else if let profile = model.selectedProfile {
+                            Button("All profiles", systemImage: "chevron.left") {
+                                model.profileID = nil
+                            }
+                            accounts(for: profile)
+                        } else {
+                            PageSectionHeader(
+                                "Profiles",
+                                subtitle:
+                                    "Keep the social accounts for each person, brand or client together."
+                            )
+                            LazyVGrid(
+                                columns: PageMetrics.cardColumns(
+                                    compact, minimum: 250, spacing: 12, alignment: .topLeading),
+                                spacing: UIScale.pt(12)
+                            ) {
+                                ForEach(model.catalog.profiles) { profile in profileCard(profile) }
+                            }
                         }
-                        accounts(for: profile)
-                    } else {
-                        PageSectionHeader(
-                            "Profiles",
-                            subtitle:
-                                "Keep the social accounts for each person, brand or client together."
+                        Label(
+                            "Sign in on each website once. Cookies and website storage stay in that account's own persistent browser session on this Mac.",
+                            systemImage: "lock.shield"
                         )
-                        if model.catalog.profiles.isEmpty {
-                            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                                Text("Create your first profile").font(.edithText(.headline))
-                                Text(
-                                    "Add Personal, Studio or a client, then choose the Instagram, YouTube, X, LinkedIn and other accounts that belong to it."
-                                )
-                                .font(.edithText(.body)).foregroundStyle(.secondary)
-                                Button("Add profile", systemImage: "plus") { addingProfile = true }
-                            }.padding(UIScale.pt(20))
-                        }
-                        LazyVGrid(
-                            columns: PageMetrics.cardColumns(
-                                compact, minimum: 250, spacing: 12, alignment: .topLeading),
-                            spacing: UIScale.pt(12)
-                        ) {
-                            ForEach(model.catalog.profiles) { profile in profileCard(profile) }
-                        }
-                    }
-                    Label(
-                        "Sign in on each website once. Cookies and website storage stay in that account's own persistent browser session on this Mac.",
-                        systemImage: "lock.shield"
-                    )
-                    .font(.edithText(.caption)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                }.padding(.top, UIScale.pt(PageMetrics.top))
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }.padding(.top, UIScale.pt(PageMetrics.top))
+                }
             }
         }
+    }
+
+    private var firstProfileState: some View {
+        PageEmptyState(
+            symbolName: "person.crop.rectangle.stack",
+            title: "Keep every social account in one place",
+            message:
+                "Group the accounts for each person, brand or client into a profile, then open them side by side with each one staying signed in.",
+            steps: [
+                PageGuideStep(
+                    symbolName: "person.crop.circle.badge.plus", title: "Create a profile",
+                    detail: "Name it after a person, brand or client."),
+                PageGuideStep(
+                    symbolName: "plus.app", title: "Add accounts",
+                    detail: "Pick Instagram, YouTube, X, LinkedIn or any website."),
+                PageGuideStep(
+                    symbolName: "rectangle.split.2x1", title: "Sign in once, work side by side",
+                    detail: "Each account keeps its own login on this Mac."),
+            ],
+            primary: PageAction(
+                "Create your first profile", symbolName: "plus", identifier: "social.first-profile"
+            ) {
+                addingProfile = true
+            },
+            footnote:
+                "Logins stay in each account's own browser session on this Mac. Edith never sees your passwords."
+        )
+        .frame(minHeight: UIScale.pt(420))
+    }
+
+    private var firstAccountState: some View {
+        let profile = model.catalog.profiles.first
+        return PageEmptyState(
+            symbolName: "plus.app",
+            title: "Add your first account",
+            message:
+                "Choose a website such as Instagram, YouTube, X or LinkedIn, then sign in once. It stays signed in the next time you open it.",
+            primary: PageAction(
+                "Add account", symbolName: "plus", identifier: "social.first-account"
+            ) {
+                accountProfile = profile
+                addingAccount = true
+            },
+            secondary: PageAction(
+                "Add another profile", symbolName: "person.crop.circle.badge.plus"
+            ) {
+                addingProfile = true
+            },
+            footnote: profile.map {
+                "It will be added to \($0.name). You can move on later from the profile menu."
+            }
+        )
+        .frame(minHeight: UIScale.pt(420))
     }
 
     private func profileCard(_ profile: SocialProfile) -> some View {
@@ -435,15 +487,18 @@ struct SocialManagerPage: View {
                     .secondary)
                 Button("Reset filters") { model.resetAccountFilters() }
             } else if accounts.isEmpty {
-                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                    Text("Add accounts to \(profile.name)").font(.edithText(.headline))
-                    Text(
-                        "Choose Instagram, YouTube, X, LinkedIn or another website, then sign in. Only the accounts you add appear in this profile."
-                    )
-                    .font(.edithText(.body)).foregroundStyle(.secondary)
-                    Button("Add account") { addingAccount = true }.disabled(model.busy)
-                }
-                .padding(UIScale.pt(20))
+                PageEmptyState(
+                    symbolName: "plus.app", title: "Add accounts to \(profile.name)",
+                    message:
+                        "Choose Instagram, YouTube, X, LinkedIn or another website, then sign in once. Only the accounts you add appear in this profile.",
+                    primary: PageAction(
+                        "Add account", symbolName: "plus", identifier: "social.profile-add-account"
+                    ) {
+                        accountProfile = profile
+                        addingAccount = true
+                    }
+                )
+                .frame(minHeight: UIScale.pt(300)).disabled(model.busy)
             } else {
                 LazyVGrid(
                     columns: PageMetrics.cardColumns(

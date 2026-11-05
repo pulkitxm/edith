@@ -279,6 +279,7 @@ struct EmbeddedMusicPage: View {
             }
             .buttonStyle(.edith(.toolbar))
             .help(gridView ? "Show as list" : "Show as grid")
+            .accessibilityLabel(gridView ? "Show as list" : "Show as grid")
             Button {
                 if remote.showingFavourites {
                     remote.navigate(to: remote.folderPath)
@@ -293,6 +294,8 @@ struct EmbeddedMusicPage: View {
             }
             .buttonStyle(.edith(.toolbar))
             .help(remote.showingFavourites ? "Back to your folders" : "Show favourites")
+            .accessibilityLabel(
+                remote.showingFavourites ? "Back to your folders" : "Show favourites")
             Button {
                 newFolderName = ""
                 showNewFolder = true
@@ -301,6 +304,7 @@ struct EmbeddedMusicPage: View {
             }
             .buttonStyle(.edith(.toolbar))
             .help("New folder")
+            .accessibilityLabel("New folder")
             Button {
                 EmbeddedMusicRemote.shared.openLibrary()
             } label: {
@@ -308,6 +312,7 @@ struct EmbeddedMusicPage: View {
             }
             .buttonStyle(.edith(.toolbar))
             .help("Open music folder in Finder")
+            .accessibilityLabel("Open music folder in Finder")
             Button {
                 remote.rescan()
             } label: {
@@ -315,6 +320,7 @@ struct EmbeddedMusicPage: View {
             }
             .buttonStyle(.edith(.toolbar))
             .help("Rescan music folder")
+            .accessibilityLabel("Rescan music folder")
             Button {
                 showDownloader = true
             } label: {
@@ -322,6 +328,7 @@ struct EmbeddedMusicPage: View {
             }
             .buttonStyle(.edith(.toolbar))
             .help("Download YouTube audio")
+            .accessibilityLabel("Download YouTube audio")
         }
     }
 
@@ -435,21 +442,20 @@ struct EmbeddedMusicPage: View {
                     .pageContent(compact)
             }
         } else if filteredFolders.isEmpty && filteredTracks.isEmpty {
-            VStack(spacing: UIScale.pt(8)) {
-                Text(emptyMessage)
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(.secondary)
-                Text(
-                    remote.showingFavourites
-                        ? "Tap the heart on a track to add it here"
-                        : EmbeddedMusicPrivacyState.shared.hides(.music)
-                            ? "This music folder"
-                            : EmbeddedTrackMeta.url(for: remote.folderPath).path
-                )
-                .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(.tertiary)
-            }
+            EmbeddedMusicLocalEmptyState(
+                kind: .resolve(
+                    search: search, showingFavourites: remote.showingFavourites,
+                    folderPath: remote.folderPath),
+                folderLocation: EmbeddedMusicPrivacyState.shared.hides(.music)
+                    ? nil : EmbeddedTrackMeta.url(for: remote.folderPath).path,
+                download: { showDownloader = true },
+                openLibrary: { remote.openLibrary() },
+                clearSearch: { search = "" },
+                showFolders: { remote.navigate(to: remote.folderPath) },
+                goUp: {
+                    remote.navigate(to: (remote.folderPath as NSString).deletingLastPathComponent)
+                }
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
@@ -534,12 +540,6 @@ struct EmbeddedMusicPage: View {
                 )
             }
         }
-    }
-
-    private var emptyMessage: String {
-        if remote.showingFavourites { return "No favourites yet" }
-        return remote.folderPath.isEmpty
-            ? "No playable files in your music folder" : "This folder is empty"
     }
 
     private func beginFolderRename(_ folder: EmbeddedMusicFolder) {
