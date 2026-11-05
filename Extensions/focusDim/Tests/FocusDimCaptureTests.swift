@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -7,6 +8,9 @@ import Testing
 @testable import FocusDimExtension
 
 @MainActor @Suite(.serialized) struct FocusDimCaptureTests {
+    private static let wide = RenderCapture.Variant(
+        name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)
+
     private enum Fixture: String, CaseIterable {
         case off, ready, on, error
     }
@@ -30,8 +34,8 @@ import Testing
             if fixture != .off { await model.refresh() }
             #expect(model.active == (fixture != .off))
             #expect((model.error != nil) == (fixture == .error))
-            for variant in DeskSettingsCapture.variants {
-                let bitmap = try await DeskSettingsCapture.render(
+            for variant in RenderCapture.variants + RenderCapture.sheetVariants + [Self.wide] {
+                let rendered = try await RenderCapture.render(
                     "focusdim-\(fixture.rawValue)", variant: variant
                 ) {
                     ExtensionPageHost {
@@ -40,8 +44,8 @@ import Testing
                         }
                     }
                 }
-                #expect(bitmap.pixelsWide >= Int(variant.width))
-                #expect(DeskSettingsCapture.distinctColors(bitmap) > 20)
+                #expect(rendered.bitmap.pixelsWide >= Int(variant.width))
+                #expect(RenderCapture.distinctColors(rendered.bitmap) > 20)
             }
         }
     }
@@ -56,7 +60,10 @@ import Testing
             return ControlPresentation(client: nil, defaults: defaults) { _, _ in
                 throw NSError(
                     domain: "FocusDimCapture", code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "The connection to the extension was interrupted."])
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "The connection to the extension was interrupted."
+                    ])
             }
         case .ready, .on:
             return ControlPresentation(client: nil, defaults: defaults) { operation, _ in

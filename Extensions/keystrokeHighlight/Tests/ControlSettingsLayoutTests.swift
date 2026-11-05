@@ -17,7 +17,7 @@ import Testing
             rootView: state.withContext {
                 ExtensionPageHost {
                     ControlSettingsHost(presentation: model) {
-                        Form { KeystrokeHighlightRows(presentation: model) }.deskForm()
+                        Form { KeystrokeHighlightRows(presentation: model) }.settingsForm()
                     }
                 }
             })

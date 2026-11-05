@@ -38,6 +38,22 @@ public enum BifrostMode: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    public var emptyTitle: String {
+        switch self {
+        case .launcher: "No matches"
+        case .clipboard: "Nothing to show"
+        case .files: "No files found"
+        }
+    }
+
+    public var emptyHint: String {
+        switch self {
+        case .launcher: "Try an app name, a sum like 12 * 8, or a conversion like 5 km to mi."
+        case .clipboard: "Items you copy appear here when Clipboard is on."
+        case .files: "Try another word, or change where to look."
+        }
+    }
+
     public var showsDetail: Bool { self != .launcher }
 }
 

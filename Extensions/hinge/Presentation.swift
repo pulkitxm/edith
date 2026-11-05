@@ -1,5 +1,6 @@
 import CoreFoundation
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 import Observation
 
@@ -27,6 +28,7 @@ struct ControlPresentationState: Codable {
 }
 
 enum ControlPresentationContract {
+    static let pendingKey = "hingePendingPreferences"
     static let writable: Set<String> = [
         HingeState.activeKey, HingeSettings.effectStrength, HingeSettings.sideFill,
         HingeSettings.cropsTop, HingeSettings.blursByDistance, HingeSettings.hotKeyCode,
@@ -75,6 +77,12 @@ enum ControlPresentationContract {
         }
         for key in update.removed { defaults.removeObject(forKey: key) }
         for (key, value) in values { defaults.set(value, forKey: key) }
+    }
+
+    @MainActor static func applyQueued(defaults: UserDefaults) {
+        guard let queued = defaults.data(forKey: pendingKey) else { return }
+        try? update(queued, defaults: defaults)
+        defaults.removeObject(forKey: pendingKey)
     }
 
     static func valid(_ value: Any, for key: String) -> Bool {
@@ -127,7 +135,6 @@ final class ControlPresentation {
     private var reading = false
     private var readTask: Task<Void, Never>?
     private var callbacks: [UUID: Task<Void, Never>] = [:]
-    private static let pendingPreferencesKey = "hingePendingPreferences"
     private var applying = false
     private var engineSynced = false
     private var stopped = false
@@ -211,7 +218,7 @@ final class ControlPresentation {
     private func queuePreferences(_ values: [String: Any]) throws {
         var queued: [String: Any] = [:]
         var removed: Set<String> = []
-        if let data = defaults.data(forKey: Self.pendingPreferencesKey) {
+        if let data = defaults.data(forKey: ControlPresentationContract.pendingKey) {
             let update = try JSONDecoder().decode(ControlPreferenceUpdate.self, from: data)
             queued = try ControlPresentationContract.decode(
                 update.values, keys: ControlPresentationContract.writable)
@@ -235,7 +242,8 @@ final class ControlPresentation {
         }
         let update = ControlPreferenceUpdate(
             values: try ControlPresentationContract.encode(queued), removed: Array(removed))
-        defaults.set(try JSONEncoder().encode(update), forKey: Self.pendingPreferencesKey)
+        defaults.set(
+            try JSONEncoder().encode(update), forKey: ControlPresentationContract.pendingKey)
     }
 
     func refresh() async {
@@ -261,11 +269,13 @@ final class ControlPresentation {
         do {
             var data = try await invoke("hinge.ui.read", Data("{}".utf8))
             guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
-            if !engineSynced, let queued = defaults.data(forKey: Self.pendingPreferencesKey) {
+            if !engineSynced,
+                let queued = defaults.data(forKey: ControlPresentationContract.pendingKey)
+            {
                 _ = try await invoke("hinge.ui.update", queued)
                 guard !stopped, revision == self.revision, load.isCurrent(request) else { return }
-                if defaults.data(forKey: Self.pendingPreferencesKey) == queued {
-                    defaults.removeObject(forKey: Self.pendingPreferencesKey)
+                if defaults.data(forKey: ControlPresentationContract.pendingKey) == queued {
+                    defaults.removeObject(forKey: ControlPresentationContract.pendingKey)
                 }
                 data = try await invoke("hinge.ui.read", Data("{}".utf8))
             }
@@ -370,28 +380,4 @@ final class ControlPresentation {
 
 }
 
-import EdithExtensionUI
-import SwiftUI
-
-struct ControlSettingsHost<Content: View>: View {
-    let presentation: ControlPresentation
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        VStack(spacing: 0) {
-            PageLoading(
-                state: presentation.load.state, title: "Settings unavailable",
-                message: presentation.error ?? "The extension engine is unavailable.",
-                layout: .editor, retry: retry
-            ) { content() }
-        }
-        .pageRefresh(
-            active: presentation.active && presentation.running,
-            interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
-        ) {
-            await presentation.refresh()
-        }
-    }
-
-    private func retry() { presentation.retry() }
-}
+extension ControlPresentation: ControlSettingsPresenting {}

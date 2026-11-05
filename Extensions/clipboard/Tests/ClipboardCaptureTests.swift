@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -7,6 +8,9 @@ import Testing
 @testable import ClipboardExtension
 
 @MainActor @Suite(.serialized) struct ClipboardCaptureTests {
+    private static let wide = RenderCapture.Variant(
+        name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)
+
     private enum Fixture: String, CaseIterable {
         case loading, error, firstRun, populated, off
     }
@@ -16,12 +20,14 @@ import Testing
             let presentation = ClipboardPresentation(
                 send: Self.engine(fixture), available: fixture != .off)
             if fixture != .loading { await presentation.refresh() }
-            #expect(presentation.preferencesLoad.hasContent == ![.loading, .error].contains(fixture))
+            #expect(
+                presentation.preferencesLoad.hasContent == ![.loading, .error].contains(fixture))
             #expect((presentation.preferencesLoad.errorMessage != nil) == (fixture == .error))
-            for variant in DeskSettingsCapture.variants + [
-                .init(name: "full-light", width: 640, height: 2200, zoom: 1, scheme: .light)
+            for variant in RenderCapture.variants + RenderCapture.sheetVariants + [
+                Self.wide,
+                .init(name: "full-light", width: 640, height: 2200, zoom: 1, scheme: .light),
             ] {
-                let bitmap = try await DeskSettingsCapture.render(
+                let rendered = try await RenderCapture.render(
                     "clipboard-\(fixture.rawValue)", variant: variant, settle: .milliseconds(400)
                 ) {
                     ExtensionPageHost {
@@ -30,14 +36,45 @@ import Testing
                             openPalette: {}, presentation: presentation)
                     }
                 }
-                #expect(bitmap.pixelsWide >= Int(variant.width))
-                #expect(DeskSettingsCapture.distinctColors(bitmap) > 4)
+                #expect(rendered.bitmap.pixelsWide >= Int(variant.width))
+                #expect(RenderCapture.distinctColors(rendered.bitmap) > 4)
             }
             await presentation.stopAndWait()
         }
     }
 
-    private static func engine(_ fixture: Fixture) -> @MainActor (String, Data) async throws -> Data {
+    @Test func recentRowsAndHistorySheetRenderWithSyntheticEntries() async throws {
+        let presentation = ClipboardPresentation(send: Self.engine(.populated), available: true)
+        await presentation.refresh()
+        for variant in RenderCapture.variants + [Self.wide] where variant.zoom == 1 {
+            try await RenderCapture.render(
+                "clipboard-recent", variant: variant, settle: .milliseconds(700)
+            ) {
+                ExtensionPageHost {
+                    ClipboardPage(
+                        client: presentation.client, history: presentation.history,
+                        openPalette: {}, presentation: presentation
+                    )
+                    .environment(\.windowVisible, true)
+                    .environment(\.automaticViewActionsEnabled, true)
+                }
+            }
+        }
+        for variant in RenderCapture.sheetVariants where variant.zoom == 1 {
+            try await RenderCapture.render(
+                "clipboard-history-sheet", variant: variant, settle: .milliseconds(700)
+            ) {
+                ClipboardHistoryView(model: presentation.history)
+                    .environment(\.windowVisible, true)
+                    .environment(\.automaticViewActionsEnabled, true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        await presentation.stopAndWait()
+    }
+
+    private static func engine(_ fixture: Fixture) -> @MainActor (String, Data) async throws -> Data
+    {
         { operation, _ in
             switch fixture {
             case .loading:
@@ -47,7 +84,8 @@ import Testing
                 throw NSError(
                     domain: "ClipboardCapture", code: 1,
                     userInfo: [
-                        NSLocalizedDescriptionKey: "The connection to the extension was interrupted."
+                        NSLocalizedDescriptionKey:
+                            "The connection to the extension was interrupted."
                     ])
             case .firstRun, .populated, .off:
                 if operation == "clipboard.ui.preferences" {
@@ -56,7 +94,8 @@ import Testing
                 if operation == "clipboard.ui.snapshot" {
                     let entries = fixture == .populated ? Self.entries : []
                     return try ClipboardMessage.encode(
-                        ClipboardSnapshot(entries: entries, revision: "fixture", total: entries.count))
+                        ClipboardSnapshot(
+                            entries: entries, revision: "fixture", total: entries.count))
                 }
                 return Data("{}".utf8)
             }

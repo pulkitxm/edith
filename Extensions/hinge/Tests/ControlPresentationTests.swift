@@ -57,6 +57,53 @@ import Testing
         }
     }
 
+    @Test func idleEditsAreQueuedAndReachTheEngineWhenItStarts() throws {
+        let local = fixture()
+        let model = ControlPresentation(client: nil, defaults: local)
+        defer { model.stop() }
+        #expect(!model.active)
+        local.set(true, forKey: HingeState.activeKey)
+        local.set(0.5, forKey: HingeSettings.effectStrength)
+        model.changed()
+        let queued = try #require(local.data(forKey: ControlPresentationContract.pendingKey))
+        let engine = fixture()
+        engine.set(queued, forKey: ControlPresentationContract.pendingKey)
+        ControlPresentationContract.applyQueued(defaults: engine)
+        #expect(engine.bool(forKey: HingeState.activeKey))
+        #expect(engine.double(forKey: HingeSettings.effectStrength) == 0.5)
+        #expect(engine.data(forKey: ControlPresentationContract.pendingKey) == nil)
+    }
+
+    @Test func engineStartDiscardsAnUnreadableQueue() {
+        let engine = fixture()
+        engine.set(Data("not a queue".utf8), forKey: ControlPresentationContract.pendingKey)
+        engine.set(true, forKey: HingeState.activeKey)
+        ControlPresentationContract.applyQueued(defaults: engine)
+        #expect(engine.data(forKey: ControlPresentationContract.pendingKey) == nil)
+        #expect(engine.bool(forKey: HingeState.activeKey))
+    }
+
+    @Test func engineStopsReplayingAQueueItAlreadyApplied() async throws {
+        let defaults = fixture()
+        let update = ControlPreferenceUpdate(
+            values: try ControlPresentationContract.encode([HingeState.activeKey: true]),
+            removed: [])
+        defaults.set(
+            try JSONEncoder().encode(update), forKey: ControlPresentationContract.pendingKey)
+        ControlPresentationContract.applyQueued(defaults: defaults)
+        defaults.set(false, forKey: HingeState.activeKey)
+        var writes = 0
+        let model = ControlPresentation(client: nil, defaults: defaults) { operation, _ in
+            if operation == "hinge.ui.update" { writes += 1 }
+            return try ControlPresentationContract.snapshot(
+                defaults: defaults, state: ControlPresentationState())
+        }
+        defer { model.stop() }
+        await model.refresh()
+        #expect(writes == 0)
+        #expect(!defaults.bool(forKey: HingeState.activeKey))
+    }
+
     @Test func stoppedPresentationRejectsLateSnapshotAndNewActions() async throws {
         let defaults = fixture()
         var continuation: CheckedContinuation<Data, any Error>?

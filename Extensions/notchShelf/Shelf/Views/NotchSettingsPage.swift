@@ -3,6 +3,8 @@ import EdithExtensionUI
 import SwiftUI
 
 struct NotchSettingsPage: View {
+    private static let formHeaderInset = 10.0
+
     let model: NotchSettingsModel
 
     init(model: NotchSettingsModel) { self.model = model }
@@ -44,11 +46,14 @@ struct NotchSettingsPage: View {
                         } actions: {
                             Button("Try again") { Task { await model.refresh() } }
                         }
+                        .padding(.horizontal, -Self.formHeaderInset)
                     }
                     if !model.available {
                         PageNotice(
                             "Notch Shelf is switched off, so these settings are locked. Turn it on in Extensions to use the shelf, browser and alerts.",
-                            title: "Notch Shelf is not running", symbol: "power")
+                            title: "Notch Shelf is not running", symbol: "power"
+                        )
+                        .padding(.horizontal, -Self.formHeaderInset)
                     }
                     Text("Layout")
                 }
@@ -182,7 +187,7 @@ struct NotchSettingsPage: View {
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.6)
         }
-        .edithForm()
+        .settingsForm()
         .pageTask { await model.refresh() }
     }
 

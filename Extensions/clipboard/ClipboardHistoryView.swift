@@ -36,13 +36,16 @@ struct ClipboardHistoryView: View {
                 Spacer()
                 Button("Done") { dismiss() }
             }
-            .padding()
+            .padding(.horizontal, ClipboardHistoryRow.inset)
+            .padding(.vertical, UIScale.pt(14))
             if let error = model.error {
-                Text(error).settingsCaption().foregroundStyle(.red).padding(.horizontal)
+                Text(error).settingsCaption().foregroundStyle(.red)
+                    .padding(.horizontal, ClipboardHistoryRow.inset)
             }
             Divider()
             SearchField(placeholder: "Search…", text: $filterText, typeAhead: true)
-                .padding(UIScale.pt(10))
+                .padding(.horizontal, ClipboardHistoryRow.inset)
+                .padding(.vertical, UIScale.pt(10))
             VirtualList(
                 filtered, rowHeight: { _ in ClipboardHistoryRow.height }, header: { EmptyView() }
             ) { entry in
@@ -62,6 +65,7 @@ struct ClipboardHistoryView: View {
 
 private struct ClipboardHistoryRow: View {
     @MainActor static var height: CGFloat { UIScale.pt(58) }
+    @MainActor static var inset: CGFloat { UIScale.pt(14) }
 
     let entry: ClipboardEntry
     let model: ClipboardHistoryModel
@@ -118,7 +122,7 @@ private struct ClipboardHistoryRow: View {
             }
             .buttonStyle(.edith(.borderless))
         }
-        .padding(.horizontal, UIScale.pt(14))
+        .padding(.horizontal, Self.inset)
         .frame(height: Self.height)
         .overlay(alignment: .bottom) { Divider().opacity(0.6) }
     }

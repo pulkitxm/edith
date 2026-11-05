@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -7,6 +8,9 @@ import Testing
 @testable import WindowSweatersExtension
 
 @MainActor @Suite(.serialized) struct SweaterSettingsCaptureTests {
+    private static let wide = RenderCapture.Variant(
+        name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)
+
     private struct Failure: LocalizedError {
         var errorDescription: String? { "The Window Sweaters engine stopped responding." }
     }
@@ -20,18 +24,48 @@ import Testing
     private func page(_ model: ControlPresentation) -> some View {
         ExtensionPageHost {
             ControlSettingsHost(presentation: model) {
-                Form { WindowSweatersRows(presentation: model) }.edithForm()
+                Form { WindowSweatersRows(presentation: model) }.settingsForm()
             }
         }
     }
 
-    @Test func notRunningExplainsHowToTurnSweatersOn() async throws {
+    @Test func idlePageKeepsEveryControlUsable() async throws {
         reset()
+        SharedDefaults.store.set(false, forKey: SweaterState.activeKey)
         let model = ControlPresentation(client: nil, defaults: SharedDefaults.store)
         defer { model.stop() }
         #expect(!model.active)
-        for variant in SurfaceCapture.variants {
-            try await SurfaceCapture.render("sweaters-off", variant: variant) { page(model) }
+        for variant in RenderCapture.variants + [Self.wide] {
+            try await RenderCapture.render("sweaters-idle", variant: variant) { page(model) }
+        }
+        try await RenderCapture.withAccessibility {
+            let rendered = try await RenderCapture.render(
+                "sweaters-idle-usable", variant: RenderCapture.variants[0]
+            ) { page(model) }
+            let toggle = try #require(
+                RenderCapture.find(
+                    rendered.host,
+                    label:
+                        "Sweaters on, Shows or hides the knitting on every window. Your colours are kept."
+                ))
+            #expect((toggle as AnyObject).isAccessibilityEnabled?() == true)
+        }
+    }
+
+    @Test func sweatersTurnedOnWhileIdleSayWhenTheyStart() async throws {
+        reset()
+        let model = ControlPresentation(client: nil, defaults: SharedDefaults.store)
+        defer { model.stop() }
+        try await RenderCapture.withAccessibility {
+            for variant in (RenderCapture.variants + [Self.wide]) where variant.zoom == 1 {
+                let rendered = try await RenderCapture.render(
+                    "sweaters-idle-on", variant: variant
+                ) { page(model) }
+                #expect(
+                    RenderCapture.find(
+                        rendered.host,
+                        label: "Your choice is saved, so there is nothing else to do.") != nil)
+            }
         }
     }
 
@@ -42,8 +76,8 @@ import Testing
         }
         defer { model.stop() }
         #expect(model.active && model.error == nil)
-        for variant in SurfaceCapture.variants {
-            try await SurfaceCapture.render("sweaters-running", variant: variant) { page(model) }
+        for variant in RenderCapture.variants + [Self.wide] {
+            try await RenderCapture.render("sweaters-running", variant: variant) { page(model) }
         }
     }
 
@@ -57,8 +91,9 @@ import Testing
         let deadline = ContinuousClock.now + .seconds(3)
         while model.error == nil, ContinuousClock.now < deadline { await Task.yield() }
         #expect(model.error == "The Window Sweaters engine stopped responding.")
-        for variant in SurfaceCapture.variants where variant.zoom == 1 && !variant.compact {
-            try await SurfaceCapture.render("sweaters-error", variant: variant) { page(model) }
+        for variant in RenderCapture.variants + [Self.wide]
+        where variant.zoom == 1 && !variant.compact {
+            try await RenderCapture.render("sweaters-error", variant: variant) { page(model) }
         }
     }
 }

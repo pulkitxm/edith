@@ -112,7 +112,7 @@ final class EmojiService: ExtensionService {
         return NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    Form { EmojiSettingsRows(presentation: presentation) }.deskForm()
+                    Form { EmojiSettingsRows(presentation: presentation) }.settingsForm()
                 }
             })
     }

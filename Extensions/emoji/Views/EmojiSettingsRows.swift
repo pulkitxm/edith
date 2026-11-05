@@ -18,14 +18,15 @@ struct EmojiSettingsRows: View {
         Group {
             if !enabled {
                 Section {
-                    DeskSettingsNotice(
-                        title: "Emoji Picker is off",
-                        message: "Turn it on to type emoji from any app and change these settings.")
+                    SettingsNoticeRow(
+                        "Emoji Picker is off",
+                        message: "Turn it on to type emoji from any app and change these settings.",
+                        symbol: "power.circle.fill")
                 }
             } else if presentation.ready, let error = presentation.error {
                 Section {
-                    DeskSettingsError(
-                        title: "Emoji Picker is not responding", message: error,
+                    SettingsErrorRow(
+                        "Emoji Picker is not responding", message: error,
                         retry: presentation.retry)
                 }
             }
@@ -38,7 +39,7 @@ struct EmojiSettingsRows: View {
                         Text("Type an emoji")
                         Text("Search by name, then press Return to type it where your cursor is.")
                     }
-                    DeskShortcutRow(
+                    SettingsShortcutRow(
                         keyPrefix: "emojiHotKey", defaultLabel: "\u{2303}\u{21E7}E",
                         purpose: "Opens the picker over whatever you are typing in.")
                 }
@@ -59,21 +60,23 @@ struct EmojiSettingsRows: View {
                         Text("Skin tone")
                         Text("Used for every emoji that has skin tones.")
                     }
-                    LabeledContent {
+                    SettingsRow(
+                        "Favorites to show",
+                        subtitle:
+                            "Your most used emoji, pinned to the top of the picker. Set 0 to hide them."
+                    ) {
                         HStack(spacing: UIScale.pt(8)) {
                             Text("\(frequentCount)")
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
                                 .frame(minWidth: UIScale.pt(28), alignment: .trailing)
                             Stepper(
-                                "Favorites to show", value: $frequentCount.notifyingSettingsChange(),
+                                "Favorites to show",
+                                value: $frequentCount.notifyingSettingsChange(),
                                 in: 0...EmojiCatalogSummary.maxFrequentCount
                             )
                             .labelsHidden()
                         }
-                    } label: {
-                        Text("Favorites to show")
-                        Text("Your most used emoji, pinned to the top of the picker. Set 0 to hide them.")
                     }
                 } header: {
                     Text("Picker")
@@ -89,12 +92,14 @@ struct EmojiSettingsRows: View {
             if enabled, frequentCount > 0 {
                 Section("Your favorites") {
                     if frequent.isEmpty {
-                        LabeledContent {
-                            EmptyView()
-                        } label: {
+                        VStack(spacing: UIScale.pt(2)) {
                             Text("No favorites yet")
                             Text("Emoji you type with the picker show up here, most used first.")
+                                .settingsCaption()
                         }
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityElement(children: .combine)
                     } else {
                         EmojiFrequentGrid(characters: frequent)
                         LabeledContent {
@@ -126,13 +131,18 @@ struct EmojiSettingsRows: View {
 }
 
 private struct EmojiFrequentGrid: View {
+    private static let columnsPerRow = 12
+
     let characters: [String]
 
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: UIScale.pt(8)),
+            count: min(characters.count, Self.columnsPerRow))
+    }
+
     var body: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(32)), spacing: UIScale.pt(8))],
-            alignment: .leading, spacing: UIScale.pt(8)
-        ) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(8)) {
             ForEach(characters, id: \.self) { character in
                 Text(character)
                     .font(.system(size: UIScale.pt(22)))

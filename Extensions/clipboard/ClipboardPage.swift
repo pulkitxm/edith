@@ -17,10 +17,11 @@ struct ClipboardPage: View {
     var body: some View {
         Group {
             if loading {
-                PageSkeleton(layout: .editor)
-                    .padding(UIScale.pt(20))
+                PageSkeleton(layout: .form)
+                    .padding(PageMetrics.groupedFormInset)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            } else if let presentation, presentation.available, !presentation.preferencesLoad.hasContent,
+            } else if let presentation, presentation.available,
+                !presentation.preferencesLoad.hasContent,
                 let error = presentation.preferencesLoad.errorMessage
             {
                 PageEmptyState(
@@ -36,7 +37,7 @@ struct ClipboardPage: View {
                         client: client, history: history, presentation: presentation,
                         openPalette: openPalette)
                 }
-                .deskForm()
+                .settingsForm()
             }
         }
         .disabled(presentation?.stopped == true)

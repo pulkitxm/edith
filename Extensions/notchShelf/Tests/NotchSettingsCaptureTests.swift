@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -8,6 +9,9 @@ import Testing
 @testable import NotchShelfExtension
 
 @MainActor @Suite(.serialized) struct NotchSettingsCaptureTests {
+    private static let wide = RenderCapture.Variant(
+        name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)
+
     private struct Failure: LocalizedError {
         var errorDescription: String? {
             "Notch Shelf did not answer. Its settings may be out of date."
@@ -21,8 +25,8 @@ import Testing
     @Test func notRunningLocksSettingsAndSaysWhy() async throws {
         let model = NotchSettingsModel(client: nil)
         #expect(!model.available)
-        for variant in SurfaceCapture.variants {
-            try await SurfaceCapture.render("notch-settings-off", variant: variant) { page(model) }
+        for variant in [Self.wide] + RenderCapture.variants {
+            try await RenderCapture.render("notch-settings-off", variant: variant) { page(model) }
         }
     }
 
@@ -34,8 +38,8 @@ import Testing
             try JSONEncoder().encode(snapshot)
         }
         #expect(model.available && model.error == nil)
-        for variant in SurfaceCapture.variants {
-            try await SurfaceCapture.render("notch-settings-running", variant: variant) {
+        for variant in [Self.wide] + RenderCapture.variants {
+            try await RenderCapture.render("notch-settings-running", variant: variant) {
                 page(model)
             }
         }
@@ -45,8 +49,9 @@ import Testing
         let model = NotchSettingsModel(snapshot: .empty) { _, _ in throw Failure() }
         await model.refresh()
         #expect(model.error == "Notch Shelf did not answer. Its settings may be out of date.")
-        for variant in SurfaceCapture.variants where variant.zoom == 1 && !variant.compact {
-            try await SurfaceCapture.render("notch-settings-error", variant: variant) {
+        for variant in [Self.wide] + RenderCapture.variants
+        where variant.zoom == 1 && !variant.compact {
+            try await RenderCapture.render("notch-settings-error", variant: variant) {
                 page(model)
             }
         }
@@ -55,8 +60,8 @@ import Testing
 
 @MainActor @Suite(.serialized) struct NotchCameraCaptureTests {
     @Test func cameraPermissionStatesShowOneClearAction() async throws {
-        let notch = SurfaceCapture.Variant(
-            name: "notch", size: CGSize(width: 560, height: 260), scheme: .dark, zoom: 1)
+        let notch = RenderCapture.Variant(
+            name: "notch", width: 560, height: 260, zoom: 1, scheme: .dark)
         for (name, status) in [
             ("prompt", AVAuthorizationStatus.notDetermined), ("denied", .denied),
         ] {
@@ -68,7 +73,7 @@ import Testing
             ) { _, _ in try JSONEncoder().encode(state) }
             await client.load()
             #expect(client.state?.authorization == status.rawValue)
-            try await SurfaceCapture.render("notch-camera-\(name)", variant: notch) {
+            try await RenderCapture.render("notch-camera-\(name)", variant: notch) {
                 NotchRemoteCameraTab(model: client).background(.black)
             }
             client.stop()

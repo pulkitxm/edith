@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import Foundation
 import Testing
 @testable import NotchShelfExtension

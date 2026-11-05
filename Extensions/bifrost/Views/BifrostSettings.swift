@@ -28,12 +28,12 @@ struct BifrostSettings: View {
                             Task { await context.load() }
                         })
                 } else {
-                    PageSkeleton(layout: .editor)
-                        .padding(UIScale.pt(20))
+                    PageSkeleton(layout: .form)
+                        .padding(PageMetrics.groupedFormInset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
             } else {
-                Form { BifrostRows(error: context?.error) }.deskForm()
+                Form { BifrostRows(error: context?.error) }.settingsForm()
             }
         }
         .pageTask { await context?.load() }

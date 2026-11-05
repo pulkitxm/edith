@@ -57,6 +57,53 @@ import Testing
         }
     }
 
+    @Test func idleEditsAreQueuedAndReachTheEngineWhenItStarts() throws {
+        let local = fixture()
+        let model = ControlPresentation(client: nil, defaults: local)
+        defer { model.stop() }
+        #expect(!model.active)
+        local.set(true, forKey: SweaterState.activeKey)
+        local.set(0.5, forKey: AppStorageKeys.WindowSweaters.unfocusedDim)
+        model.changed()
+        let queued = try #require(local.data(forKey: ControlPresentationContract.pendingKey))
+        let engine = fixture()
+        engine.set(queued, forKey: ControlPresentationContract.pendingKey)
+        ControlPresentationContract.applyQueued(defaults: engine)
+        #expect(engine.bool(forKey: SweaterState.activeKey))
+        #expect(engine.double(forKey: AppStorageKeys.WindowSweaters.unfocusedDim) == 0.5)
+        #expect(engine.data(forKey: ControlPresentationContract.pendingKey) == nil)
+    }
+
+    @Test func engineStartDiscardsAnUnreadableQueue() {
+        let engine = fixture()
+        engine.set(Data("not a queue".utf8), forKey: ControlPresentationContract.pendingKey)
+        engine.set(true, forKey: SweaterState.activeKey)
+        ControlPresentationContract.applyQueued(defaults: engine)
+        #expect(engine.data(forKey: ControlPresentationContract.pendingKey) == nil)
+        #expect(engine.bool(forKey: SweaterState.activeKey))
+    }
+
+    @Test func engineStopsReplayingAQueueItAlreadyApplied() async throws {
+        let defaults = fixture()
+        let update = ControlPreferenceUpdate(
+            values: try ControlPresentationContract.encode([SweaterState.activeKey: true]),
+            removed: [])
+        defaults.set(
+            try JSONEncoder().encode(update), forKey: ControlPresentationContract.pendingKey)
+        ControlPresentationContract.applyQueued(defaults: defaults)
+        defaults.set(false, forKey: SweaterState.activeKey)
+        var writes = 0
+        let model = ControlPresentation(client: nil, defaults: defaults) { operation, _ in
+            if operation == "windowSweaters.ui.update" { writes += 1 }
+            return try ControlPresentationContract.snapshot(
+                defaults: defaults, state: ControlPresentationState())
+        }
+        defer { model.stop() }
+        await model.refresh()
+        #expect(writes == 0)
+        #expect(!defaults.bool(forKey: SweaterState.activeKey))
+    }
+
     @Test func stoppedPresentationRejectsLateSnapshotAndNewActions() async throws {
         let defaults = fixture()
         var continuation: CheckedContinuation<Data, any Error>?

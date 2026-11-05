@@ -1,5 +1,6 @@
 import CoreFoundation
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 import Observation
 
@@ -367,24 +368,4 @@ final class ControlPresentation {
 
 }
 
-import EdithExtensionUI
-import SwiftUI
-
-struct ControlSettingsHost<Content: View>: View {
-    let presentation: ControlPresentation
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        PageLoading(
-            state: presentation.load.state, title: "Settings unavailable",
-            message: presentation.error ?? "The extension engine is unavailable.",
-            layout: .editor, retry: presentation.retry
-        ) { content() }
-        .pageRefresh(
-            active: presentation.active && presentation.running,
-            interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
-        ) {
-            await presentation.refresh()
-        }
-    }
-}
+extension ControlPresentation: ControlSettingsPresenting {}

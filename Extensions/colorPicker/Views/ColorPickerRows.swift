@@ -23,14 +23,15 @@ struct ColorPickerRows: View {
         Group {
             if !presentation.active {
                 Section {
-                    DeskSettingsNotice(
-                        title: "Color Picker is off",
-                        message: "Turn it on to pick colors and change these settings.")
+                    SettingsNoticeRow(
+                        "Color Picker is off",
+                        message: "Turn it on to pick colors and change these settings.",
+                        symbol: "power.circle.fill")
                 }
             } else if presentation.ready, let error = presentation.error {
                 Section {
-                    DeskSettingsError(
-                        title: "Color Picker is not responding", message: error,
+                    SettingsErrorRow(
+                        "Color Picker is not responding", message: error,
                         retry: presentation.retry)
                 }
             }
@@ -42,9 +43,10 @@ struct ColorPickerRows: View {
                     } label: {
                         Text("Pick a color")
                         Text(
-                            "Opens a magnifier over your screen. Click any pixel to copy its color.")
+                            "Opens a magnifier over your screen. Click any pixel to copy its color."
+                        )
                     }
-                    DeskShortcutRow(
+                    SettingsShortcutRow(
                         keyPrefix: "colorPickerHotKey", defaultLabel: "\u{2303}\u{2325}\u{2318}C",
                         purpose: "Opens the magnifier from any app.")
                 }
@@ -67,7 +69,10 @@ struct ColorPickerRows: View {
                             "sRGB matches the web. Display P3 keeps the extra colors of wide-color screens."
                         )
                     }
-                    LabeledContent {
+                    SettingsRow(
+                        "Colors to remember",
+                        subtitle: "Older colors are removed once the list is full."
+                    ) {
                         HStack(spacing: UIScale.pt(8)) {
                             Text("\(historySize)")
                                 .monospacedDigit()
@@ -79,9 +84,6 @@ struct ColorPickerRows: View {
                             )
                             .labelsHidden()
                         }
-                    } label: {
-                        Text("Colors to remember")
-                        Text("Older colors are removed once the list is full.")
                     }
                 }
             }
@@ -91,14 +93,16 @@ struct ColorPickerRows: View {
             if presentation.active {
                 Section {
                     if history.isEmpty {
-                        LabeledContent {
-                            EmptyView()
-                        } label: {
+                        VStack(spacing: UIScale.pt(2)) {
                             Text("No colors yet")
                             Text(
                                 "Colors you pick appear here, newest first. Click one to copy it again."
                             )
+                            .settingsCaption()
                         }
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityElement(children: .combine)
                     } else {
                         ColorSwatchGrid(history: history, defaultFormat: copyFormat)
                     }

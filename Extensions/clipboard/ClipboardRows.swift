@@ -59,15 +59,16 @@ struct ClipboardRows: View {
         Group {
             if !available {
                 Section {
-                    DeskSettingsNotice(
-                        title: "Clipboard is off",
-                        message: "Nothing you copy is being recorded. Turn it on to keep a history and change these settings."
-                    )
+                    SettingsNoticeRow(
+                        "Clipboard is off",
+                        message:
+                            "Nothing you copy is being recorded. Turn it on to keep a history and change these settings.",
+                        symbol: "power.circle.fill")
                 }
             } else if let error = presentation?.error {
                 Section {
-                    DeskSettingsError(
-                        title: "A change was not saved", message: error,
+                    SettingsErrorRow(
+                        "A change was not saved", message: error,
                         retry: { Task { await presentation?.refresh() } })
                 }
             }
@@ -80,7 +81,7 @@ struct ClipboardRows: View {
                         Text("Paste something again")
                         Text("Search everything you copied recently and pick an item to paste it.")
                     }
-                    DeskShortcutRow(
+                    SettingsShortcutRow(
                         keyPrefix: "clipboardHotKey", defaultLabel: "\u{2303}\u{21E7}C",
                         purpose: "Opens your clipboard history from any app.")
                 }
@@ -123,8 +124,8 @@ struct ClipboardRows: View {
     @ViewBuilder private var recentSection: some View {
         Section("Recently copied") {
             if let error = recent.error, recent.entries.isEmpty {
-                DeskSettingsError(
-                    title: "Recent items did not load", message: error, retry: reload)
+                SettingsErrorRow(
+                    "Recent items did not load", message: error, retry: reload)
             } else if recent.loading, recent.entries.isEmpty {
                 ForEach(0..<3, id: \.self) { _ in
                     SkeletonGroup {
@@ -134,17 +135,21 @@ struct ClipboardRows: View {
                                 SkeletonBlock(width: 220, height: 10, corner: 4)
                                 SkeletonBlock(width: 120, height: 8, corner: 4)
                             }
+                            Spacer(minLength: 0)
+                            SkeletonBlock(width: 64, height: 10, corner: 4)
                         }
                     }
                 }
                 .accessibilityLabel("Loading clipboard history")
             } else if recent.entries.isEmpty {
-                LabeledContent {
-                    EmptyView()
-                } label: {
+                VStack(spacing: UIScale.pt(2)) {
                     Text("Nothing copied yet")
                     Text("Copy some text, a link or an image in any app and it shows up here.")
+                        .settingsCaption()
                 }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
             } else {
                 ForEach(recent.entries) { entry in
                     ClipboardRecentRow(entry: entry)
@@ -164,7 +169,8 @@ struct ClipboardRows: View {
         Section {
             Toggle(isOn: binding(\.capturePaused)) {
                 Text("Pause recording")
-                Text("New copies are ignored until you turn this off. Your history stays available.")
+                Text(
+                    "New copies are ignored until you turn this off. Your history stays available.")
             }
             Toggle(isOn: binding(\.saveText)) {
                 Text("Keep text and links")
@@ -175,7 +181,11 @@ struct ClipboardRows: View {
             Toggle(isOn: binding(\.saveFiles)) {
                 Text("Keep files")
             }
-            LabeledContent {
+            SettingsRow(
+                "Ignored apps",
+                subtitle:
+                    "Copies made in these apps are never recorded. Password managers are listed already."
+            ) {
                 TextField(
                     "Ignored apps", text: binding(\.ignoredApps),
                     prompt: Text("com.example.app, com.other.app")
@@ -185,9 +195,6 @@ struct ClipboardRows: View {
                 .multilineTextAlignment(.leading)
                 .lineLimit(1)
                 .frame(width: UIScale.pt(220))
-            } label: {
-                Text("Ignored apps")
-                Text("Copies made in these apps are never recorded. Password managers are listed already.")
             }
         } header: {
             Text("Recording")
@@ -207,14 +214,17 @@ struct ClipboardRows: View {
                     })
             ) {
                 Text("Paste for me")
-                Text("Picking an item pastes it into the app you were using, instead of only copying it.")
+                Text(
+                    "Picking an item pastes it into the app you were using, instead of only copying it."
+                )
             }
             if preferences.autoPaste, !preferences.accessibilityGranted {
                 LabeledContent {
                     Button("Allow Access", action: requestPermission)
                         .buttonStyle(.edith(.secondary))
                 } label: {
-                    Text(Image(systemName: "exclamationmark.triangle.fill")).foregroundColor(.orange)
+                    Text(Image(systemName: "exclamationmark.triangle.fill")).foregroundColor(
+                        .orange)
                         + Text(" Accessibility is needed")
                     Text("Until you allow it, picking an item only copies it.")
                 }
@@ -228,17 +238,17 @@ struct ClipboardRows: View {
 
     @ViewBuilder private var historySection: some View {
         Section("History") {
-            LabeledContent {
+            SettingsRow(
+                "Items to keep",
+                subtitle: "The oldest unpinned item is removed when the list is full."
+            ) {
                 HStack(spacing: UIScale.pt(8)) {
                     EdithNumberField(value: boundedMaxItems, width: UIScale.pt(64))
                     Stepper("Items to keep", value: boundedMaxItems, in: 1...999)
                         .labelsHidden()
                 }
-            } label: {
-                Text("Items to keep")
-                Text("The oldest unpinned item is removed when the list is full.")
             }
-            LabeledContent {
+            SettingsRow("Largest item", subtitle: "Bigger copies are skipped and not saved.") {
                 HStack(spacing: UIScale.pt(8)) {
                     Text("\(maxItemMB.wrappedValue) MB")
                         .monospacedDigit()
@@ -249,9 +259,6 @@ struct ClipboardRows: View {
                     )
                     .labelsHidden()
                 }
-            } label: {
-                Text("Largest item")
-                Text("Bigger copies are skipped and not saved.")
             }
             Picker(selection: binding(\.maxAgeDays)) {
                 Text("Never").tag(0)
@@ -262,7 +269,10 @@ struct ClipboardRows: View {
                 Text("Delete old items")
                 Text("Pinned items are always kept.")
             }
-            LabeledContent {
+            SettingsRow(
+                "Check for copies every",
+                subtitle: "Longer saves battery. Shorter catches quick copies in a row."
+            ) {
                 HStack(spacing: UIScale.pt(8)) {
                     Text(String(format: "%.1f s", preferences.checkInterval))
                         .monospacedDigit()
@@ -273,9 +283,6 @@ struct ClipboardRows: View {
                     )
                     .labelsHidden()
                 }
-            } label: {
-                Text("Check for copies every")
-                Text("Longer saves battery. Shorter catches quick copies in a row.")
             }
         }
     }
@@ -340,19 +347,20 @@ private struct ClipboardRecentRow: View {
     let entry: ClipboardEntry
 
     var body: some View {
-        LabeledContent {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            Image(systemName: ClipboardCategory(entry).symbol)
+                .foregroundStyle(.secondary)
+                .frame(width: UIScale.pt(20))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(entry.displayPreview).lineLimit(1).truncationMode(.tail)
+                Text(entry.sourceApp ?? "Unknown app").settingsCaption()
+            }
+            Spacer(minLength: UIScale.pt(PageMetrics.controlSpacing))
             Text(entry.createdAt.formatted(.relative(presentation: .named)))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-        } label: {
-            Label {
-                Text(entry.displayPreview).lineLimit(1).truncationMode(.tail)
-                Text(entry.sourceApp ?? "Unknown app")
-            } icon: {
-                Image(systemName: ClipboardCategory(entry).symbol)
-                    .foregroundStyle(.secondary)
-            }
         }
+        .accessibilityElement(children: .combine)
     }
 }
 

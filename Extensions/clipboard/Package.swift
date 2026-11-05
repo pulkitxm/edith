@@ -15,6 +15,10 @@ let package = Package(
             ], path: ".", exclude: ["Tests", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "ClipboardExtensionTests", dependencies: ["ClipboardExtension"], path: "Tests",
-            swiftSettings: [.swiftLanguageMode(.v5)]),
+            name: "ClipboardExtensionTests",
+            dependencies: [
+                "ClipboardExtension",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ],
+            path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

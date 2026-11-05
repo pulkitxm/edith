@@ -22,14 +22,15 @@ struct KeystrokeHighlightRows: View {
         Group {
             if !presentation.active {
                 Section {
-                    DeskSettingsNotice(
-                        title: "Keystroke Highlight is off",
-                        message: "Turn it on to show your key presses and change these settings.")
+                    SettingsNoticeRow(
+                        "Keystroke Highlight is off",
+                        message: "Turn it on to show your key presses and change these settings.",
+                        symbol: "power.circle.fill")
                 }
             } else if presentation.ready, let error = presentation.error {
                 Section {
-                    DeskSettingsError(
-                        title: "Keystroke Highlight is not responding", message: error,
+                    SettingsErrorRow(
+                        "Keystroke Highlight is not responding", message: error,
                         retry: presentation.retry)
                 }
             }
@@ -41,7 +42,7 @@ struct KeystrokeHighlightRows: View {
                             "Draws the keys you press as keycaps on screen, handy for demos and recordings."
                         )
                     }
-                    DeskShortcutRow(
+                    SettingsShortcutRow(
                         keyPrefix: "keystrokeHighlightHotKey",
                         defaultLabel: "\u{2303}\u{2325}\u{2318}K",
                         purpose: "Starts or pauses the keycaps from any app.")
@@ -55,10 +56,10 @@ struct KeystrokeHighlightRows: View {
                         Text("Position")
                         Text("The edge of the screen where keycaps appear.")
                     }
-                    DeskSliderRow(
-                        title: "Stay visible", detail: "How long each key stays before it fades.",
+                    SettingsSliderRow(
+                        "Stay visible", subtitle: "How long each key stays before it fades.",
                         value: $duration.notifyingSettingsChange(),
-                        range: KeystrokeHighlightSettings.durationRange, step: 0.25,
+                        in: KeystrokeHighlightSettings.durationRange, step: 0.25,
                         readout: String(format: "%.2g s", duration))
                     LabeledContent {
                         KeystrokeCapPreview()
@@ -78,22 +79,22 @@ struct KeystrokeHighlightRows: View {
 
     @ViewBuilder private var status: some View {
         if !active {
-            LabeledContent {
+            SettingsRow(
+                "Keyboard monitoring",
+                subtitle: "Edith is not reading key presses. Turn on Show keystrokes to start."
+            ) {
                 Text("Paused").foregroundStyle(.secondary)
-            } label: {
-                Text("Keyboard monitoring")
-                Text("Edith is not reading key presses. Turn on Show keystrokes to start.")
             }
         } else if runtimeError.isEmpty {
-            LabeledContent {
+            SettingsRow(
+                "Keyboard monitoring",
+                subtitle: "Key presses are only used to draw the keycaps and are never saved."
+            ) {
                 Label(
                     runtimeActive ? "Active" : "Starting",
                     systemImage: runtimeActive ? "checkmark.circle.fill" : "clock"
                 )
                 .foregroundStyle(runtimeActive ? Color.green : Color.secondary)
-            } label: {
-                Text("Keyboard monitoring")
-                Text("Key presses are only used to draw the keycaps and are never saved.")
             }
         } else {
             LabeledContent {

@@ -17,90 +17,75 @@ struct HingeRows: View {
         var sensorAvailable = false
     @AppStorage(HingeSettings.status, store: SharedDefaults.store) private var status = ""
 
+    private var calibratable: Bool { presentation.active && sensorAvailable }
+
+    private var openPositionHint: String {
+        if !presentation.active { return "You can set this while the fold is running." }
+        return sensorAvailable
+            ? "Open the lid the way you normally work, then press Use current angle."
+            : "This Mac has no lid angle sensor Hinge can read, so the fold cannot follow the lid."
+    }
+
     var body: some View {
         Form {
             Section {
-                Group {
-                    Toggle(isOn: $active.notifyingSettingsChange()) {
-                        Text("Fold the desktop")
-                        Text("Turning it off puts the screen straight back to normal.")
+                Toggle(isOn: $active.notifyingSettingsChange()) {
+                    Text("Fold the desktop")
+                    Text("Turning it off puts the screen straight back to normal.")
+                }
+                if active && !presentation.active {
+                    SettingsNoticeRow(
+                        "Starts the next time Edith opens",
+                        message: "Your choice is saved, so there is nothing else to do.",
+                        symbol: "clock.fill")
+                }
+                if !status.isEmpty {
+                    Label {
+                        Text(status).fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(
+                            .orange)
                     }
-                    if !status.isEmpty {
-                        Label {
-                            Text(status).fixedSize(horizontal: false, vertical: true)
-                        } icon: {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(
-                                .orange)
-                        }
-                        .font(.edithText(.subheadline))
-                    }
-                    LabeledContent {
-                        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
-                            Text("\(Int(openAngle.rounded()))°")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                            Button("Use current angle") { presentation.perform("calibrate") }
-                                .buttonStyle(.edith(.secondary))
-                                .disabled(!sensorAvailable)
-                                .help(
-                                    sensorAvailable
-                                        ? "Saves the lid angle right now as your open position."
-                                        : "Needs a Mac with a lid angle sensor.")
-                        }
-                    } label: {
-                        Text("Open position")
-                        Text(
-                            sensorAvailable || !presentation.active
-                                ? "Open the lid the way you normally work, then press Use current angle."
-                                : "This Mac has no lid angle sensor Hinge can read, so the fold cannot follow the lid."
-                        )
-                    }
-                    LabeledContent {
-                        HotKeyRecorderControl(keyPrefix: "hingeHotKey", defaultLabel: "⌃⌥H")
-                    } label: {
-                        Text("Shortcut")
-                        Text("Turns the fold on or off from anywhere.")
+                    .font(.edithText(.subheadline))
+                }
+                SettingsRow("Open position", subtitle: openPositionHint) {
+                    HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+                        Text("\(Int(openAngle.rounded()))°")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        Button("Use current angle") { presentation.perform("calibrate") }
+                            .buttonStyle(.edith(.secondary))
+                            .disabled(!calibratable)
+                            .help(
+                                calibratable
+                                    ? "Saves the lid angle right now as your open position."
+                                    : openPositionHint)
                     }
                 }
-                .disabled(!presentation.active)
-                .opacity(presentation.active ? 1 : 0.6)
+                SettingsShortcutRow(
+                    keyPrefix: "hingeHotKey", defaultLabel: "⌃⌥H",
+                    purpose: "Turns the fold on or off from anywhere.")
             } header: {
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     HingeIntro()
+                        .padding(.horizontal, -HingeIntro.formHeaderInset)
                     if presentation.ready, let error = presentation.error {
                         PageNotice(error, title: "Settings could not be saved", tone: .warning) {
                             EmptyView()
                         } actions: {
                             Button("Try again") { presentation.retry() }
                         }
-                    }
-                    if !presentation.active {
-                        PageNotice(
-                            "Hinge is switched off. Turn it on in Extensions to change these settings.",
-                            title: "Hinge is not running", symbol: "power")
+                        .padding(.horizontal, -HingeIntro.formHeaderInset)
                     }
                     Text("Fold")
                 }
             }
 
             Section("Look") {
-                LabeledContent {
-                    HStack(spacing: UIScale.pt(12)) {
-                        Slider(
-                            value: $strength.notifyingSettingsChange(),
-                            in: HingeSettings.strengthRange
-                        )
-                        .labelsHidden()
-                        .frame(maxWidth: UIScale.pt(220))
-                        Text("\(Int(strength * 100))%")
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                            .frame(minWidth: UIScale.pt(40), alignment: .trailing)
-                    }
-                } label: {
-                    Text("Strength")
-                    Text("How far the desktop bends as the lid closes.")
-                }
+                SettingsSliderRow(
+                    "Strength", subtitle: "How far the desktop bends as the lid closes.",
+                    value: $strength.notifyingSettingsChange(), in: HingeSettings.strengthRange,
+                    readout: "\(Int(strength * 100))%")
                 LabeledContent {
                     EdithSegmentedPicker(
                         "Sides",
@@ -122,14 +107,14 @@ struct HingeRows: View {
                     Text("Softens the part of the picture that bends furthest away.")
                 }
             }
-            .disabled(!presentation.active)
-            .opacity(presentation.active ? 1 : 0.6)
         }
-        .edithForm()
+        .settingsForm()
     }
 }
 
 private struct HingeIntro: View {
+    static let formHeaderInset = 10.0
+
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
@@ -158,7 +143,8 @@ private struct HingeIntro: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(UIScale.pt(16))
+        .padding(.vertical, UIScale.pt(16))
+        .padding(.horizontal, Self.formHeaderInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(DashSkin.line(dark)))

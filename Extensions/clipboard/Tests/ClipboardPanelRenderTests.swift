@@ -1,4 +1,5 @@
 @testable import ClipboardExtension
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import AppKit
 import Foundation
@@ -76,7 +77,7 @@ import Testing
         host.frame = frame
         host.autoresizingMask = [.width, .height]
         effect.addSubview(host)
-        let window = ClipboardTestWindowHost.window(contentRect: frame)
+        let window = TestWindowHost.window(contentRect: frame)
         defer { window.orderOut(nil) }
         window.appearance = NSAppearance(named: appearance)
         window.contentView = effect
@@ -87,7 +88,7 @@ import Testing
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.25))
         }
         redraw(effect)
-        #expect(!ClipboardTestWindowHost.isExposedOnDesktop(window))
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
         let bitmap = try #require(effect.bitmapImageRepForCachingDisplay(in: effect.bounds))
         effect.cacheDisplay(in: effect.bounds, to: bitmap)
         return bitmap
@@ -127,6 +128,28 @@ import Testing
         #expect(log.values.last == expected)
         #expect(bitmap.pixelsWide >= Int(ClipboardPanelLayout.width))
         #expect(distinctColors(in: bitmap) > 12)
+    }
+
+    @Test func palettePanelCapturesEdgesInBothAppearances() async throws {
+        for (name, entries) in [("populated", syntheticHistory), ("empty", [])] {
+            let store = try await store(entries)
+            defer { store.shutdown() }
+            let height = ClipboardPanelLayout.estimatedHeight(
+                for: store.entries, pinToTop: true, showsFooter: true)
+            for scheme in [ColorScheme.light, .dark] {
+                let label = scheme == .dark ? "dark" : "light"
+                try await RenderCapture.render(
+                    "clipboard-panel-\(name)",
+                    variant: .init(
+                        name: label, width: 640, height: height + 48, zoom: 1, scheme: scheme)
+                ) {
+                    ClipboardPanelView(store: store, onDismiss: {}, onHeightChange: { _ in })
+                        .frame(height: height)
+                        .background(.regularMaterial)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
     }
 
     @Test func anEmptyStackStillRendersItsEmptyState() async throws {

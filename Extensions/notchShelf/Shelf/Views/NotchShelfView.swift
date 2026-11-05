@@ -392,11 +392,11 @@ struct NotchShelfContentView: View {
         return Group {
             if let client = controller as? NotchChromeClient {
                 NotchNativeSlotView(client: client, tile: configured, kind: .providerTab)
-                    .padding(.horizontal, 12).padding(.bottom, 12)
+                    .padding(.horizontal, 16).padding(.bottom, 12)
             } else {
                 ScrollView {
                     NotchSurfaceCard(controller: controller, tile: configured)
-                        .padding(.horizontal, 12).padding(.bottom, 12)
+                        .padding(.horizontal, 16).padding(.bottom, 12)
                 }
             }
         }

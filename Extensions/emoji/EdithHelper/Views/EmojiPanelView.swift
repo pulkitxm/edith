@@ -25,6 +25,10 @@ struct EmojiPanelView: View {
     static let columns = 9
     static let cellSize: CGFloat = 34
     static let cellSpacing: CGFloat = 4
+    static var edgeInset: CGFloat {
+        let columns = CGFloat(Self.columns)
+        return (EmojiPanel.width - columns * cellSize - (columns - 1) * cellSpacing) / 2
+    }
     static let frequentSectionID = "frequent"
     static let resultsSectionID = "results"
 
@@ -87,7 +91,7 @@ struct EmojiPanelView: View {
             searchField
             tonePicker
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, Self.edgeInset)
         .padding(.vertical, 6)
     }
 
@@ -162,13 +166,6 @@ struct EmojiPanelView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8, pinnedViews: [.sectionHeaders]) {
-                    if model.renderedSections.isEmpty {
-                        Text("No emoji match \u{201C}\(model.query)\u{201D}")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.top, 24)
-                    }
                     ForEach(model.renderedSections) { section in
                         Section {
                             sectionGrid(section)
@@ -192,6 +189,15 @@ struct EmojiPanelView: View {
             }
         }
         .frame(maxHeight: .infinity)
+        .overlay {
+            if model.renderedSections.isEmpty {
+                Text("No emoji match \u{201C}\(model.query)\u{201D}")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Self.edgeInset)
+            }
+        }
     }
 
     private func sectionHeader(_ section: EmojiSection) -> some View {
@@ -199,7 +205,7 @@ struct EmojiPanelView: View {
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, Self.edgeInset)
             .padding(.vertical, 4)
             .background(.ultraThinMaterial)
     }
@@ -220,7 +226,7 @@ struct EmojiPanelView: View {
                 }
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, Self.edgeInset)
     }
 
     private func emojiCell(_ cell: EmojiPanelCell) -> some View {
@@ -285,7 +291,7 @@ struct EmojiPanelView: View {
             }
         }
         .frame(height: 30)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, Self.edgeInset)
     }
 
     private var categoryBar: some View {
@@ -304,7 +310,7 @@ struct EmojiPanelView: View {
                 .help(section.title)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, Self.edgeInset)
         .padding(.bottom, 6)
         .opacity(model.sections.count > 1 ? 1 : 0)
     }

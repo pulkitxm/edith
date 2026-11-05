@@ -29,29 +29,32 @@ struct KeystrokeHighlightOverlay: View {
     let runtime: KeystrokeHighlightRuntime
     @AppStorage(AppStorageKeys.KeystrokeHighlight.position, store: SharedDefaults.store) private
         var position = KeystrokeHighlightPosition.bottom.rawValue
+
+    var body: some View {
+        KeystrokeHighlightStage(
+            entries: runtime.entries,
+            position: KeystrokeHighlightPosition(rawValue: position) ?? .bottom)
+    }
+}
+
+struct KeystrokeHighlightStage: View {
+    let entries: [KeystrokeHighlightEntry]
+    let position: KeystrokeHighlightPosition
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
-            if resolvedPosition == .bottom { Spacer(minLength: 0) }
-            HStack(alignment: .bottom, spacing: 14) {
-                ForEach(runtime.entries) { entry in
-                    KeystrokeHighlightEntryView(entry: entry)
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .asymmetric(
-                                    insertion: .scale(scale: 0.84).combined(with: .opacity),
-                                    removal: .move(
-                                        edge: resolvedPosition == .top ? .top : .bottom
-                                    ).combined(with: .opacity)))
+            if position == .bottom { Spacer(minLength: 0) }
+            ViewThatFits(in: .horizontal) {
+                ForEach(Array(stride(from: entries.count, to: 0, by: -1)), id: \.self) { count in
+                    row(Array(entries.suffix(count)))
                 }
             }
             .padding(.horizontal, 36)
             .animation(
                 reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.76),
-                value: runtime.entries)
-            if resolvedPosition == .top { Spacer(minLength: 0) }
+                value: entries)
+            if position == .top { Spacer(minLength: 0) }
         }
         .padding(.top, 72)
         .padding(.bottom, 72)
@@ -59,8 +62,19 @@ struct KeystrokeHighlightOverlay: View {
         .preferredColorScheme(.dark)
     }
 
-    private var resolvedPosition: KeystrokeHighlightPosition {
-        KeystrokeHighlightPosition(rawValue: position) ?? .bottom
+    private func row(_ visible: [KeystrokeHighlightEntry]) -> some View {
+        HStack(alignment: .bottom, spacing: 14) {
+            ForEach(visible) { entry in
+                KeystrokeHighlightEntryView(entry: entry)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .scale(scale: 0.84).combined(with: .opacity),
+                                removal: .move(edge: position == .top ? .top : .bottom)
+                                    .combined(with: .opacity)))
+            }
+        }
     }
 }
 

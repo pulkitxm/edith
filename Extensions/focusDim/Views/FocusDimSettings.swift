@@ -18,14 +18,15 @@ struct FocusDimSettings: View {
         Form {
             if !presentation.active {
                 Section {
-                    DeskSettingsNotice(
-                        title: "Focus Dim is off",
-                        message: "Turn it on to dim background windows and change these settings.")
+                    SettingsNoticeRow(
+                        "Focus Dim is off",
+                        message: "Turn it on to dim background windows and change these settings.",
+                        symbol: "power.circle.fill")
                 }
             } else if presentation.ready, let error = presentation.error {
                 Section {
-                    DeskSettingsError(
-                        title: "Focus Dim is not responding", message: error,
+                    SettingsErrorRow(
+                        "Focus Dim is not responding", message: error,
                         retry: presentation.retry)
                 }
             }
@@ -37,21 +38,21 @@ struct FocusDimSettings: View {
                             "Darkens everything behind the window you are working in. Nothing is closed or moved."
                         )
                     }
-                    DeskShortcutRow(
+                    SettingsShortcutRow(
                         keyPrefix: "focusDimHotKey", defaultLabel: "⌥⌘F",
                         purpose: "Turns dimming on or off from any app.")
                 }
                 Section("Appearance") {
-                    DeskSliderRow(
-                        title: "Strength", detail: "How dark the background gets.",
+                    SettingsSliderRow(
+                        "Strength", subtitle: "How dark the background gets.",
                         value: $intensity.notifyingSettingsChange(),
-                        range: FocusDimMath.intensityRange,
+                        in: FocusDimMath.intensityRange,
                         readout: "\(Int((intensity * 100).rounded()))%")
-                    DeskSliderRow(
-                        title: "Fade speed",
-                        detail: "How quickly the dimming follows you to another app.",
+                    SettingsSliderRow(
+                        "Fade speed",
+                        subtitle: "How quickly the dimming follows you to another app.",
                         value: $animationDuration.notifyingSettingsChange(),
-                        range: FocusDimMath.animationDurationRange,
+                        in: FocusDimMath.animationDurationRange,
                         readout: String(format: "%.2f s", animationDuration))
                     Picker(selection: $mode.notifyingSettingsChange()) {
                         Text("Keep front windows bright")
@@ -82,6 +83,6 @@ struct FocusDimSettings: View {
             .disabled(!presentation.active)
             .opacity(presentation.active ? 1 : 0.5)
         }
-        .deskForm()
+        .settingsForm()
     }
 }

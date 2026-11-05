@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -7,6 +8,9 @@ import Testing
 @testable import HingeExtension
 
 @MainActor @Suite(.serialized) struct HingeSettingsCaptureTests {
+    private static let wide = RenderCapture.Variant(
+        name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)
+
     private struct Failure: LocalizedError {
         var errorDescription: String? { "The Hinge engine stopped responding." }
     }
@@ -36,13 +40,49 @@ import Testing
         ControlPresentation(client: nil, defaults: SharedDefaults.store) { _, _ in Data() }
     }
 
-    @Test func notRunningExplainsHowToTurnHingeOn() async throws {
+    private func expectUsable(_ label: String, in host: NSView) throws {
+        let control = try #require(RenderCapture.find(host, label: label))
+        #expect((control as AnyObject).isAccessibilityEnabled?() == true)
+    }
+
+    @Test func idlePageKeepsEveryControlUsable() async throws {
         reset(sensor: false)
         let model = ControlPresentation(client: nil, defaults: SharedDefaults.store)
         defer { model.stop() }
         #expect(!model.active)
-        for variant in SurfaceCapture.variants {
-            try await SurfaceCapture.render("hinge-off", variant: variant) { page(model) }
+        for variant in RenderCapture.variants + [Self.wide] {
+            try await RenderCapture.render("hinge-idle", variant: variant) { page(model) }
+        }
+        try await RenderCapture.withAccessibility {
+            let rendered = try await RenderCapture.render(
+                "hinge-idle-usable", variant: RenderCapture.variants[0]
+            ) { page(model) }
+            try expectUsable(
+                "Fold the desktop, Turning it off puts the screen straight back to normal.",
+                in: rendered.host)
+            try expectUsable(
+                "Crop the top, Trims the top edge as it bends so the picture does not stretch.",
+                in: rendered.host)
+            let calibrate = try #require(
+                RenderCapture.find(rendered.host, label: "Use current angle"))
+            #expect((calibrate as AnyObject).isAccessibilityEnabled?() == false)
+        }
+    }
+
+    @Test func foldTurnedOnWhileIdleSaysWhenItStarts() async throws {
+        reset(sensor: false, active: true)
+        let model = ControlPresentation(client: nil, defaults: SharedDefaults.store)
+        defer { model.stop() }
+        try await RenderCapture.withAccessibility {
+            for variant in (RenderCapture.variants + [Self.wide]) where variant.zoom == 1 {
+                let rendered = try await RenderCapture.render(
+                    "hinge-idle-on", variant: variant
+                ) { page(model) }
+                #expect(
+                    RenderCapture.find(
+                        rendered.host,
+                        label: "Your choice is saved, so there is nothing else to do.") != nil)
+            }
         }
     }
 
@@ -51,8 +91,8 @@ import Testing
         let model = running()
         defer { model.stop() }
         #expect(model.active && model.error == nil)
-        for variant in SurfaceCapture.variants {
-            try await SurfaceCapture.render("hinge-running", variant: variant) { page(model) }
+        for variant in RenderCapture.variants + [Self.wide] {
+            try await RenderCapture.render("hinge-running", variant: variant) { page(model) }
         }
     }
 
@@ -60,8 +100,8 @@ import Testing
         reset(sensor: false, active: false)
         let model = running()
         defer { model.stop() }
-        for variant in SurfaceCapture.variants where variant.zoom == 1 {
-            try await SurfaceCapture.render("hinge-nosensor", variant: variant) { page(model) }
+        for variant in (RenderCapture.variants + [Self.wide]) where variant.zoom == 1 {
+            try await RenderCapture.render("hinge-nosensor", variant: variant) { page(model) }
         }
     }
 
@@ -77,8 +117,8 @@ import Testing
         let deadline = ContinuousClock.now + .seconds(3)
         while model.error == nil, ContinuousClock.now < deadline { await Task.yield() }
         #expect(model.error == "The Hinge engine stopped responding.")
-        for variant in SurfaceCapture.variants where variant.zoom == 1 {
-            try await SurfaceCapture.render("hinge-error", variant: variant) { page(model) }
+        for variant in (RenderCapture.variants + [Self.wide]) where variant.zoom == 1 {
+            try await RenderCapture.render("hinge-error", variant: variant) { page(model) }
         }
     }
 }

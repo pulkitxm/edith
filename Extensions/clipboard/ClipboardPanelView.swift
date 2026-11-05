@@ -146,7 +146,7 @@ struct ClipboardPanelView: View {
                 .foregroundStyle(.secondary)
             menu
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, ClipboardPanelLayout.contentInset)
         .frame(height: ClipboardPanelLayout.headerHeight)
     }
 
@@ -174,7 +174,7 @@ struct ClipboardPanelView: View {
                 chip(nil)
                 ForEach(palette.categories) { chip($0) }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, ClipboardPanelLayout.contentInset)
         }
         .frame(height: ClipboardPanelLayout.chipsHeight)
     }
@@ -263,7 +263,7 @@ struct ClipboardPanelView: View {
             Spacer(minLength: 0)
             KeyHint(keys: "esc", label: "Close")
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, ClipboardPanelLayout.contentInset)
         .frame(height: ClipboardPanelLayout.footerHeight)
     }
 
@@ -457,7 +457,7 @@ struct ClipboardPanelList: View, Equatable {
         Text(title)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, ClipboardPanelLayout.contentInset)
             .frame(
                 maxWidth: .infinity, minHeight: ClipboardPanelLayout.sectionHeaderHeight,
                 maxHeight: ClipboardPanelLayout.sectionHeaderHeight, alignment: .bottomLeading
@@ -508,7 +508,7 @@ private struct ClipboardPanelRow: View {
                         .foregroundStyle(secondary)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, ClipboardPanelLayout.contentInset)
             .frame(height: ClipboardPanelLayout.rowHeight(for: entry))
             .frame(maxWidth: .infinity, alignment: .leading)
             .foregroundStyle(selected ? Color.white : Color.primary)

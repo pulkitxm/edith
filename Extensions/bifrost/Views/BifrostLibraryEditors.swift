@@ -90,7 +90,8 @@ struct BifrostFieldGrid<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: UIScale.pt(12), verticalSpacing: UIScale.pt(8)) {
+        Grid(alignment: .leading, horizontalSpacing: UIScale.pt(12), verticalSpacing: UIScale.pt(8))
+        {
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

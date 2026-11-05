@@ -217,7 +217,7 @@ private let frequent = [
         #expect(model.query == "love")
     }
 
-    private final class EmojiStopProbe {
+    @MainActor private final class EmojiStopProbe {
         var finished = false
         private var started = false
         private var startWaiter: CheckedContinuation<Void, Never>?

@@ -31,6 +31,7 @@ final class WindowSweatersService: ExtensionService {
                 roleBundle: Bundle(for: WindowSweatersService.self))
         } catch { return false }
         SharedDefaults.store.set(true, forKey: SweaterState.enabledKey)
+        ControlPresentationContract.applyQueued(defaults: SharedDefaults.store)
         if engine == nil { engine = SweaterEngine(fixture: fixture) }
         if observer == nil {
             observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
@@ -99,7 +100,7 @@ final class WindowSweatersService: ExtensionService {
         return NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    Form { WindowSweatersRows(presentation: presentation) }.edithForm()
+                    Form { WindowSweatersRows(presentation: presentation) }.settingsForm()
                 }
             })
     }

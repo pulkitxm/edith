@@ -13,6 +13,7 @@ enum ClipboardPanelLayout {
     static let emptyHeight: CGFloat = 72
     static let footerHeight: CGFloat = 34
     static let listPadding: CGFloat = 8
+    static let contentInset: CGFloat = 16
     static let sizingRowLimit = 24
 
     static func rowHeight(for entry: ClipboardEntry) -> CGFloat {

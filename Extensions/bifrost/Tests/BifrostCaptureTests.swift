@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -7,6 +8,9 @@ import Testing
 @testable import BifrostExtension
 
 @MainActor @Suite(.serialized) struct BifrostCaptureTests {
+    private static let wide = RenderCapture.Variant(
+        name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)
+
     private enum Fixture: String, CaseIterable {
         case loading, error, firstRun, populated, off
     }
@@ -17,7 +21,11 @@ import Testing
         let stored = keys.map { ($0, defaults.object(forKey: $0)) }
         defer {
             for (key, value) in stored {
-                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+                if let value {
+                    defaults.set(value, forKey: key)
+                } else {
+                    defaults.removeObject(forKey: key)
+                }
             }
         }
         for fixture in Fixture.allCases {
@@ -31,17 +39,18 @@ import Testing
             if fixture != .loading { await context.load() }
             #expect(context.loaded == [.firstRun, .populated, .off].contains(fixture))
             #expect((context.error != nil) == (fixture == .error))
-            for variant in DeskSettingsCapture.variants + [
-                .init(name: "full-light", width: 640, height: 2400, zoom: 1, scheme: .light)
+            for variant in RenderCapture.variants + RenderCapture.sheetVariants + [
+                Self.wide,
+                .init(name: "full-light", width: 640, height: 2400, zoom: 1, scheme: .light),
             ] {
-                let bitmap = try await DeskSettingsCapture.render(
+                let rendered = try await RenderCapture.render(
                     "launcher-\(fixture.rawValue)", variant: variant
                 ) {
                     ExtensionPageHost { BifrostSettings(context: context) }
                         .environment(\.automaticViewActionsEnabled, false)
                 }
-                #expect(bitmap.pixelsWide >= Int(variant.width))
-                #expect(DeskSettingsCapture.distinctColors(bitmap) > 4)
+                #expect(rendered.bitmap.pixelsWide >= Int(variant.width))
+                #expect(RenderCapture.distinctColors(rendered.bitmap) > 4)
             }
         }
     }
@@ -73,7 +82,8 @@ import Testing
                 throw NSError(
                     domain: "BifrostCapture", code: 1,
                     userInfo: [
-                        NSLocalizedDescriptionKey: "The connection to the extension was interrupted."
+                        NSLocalizedDescriptionKey:
+                            "The connection to the extension was interrupted."
                     ])
             case .firstRun, .populated, .off:
                 guard operation == "bifrost.ui.settings" else { return Data("{}".utf8) }
@@ -91,7 +101,8 @@ import Testing
                 keyword: "docs")
         ])
         values[AppStorageKeys.Bifrost.snippets] = BifrostLibrary.encode([
-            BifrostSnippet(name: "Meeting link", content: "https://meet.example.com/standup", keyword: "meet")
+            BifrostSnippet(
+                name: "Meeting link", content: "https://meet.example.com/standup", keyword: "meet")
         ])
         let index = BifrostIndex(
             generatedAt: Date(),

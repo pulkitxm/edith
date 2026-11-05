@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import SwiftUI
 import Testing
@@ -7,6 +8,9 @@ import Testing
 @testable import ColorPickerExtension
 
 @MainActor @Suite(.serialized) struct ColorPickerCaptureTests {
+    private static let wide = RenderCapture.Variant(
+        name: "wide-light", width: 1600, height: 900, zoom: 1, scheme: .light)
+
     private enum Fixture: String, CaseIterable {
         case off, empty, populated, error
     }
@@ -41,19 +45,21 @@ import Testing
             }
             #expect(model.active == (fixture != .off))
             #expect((model.error != nil) == (fixture == .error))
-            #expect(ColorHistoryStore.load(from: defaults).isEmpty == (fixture == .empty || fixture == .error))
-            for variant in DeskSettingsCapture.variants {
-                let bitmap = try await DeskSettingsCapture.render(
+            #expect(
+                ColorHistoryStore.load(from: defaults).isEmpty
+                    == (fixture == .empty || fixture == .error))
+            for variant in RenderCapture.variants + RenderCapture.sheetVariants + [Self.wide] {
+                let rendered = try await RenderCapture.render(
                     "colorpicker-\(fixture.rawValue)", variant: variant
                 ) {
                     ExtensionPageHost {
                         ControlSettingsHost(presentation: model) {
-                            Form { ColorPickerRows(presentation: model) }.deskForm()
+                            Form { ColorPickerRows(presentation: model) }.settingsForm()
                         }
                     }
                 }
-                #expect(bitmap.pixelsWide >= Int(variant.width))
-                #expect(DeskSettingsCapture.distinctColors(bitmap) > 20)
+                #expect(rendered.bitmap.pixelsWide >= Int(variant.width))
+                #expect(RenderCapture.distinctColors(rendered.bitmap) > 20)
             }
         }
     }
@@ -69,7 +75,8 @@ import Testing
                 throw NSError(
                     domain: "ColorPickerCapture", code: 1,
                     userInfo: [
-                        NSLocalizedDescriptionKey: "The connection to the extension was interrupted."
+                        NSLocalizedDescriptionKey:
+                            "The connection to the extension was interrupted."
                     ])
             }
         case .empty, .populated:

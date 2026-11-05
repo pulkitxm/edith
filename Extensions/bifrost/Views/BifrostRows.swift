@@ -21,15 +21,16 @@ struct BifrostRows: View {
         Group {
             if !bifrostEnabled {
                 Section {
-                    DeskSettingsNotice(
-                        title: "Launcher is off",
-                        message: "Turn it on to open apps and search from one bar, and to change these settings."
-                    )
+                    SettingsNoticeRow(
+                        "Launcher is off",
+                        message:
+                            "Turn it on to open apps and search from one bar, and to change these settings.",
+                        symbol: "power.circle.fill")
                 }
             } else if let error {
                 Section {
-                    DeskSettingsError(
-                        title: "A change was not saved", message: error,
+                    SettingsErrorRow(
+                        "A change was not saved", message: error,
                         retry: { Task { await BifrostUIContext.current?.load() } })
                 }
             }
@@ -42,7 +43,7 @@ struct BifrostRows: View {
                         Text("Search anything")
                         Text("Type an app name, a sum like 12 * 8, or part of a file name.")
                     }
-                    DeskShortcutRow(
+                    SettingsShortcutRow(
                         keyPrefix: "bifrostHotKey", defaultLabel: "\u{2325}\u{2423}",
                         purpose: "Opens the launcher over whatever you are doing.")
                 }
@@ -55,7 +56,10 @@ struct BifrostRows: View {
                         Text("Opens at")
                         Text("Where the launcher appears when you press the shortcut.")
                     }
-                    LabeledContent {
+                    SettingsRow(
+                        "Results to show",
+                        subtitle: "How many matches are listed under the search field."
+                    ) {
                         HStack(spacing: UIScale.pt(8)) {
                             Text("\(resultLimit)")
                                 .monospacedDigit()
@@ -65,13 +69,11 @@ struct BifrostRows: View {
                                 "Results to show",
                                 value: $resultLimit.bifrostSetting(
                                     AppStorageKeys.Bifrost.resultLimit),
-                                in: BifrostQuery.minimumResultLimit...BifrostQuery.maximumResultLimit
+                                in: BifrostQuery
+                                    .minimumResultLimit...BifrostQuery.maximumResultLimit
                             )
                             .labelsHidden()
                         }
-                    } label: {
-                        Text("Results to show")
-                        Text("How many matches are listed under the search field.")
                     }
                 } header: {
                     Text("Launcher")
@@ -118,7 +120,8 @@ struct BifrostRows: View {
                             .buttonStyle(.edith(.secondary))
                     } label: {
                         Text("Find new apps")
-                        Text("Scans your application folders again. Use it if a new app is missing.")
+                        Text(
+                            "Scans your application folders again. Use it if a new app is missing.")
                     }
                     LabeledContent {
                         Button("Reset", role: .destructive) {
