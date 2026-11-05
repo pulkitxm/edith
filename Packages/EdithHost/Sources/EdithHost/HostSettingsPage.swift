@@ -20,6 +20,8 @@ struct HostSettingsPage: View {
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
         var settingsTab =
         "general"
+    @AppStorage(HostSettingsCatalog.introductionsEnabledKey, store: SharedDefaults.store) private
+        var introductions = true
     let marketplace: HostMarketplace?
     let permissions: HostPermissions
     var openPermissions: () -> Void = {}
@@ -54,6 +56,8 @@ struct HostSettingsPage: View {
             wrappedValue: "home", AppStorageKeys.General.mainWindowSection, store: defaults)
         _settingsTab = AppStorage(
             wrappedValue: "general", AppStorageKeys.General.settingsTab, store: defaults)
+        _introductions = AppStorage(
+            wrappedValue: true, HostSettingsCatalog.introductionsEnabledKey, store: defaults)
     }
     private let defaults: UserDefaults
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -141,6 +145,22 @@ struct HostSettingsPage: View {
             } footer: {
                 Text("Every permission Edith can ask for, in one place.")
                     .font(.system(size: UIScale.pt(10)))
+            }
+
+            Section {
+                Toggle("Show introductions for new tools", isOn: $introductions)
+                    .accessibilityIdentifier("settings.introductions")
+                Button("Reset introductions") {
+                    HostIntroductions(defaults: defaults).reset()
+                }
+                .accessibilityIdentifier("settings.introductions.reset")
+            } header: {
+                Text("Introductions")
+            } footer: {
+                Text(
+                    "The first time you open a tool, Edith explains what it is for. Reset shows every introduction and the Get started list on Home again."
+                )
+                .font(.system(size: UIScale.pt(10)))
             }
 
             Section {

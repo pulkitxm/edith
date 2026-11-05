@@ -12,6 +12,7 @@ struct HostHomePage: View {
     var openExtension: ((String) -> Void)? = nil
     var presenter: (any HostExtensionContentPresenting)? = nil
     var workflowSetup: AnyView? = nil
+    var getStarted: AnyView? = nil
     @Environment(\.compactLayout) private var compact
 
     @State private var editing = false
@@ -32,6 +33,7 @@ struct HostHomePage: View {
                 customize: { customize(nil) })
         } content: {
             if let workflowSetup { workflowSetup }
+            if let getStarted { getStarted }
             SurfaceCanvas(
                 layout: layout, singleColumn: compact, editing: editing, selected: selectedTile,
                 select: { selectedTile = $0 },

@@ -8,6 +8,29 @@ struct HostSuiteAbilityGroup: Identifiable, Equatable {
     var id: String { title }
 }
 
+enum HostSuiteLandingSummary {
+    static func installed(_ entries: [HostExtension], downloaded: Set<String>) -> Int {
+        entries.filter { downloaded.contains($0.id) }.count
+    }
+
+    static func summary(_ entries: [HostExtension], downloaded: Set<String>) -> String {
+        let installed = installed(entries, downloaded: downloaded)
+        let available = entries.count - installed
+        if entries.isEmpty { return "" }
+        if available == 0 { return "All \(installed) installed" }
+        if installed == 0 { return "\(available) available to get" }
+        return "\(installed) installed, \(available) available to get"
+    }
+
+    static func tagline(_ entry: HostExtension) -> String {
+        HostMarketplaceCatalog.tagline(entry)
+    }
+
+    static func status(installed: Bool, pending: Bool) -> String {
+        pending ? "cleanup pending" : (installed ? "installed" : "available")
+    }
+}
+
 enum HostSuiteLandingGroups {
     static func groups(suite: String, entries: [HostExtension]) -> [HostSuiteAbilityGroup] {
         guard suite == "desk" else { return [.init(title: "Abilities", entries: entries)] }
@@ -59,8 +82,16 @@ struct HostSuiteLandingPage: View {
             PageHeader(
                 destination.title,
                 accessory: {
-                    Text(suite?.subtitle ?? "").font(.edithText(.callout)).foregroundStyle(
-                        .secondary)
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(suite?.subtitle ?? "").font(.edithText(.callout))
+                            .foregroundStyle(.secondary)
+                        Text(
+                            HostSuiteLandingSummary.summary(
+                                groups.flatMap(\.entries),
+                                downloaded: Set(marketplace.installed.keys))
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+                    }
                 })
         } content: {
             ForEach(groups) { group in
@@ -132,12 +163,12 @@ struct HostSuiteAbilityRow: View {
                 HStack(spacing: UIScale.pt(6)) {
                     Text(entry.title).font(.system(size: UIScale.pt(13), weight: .medium))
                         .foregroundStyle(DashSkin.ink(dark))
-                    Text(pending ? "cleanup pending" : (installed ? "downloaded" : "optional"))
+                    Text(HostSuiteLandingSummary.status(installed: installed, pending: pending))
                         .font(DashSkin.mono(9.5)).foregroundStyle(DashSkin.inkFaint(dark))
                         .padding(.horizontal, UIScale.pt(5)).padding(.vertical, UIScale.pt(1))
                         .background(DashSkin.inkFaint(dark).opacity(0.1), in: Capsule())
                 }
-                Text(HostMarketplaceCatalog.subtitles[entry.id] ?? entry.title)
+                Text(HostSuiteLandingSummary.tagline(entry))
                     .font(.system(size: UIScale.pt(11.5))).foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }
@@ -161,9 +192,9 @@ struct HostSuiteAbilityRow: View {
                 )
                 .disabled(pending).accessibilityLabel(entry.title + " enabled")
             } else {
-                Button("Review download", action: review).buttonStyle(.edith(.toolbar))
+                Button("Get", action: review).buttonStyle(.edith(.secondary))
                     .disabled(marketplace.pendingRemovalIDs.contains(entry.id))
-                    .accessibilityLabel("Review " + entry.title + " download")
+                    .accessibilityLabel("Get " + entry.title)
             }
         }
         .padding(.horizontal, UIScale.pt(14)).padding(.vertical, UIScale.pt(11))
