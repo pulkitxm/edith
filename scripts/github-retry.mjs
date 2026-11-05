@@ -57,6 +57,13 @@ export function sleepSync(milliseconds) {
 export const rateLimitRecoveries = 2;
 const exhaustedBelow = 25;
 const maximumRateLimitWaitMs = 65 * 60_000;
+export const secondaryRateLimitWaitMs = 65_000;
+
+export function isRateLimitFailure(error) {
+  return /API rate limit exceeded|secondary rate limit/i.test(
+    failureText(error),
+  );
+}
 
 export function rateLimitWait({ execute = execFileSync, now = Date.now } = {}) {
   try {
@@ -75,12 +82,9 @@ export function rateLimitWait({ execute = execFileSync, now = Date.now } = {}) {
       .trim()
       .split(" ")
       .map(Number);
-    if (
-      !Number.isSafeInteger(remaining) ||
-      !Number.isSafeInteger(reset) ||
-      remaining >= exhaustedBelow
-    )
+    if (!Number.isSafeInteger(remaining) || !Number.isSafeInteger(reset))
       return undefined;
+    if (remaining >= exhaustedBelow) return null;
     return Math.min(
       Math.max(0, reset * 1000 - now()) + 5_000,
       maximumRateLimitWaitMs,
@@ -91,8 +95,12 @@ export function rateLimitWait({ execute = execFileSync, now = Date.now } = {}) {
 }
 
 function recoveryWait(error, recovery, { probe, recoveries }) {
-  const wait = recovery < recoveries ? probe() : undefined;
-  if (wait === undefined) throw error;
+  const probed = recovery < recoveries ? probe() : undefined;
+  const wait =
+    probed === null && isRateLimitFailure(error)
+      ? secondaryRateLimitWaitMs
+      : probed;
+  if (wait === undefined || wait === null) throw error;
   console.error(
     `GitHub API rate limit exhausted; waiting ${Math.ceil(wait / 1000)}s for the reset`,
   );

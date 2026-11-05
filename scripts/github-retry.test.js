@@ -6,6 +6,7 @@ import {
   backoffDelay,
   isTransientFailure,
   rateLimitWait,
+  secondaryRateLimitWaitMs,
   retryAfterMs,
   withGitHubRetrySync,
   withRateLimitRecovery,
@@ -327,7 +328,7 @@ test("an exhausted rate limit waits for its reset and a healthy one does not", (
   expect(probe("3 1600\n")).toBe(605_000);
   expect(probe("0 900\n")).toBe(5_000);
   expect(probe("0 99999\n")).toBe(65 * 60_000);
-  expect(probe("4000 1600\n")).toBeUndefined();
+  expect(probe("4000 1600\n")).toBeNull();
   expect(probe("garbage")).toBeUndefined();
   expect(
     rateLimitWait({
@@ -375,9 +376,54 @@ test("failures with a healthy rate limit are rethrown without waiting", async ()
         calls++;
         throw new Error("HTTP 422: Validation Failed");
       },
-      { probe: () => undefined, sleep },
+      { probe: () => null, sleep },
     ),
   ).rejects.toThrow("HTTP 422");
   expect(calls).toBe(1);
+  expect(delays).toEqual([]);
+});
+
+const secondaryLimitError = () =>
+  Object.assign(new Error("Command failed: gh api repos/o/r/releases/1"), {
+    stderr:
+      "gh: API rate limit exceeded for user ID 1. If you reach out to GitHub Support for help, please include the request ID SYNTHETIC (HTTP 403)\n",
+  });
+
+test("a rate limit error with core quota left waits out the secondary limit, at most twice", async () => {
+  const { delays, sleep } = recordingSleep();
+  let calls = 0;
+  const result = await withRateLimitRecovery(
+    async () => {
+      calls++;
+      if (calls < 3) throw secondaryLimitError();
+      return "published";
+    },
+    { probe: () => null, sleep },
+  );
+  expect(result).toBe("published");
+  expect(delays).toEqual([secondaryRateLimitWaitMs, secondaryRateLimitWaitMs]);
+  calls = 0;
+  expect(() =>
+    withRateLimitRecoverySync(
+      () => {
+        calls++;
+        throw secondaryLimitError();
+      },
+      { probe: () => null, sleep: () => {} },
+    ),
+  ).toThrow("Command failed");
+  expect(calls).toBe(3);
+});
+
+test("a rate limit error with an unreadable quota probe fails closed", () => {
+  const { delays, sleep } = recordingSleep();
+  expect(() =>
+    withRateLimitRecoverySync(
+      () => {
+        throw secondaryLimitError();
+      },
+      { probe: () => undefined, sleep },
+    ),
+  ).toThrow("Command failed");
   expect(delays).toEqual([]);
 });

@@ -902,14 +902,16 @@ if (import.meta.main) {
     });
     const entry = include.find(({ id }) => id === process.argv[3]);
     if (!entry) throw new Error("Unknown extension publication entry");
-    const record = await publishEntry({
-      repository,
-      directory,
-      entry,
-      target,
-      existingReleases: listReleases({ repository }),
-      verifyState,
-    });
+    const record = await withRateLimitRecovery(async () =>
+      publishEntry({
+        repository,
+        directory,
+        entry,
+        target,
+        existingReleases: listReleases({ repository }),
+        verifyState,
+      }),
+    );
     await writeFile(
       resolve(directory, `${entry.id}.published.json`),
       JSON.stringify(record),
