@@ -20,30 +20,24 @@ struct WorkspaceFilterButton<Content: View>: View {
         Button(action: onPress) {
             Image(systemName: "line.3.horizontal.decrease")
                 .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(active ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                .frame(minWidth: UIScale.pt(22), minHeight: UIScale.pt(22))
-                .padding(.horizontal, UIScale.pt(4))
-                .padding(.vertical, UIScale.pt(4))
-                .widgetBar(
-                    cornerRadius: 8,
-                    fill: active ? DashSkin.accent(dark).opacity(0.18) : DashSkin.paper2(dark),
-                    stroke: active ? DashSkin.accent(dark).opacity(0.65) : DashSkin.line(dark),
-                    strokeWidth: active ? 1.4 : 1
-                )
-                .overlay(alignment: .topTrailing) {
-                    if active {
-                        Text(count > 9 ? "9+" : "\(count)")
-                            .font(DashSkin.mono(8, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, UIScale.pt(3))
-                            .padding(.vertical, UIScale.pt(1))
-                            .background(DashSkin.accent(dark), in: Capsule())
-                            .offset(x: UIScale.pt(4), y: UIScale.pt(-4))
-                            .accessibilityHidden(true)
-                    }
-                }
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.pageChip(active: active, iconOnly: true))
+        .fixedSize()
+        .overlay(alignment: .topTrailing) {
+            if active {
+                Text(count > 9 ? "9+" : "\(count)")
+                    .font(.edithText(.caption2).weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, UIScale.pt(3))
+                    .padding(.vertical, UIScale.pt(1))
+                    .background(DashSkin.accent(dark), in: Capsule())
+                    .offset(x: UIScale.pt(4), y: UIScale.pt(-4))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .accessibilityLabel(label)
         .accessibilityValue(summary)
         .help(help)

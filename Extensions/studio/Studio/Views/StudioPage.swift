@@ -232,7 +232,7 @@ struct StudioDropOverlay: View {
                 Image(systemName: "square.and.arrow.down.on.square")
                     .font(.system(size: UIScale.pt(34), weight: .light))
                 Text("Drop to add to Studio")
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
             }
             .foregroundStyle(DashSkin.accent(scheme == .dark))
         }

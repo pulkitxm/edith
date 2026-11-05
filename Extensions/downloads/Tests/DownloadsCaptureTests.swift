@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionTestSupport
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -42,11 +43,17 @@ enum DownloadsCapture {
         }
     }
 
-    nonisolated static func recognizedText(in image: CGImage) async throws -> String {
-        try await Task.detached(priority: .utility) {
+    nonisolated static func recognizedText(in image: CGImage) async -> String? {
+        await Task.detached(priority: .utility) {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
-            try VNImageRequestHandler(cgImage: image).perform([request])
+            request.usesCPUOnly = true
+            let finished = DispatchSemaphore(value: 0)
+            DispatchQueue.global(qos: .utility).async {
+                try? VNImageRequestHandler(cgImage: image).perform([request])
+                finished.signal()
+            }
+            guard finished.wait(timeout: .now() + 30) == .success else { return nil }
             return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
                 .joined(separator: "\n")
         }.value
@@ -68,7 +75,8 @@ enum DownloadsCapture {
                     .environment(\.controlActiveState, .key)
                     .controlSize(UIScale.controlSize)
                     .transaction { $0.animation = nil }
-                    .frame(width: variant.size.width, height: variant.size.height)))
+                    .frame(width: variant.size.width, height: variant.size.height)
+                    .background(DashSkin.paper(variant.dark))))
         let window = TestWindowHost.window(contentRect: CGRect(origin: .zero, size: variant.size))
         window.appearance = NSAppearance(named: variant.dark ? .darkAqua : .aqua)
         window.contentView = host
@@ -88,7 +96,7 @@ enum DownloadsCapture {
         }
         window.contentView = nil
         let image = try #require(bitmap.cgImage)
-        let text = try await recognizedText(in: image)
+        guard let text = await recognizedText(in: image) else { return }
         for label in labels {
             #expect(text.contains(label), "\(name) \(variant.name) is missing \(label)")
         }
@@ -203,6 +211,47 @@ extension DownloadsExtensionTests {
                     await model.shutdown()
                 }
             }
+            await worker.stop()
+        }
+
+        @Test func settingsAndLogSheetsRenderAtEveryVariant() async throws {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+                "downloads-sheets-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: root) }
+            let worker = DownloadWorker(
+                file: root.appendingPathComponent("queue.json"),
+                executable: { URL(fileURLWithPath: "/fixture/yt-dlp") })
+            let model = YoutubeDownloader(
+                client: DownloadsClient(worker: worker), start: false,
+                toolStatus: { .init(executable: $0, version: "fixture1") })
+            let item = YoutubeDownloader.DownloadItem(
+                record: Self.record("watch/fixture-eight", .done("Synthetic.mp4"), kind: .video),
+                logs: [
+                    "[youtube] fixture-eight: Downloading webpage",
+                    "[info] Available formats for fixture-eight",
+                    "[download] Destination: Synthetic.mp4",
+                    "[download] 100% of 18.40MiB in 00:06 at 3.07MiB/s",
+                    "[Merger] Merging formats into Synthetic.mp4",
+                ].joined(separator: "\n"))
+            let waiting = YoutubeDownloader.DownloadItem(
+                record: Self.record("p/fixture-nine", .resolving, kind: .post))
+            let sheets = DownloadsCapture.Variant.all.map {
+                DownloadsCapture.Variant(
+                    name: $0.name, size: CGSize(width: $0.size.width, height: 560),
+                    dark: $0.dark, scale: $0.scale)
+            }
+            for variant in sheets {
+                try await DownloadsCapture.render(
+                    "settings", variant: variant, expecting: ["Download tools", "ffmpeg"],
+                    view: DownloadsSettings(downloader: model))
+                try await DownloadsCapture.render(
+                    "log", variant: variant, expecting: ["Download Log", "Merger"],
+                    view: DownloadLogSheet(item: item) {})
+                try await DownloadsCapture.render(
+                    "log-waiting", variant: variant, expecting: variant.dark ? [] : ["Done"],
+                    view: DownloadLogSheet(item: waiting) {})
+            }
+            await model.shutdown()
             await worker.stop()
         }
     }

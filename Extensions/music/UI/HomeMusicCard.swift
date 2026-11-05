@@ -55,7 +55,7 @@ struct EmbeddedHomeMusicCard: View {
                             remote.catalogLoaded
                                 ? "Drop audio files into your music folder to play them here." : ""
                         )
-                        .font(.system(size: UIScale.pt(12.5)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
                     } else if presentation?.tile.shows("queue") != false {
@@ -151,7 +151,7 @@ struct EmbeddedHomeMusicCard: View {
             }
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(track.title)
-                    .font(.system(size: UIScale.pt(13), weight: .medium))
+                    .font(.edithText(.body).weight(.medium))
                     .lineLimit(1)
                     .foregroundStyle(DashSkin.ink(dark))
                     .presenterBlur(blur)
@@ -200,7 +200,7 @@ struct EmbeddedHomeMusicCard: View {
                     EmbeddedHomeArtworkThumb(track: track, size: 26)
                 }
                 Text(track.title)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .lineLimit(1)
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .presenterBlur(blur)

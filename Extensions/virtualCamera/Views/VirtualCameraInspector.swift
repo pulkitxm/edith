@@ -59,11 +59,11 @@ struct VirtualCameraPanelSection<Content: View>: View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(title)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 if let detail {
                     Text(detail)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -84,13 +84,13 @@ struct VirtualCameraToggleRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer(minLength: UIScale.pt(8))
             Toggle(title, isOn: $isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
-                .controlSize(.mini)
+                .controlSize(UIScale.controlSize)
         }
     }
 }
@@ -107,7 +107,7 @@ struct VirtualCameraSliderRow: View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
             HStack(spacing: UIScale.pt(8)) {
                 Text(title)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                 Spacer()
                 if let neutral, abs(value - neutral) > 0.0001 {
@@ -125,12 +125,12 @@ struct VirtualCameraSliderRow: View {
                     .accessibilityLabel("Reset \(title.lowercased())")
                 }
                 Text(format(value))
-                    .font(.system(size: UIScale.pt(11))).monospacedDigit()
+                    .font(.edithText(.subheadline)).monospacedDigit()
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .frame(height: UIScale.pt(16))
             Slider(value: $value, in: range)
-                .controlSize(.small)
+                .controlSize(UIScale.controlSize)
                 .accessibilityLabel(title)
         }
     }
@@ -209,7 +209,7 @@ struct VirtualCameraFramePanel: View {
                     format: { String(format: "%.1f°", $0) }, dark: dark)
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     Text("Rotate")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     EdithSegmentedPicker(
                         "Rotate", selection: model.binding(\.framing.quarterTurns),
@@ -249,7 +249,8 @@ struct VirtualCameraFramePanel: View {
             }
         }
         .toggleStyle(.switch)
-        .controlSize(.small)
+        .controlSize(UIScale.controlSize)
+        .font(.edithText(.callout))
     }
 }
 
@@ -379,7 +380,7 @@ struct VirtualCameraBackgroundPanel: View {
             dark: dark
         ) {
             Text(cameraGuidance)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
             EdithSegmentedPicker(
@@ -391,7 +392,7 @@ struct VirtualCameraBackgroundPanel: View {
             switch model.systemBackgroundActive ? .none : model.composition.background.mode {
             case .none:
                 Text("Apps see your camera picture, including any macOS video effects.")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             case .blur:
                 VirtualCameraSliderRow(
@@ -436,7 +437,7 @@ struct VirtualCameraImageRow: View {
             .presenterCover(CameraPrivacy.shared.hides(.camera))
             .background(RoundedRectangle(cornerRadius: UIScale.pt(6)).fill(DashSkin.paper2(dark)))
             Text(path == nil ? "No image" : title)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -465,6 +466,7 @@ struct VirtualCameraCornerPicker: View {
                 Text(corner.title).tag(corner)
             }
         }
+        .font(.edithText(.callout))
     }
 }
 
@@ -479,10 +481,11 @@ struct VirtualCameraOverlayPanel: View {
                     title: "Show a name tag", isOn: model.binding(\.overlays.nameTag.enabled),
                     dark: dark)
                 if model.composition.overlays.nameTag.enabled {
-                    TextField("Name", text: model.binding(\.overlays.nameTag.title))
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Title or pronouns", text: model.binding(\.overlays.nameTag.subtitle))
-                        .textFieldStyle(.roundedBorder)
+                    EdithTextField(
+                        placeholder: "Name", text: model.binding(\.overlays.nameTag.title))
+                    EdithTextField(
+                        placeholder: "Title or pronouns",
+                        text: model.binding(\.overlays.nameTag.subtitle))
                     EdithSegmentedPicker(
                         "Style", selection: model.binding(\.overlays.nameTag.style),
                         options: VirtualCameraNameTagStyle.allCases, label: { $0.title })
@@ -556,7 +559,8 @@ struct VirtualCameraOverlayPanel: View {
             }
         }
         .toggleStyle(.switch)
-        .controlSize(.small)
+        .controlSize(UIScale.controlSize)
+        .font(.edithText(.callout))
     }
 }
 
@@ -622,13 +626,13 @@ struct VirtualCameraOutputPanel: View {
                     Text(
                         "No app is using the virtual camera yet. Edith keeps your real camera off until one does."
                     )
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .fixedSize(horizontal: false, vertical: true)
                 } else {
                     ForEach(clients, id: \.id) { client in
                         Label(client.name, systemImage: "video.fill")
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                     }
                 }
                 VirtualCameraFact(
@@ -652,8 +656,8 @@ struct VirtualCameraOutputPanel: View {
                 Button("Stop completely") { model.pause(.stopped) }
                     .buttonStyle(.edith(.secondary))
                     .disabled(model.state.privacy == .stopped)
-                TextField("Card message", text: model.stateBinding(\.privacyMessage))
-                    .textFieldStyle(.roundedBorder)
+                EdithTextField(
+                    placeholder: "Card message", text: model.stateBinding(\.privacyMessage))
                 HStack {
                     ForEach([VirtualCameraPrivacy.card, .blank, .freeze], id: \.self) { mode in
                         Button(mode.title) { model.pause(mode) }
@@ -679,13 +683,14 @@ struct VirtualCameraOutputPanel: View {
                 Text(
                     "Meet mirrors its self preview. Use the audience preview here to check text and overlays."
                 )
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
         .toggleStyle(.switch)
-        .controlSize(.small)
+        .controlSize(UIScale.controlSize)
+        .font(.edithText(.callout))
     }
 }
 
@@ -697,11 +702,11 @@ struct VirtualCameraFact: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer()
             Text(value)
-                .font(.system(size: UIScale.pt(11))).monospacedDigit()
+                .font(.edithText(.subheadline)).monospacedDigit()
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }

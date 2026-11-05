@@ -1,4 +1,5 @@
 import AVFoundation
+import EdithExtensionTestSupport
 import AppKit
 import CoreImage
 import CoreText
@@ -1071,6 +1072,17 @@ enum VirtualCameraSyntheticStudio {
                     size: size, compact: compact, dark: dark, controlsVisible: controls)
             }
         }
+        for tab in VirtualCameraInspectorTab.allCases {
+            for section in VirtualCameraInspectorTab.allCases {
+                model.setInspectorExpanded(section, section == tab)
+            }
+            for (label, zoom, dark) in [("compact", 1.0, false), ("zoom", 1.6, true)] {
+                UIScale.apply(zoom)
+                try renderInspector(
+                    model, zoom: zoom, dark: dark,
+                    to: output.appendingPathComponent("inspector-\(tab.rawValue)-\(label).png"))
+            }
+        }
         UIScale.apply(previousZoom)
         model.updateComposition {
             $0.background = VirtualCameraBackground(
@@ -1179,6 +1191,46 @@ enum VirtualCameraSyntheticStudio {
                 .write(to: output.appendingPathComponent(name + ".png"))
         }
         return host
+    }
+
+    private func renderInspector(
+        _ model: VirtualCameraPageModel, zoom: Double, dark: Bool, to url: URL
+    ) throws {
+        let host = NSHostingView(
+            rootView: VStack(spacing: UIScale.pt(12)) {
+                HStack {
+                    Text("Adjust your meeting").font(.edithText(.headline))
+                    Spacer()
+                    Button("Done") {}.buttonStyle(.edith(.secondary))
+                }
+                VirtualCameraInspector(model: model, dark: dark)
+            }
+            .padding(UIScale.pt(16))
+            .environment(\.compactLayout, true)
+            .environment(\.automaticViewActionsEnabled, false)
+            .environment(\.windowVisible, false)
+            .environment(\.colorScheme, dark ? .dark : .light)
+            .background(DashSkin.paper(dark))
+            .transaction { $0.animation = nil })
+        host.sizingOptions = []
+        host.frame = CGRect(x: 0, y: 0, width: 440 * zoom, height: 580 * zoom)
+        host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        defer { window.orderOut(nil) }
+        window.appearance = host.appearance
+        window.contentView = host
+        window.orderBack(nil)
+        for _ in 0..<3 {
+            window.layoutIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            host.displayIfNeeded()
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        #expect(bitmap.pixelsWide > 0)
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
     }
 
     private func renderPage(

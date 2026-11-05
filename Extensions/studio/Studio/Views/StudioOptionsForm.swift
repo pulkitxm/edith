@@ -81,7 +81,7 @@ struct StudioOptionField: View {
         case let .longText(placeholder):
             ZStack(alignment: .topLeading) {
                 TextEditor(text: text)
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     .frame(height: UIScale.pt(84))
                     .scrollContentBackground(.hidden)
                     .padding(UIScale.pt(4))
@@ -92,7 +92,7 @@ struct StudioOptionField: View {
                         RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.15)))
                 if text.wrappedValue.isEmpty {
                     Text(placeholder)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(.tertiary)
                         .padding(UIScale.pt(9))
                         .allowsHitTesting(false)
@@ -208,7 +208,7 @@ struct StudioIntegerField: View {
             )
             .labelsHidden()
             if let unit {
-                Text(unit).font(.system(size: UIScale.pt(11.5))).foregroundStyle(.secondary)
+                Text(unit).font(.edithText(.subheadline)).foregroundStyle(.secondary)
             }
         }
     }
@@ -225,7 +225,7 @@ struct StudioSliderField: View {
             Slider(value: $value, in: range, step: step)
                 .controlSize(.small)
             Text(format(value))
-                .font(DashSkin.mono(11))
+                .font(.edithText(.subheadline)).monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(minWidth: UIScale.pt(52), alignment: .trailing)
         }
@@ -260,7 +260,7 @@ struct StudioColorField: View {
             .labelsHidden()
             TextField("#000000", text: $hex)
                 .textFieldStyle(.roundedBorder)
-                .font(DashSkin.mono(11.5))
+                .font(.edithText(.subheadline)).monospacedDigit()
                 .frame(width: UIScale.pt(96))
         }
     }
@@ -281,7 +281,7 @@ struct StudioPagesField: View {
                     problem
                         ?? "\(pageCount) pages in \(job.inputs.first?.lastPathComponent ?? "the PDF")"
                 )
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(problem == nil ? Color.secondary : DashSkin.danger)
             }
         }
@@ -344,7 +344,7 @@ struct StudioSpanField: View {
                 Text(
                     "Clip is \(StudioTime.format(duration)) long. Leave End empty to keep going to the end."
                 )
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(.secondary)
                 if duration > 0 {
                     StudioSpanSlider(span: $span, duration: duration)
@@ -462,14 +462,14 @@ struct StudioRectField: View {
                             }
                         }
                 } else {
-                    Text("Add a file to pick an area").font(.system(size: UIScale.pt(11)))
+                    Text("Add a file to pick an area").font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
             }
             .frame(height: UIScale.pt(170))
             HStack {
                 Text(StudioRectText.describe(rect))
-                    .font(DashSkin.mono(10.5))
+                    .font(.edithText(.subheadline)).monospacedDigit()
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Reset") { rect = .full }
@@ -559,7 +559,7 @@ struct StudioFileField: View {
                 StudioThumbnail(url: URL(fileURLWithPath: path), side: 48, corner: 5)
                     .frame(width: UIScale.pt(30), height: UIScale.pt(30))
                 Text(URL(fileURLWithPath: path).lastPathComponent)
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .lineLimit(1)
                     .truncationMode(.middle)
             }

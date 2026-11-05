@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionTestSupport
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation

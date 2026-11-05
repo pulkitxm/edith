@@ -6,6 +6,7 @@ import SwiftUI
 import Testing
 
 @testable import MusicEmbeddedUI
+@testable import MusicExtension
 
 @MainActor @Suite(.serialized) struct MusicDesignCaptureTests {
     private static let root = URL(fileURLWithPath: "/tmp/mock-music-library")
@@ -96,6 +97,103 @@ import Testing
         SharedDefaults.store.set(false, forKey: AppStorageKeys.Music.gridView)
     }
 
+    @Test func settingsDownloadsDetailHomeAndNotchRenderAtBothWidthsAndThemes() async throws {
+        let session = MusicCaptureSession()
+        defer { session.restore() }
+        try await configure(.populated)
+        let settings = EmbeddedMusicSettingsModel(expectedVersion: nil) { _, _ in
+            try JSONEncoder().encode(
+                EmbeddedMusicUISettings(
+                    version: "fixture", preferences: EmbeddedMusicUIPreferences()))
+        }
+        defer { settings.stop() }
+        await settings.refresh()
+        #expect(settings.loaded)
+        let track = EmbeddedTrack(
+            url: Self.root.appendingPathComponent("Morning Static.m4a"),
+            relativePath: "Morning Static.m4a")
+        let downloader = EmbeddedYoutubeDownloader()
+        try downloader.apply(Self.downloadsState)
+        let tile = SurfaceTile(.music)
+        for (zoom, width, height) in [
+            (1.0, 1100.0, 760.0), (1.0, 640.0, 700.0), (1.6, 1100.0, 760.0),
+        ] {
+            session.zoom(zoom)
+            for scheme in [ColorScheme.light, .dark] {
+                let suffix = "\(Int(width))-\(scheme)-\(zoom)"
+                _ = try await session.render(
+                    width: width, height: height, scheme: scheme, name: "settings-\(suffix)"
+                ) { EmbeddedMusicSettings(model: settings) }
+                _ = try await session.render(
+                    width: width, height: height, scheme: scheme, name: "downloads-\(suffix)"
+                ) { EmbeddedDownloadSheet(isPage: true, downloader: downloader) }
+                _ = try await session.render(
+                    width: width, height: height, scheme: scheme, name: "detail-\(suffix)"
+                ) {
+                    EmbeddedMusicDetailSheet(
+                        track: track, availableSize: CGSize(width: width, height: height),
+                        theme: .accentColor, beginRename: false, onRename: { _ in },
+                        onDelete: {}, onOpenFolder: { _ in }, onClose: {})
+                }
+                _ = try await session.render(
+                    width: min(width, 540), height: 340, scheme: scheme, name: "home-\(suffix)"
+                ) { EmbeddedMusicHomeScene(tile: tile) }
+            }
+        }
+        session.zoom(1)
+        #expect(downloader.items.count == 3)
+    }
+
+    @Test func notchCardRendersPlayingAndEmpty() async throws {
+        let session = MusicCaptureSession()
+        defer { session.restore() }
+        let playing = MusicSurfacePlayback(
+            sourceID: "local", sourceTitle: "Local library", trackKey: "Mock Collection/Mock.mov",
+            title: "Morning Static", artist: "Synthetic Artist", playing: true, elapsed: 74,
+            duration: 212, volume: 0.6, shuffle: false, repeating: false)
+        let context: NSDictionary = [
+            "location": "notch", "section": EmbeddedMusicNotchRoute.Section.card.rawValue,
+            "target": "notch", "tile": try JSONEncoder().encode(SurfaceTile(.music)),
+        ]
+        let route = try #require(EmbeddedMusicNotchRoute(context: context))
+        for (name, states) in [("playing", [playing]), ("empty", [])] {
+            let service = MusicSurface(
+                read: { _ in states }, perform: { _ in }, appIcon: { _ in nil },
+                privacyValues: { ["active": "0", "blurMusic": "1"] })
+            let model = EmbeddedMusicNotchModel(
+                request: route.request, presentationID: UUID(), invoke: service.execute)
+            await model.refresh()
+            #expect((model.nowPlaying != nil) == !states.isEmpty)
+            _ = try await session.render(
+                width: 420, height: 160, scheme: .dark, name: "notch-\(name)"
+            ) {
+                EmbeddedMusicNotchScene(route: route, model: model).background(.black)
+            }
+        }
+    }
+
+    private static var downloadsState: EmbeddedMusicDownloadsState {
+        let date = Date(timeIntervalSince1970: 1_790_000_000)
+        func record(_ path: String, _ status: EmbeddedDownloadStatus) -> EmbeddedDownloadRecord {
+            EmbeddedDownloadRecord(
+                url: URL(string: "https://media.example.test/\(path)")!, status: status,
+                outputFilename: nil, createdAt: date, kind: .audio)
+        }
+        return EmbeddedMusicDownloadsState(
+            snapshot: EmbeddedDownloadWorkerSnapshot(
+                records: [
+                    record(
+                        "watch/fixture-one",
+                        .downloading(
+                            progress: "42.0% of 18.4MiB at 3.1MiB/s", videoIndex: 1, videoCount: 3)),
+                    record("watch/fixture-two", .done("Synthetic harbour.m4a")),
+                    record("watch/fixture-three", .error("This video is private.")),
+                ], logs: [:], enabled: true, running: true, generation: UUID(), revision: 1,
+                executable: URL(fileURLWithPath: "/fixture/yt-dlp")),
+            unavailableReason: nil, updating: false, updateMessage: nil, updateError: nil,
+            directories: [:])
+    }
+
     @Test func footerAndSidebarReportTheHeightTheyDraw() async throws {
         let session = MusicCaptureSession()
         defer { session.restore() }
@@ -177,12 +275,37 @@ import Testing
         route: EmbeddedMusicSceneRoute, width: Double, height: Double?, scheme: ColorScheme,
         name: String
     ) async throws -> NSView {
+        try await render(
+            width: width, height: height, compact: route == .sidebar, scheme: scheme, name: name,
+            controller: { Self.controller(route) })
+    }
+
+    func render(
+        width: Double, height: Double?, scheme: ColorScheme, name: String,
+        @ViewBuilder content: @escaping () -> some View
+    ) async throws -> NSView {
+        try await render(
+            width: width, height: height, compact: false, scheme: scheme, name: name,
+            controller: {
+                NSHostingController(
+                    rootView: ExtensionPageHost {
+                        EmbeddedMusicSceneLoad {
+                            content().environment(\.controlActiveState, .key)
+                        }
+                    })
+            })
+    }
+
+    private func render(
+        width: Double, height: Double?, compact: Bool, scheme: ColorScheme, name: String,
+        controller make: () -> NSViewController
+    ) async throws -> NSView {
         defaults.set(scheme == .dark ? "dark" : "light", forKey: AppStorageKeys.General.appearance)
         let intrinsic = height == nil
         let presentation = ExtensionPresentationState(
-            compact: route == .sidebar || width < UIScale.pt(720), visible: false,
+            compact: compact || width < UIScale.pt(720), visible: false,
             availableWidth: width, intrinsic: intrinsic)
-        let controller = presentation.withContext { Self.controller(route) }
+        let controller = presentation.withContext { make() }
         var measured = height ?? 0
         if intrinsic {
             for _ in 0..<20 {

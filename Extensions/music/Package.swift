@@ -33,6 +33,7 @@ let package = Package(
             name: "MusicExtensionTests",
             dependencies: [
                 "MusicExtension", .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ], path: "Tests",
             exclude: ["Embedded"],
             swiftSettings: [.swiftLanguageMode(.v5)]),

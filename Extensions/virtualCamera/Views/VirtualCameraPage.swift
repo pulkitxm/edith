@@ -150,7 +150,7 @@ struct VirtualCameraStatusPill: View {
                 .fill(tint)
                 .frame(width: UIScale.pt(8), height: UIScale.pt(8))
             Text(model.statusHeadline)
-                .font(.system(size: UIScale.pt(12), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .lineLimit(1)
         }
@@ -189,9 +189,9 @@ struct VirtualCameraStage: View {
                     Image(systemName: "video.slash")
                         .font(.system(size: UIScale.pt(32)))
                     Text("Camera stopped")
-                        .font(.system(size: UIScale.pt(18), weight: .semibold))
+                        .font(.edithText(.title2).weight(.semibold))
                     Text("Capture is off and meeting apps see no video. Press Play to start again.")
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                 }
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -201,11 +201,11 @@ struct VirtualCameraStage: View {
                     Image(systemName: "video.slash")
                         .font(.system(size: UIScale.pt(32)))
                     Text("No camera connected")
-                        .font(.system(size: UIScale.pt(18), weight: .semibold))
+                        .font(.edithText(.title2).weight(.semibold))
                     Text(
                         "Plug in a webcam, or use a video file or a window instead. Then refresh the camera list."
                     )
-                    .font(.system(size: UIScale.pt(12)))
+                    .font(.edithText(.callout))
                     HStack(spacing: UIScale.pt(8)) {
                         Button("Choose video…") { model.chooseVideo() }
                             .buttonStyle(.edith(.secondary))
@@ -221,9 +221,9 @@ struct VirtualCameraStage: View {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: UIScale.pt(28)))
                     Text("Camera preview unavailable")
-                        .font(.system(size: UIScale.pt(16), weight: .semibold))
+                        .font(.edithText(.title2).weight(.semibold))
                     Text(failure)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                     Button("Retry camera") { model.retryPreview() }
                         .buttonStyle(.edith(.secondary))
                 }
@@ -235,7 +235,7 @@ struct VirtualCameraStage: View {
                     SkeletonBlock(width: 56, height: 56, corner: 14)
                     SkeletonBlock(width: 160, height: 12)
                     Text(title)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .foregroundStyle(.white.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -274,7 +274,7 @@ struct VirtualCameraStage: View {
                     HStack {
                         Spacer()
                         Text(String(format: "%.1fx", model.composition.framing.zoom))
-                            .font(.system(size: UIScale.pt(12), weight: .medium))
+                            .font(.edithText(.callout).weight(.medium))
                             .monospacedDigit()
                             .foregroundStyle(.white)
                             .padding(.horizontal, UIScale.pt(8))
@@ -300,7 +300,7 @@ struct VirtualCameraBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: UIScale.pt(10), weight: .bold))
+            .font(.edithText(.caption).weight(.bold))
             .tracking(0.6)
             .foregroundStyle(.white)
             .padding(.horizontal, UIScale.pt(7))
@@ -337,7 +337,7 @@ struct VirtualCameraAccessPrompt: View {
                 model.cameraAccess == .notDetermined
                     ? "Edith needs your camera" : "Camera access is off"
             )
-            .font(.system(size: UIScale.pt(15), weight: .semibold))
+            .font(.edithText(.title3).weight(.semibold))
             .foregroundStyle(.white)
             Text(
                 model.cameraAccess == .notDetermined
@@ -345,7 +345,7 @@ struct VirtualCameraAccessPrompt: View {
                     : "Camera access was turned off for Edith. Turn it back on in System Settings, under Privacy & Security, Camera."
             )
             .padding(.horizontal, UIScale.pt(16))
-            .font(.system(size: UIScale.pt(12)))
+            .font(.edithText(.callout))
             .foregroundStyle(.white.opacity(0.7))
             Button(model.cameraAccess == .notDetermined ? "Allow camera" : "Open System Settings") {
                 model.requestCameraAccess()
@@ -370,10 +370,10 @@ struct VirtualCameraSceneStrip: View {
             HStack(alignment: .top, spacing: UIScale.pt(8)) {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text("Scenes")
-                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .font(.edithText(.body).weight(.semibold))
                         .foregroundStyle(DashSkin.ink(dark))
                     Text("Save your framing, look and overlays. Switch with ⌘1 to ⌘9.")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -482,7 +482,7 @@ struct VirtualCameraNamePrompt: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             Text(title)
-                .font(.system(size: UIScale.pt(13), weight: .semibold))
+                .font(.edithText(.body).weight(.semibold))
             TextField("Name", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: UIScale.pt(240))

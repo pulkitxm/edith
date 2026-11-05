@@ -169,6 +169,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                         }
                         PageLoading(
                             state: library.load.state, title: "No music found",
+                            errorTitle: "Your music could not be loaded",
                             message: emptyMessage, layout: .cards,
                             refreshing: library.load.isRefreshing,
                             retry: { library.refresh() }

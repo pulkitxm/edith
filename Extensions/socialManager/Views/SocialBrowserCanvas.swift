@@ -94,28 +94,22 @@ private struct SocialBrowserPane: View {
                 Menu {
                     paneActions
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: "ellipsis").accessibilityHidden(true)
                 }
-                .menuStyle(.borderlessButton).fixedSize()
+                .menuStyle(.button).buttonStyle(.pageChip(iconOnly: true))
+                .menuIndicator(.hidden).fixedSize()
                 .accessibilityLabel("Manage \(account.name) pane")
                 if tab.layout.paneCount > 1 {
-                    Button {
-                        model.toggleZoom(key)
-                    } label: {
-                        Image(
-                            systemName: tab.zoomed == key
-                                ? "arrow.down.right.and.arrow.up.left"
-                                : "arrow.up.left.and.arrow.down.right")
-                    }
-                    .accessibilityLabel(
-                        tab.zoomed == key ? "Restore panes" : "Maximize \(account.name)")
+                    PageIconChip(
+                        systemImage: tab.zoomed == key
+                            ? "arrow.down.right.and.arrow.up.left"
+                            : "arrow.up.left.and.arrow.down.right",
+                        label: tab.zoomed == key ? "Restore panes" : "Maximize \(account.name)"
+                    ) { model.toggleZoom(key) }
                 }
-                Button {
+                PageIconChip(systemImage: "xmark", label: "Close \(account.name)") {
                     model.closeAccount(key)
-                } label: {
-                    Image(systemName: "xmark")
                 }
-                .accessibilityLabel("Close \(account.name)")
             }
             .padding(UIScale.pt(8))
             .background(focused ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper2(dark))
@@ -254,44 +248,36 @@ struct SocialBrowserContent: View {
 
     private var navigation: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Button {
-                page.webView.goBack()
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .disabled(!page.canGoBack).accessibilityLabel("Back")
-            Button {
+            PageIconChip(systemImage: "chevron.left", label: "Back") { page.webView.goBack() }
+                .disabled(!page.canGoBack)
+            PageIconChip(systemImage: "chevron.right", label: "Forward") {
                 page.webView.goForward()
-            } label: {
-                Image(systemName: "chevron.right")
             }
-            .disabled(!page.canGoForward).accessibilityLabel("Forward")
-            Button {
+            .disabled(!page.canGoForward)
+            PageIconChip(
+                systemImage: page.isLoading ? "xmark" : "arrow.clockwise",
+                label: page.isLoading ? "Stop loading" : "Reload"
+            ) {
                 page.isLoading ? page.webView.stopLoading() : page.retry()
-            } label: {
-                Image(systemName: page.isLoading ? "xmark" : "arrow.clockwise")
-            }.accessibilityLabel(page.isLoading ? "Stop loading" : "Reload")
-            Button {
-                page.webView.load(URLRequest(url: website))
-            } label: {
-                Image(systemName: "house")
             }
-            .accessibilityLabel("Platform home")
-            TextField("Website address", text: $address)
-                .font(.edithText(.caption)).textFieldStyle(.roundedBorder)
-                .focused($addressFocused)
-                .onSubmit {
-                    let engine =
-                        BrowserSearchEngine(
-                            rawValue: SharedDefaults.store.string(
-                                forKey: AppStorageKeys.Notch.browserSearchEngine) ?? "")
-                        ?? .fallback
-                    guard let url = BrowserAddress.url(for: address, engine: engine) else { return }
-                    page.webView.load(URLRequest(url: url))
-                    addressFocused = false
-                    page.webView.window?.makeFirstResponder(page.webView)
-                }
-                .help(page.url?.absoluteString ?? website.absoluteString)
+            PageIconChip(systemImage: "house", label: "Platform home") {
+                page.webView.load(URLRequest(url: website))
+            }
+            EdithTextField(
+                placeholder: "Website address", text: $address, compact: true,
+                focus: $addressFocused
+            ) {
+                let engine =
+                    BrowserSearchEngine(
+                        rawValue: SharedDefaults.store.string(
+                            forKey: AppStorageKeys.Notch.browserSearchEngine) ?? "")
+                    ?? .fallback
+                guard let url = BrowserAddress.url(for: address, engine: engine) else { return }
+                page.webView.load(URLRequest(url: url))
+                addressFocused = false
+                page.webView.window?.makeFirstResponder(page.webView)
+            }
+            .help(page.url?.absoluteString ?? website.absoluteString)
         }
         .padding(UIScale.pt(8))
     }

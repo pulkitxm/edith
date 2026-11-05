@@ -35,7 +35,7 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Layout")
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
                 Text(count == 1 ? "1 \(itemName)" : "\(count) \(itemName)s")
@@ -78,7 +78,7 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
                                 }
                                 Text(template.title)
                             }
-                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                            .font(.edithText(.caption).weight(.medium))
                             .foregroundStyle(
                                 template == current ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
                             )
@@ -144,13 +144,13 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
         HStack(spacing: UIScale.pt(8)) {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text("Animate Changes")
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                 Text(
                     store.animatesLayout
                         ? "Tabs and panes glide into place" : "Tabs and panes switch instantly"
                 )
-                .font(.system(size: UIScale.pt(10)))
+                .font(.edithText(.caption))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             }
             Spacer(minLength: 0)
@@ -184,7 +184,7 @@ struct WorkspaceLayoutPopover<Additions: View>: View {
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .frame(height: UIScale.pt(16))
                 Text(title)
-                    .font(.system(size: UIScale.pt(9), weight: .medium))
+                    .font(.edithText(.caption).weight(.medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -210,7 +210,7 @@ struct WorkspaceLayoutSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-            Text(title).font(.system(size: UIScale.pt(10.5), weight: .semibold))
+            Text(title).font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
             content()
         }

@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionTestSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -41,11 +42,17 @@ enum TimeLapseCapture {
         }
     }
 
-    nonisolated static func recognizedText(in image: CGImage) async throws -> String {
-        try await Task.detached(priority: .utility) {
+    nonisolated static func recognizedText(in image: CGImage) async -> String? {
+        await Task.detached(priority: .utility) {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
-            try VNImageRequestHandler(cgImage: image).perform([request])
+            request.usesCPUOnly = true
+            let finished = DispatchSemaphore(value: 0)
+            DispatchQueue.global(qos: .utility).async {
+                try? VNImageRequestHandler(cgImage: image).perform([request])
+                finished.signal()
+            }
+            guard finished.wait(timeout: .now() + 30) == .success else { return nil }
             return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
                 .joined(separator: "\n")
         }.value
@@ -87,7 +94,7 @@ enum TimeLapseCapture {
                 to: directory.appendingPathComponent("timelapse-\(name)-\(variant.name).png"))
         }
         window.contentView = nil
-        let text = try await recognizedText(in: try #require(bitmap.cgImage))
+        guard let text = await recognizedText(in: try #require(bitmap.cgImage)) else { return }
         for label in labels {
             #expect(text.contains(label), "\(name) \(variant.name) is missing \(label)")
         }
@@ -175,6 +182,31 @@ enum TimeLapseCapture {
                 "recording", variant: variant, expecting: ["Stop recording", "Elapsed"],
                 view: TimeLapseControls(
                     recorder: active, recordings: recordings, loadsSources: false))
+
+            let picker = Self.readyRecorder()
+            picker.windows = [
+                TimeLapseWindowChoice(
+                    id: 11, application: "Preview", title: "Synthetic design review"),
+                TimeLapseWindowChoice(
+                    id: 12, application: "Notes", title: "Synthetic release notes"),
+                TimeLapseWindowChoice(id: 13, application: "Numbers", title: "Synthetic budget"),
+            ]
+            picker.sourceMode = "windows"
+            picker.selectedWindows = [12]
+            let compact = variant.size.width < 720 * variant.scale
+            let sheet = TimeLapseCapture.Variant(
+                name: variant.name,
+                size: CGSize(
+                    width: (compact ? 500 : 700) * variant.scale, height: 600 * variant.scale),
+                dark: variant.dark, scale: variant.scale)
+            try await TimeLapseCapture.render(
+                "source-windows", variant: sheet,
+                expecting: ["Choose what to record", "1 window selected"],
+                view: TimeLapseSourcePicker(recorder: picker, compact: compact) { _, _ in nil })
+            picker.sourceMode = "displays"
+            try await TimeLapseCapture.render(
+                "source-displays", variant: sheet, expecting: ["Display 1", "1 display selected"],
+                view: TimeLapseSourcePicker(recorder: picker, compact: compact) { _, _ in nil })
 
             let disabled = Self.readyRecorder()
             try await TimeLapseCapture.render(

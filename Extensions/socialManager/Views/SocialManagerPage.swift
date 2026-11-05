@@ -197,12 +197,10 @@ struct SocialManagerPage: View {
 
     private var tabs: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Button {
+            PageIconChip(systemImage: "sidebar.left", label: "Show accounts") {
                 if compact { compactRailPresented.toggle() } else { railOpen.toggle() }
-            } label: {
-                Image(systemName: "sidebar.left")
             }
-            .accessibilityLabel("Show accounts").help("Show or hide the account list")
+            .help("Show or hide the account list")
             .padding(.leading, PageMetrics.gutter(compact))
             SocialAccountFilterButton(
                 model: model, presented: $filterMenu,
@@ -250,7 +248,8 @@ struct SocialManagerPage: View {
                                 .font(.edithText(.subheadline)).lineLimit(1)
                                 if tab.layout.paneCount > 1 {
                                     Text("+\(tab.layout.paneCount - 1)")
-                                        .font(DashSkin.mono(9.5, weight: .semibold))
+                                        .font(.edithText(.caption).weight(.semibold))
+                                        .monospacedDigit()
                                         .padding(.horizontal, UIScale.pt(5)).padding(
                                             .vertical, UIScale.pt(1)
                                         )
@@ -296,6 +295,7 @@ struct SocialManagerPage: View {
         } content: {
             PageLoading(
                 state: model.load.state, title: "Social profiles",
+                errorTitle: "Your profiles could not be opened",
                 message: model.load.errorMessage.map {
                     "Your saved profiles and accounts could not be opened. \($0) Try again in a moment."
                 } ?? "Loading your profiles and connected accounts.",
@@ -540,14 +540,11 @@ struct SocialManagerPage: View {
 
     private func profileActionBar(_ profile: SocialProfile) -> some View {
         HStack(spacing: UIScale.pt(8)) {
-            SocialEmailMenu(model: model, profile: profile).fixedSize()
-            Menu {
+            SocialEmailMenu(model: model, profile: profile)
+            PageMenuChip("Manage profile", systemImage: "ellipsis") {
                 profileActions(profile)
                 Button("Add custom website") { addingPlatform = true }
-            } label: {
-                Label("Manage profile", systemImage: "ellipsis")
             }
-            .fixedSize()
             if !model.accounts(in: profile).isEmpty {
                 Button("Add account", systemImage: "plus") { addingAccount = true }
                     .buttonStyle(.edith(.secondary))
@@ -632,7 +629,7 @@ struct SocialManagerPage: View {
                     SocialEmailMenu(model: model, profile: profile)
                 }
                 if !model.catalog.profiles.isEmpty {
-                    Button("Manage profiles") {
+                    PageChip("Manage profiles") {
                         model.browse(.profiles); compactRailPresented = false
                     }
                 }

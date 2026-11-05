@@ -105,7 +105,7 @@ struct StudioPDFPageTile: View {
                 }
             }
             Text("\(index + 1)")
-                .font(DashSkin.mono(11, weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium)).monospacedDigit()
                 .foregroundStyle(.secondary)
         }
         .onHover { hovering = $0 }
@@ -155,7 +155,7 @@ struct StudioSignaturePad: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            Text("New signature").font(.system(size: UIScale.pt(16), weight: .semibold))
+            Text("New signature").font(.edithText(.title2).weight(.semibold))
             EdithSegmentedPicker(
                 "", selection: $mode, options: Mode.allCases, label: { $0.rawValue }
             )

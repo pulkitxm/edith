@@ -130,7 +130,7 @@ struct SocialAccountFilterMenu: View {
                     systemName: row.action == .clear
                         ? "xmark" : row.selected ? "checkmark.circle.fill" : "circle"
                 )
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(row.selected ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(14), height: UIScale.pt(14))
                 Text(row.title)

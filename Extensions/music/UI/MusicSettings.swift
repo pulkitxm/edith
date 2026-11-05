@@ -5,12 +5,17 @@ import SwiftUI
 
 struct EmbeddedMusicSettings: View {
     var openLibrary: () -> Void = {}
+    var done: (() -> Void)?
     @State private var tools = EmbeddedMusicTools.shared
     @State private var model: EmbeddedMusicSettingsModel
     @State private var openError: String?
 
-    init(model: EmbeddedMusicSettingsModel? = nil, openLibrary: @escaping () -> Void = {}) {
+    init(
+        model: EmbeddedMusicSettingsModel? = nil, done: (() -> Void)? = nil,
+        openLibrary: @escaping () -> Void = {}
+    ) {
         self.openLibrary = openLibrary
+        self.done = done
         _model = State(
             initialValue: model
                 ?? EmbeddedMusicSettingsModel { operation, payload in
@@ -22,75 +27,82 @@ struct EmbeddedMusicSettings: View {
         PageWorkspace {
             PageHeader(
                 "Music settings",
+                trailing: {
+                    if let done {
+                        Button("Done", action: done).buttonStyle(.edith(.secondary))
+                            .keyboardShortcut(.cancelAction)
+                    }
+                },
                 accessory: {
                     Text("Library, streaming accounts and playback.").font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                 })
         } content: {
             Form {
-                Section("Command-line tools") {
-                    Text(
-                        "These tools save YouTube audio, videos, images and posts to your library."
-                    ).font(.edithText(.caption)).foregroundStyle(.secondary)
+                Section {
                     ForEach(EmbeddedMusicTools.names, id: \.self) { name in
-                        LabeledContent(name) {
-                            if tools.installed.contains(name) {
-                                Label("Installed", systemImage: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            } else if tools.installing == name {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Button("Install") { tools.install(name) }.disabled(
-                                    tools.installing != nil)
-                            }
+                        SettingsRow(name, subtitle: EmbeddedMusicTools.purpose(of: name)) {
+                            toolStatus(name)
                         }
                     }
                     if let error = tools.error {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red).font(.edithText(.caption))
+                        SettingsErrorRow(
+                            "A tool could not be installed", message: error,
+                            retryTitle: "Check Again"
+                        ) { tools.refresh() }
                     }
-                    Button("Check tools again") {
-                        tools.refresh();
+                } header: {
+                    Text("Command-line tools")
+                } footer: {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("These tools save audio, videos, images and posts to your library.")
+                        Spacer(minLength: 0)
+                        Button("Check Again") { tools.refresh() }.buttonStyle(.edith(.toolbar))
                     }
                 }
-                Section {
-                    LabeledContent("Streaming accounts") {
+                Section("Library") {
+                    SettingsRow(
+                        "Streaming accounts",
+                        subtitle: "Spotify and YouTube Music connect in Music."
+                    ) {
                         Button("Connect in Music", action: openLibrary)
+                            .buttonStyle(.edith(.secondary))
                     }
-                    LabeledContent("Music folder") {
-                        HStack {
-                            Button("Choose folder...", action: chooseLibrary)
+                    SettingsRow("Music folder", subtitle: "Where your tracks and downloads live.") {
+                        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                            Button("Choose Folder...", action: chooseLibrary)
+                                .buttonStyle(.edith(.secondary))
                             Button("Open in Finder") {
                                 EmbeddedMusicRemote.shared.openLibrary()
                             }
+                            .buttonStyle(.edith(.secondary))
                         }
                     }
                     if let openError {
-                        Label(openError, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red).font(.edithText(.caption))
+                        SettingsNoticeRow(
+                            "The folder could not be opened", message: openError,
+                            symbol: "exclamationmark.triangle.fill", tint: .orange)
                     }
                     Toggle("Fade between tracks", isOn: model.boolean(.crossfade, \.crossfade))
                     if model.boolean(.crossfade, \.crossfade).wrappedValue {
-                        LabeledContent("Fade length") {
-                            Text(String(format: "%.1fs", model.fadeLength.wrappedValue))
-                                .foregroundStyle(.secondary).monospacedDigit()
-                        }
-                        Slider(value: model.fadeLength, in: EmbeddedMusicFade.secondsRange)
-                        Text("How long the old track fades out while the next one fades in.").font(
-                            .edithText(.caption)
-                        ).foregroundStyle(.secondary)
+                        SettingsSliderRow(
+                            "Fade length",
+                            subtitle: "How long the old track fades out as the next fades in.",
+                            value: model.fadeLength, in: EmbeddedMusicFade.secondsRange,
+                            readout: String(format: "%.1fs", model.fadeLength.wrappedValue))
                     }
                 }
                 .disabled(!model.loaded || model.closed)
                 .opacity(model.loaded && !model.closed ? 1 : 0.5)
                 EmbeddedMusicBarRows(model: model)
                 if let error = model.error {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .font(.edithText(.caption))
-                    Button("Try again") { Task { await model.refresh() } }
+                    Section {
+                        SettingsErrorRow("Settings could not be loaded", message: error) {
+                            Task { await model.refresh() }
+                        }
+                    }
                 }
-            }.edithForm()
+            }.settingsForm()
         }
         .pageTask {
             await model.refresh(); tools.refresh()
@@ -99,22 +111,38 @@ struct EmbeddedMusicSettings: View {
     }
 
     private func chooseLibrary() { EmbeddedMusicRemote.shared.chooseLibrary() }
+
+    @ViewBuilder
+    private func toolStatus(_ name: String) -> some View {
+        if tools.installed.contains(name) {
+            Label("Installed", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        } else if tools.installing == name {
+            SkeletonBlock(width: 64, height: 12, corner: 4)
+                .accessibilityLabel("Installing \(name)")
+        } else {
+            Button("Install") { tools.install(name) }
+                .buttonStyle(.edith(.secondary))
+                .disabled(tools.installing != nil)
+        }
+    }
 }
 
 struct EmbeddedMusicBarRows: View {
     @Bindable var model: EmbeddedMusicSettingsModel
 
     var body: some View {
-        Section("Player bar") {
+        Section {
             Toggle(
                 "Collapse to a progress line",
                 isOn: model.boolean(.barCollapsed, \.barCollapsed))
             Toggle(
                 "Hide when nothing is playing",
                 isOn: model.boolean(.barAutoHide, \.barAutoHide))
+        } header: {
+            Text("Player bar")
+        } footer: {
             Text("The chevron at the right end of the bar toggles the collapsed state too.")
-                .font(.edithText(.caption))
-                .foregroundStyle(.secondary)
         }
         .disabled(!model.loaded || model.closed)
         .opacity(model.loaded && !model.closed ? 1 : 0.5)

@@ -112,32 +112,10 @@ struct SocialLibraryViewPicker: View {
 
 struct SocialAccountSearch: View {
     @Bindable var model: SocialManagerModel
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
-            TextField("Search accounts", text: $model.accountSearch)
-                .textFieldStyle(.plain).font(.edithText(.subheadline))
-                .disableAutocorrection(true)
-                .accessibilityLabel("Search social accounts")
-            if !model.accountSearch.isEmpty {
-                Button {
-                    model.accountSearch = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                }
-                .buttonStyle(.edith(.borderless))
-                .accessibilityLabel("Clear account search")
-            }
-        }
-        .padding(.horizontal, UIScale.pt(8))
-        .padding(.vertical, UIScale.pt(6))
-        .widgetBar(
-            cornerRadius: 8, fill: DashSkin.paper2(scheme == .dark),
-            stroke: DashSkin.line(scheme == .dark))
+        SearchField(placeholder: "Search accounts", text: $model.accountSearch)
+            .accessibilityLabel("Search social accounts")
     }
 }
 
@@ -146,7 +124,7 @@ struct SocialOpenAccountsMenu: View {
     let accounts: [SocialAccount]
 
     var body: some View {
-        Menu {
+        PageMenuChip("Open all (\(accounts.count))", systemImage: "rectangle.stack") {
             Button("Open all in tabs") { model.openAccounts(accounts) }
             if accounts.count > 1 {
                 Menu("Open all side by side") {
@@ -155,8 +133,6 @@ struct SocialOpenAccountsMenu: View {
                     }
                 }
             }
-        } label: {
-            Label("Open all (\(accounts.count))", systemImage: "rectangle.stack.badge.plus")
         }
         .disabled(accounts.isEmpty || model.busy)
         .help("Open every matching account using its saved browser session")
@@ -203,9 +179,10 @@ struct SocialAccountListRow: View {
             Menu {
                 SocialAccountActions(model: model, account: account)
             } label: {
-                Image(systemName: "ellipsis")
+                Image(systemName: "ellipsis").accessibilityHidden(true)
             }
-            .menuStyle(.borderlessButton).fixedSize()
+            .menuStyle(.button).buttonStyle(.pageChip(iconOnly: true))
+            .menuIndicator(.hidden).fixedSize()
             .accessibilityLabel("Manage \(model.accountTitle(account))")
         }
         .padding(UIScale.pt(compactRow ? 8 : compact ? 10 : 14))

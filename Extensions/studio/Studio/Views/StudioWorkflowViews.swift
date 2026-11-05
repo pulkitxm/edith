@@ -125,9 +125,9 @@ struct StudioWorkflowCard: View {
             }
             .scrollIndicators(.automatic)
             Text(workflow.name)
-                .font(.system(size: UIScale.pt(13.5), weight: .semibold))
+                .font(.edithText(.body).weight(.semibold))
             Text(workflow.summary)
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
             HStack {
@@ -177,20 +177,26 @@ struct StudioWorkflowEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            Text("Workflow").font(.system(size: UIScale.pt(17), weight: .semibold))
-            TextField("Name", text: Binding(get: { draft.name }, set: { draft.name = $0 }))
-                .textFieldStyle(.roundedBorder)
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
+                Text("Workflow").font(.edithText(.title2)).fontWeight(.semibold)
+                Text("Run these tools in order on the files you choose.")
+                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+            }
+            EdithTextField(
+                placeholder: "Workflow name",
+                text: Binding(get: { draft.name }, set: { draft.name = $0 }))
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     ForEach(Array(draft.steps.enumerated()), id: \.element.id) { index, step in
                         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                             HStack(spacing: UIScale.pt(8)) {
                                 Text("\(index + 1)")
-                                    .font(DashSkin.mono(11, weight: .bold))
+                                    .font(.edithText(.callout)).fontWeight(.semibold)
+                                    .monospacedDigit()
                                     .frame(width: UIScale.pt(20))
                                 StudioToolIcon(tool: step.tool, size: 26)
-                                Text(step.tool.title).font(
-                                    .system(size: UIScale.pt(12.5), weight: .medium))
+                                Text(step.tool.title)
+                                    .font(.edithText(.callout)).fontWeight(.medium)
                                 Spacer()
                                 if !step.tool.options.isEmpty {
                                     Button(expanded == index ? "Done" : "Settings") {
@@ -242,14 +248,14 @@ struct StudioWorkflowEditor: View {
                             draft.steps.isEmpty ? "Choose the first tool" : "Add a step",
                             systemImage: "plus")
                     }
-                    .menuStyle(.borderlessButton)
+                    .buttonStyle(.edith(.secondary))
                     .fixedSize()
                     .padding(.top, UIScale.pt(4))
                 }
             }
             .frame(minHeight: UIScale.pt(220), maxHeight: UIScale.pt(420))
             if let failure = draft.failure {
-                Text(failure).font(.system(size: UIScale.pt(11.5))).foregroundStyle(DashSkin.danger)
+                Text(failure).font(.edithText(.callout)).foregroundStyle(DashSkin.danger)
             }
             HStack {
                 Spacer()
@@ -259,9 +265,12 @@ struct StudioWorkflowEditor: View {
                 Button("Save workflow") { model.saveWorkflow(draft) }
                     .buttonStyle(.edith(.primary))
                     .keyboardShortcut(.defaultAction)
+                    .disabled(
+                        draft.steps.isEmpty
+                            || draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(UIScale.pt(22))
+        .padding(UIScale.pt(PageMetrics.gutter))
         .frame(width: UIScale.pt(560))
     }
 }

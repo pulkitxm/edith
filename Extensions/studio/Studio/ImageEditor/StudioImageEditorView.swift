@@ -95,7 +95,7 @@ struct StudioImageEditorView: View {
             }
             if let status = editor.status {
                 HStack {
-                    Text(status).font(.system(size: UIScale.pt(11.5))).foregroundStyle(.secondary)
+                    Text(status).font(.edithText(.subheadline)).foregroundStyle(.secondary)
                     Spacer()
                     if let saved = editor.lastSaved {
                         Button("Show in Finder") { StudioFileActions.reveal([saved]) }
@@ -163,7 +163,7 @@ struct StudioImageToolRail: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical) {
             VStack(spacing: UIScale.pt(4)) {
                 ForEach(StudioImagePanel.allCases) { panel in
                     Button {
@@ -173,7 +173,7 @@ struct StudioImageToolRail: View {
                             Image(systemName: panel.symbol)
                                 .font(.system(size: UIScale.pt(15)))
                             Text(panel.title.components(separatedBy: " ").first ?? panel.title)
-                                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                                .font(.edithText(.caption).weight(.medium))
                                 .lineLimit(1)
                         }
                         .frame(width: UIScale.pt(60), height: UIScale.pt(46))

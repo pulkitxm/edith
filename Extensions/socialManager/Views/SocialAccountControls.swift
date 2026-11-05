@@ -8,12 +8,10 @@ struct SocialEmailMenu: View {
     let profile: SocialProfile
 
     var body: some View {
-        Menu {
+        PageMenuChip("Email", systemImage: "envelope") {
             Button("Open email in tab") { model.openEmail(profile) }
             Button("Open email on the right") { model.openEmail(profile, beside: true) }
             Button("Open email below") { model.openEmail(profile, beside: true, side: .bottom) }
-        } label: {
-            Label("Email", systemImage: "envelope")
         }
         .help(profile.email ?? "Open this profile's saved Gmail session")
         .disabled(model.busy)

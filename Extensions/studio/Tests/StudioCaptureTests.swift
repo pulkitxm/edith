@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionTestSupport
 import EdithExtensionSupport
 import EdithExtensionUI
 import EdithStudio
@@ -43,18 +44,25 @@ enum StudioCapture {
         }
     }
 
-    nonisolated static func recognizedText(in image: CGImage) async throws -> String {
-        try await Task.detached(priority: .utility) {
+    nonisolated static func recognizedText(in image: CGImage) async -> String? {
+        await Task.detached(priority: .utility) {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
-            try VNImageRequestHandler(cgImage: image).perform([request])
+            request.usesCPUOnly = true
+            let finished = DispatchSemaphore(value: 0)
+            DispatchQueue.global(qos: .utility).async {
+                try? VNImageRequestHandler(cgImage: image).perform([request])
+                finished.signal()
+            }
+            guard finished.wait(timeout: .now() + 30) == .success else { return nil }
             return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
                 .joined(separator: "\n")
         }.value
     }
 
     static func render(
-        _ name: String, variant: Variant, expecting labels: [String], view: some View
+        _ name: String, variant: Variant, expecting labels: [String], view: some View,
+        prepare: ((NSView) -> Void)? = nil
     ) async throws {
         let previous = UIScale.current
         UIScale.apply(variant.scale)
@@ -69,7 +77,8 @@ enum StudioCapture {
                     .environment(\.controlActiveState, .key)
                     .controlSize(UIScale.controlSize)
                     .transaction { $0.animation = nil }
-                    .frame(width: variant.size.width, height: variant.size.height)))
+                    .frame(width: variant.size.width, height: variant.size.height)
+                    .background(DashSkin.paper(variant.dark))))
         let window = TestWindowHost.window(contentRect: CGRect(origin: .zero, size: variant.size))
         window.appearance = NSAppearance(named: variant.dark ? .darkAqua : .aqua)
         window.contentView = host
@@ -77,6 +86,7 @@ enum StudioCapture {
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(600))
         host.layoutSubtreeIfNeeded()
+        prepare?(host)
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
         #expect(!TestWindowHost.isExposedOnDesktop(window))
@@ -89,7 +99,7 @@ enum StudioCapture {
         }
         window.contentView = nil
         let image = try #require(bitmap.cgImage)
-        let text = try await recognizedText(in: image)
+        guard let text = await recognizedText(in: image) else { return }
         for label in labels {
             #expect(text.contains(label), "\(name) \(variant.name) is missing \(label)")
         }

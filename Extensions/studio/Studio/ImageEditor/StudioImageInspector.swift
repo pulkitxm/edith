@@ -11,7 +11,7 @@ struct StudioImageInspector: View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 Text(editor.panel.title)
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                 switch editor.panel {
                 case .select:
                     Text(
@@ -48,6 +48,7 @@ struct StudioImageInspector: View {
                     StudioImageLayerList(editor: editor)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(UIScale.pt(16))
             .controlSize(.small)
         }
@@ -65,12 +66,12 @@ struct StudioImageCropPanel: View {
 
     var body: some View {
         StudioInspectorGroup("Aspect ratio") {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(56)))], spacing: UIScale.pt(6)
+            WrapHStack(
+                spacing: UIScale.pt(PageMetrics.controlSpacing),
+                lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
             ) {
                 ForEach(ratios, id: \.0) { ratio in
-                    Button(ratio.0) { apply(ratio.1) }
-                        .buttonStyle(.edith(.secondary))
+                    PageChip(ratio.0) { apply(ratio.1) }
                 }
             }
         }
@@ -150,7 +151,7 @@ struct StudioImageSlider: View {
                 }
             }
             Text(format(draft ?? value))
-                .font(DashSkin.mono(10))
+                .font(.edithText(.caption)).monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(width: UIScale.pt(40), alignment: .trailing)
         }
@@ -165,12 +166,12 @@ struct StudioImageAdjustPanel: View {
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 HStack {
                     Label(key.title, systemImage: key.symbolName)
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                     Spacer()
                     if abs(editor.document.adjustments[key]) > 0.0001 {
                         Button("Reset") { editor.edit { $0.adjustments[key] = 0 } }
                             .buttonStyle(.edith(.toolbar))
-                            .font(.system(size: UIScale.pt(10)))
+                            .font(.edithText(.caption))
                     }
                 }
                 StudioImageSlider(
@@ -219,7 +220,7 @@ struct StudioImageFilterPanel: View {
                                 .strokeBorder(
                                     editor.document.filter == preset
                                         ? Color.themeAccent : Color.clear, lineWidth: 2.5))
-                        Text(preset.title).font(.system(size: UIScale.pt(10.5)))
+                        Text(preset.title).font(.edithText(.subheadline))
                     }
                     .edithButtonTarget(.borderless)
                 }
@@ -262,7 +263,7 @@ struct StudioImageTextPanel: View {
         Text(
             "Click the picture to add text there. Drag text to move it, drag the corner to resize."
         )
-        .font(.system(size: UIScale.pt(11)))
+        .font(.edithText(.subheadline))
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
         if let layer = editor.selected, case let .text(style) = layer.content {
@@ -282,7 +283,7 @@ struct StudioImageTextStyleEditor: View {
                 .lineLimit(1...5)
             StudioFontField(family: bind(\.font))
             HStack {
-                Text("Size").font(.system(size: UIScale.pt(11)))
+                Text("Size").font(.edithText(.subheadline))
                 StudioImageSlider(
                     value: style.size, range: 0.02...0.3,
                     format: { String(format: "%.0f", $0 * 100) }
@@ -350,13 +351,13 @@ struct StudioImageDrawPanel: View {
 
     var body: some View {
         Text("Drag on the picture to draw.")
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(.secondary)
         StudioInspectorGroup("Brush") {
             StudioColorField(
                 hex: Binding(get: { editor.drawColor }, set: { editor.drawColor = $0 }))
             HStack {
-                Text("Width").font(.system(size: UIScale.pt(11)))
+                Text("Width").font(.edithText(.subheadline))
                 StudioImageSlider(
                     value: editor.drawWidth, range: 0.002...0.05,
                     format: { String(format: "%.1f", $0 * 100) }
@@ -381,7 +382,7 @@ struct StudioImageShapePanel: View {
             "Shape", selection: Binding(get: { editor.shapeKind }, set: { editor.shapeKind = $0 }),
             options: ImageShapeKind.allCases, label: { $0.rawValue.capitalized })
         Text("Drag on the picture to add the shape.")
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(.secondary)
         StudioColorField(hex: Binding(get: { editor.shapeColor }, set: { editor.shapeColor = $0 }))
         Toggle("Fill", isOn: Binding(get: { editor.shapeFill }, set: { editor.shapeFill = $0 }))
@@ -427,7 +428,7 @@ struct StudioImageBlurPanel: View {
             selection: Binding(get: { editor.redactStyle }, set: { editor.redactStyle = $0 }),
             options: ImageRedactionStyle.allCases, label: { $0.title })
         HStack {
-            Text("Strength").font(.system(size: UIScale.pt(11)))
+            Text("Strength").font(.edithText(.subheadline))
             StudioImageSlider(
                 value: editor.redactStrength, range: 0.1...1,
                 format: { "\(Int(($0 * 100).rounded()))%" }
@@ -436,7 +437,7 @@ struct StudioImageBlurPanel: View {
             }
         }
         Text("Drag over faces, plates, names or anything private.")
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.subheadline))
             .foregroundStyle(.secondary)
         Button {
             editor.blurFaces()
@@ -472,7 +473,7 @@ struct StudioImageFramePanel: View {
         }
         if let frame = editor.document.frame {
             HStack {
-                Text("Width").font(.system(size: UIScale.pt(11)))
+                Text("Width").font(.edithText(.subheadline))
                 StudioImageSlider(
                     value: frame.width, range: 0.005...0.2,
                     format: { String(format: "%.0f", $0 * 100) }
@@ -516,7 +517,7 @@ struct StudioImageExportPanel: View {
             }
             if editor.document.outputFormat.isLossy {
                 HStack {
-                    Text("Quality").font(.system(size: UIScale.pt(11)))
+                    Text("Quality").font(.edithText(.subheadline))
                     StudioImageSlider(
                         value: editor.document.export.quality, range: 0.3...1,
                         format: { "\(Int(($0 * 100).rounded()))%" }
@@ -541,7 +542,7 @@ struct StudioImageExportPanel: View {
                 }
             }
             Text("Saves as \(editor.document.outputFormat.title).")
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(.secondary)
         }
     }

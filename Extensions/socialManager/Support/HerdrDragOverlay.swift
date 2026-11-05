@@ -103,7 +103,7 @@ struct HerdrDragOverlay: View {
                     .lineLimit(1)
                 if highlighted, let hint = hint(target) {
                     Text(hint)
-                        .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                        .font(.edithText(.subheadline).weight(.medium))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
@@ -162,7 +162,7 @@ struct HerdrDragOverlay: View {
             }
             .overlay {
                 Text(label)
-                    .font(.system(size: UIScale.pt(14), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark))
             }
             .frame(width: max(0, rect.width), height: max(0, rect.height))
@@ -197,7 +197,7 @@ struct HerdrDragOverlay: View {
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: UIScale.pt(10), weight: .semibold))
                 Text("Layouts")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .font(.edithText(.subheadline).weight(.semibold))
                 Image(systemName: "chevron.up")
                     .font(.system(size: UIScale.pt(8), weight: .bold))
             }
@@ -262,7 +262,7 @@ struct HerdrDragOverlay: View {
                     .foregroundStyle(DashSkin.ink(dark))
             }
             Text(ghostTitle(item, panes: panes, tearing: tearing))
-                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.ink(dark))
                 .lineLimit(1)
             if drag.target == nil {

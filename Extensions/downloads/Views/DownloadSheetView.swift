@@ -250,7 +250,7 @@ struct DownloadSheet: View {
         }
         .scrollIndicators(.automatic)
         .edithSheet(isPresented: $settingsPresented) {
-            DownloadsSettings(downloader: downloader)
+            DownloadsSettings(downloader: downloader) { settingsPresented = false }
         }
     }
 
@@ -273,7 +273,9 @@ struct DownloadSheet: View {
             }
         }
         .edithSheet(item: $logItem) { item in
-            logSheet(item)
+            DownloadLogSheet(
+                item: downloader.items.first { $0.id == item.id } ?? item
+            ) { logItem = nil }
         }
         .confirmationDialog(
             "Clear download history?", isPresented: $confirmClearHistory,
@@ -853,43 +855,60 @@ struct DownloadSheet: View {
         .accessibilityLabel("Remove from list")
     }
 
-    private func logSheet(_ item: YoutubeDownloader.DownloadItem) -> some View {
-        let live = downloader.items.first(where: { $0.id == item.id }) ?? item
-        return VStack(spacing: UIScale.pt(0)) {
+    private func displayURL(_ url: URL) -> String {
+        (url.host ?? "") + (url.port.map { ":\($0)" } ?? "") + url.path
+    }
+
+    private func startDownload() {
+        let urls = YoutubeDownloader.parseURLs(from: urlText)
+        guard !urls.isEmpty else { return }
+        downloader.enqueue(
+            urls: urls, prefix: filenamePrefix, kind: downloadKind,
+            outputDirectory: outputDirectory, browser: DownloadBrowser(rawValue: browser))
+        urlText = ""
+    }
+}
+
+struct DownloadLogSheet: View {
+    let item: YoutubeDownloader.DownloadItem
+    let close: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    private var isActive: Bool {
+        switch item.status {
+        case .queued, .resolving, .downloading: true
+        case .done, .error, .interrupted: false
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
             HStack {
                 Text("Download Log")
-                    .font(DashSkin.heading(16))
+                    .font(.edithText(.headline))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
-                Button {
-                    logItem = nil
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.edith(.toolbar))
+                Button("Done", action: close)
+                    .buttonStyle(.edith(.secondary))
+                    .keyboardShortcut(.cancelAction)
             }
-            .padding(.horizontal, UIScale.pt(20))
-            .padding(.vertical, UIScale.pt(12))
-
-            Divider().overlay(DashSkin.line(dark))
-
+            .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
+            .padding(.vertical, UIScale.pt(PageMetrics.cardSpacing))
+            Divider()
             ScrollViewReader { proxy in
                 ScrollView {
                     Group {
-                        if !live.logs.isEmpty {
-                            Text(live.logs)
-                        } else if isActiveLog(live) {
+                        if !item.logs.isEmpty {
+                            Text(item.logs)
+                        } else if isActive {
                             SkeletonGroup {
                                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                                     ForEach(0..<7, id: \.self) { index in
                                         SkeletonBlock(
                                             width: [286, 410, 344, 426, 238, 382, 304][index],
-                                            height: 8,
-                                            corner: 3)
+                                            height: 8, corner: 3)
                                     }
                                 }
                             }
@@ -902,36 +921,16 @@ struct DownloadSheet: View {
                     .foregroundStyle(DashSkin.ink(dark))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-                    .padding(UIScale.pt(14))
+                    .padding(UIScale.pt(PageMetrics.cardPadding))
                     Color.clear.frame(height: UIScale.pt(1)).id("logBottom")
                 }
-                .scrollIndicators(.hidden)
-                .onChange(of: live.logs) { proxy.scrollTo("logBottom", anchor: .bottom) }
+                .scrollIndicators(.automatic)
+                .onChange(of: item.logs) { proxy.scrollTo("logBottom", anchor: .bottom) }
                 .onAppear { proxy.scrollTo("logBottom", anchor: .bottom) }
             }
         }
         .frame(width: PresentationMetrics.width(480), height: PresentationMetrics.height(360))
         .background(DashSkin.paper(dark))
-    }
-
-    private func isActiveLog(_ item: YoutubeDownloader.DownloadItem) -> Bool {
-        switch item.status {
-        case .queued, .resolving, .downloading: true
-        case .done, .error, .interrupted: false
-        }
-    }
-
-    private func displayURL(_ url: URL) -> String {
-        (url.host ?? "") + (url.port.map { ":\($0)" } ?? "") + url.path
-    }
-
-    private func startDownload() {
-        let urls = YoutubeDownloader.parseURLs(from: urlText)
-        guard !urls.isEmpty else { return }
-        downloader.enqueue(
-            urls: urls, prefix: filenamePrefix, kind: downloadKind,
-            outputDirectory: outputDirectory, browser: DownloadBrowser(rawValue: browser))
-        urlText = ""
     }
 }
 

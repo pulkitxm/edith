@@ -61,7 +61,7 @@ struct StudioToolsView: View {
                     )
                     .frame(maxWidth: compact ? .infinity : UIScale.pt(260))
                     PageTabPicker(
-                        title: "Tool category",
+                        "Tool category",
                         selection: Binding(
                             get: { model.toolFilter }, set: { model.toolFilter = $0 }),
                         options: StudioToolFilter.available, label: { $0.title })

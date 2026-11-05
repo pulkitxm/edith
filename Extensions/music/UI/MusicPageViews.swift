@@ -255,7 +255,7 @@ struct EmbeddedMusicPage: View {
                             Button("Choose it again", action: chooseMusicFolder)
                                 .buttonStyle(.link)
                         }
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                     }
                     if !libraryIsEmpty {
@@ -363,7 +363,7 @@ struct EmbeddedMusicPage: View {
         HStack(spacing: UIScale.pt(8)) {
             if remote.showingFavourites {
                 Label("Favourites", systemImage: "heart.fill")
-                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(theme)
                     .padding(.vertical, UIScale.pt(6))
             } else {
@@ -686,7 +686,7 @@ private struct EmbeddedMusicFolderRow: View {
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                         Text(folder.name)
-                            .font(.system(size: UIScale.pt(13), weight: .medium))
+                            .font(.edithText(.body).weight(.medium))
                             .lineLimit(1)
                             .foregroundStyle(.primary)
                             .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
@@ -697,7 +697,7 @@ private struct EmbeddedMusicFolderRow: View {
                         .presenterBlur(
                             location != nil && EmbeddedMusicPrivacyState.shared.hides(.music)
                         )
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
@@ -790,13 +790,13 @@ private struct EmbeddedMusicPageRow: View {
                 HStack(spacing: UIScale.pt(10)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                         Text(track.title)
-                            .font(.system(size: UIScale.pt(13)))
+                            .font(.edithText(.body))
                             .lineLimit(1)
                             .foregroundStyle(isCurrent ? theme : .primary)
                             .presenterBlur(blur)
                         if let location {
                             Text(location)
-                                .font(.system(size: UIScale.pt(10.5)))
+                                .font(.edithText(.subheadline))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.head)
@@ -810,7 +810,7 @@ private struct EmbeddedMusicPageRow: View {
                             .foregroundStyle(theme)
                     }
                     Text(duration ?? "")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .monospacedDigit()
                         .foregroundStyle(.tertiary)
                 }
@@ -993,11 +993,11 @@ private struct EmbeddedMusicFolderTile: View {
 
             VStack(spacing: UIScale.pt(1)) {
                 Text(folder.name)
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .lineLimit(1)
                     .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                 Text(location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? "Folder")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
@@ -1090,13 +1090,13 @@ private struct EmbeddedMusicTrackTile: View {
             Button(action: onOpenDetails) {
                 VStack(spacing: UIScale.pt(1)) {
                     Text(track.title)
-                        .font(.system(size: UIScale.pt(12)))
+                        .font(.edithText(.callout))
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(isCurrent ? theme : .primary)
                         .presenterBlur(blur)
                     Text(location ?? duration ?? " ")
-                        .font(.system(size: UIScale.pt(10.5)))
+                        .font(.edithText(.subheadline))
                         .monospacedDigit()
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -1213,7 +1213,7 @@ struct EmbeddedMusicDetailOverlay: View {
     }
 }
 
-private struct EmbeddedMusicDetailSheet: View {
+struct EmbeddedMusicDetailSheet: View {
     let track: EmbeddedTrack
     let availableSize: CGSize
     let theme: Color
@@ -1384,7 +1384,7 @@ private struct EmbeddedMusicDetailSheet: View {
     private var titleField: some View {
         TextField("Track name", text: nameBinding)
             .textFieldStyle(.plain)
-            .font(.system(size: UIScale.pt(17), weight: .semibold))
+            .font(.edithText(.title2).weight(.semibold))
             .multilineTextAlignment(.center)
             .foregroundStyle(DashSkin.ink(dark))
             .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
@@ -1410,7 +1410,7 @@ private struct EmbeddedMusicDetailSheet: View {
                 ticker { Text(EmbeddedTrackMeta.timeLabel(remote.elapsed)) }
                 Spacer()
                 Label(isPlaying ? "Now Playing" : "Paused", systemImage: "waveform")
-                    .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(theme)
                 Spacer()
                 ticker {
@@ -1418,7 +1418,7 @@ private struct EmbeddedMusicDetailSheet: View {
                         "-" + EmbeddedTrackMeta.timeLabel(max(remote.duration - remote.elapsed, 0)))
                 }
             }
-            .font(.system(size: UIScale.pt(10.5)))
+            .font(.edithText(.subheadline))
             .monospacedDigit()
             .foregroundStyle(.secondary)
         }
@@ -1462,7 +1462,7 @@ private struct EmbeddedMusicDetailSheet: View {
         }
         .buttonStyle(.edith(.borderless))
         .background(theme, in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
-        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+        .font(.edithText(.callout).weight(.semibold))
         .padding(.top, UIScale.pt(Self.renameButtonGap))
         .frame(height: canRename ? UIScale.pt(Self.renameRowHeight) : 0, alignment: .top)
         .clipped()
@@ -1704,11 +1704,11 @@ struct EmbeddedMusicFooter: View {
                 HStack(spacing: UIScale.pt(11)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(track.title)
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .font(.edithText(.body).weight(.semibold))
                             .lineLimit(1)
                             .presenterBlur(blur)
                         Text(remote.isPlaying ? "Now playing" : "Paused")
-                            .font(.system(size: UIScale.pt(10.5)))
+                            .font(.edithText(.subheadline))
                             .foregroundStyle(.secondary)
                             .frame(width: UIScale.pt(78), alignment: .leading)
                     }
@@ -1769,7 +1769,7 @@ struct EmbeddedMusicFooter: View {
                     .frame(width: UIScale.pt(46), alignment: .leading)
             }
         }
-        .font(.system(size: UIScale.pt(10.5)))
+        .font(.edithText(.subheadline))
         .monospacedDigit()
         .foregroundStyle(.secondary)
     }
@@ -1837,14 +1837,14 @@ struct EmbeddedMusicFooter: View {
                 .font(.system(size: UIScale.pt(14)))
                 .foregroundStyle(.secondary)
             Text("Nothing playing")
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(.secondary)
             Spacer()
             Button {
                 remote.send(.openMusic)
             } label: {
                 Text("Browse music")
-                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                    .font(.edithText(.subheadline).weight(.medium))
                     .foregroundStyle(theme)
             }
             .buttonStyle(.edith(.toolbar))

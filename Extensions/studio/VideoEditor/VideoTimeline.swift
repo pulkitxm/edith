@@ -69,8 +69,7 @@ struct VideoTimeline: View {
             .coordinateSpace(name: "editTimeline")
         }
         .frame(
-            minHeight: UIScale.pt(compact ? 200 : 100),
-            idealHeight: UIScale.pt(compact ? 260 : 200),
+            minHeight: UIScale.pt(180), idealHeight: UIScale.pt(260),
             maxHeight: UIScale.pt(320))
     }
 
@@ -99,7 +98,7 @@ struct VideoTimeline: View {
         _ title: String, color: Color, items: [Item], width: Double, snaps: [Double]
     ) -> some View {
         HStack(spacing: 0) {
-            Text(title).font(.system(size: UIScale.pt(10), weight: .semibold)).foregroundStyle(
+            Text(title).font(.edithText(.caption).weight(.semibold)).foregroundStyle(
                 .secondary
             )
             .frame(width: UIScale.pt(90))
@@ -132,7 +131,7 @@ struct VideoTimeline: View {
 
     private func zoomLane(width: Double) -> some View {
         HStack(spacing: 0) {
-            Text("ZOOM").font(.system(size: UIScale.pt(10), weight: .semibold)).foregroundStyle(
+            Text("ZOOM").font(.edithText(.caption).weight(.semibold)).foregroundStyle(
                 .secondary
             )
             .frame(width: UIScale.pt(90))

@@ -64,7 +64,7 @@ struct StudioKindBadge: View {
 
     var body: some View {
         Text(label ?? kind.title.uppercased())
-            .font(DashSkin.mono(9, weight: .semibold))
+            .font(.edithText(.caption).weight(.semibold)).monospacedDigit()
             .foregroundStyle(.white)
             .padding(.horizontal, UIScale.pt(5))
             .padding(.vertical, UIScale.pt(2))
@@ -85,29 +85,6 @@ struct StudioToolIcon: View {
             .frame(width: UIScale.pt(size), height: UIScale.pt(size))
             .background(
                 tint.opacity(0.13), in: RoundedRectangle(cornerRadius: UIScale.pt(size * 0.28)))
-    }
-}
-
-struct StudioChip: View {
-    let title: String
-    var count: Int?
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: UIScale.pt(6)) {
-                Text(title).lineLimit(1)
-                if let count {
-                    Text("\(count)")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .buttonStyle(.pageChip(active: selected))
-        .fixedSize()
-        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -141,13 +118,16 @@ struct StudioBackBar<Trailing: View>: View {
             HStack(spacing: UIScale.pt(10)) {
                 heading.fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: UIScale.pt(8))
-                trailing().fixedSize(horizontal: true, vertical: false)
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) { trailing() }
+                    .fixedSize(horizontal: true, vertical: false)
             }
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 heading
-                ScrollView(.horizontal) { trailing() }
-                    .scrollIndicators(.automatic)
-                    .frame(height: UIScale.pt(36))
+                ScrollView(.horizontal) {
+                    HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) { trailing() }
+                }
+                .scrollIndicators(.automatic)
+                .frame(height: UIScale.pt(36))
             }
         }
         .padding(.horizontal, UIScale.pt(16))
@@ -191,14 +171,14 @@ struct StudioEngineBanner: View {
                     .foregroundStyle(DashSkin.warn)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(StudioEngineText.title(missing))
-                        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                        .font(.edithText(.callout).weight(.semibold))
                     Text(StudioEngineText.detail(missing))
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let log = model.installLog, model.installing != nil {
                         Text(log)
-                            .font(DashSkin.mono(10))
+                            .font(.edithText(.caption)).monospacedDigit()
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -322,7 +302,7 @@ struct StudioToast: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: UIScale.pt(12), weight: .medium))
+            .font(.edithText(.callout).weight(.medium))
             .padding(.horizontal, UIScale.pt(14))
             .padding(.vertical, UIScale.pt(8))
             .background(DashSkin.panel, in: Capsule())

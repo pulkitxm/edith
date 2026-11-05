@@ -34,9 +34,11 @@ struct StudioRunnerView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Divider()
-                StudioOptionsPanel(model: model, job: job)
-                    .frame(width: compact ? nil : UIScale.pt(330))
+                if job.phase != .finished {
+                    Divider()
+                    StudioOptionsPanel(model: model, job: job)
+                        .frame(width: compact ? nil : UIScale.pt(330))
+                }
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -212,7 +214,7 @@ struct StudioInputTile: View {
                 .help("Remove from this run")
                 if ordered {
                     Text("\(index + 1)")
-                        .font(DashSkin.mono(10, weight: .bold))
+                        .font(.edithText(.caption).weight(.bold)).monospacedDigit()
                         .foregroundStyle(.white)
                         .frame(width: UIScale.pt(20), height: UIScale.pt(20))
                         .background(DashSkin.accent(scheme == .dark), in: Circle())
@@ -221,12 +223,12 @@ struct StudioInputTile: View {
                 }
             }
             Text(url.lastPathComponent)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
             HStack(spacing: UIScale.pt(4)) {
                 Text(StudioFileActions.describe(facts, kind: url.studioKind))
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -271,7 +273,7 @@ struct StudioOptionsPanel: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     if job.tool.options.isEmpty {
                         Text("No settings needed.")
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(.secondary)
                     } else {
                         StudioOptionsForm(job: job)
@@ -283,20 +285,20 @@ struct StudioOptionsPanel: View {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if case let .failed(message) = job.phase {
                     Label(message, systemImage: "exclamationmark.octagon.fill")
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if let validation = job.validationMessage,
                     !job.inputs.isEmpty || !job.tool.needsFiles
                 {
                     Text(validation)
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: UIScale.pt(6)) {
                     Text("Save to")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                     StudioDestinationPicker(model: model)
                         .labelsHidden()
@@ -306,7 +308,7 @@ struct StudioOptionsPanel: View {
                     model.run(job)
                 } label: {
                     Text(job.tool.actionTitle)
-                        .font(.system(size: UIScale.pt(13.5), weight: .semibold))
+                        .font(.edithText(.body).weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, UIScale.pt(3))
                 }
@@ -336,17 +338,17 @@ struct StudioProgressCard: View {
             VStack(spacing: UIScale.pt(12)) {
                 StudioToolIcon(tool: job.tool, size: 44)
                 Text(job.status ?? "\(job.tool.actionTitle)…")
-                    .font(.system(size: UIScale.pt(13.5), weight: .semibold))
+                    .font(.edithText(.body).weight(.semibold))
                     .lineLimit(1)
                 if job.units > 1 {
                     Text("File \(min(job.unit + 1, job.units)) of \(job.units)")
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
                 LoadingProgress(value: job.progress)
                     .frame(width: UIScale.pt(260))
                 Text("\(Int((job.progress * 100).rounded()))%")
-                    .font(DashSkin.mono(11))
+                    .font(.edithText(.subheadline)).monospacedDigit()
                     .foregroundStyle(.secondary)
                 Button("Cancel") { job.cancel() }
                     .buttonStyle(.edith(.secondary))
@@ -375,9 +377,9 @@ struct StudioResultView: View {
                         .foregroundStyle(DashSkin.ok)
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(StudioResultText.headline(job.tool, result))
-                            .font(.system(size: UIScale.pt(17), weight: .semibold))
+                            .font(.edithText(.title2).weight(.semibold))
                         Text(StudioResultText.detail(result))
-                            .font(.system(size: UIScale.pt(12)))
+                            .font(.edithText(.callout))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -390,7 +392,7 @@ struct StudioResultView: View {
                 }
                 ForEach(result.notes, id: \.self) { note in
                     Label(note, systemImage: "info.circle")
-                        .font(.system(size: UIScale.pt(11.5)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
                 ForEach(result.failures, id: \.self) { failure in
@@ -398,7 +400,7 @@ struct StudioResultView: View {
                         "\(failure.file): \(failure.message)",
                         systemImage: "exclamationmark.triangle"
                     )
-                    .font(.system(size: UIScale.pt(11.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.warn)
                 }
                 VStack(spacing: 0) {
@@ -417,7 +419,7 @@ struct StudioResultView: View {
                         DashSkin.line(scheme == .dark)))
                 if result.outputs.count > 200 {
                     Text("And \(result.outputs.count - 200) more in the folder.")
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
                 HStack(spacing: UIScale.pt(8)) {
@@ -461,7 +463,7 @@ struct StudioOutputRow: View {
                 .frame(width: UIScale.pt(44), height: UIScale.pt(44))
             VStack(alignment: .leading, spacing: 1) {
                 Text(output.url.lastPathComponent)
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(
@@ -469,10 +471,10 @@ struct StudioOutputRow: View {
                         + output.url.deletingLastPathComponent().lastPathComponent
                 )
                 .help(output.url.path)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .truncationMode(.head)
+                .truncationMode(.middle)
             }
             Spacer(minLength: UIScale.pt(8))
             if let edit = StudioCatalog.quickTool(.edit, for: output.kind) {

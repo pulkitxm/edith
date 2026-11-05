@@ -90,7 +90,7 @@ struct VideoEditorPage: View {
                     Button("Reload saved edits") { model.discardLocalEditsAndRefresh() }
                         .buttonStyle(.edith(.secondary))
                 }
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .padding(UIScale.pt(10))
                 .background(DashSkin.paper2(scheme == .dark))
                 Divider()
