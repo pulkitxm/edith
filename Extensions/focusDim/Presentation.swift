@@ -317,6 +317,11 @@ final class ControlPresentation {
         }
     }
 
+    func retry() {
+        changed()
+        scheduleRefresh()
+    }
+
     func scheduleRefresh() {
         guard active, !stopped, callbacks.isEmpty else { return }
         let id = UUID()
@@ -354,7 +359,6 @@ final class ControlPresentation {
             + Array(actions.values) + Array(callbacks.values)
         for task in pending { await task.value }
     }
-
 }
 
 import EdithExtensionUI
@@ -365,29 +369,16 @@ struct ControlSettingsHost<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(spacing: 0) {
-            if presentation.ready, let error = presentation.error {
-                HStack {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                    Button("Retry", action: retry)
-                }.padding()
-            }
-            PageLoading(
-                state: presentation.load.state, title: "Settings unavailable",
-                message: presentation.error ?? "The extension engine is unavailable.",
-                layout: .editor, retry: retry
-            ) { content() }
-        }
+        PageLoading(
+            state: presentation.load.state, title: "Settings unavailable",
+            message: presentation.error ?? "The extension engine is unavailable.",
+            layout: .editor, retry: presentation.retry
+        ) { content() }
         .pageRefresh(
             active: presentation.active && presentation.running,
             interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
         ) {
             await presentation.refresh()
         }
-    }
-
-    private func retry() {
-        presentation.changed()
-        presentation.scheduleRefresh()
     }
 }

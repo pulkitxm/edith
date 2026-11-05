@@ -323,6 +323,11 @@ final class ControlPresentation {
         }
     }
 
+    func retry() {
+        changed()
+        scheduleRefresh()
+    }
+
     func stop() {
         guard !stopped else { return }
         stopped = true
@@ -361,25 +366,12 @@ struct ControlSettingsHost<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(spacing: 0) {
-            if presentation.ready, let error = presentation.error {
-                HStack {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                    Button("Retry", action: retry)
-                }.padding()
-            }
-            content()
-        }
+        content()
         .pageRefresh(
             active: presentation.active && presentation.running,
             interval: { .seconds(2) }, cancel: { presentation.load.cancel() }
         ) {
             await presentation.refresh()
         }
-    }
-
-    private func retry() {
-        presentation.changed()
-        presentation.scheduleRefresh()
     }
 }

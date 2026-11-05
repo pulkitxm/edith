@@ -16,85 +16,97 @@ struct EmojiSettingsRows: View {
 
     var body: some View {
         Group {
-            Section {
-                Text(
-                    "Press the hotkey in any app to search emoji by name and type one right where your cursor is. Your most used emoji are kept at the top."
-                )
-                .settingsCaption()
-                if !enabled {
-                    Label(
-                        "Turn the Emoji Picker extension on to use it and change these settings.",
-                        systemImage: "info.circle"
-                    )
-                    .settingsCaption()
+            if !enabled {
+                Section {
+                    DeskSettingsNotice(
+                        title: "Emoji Picker is off",
+                        message: "Turn it on to type emoji from any app and change these settings.")
                 }
-                Button("Try the picker now") { presentation.perform("pick") }
-                    .help(
-                        enabled
-                            ? "Opens the picker here so you can see how it works."
-                            : "Turn the extension on first.")
-                LabeledContent {
-                    HotKeyRecorderControl(keyPrefix: "emojiHotKey", defaultLabel: "⌃⇧E")
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Picker hotkey")
-                        InfoDot("Opens the picker over whatever you are typing in.")
-                    }
+            } else if presentation.ready, let error = presentation.error {
+                Section {
+                    DeskSettingsError(
+                        title: "Emoji Picker is not responding", message: error,
+                        retry: presentation.retry)
                 }
-                Picker(selection: $popupAt.notifyingSettingsChange()) {
-                    ForEach(PopupPosition.allCases) { position in
-                        Text(position.title).tag(position.rawValue)
+            }
+            Group {
+                Section {
+                    LabeledContent {
+                        Button("Open Picker") { presentation.perform("pick") }
+                            .buttonStyle(.edith(.primary))
+                    } label: {
+                        Text("Type an emoji")
+                        Text("Search by name, then press Return to type it where your cursor is.")
                     }
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Popup at")
-                        InfoDot("Where the picker appears when you summon it.")
-                    }
+                    DeskShortcutRow(
+                        keyPrefix: "emojiHotKey", defaultLabel: "\u{2303}\u{21E7}E",
+                        purpose: "Opens the picker over whatever you are typing in.")
                 }
-                Picker(selection: $skinTone.notifyingSettingsChange()) {
-                    ForEach(EmojiSkinTone.allCases) { option in
-                        Text("\(option.sample)  \(option.title)").tag(option.rawValue)
+                Section {
+                    Picker(selection: $popupAt.notifyingSettingsChange()) {
+                        ForEach(PopupPosition.allCases) { position in
+                            Text(position.title).tag(position.rawValue)
+                        }
+                    } label: {
+                        Text("Opens at")
+                        Text("Where the picker appears when you press the shortcut.")
                     }
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Default skin tone")
-                        InfoDot("Applied to every emoji that supports one.")
+                    Picker(selection: $skinTone.notifyingSettingsChange()) {
+                        ForEach(EmojiSkinTone.allCases) { option in
+                            Text("\(option.sample)  \(option.title)").tag(option.rawValue)
+                        }
+                    } label: {
+                        Text("Skin tone")
+                        Text("Used for every emoji that has skin tones.")
                     }
+                    LabeledContent {
+                        HStack(spacing: UIScale.pt(8)) {
+                            Text("\(frequentCount)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: UIScale.pt(28), alignment: .trailing)
+                            Stepper(
+                                "Favorites to show", value: $frequentCount.notifyingSettingsChange(),
+                                in: 0...EmojiCatalogSummary.maxFrequentCount
+                            )
+                            .labelsHidden()
+                        }
+                    } label: {
+                        Text("Favorites to show")
+                        Text("Your most used emoji, pinned to the top of the picker. Set 0 to hide them.")
+                    }
+                } header: {
+                    Text("Picker")
+                } footer: {
+                    Text(EmojiCatalogSummary.availability)
+                        .font(.edithText(.subheadline))
+                        .foregroundStyle(.secondary)
                 }
-                Stepper(
-                    value: $frequentCount.notifyingSettingsChange(),
-                    in: 0...EmojiCatalogSummary.maxFrequentCount
-                ) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Frequently used: \(frequentCount)")
-                        InfoDot("How many of your most-used emoji pin to the top of the picker.")
-                    }
-                }
-            } header: {
-                Text("Picker")
-            } footer: {
-                Text(EmojiCatalogSummary.availability)
-                    .font(.system(size: UIScale.pt(10)))
             }
             .disabled(!enabled)
             .opacity(enabled ? 1 : 0.5)
 
             if enabled, frequentCount > 0 {
-                Section {
+                Section("Your favorites") {
                     if frequent.isEmpty {
-                        Label(
-                            "No favorites yet. Emoji you pick from the picker show up here, most used first.",
-                            systemImage: "face.smiling"
-                        )
-                        .settingsCaption()
+                        LabeledContent {
+                            EmptyView()
+                        } label: {
+                            Text("No favorites yet")
+                            Text("Emoji you type with the picker show up here, most used first.")
+                        }
                     } else {
                         EmojiFrequentGrid(characters: frequent)
-                        Button("Forget frequently used emoji", role: .destructive) {
-                            presentation.perform("clear")
+                        LabeledContent {
+                            Button("Forget All", role: .destructive) {
+                                presentation.perform("clear")
+                            }
+                            .buttonStyle(.edith(.secondary))
+                        } label: {
+                            Text("Start over")
+                            Text("Clears the list. The emoji themselves are not affected.")
                         }
                     }
-                } header: {
-                    Text("Frequently Used")
                 }
             }
         }
@@ -118,13 +130,13 @@ private struct EmojiFrequentGrid: View {
 
     var body: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(28)), spacing: UIScale.pt(6))],
-            spacing: UIScale.pt(6)
+            columns: [GridItem(.adaptive(minimum: UIScale.pt(32)), spacing: UIScale.pt(8))],
+            alignment: .leading, spacing: UIScale.pt(8)
         ) {
             ForEach(characters, id: \.self) { character in
                 Text(character)
-                    .font(.system(size: UIScale.pt(20)))
-                    .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                    .font(.system(size: UIScale.pt(22)))
+                    .frame(width: UIScale.pt(32), height: UIScale.pt(32))
                     .contextMenu {
                         Button("Copy") {
                             NSPasteboard.general.clearContents()
@@ -133,6 +145,5 @@ private struct EmojiFrequentGrid: View {
                     }
             }
         }
-        .padding(.vertical, UIScale.pt(4))
     }
 }

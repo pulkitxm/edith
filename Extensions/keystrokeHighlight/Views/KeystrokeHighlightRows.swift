@@ -5,8 +5,6 @@ import SwiftUI
 
 struct KeystrokeHighlightRows: View {
     let presentation: ControlPresentation
-    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
-        var enabled = false
     @AppStorage(AppStorageKeys.KeystrokeHighlight.active, store: SharedDefaults.store) private
         var active = false
     @AppStorage(AppStorageKeys.KeystrokeHighlight.duration, store: SharedDefaults.store) private
@@ -22,105 +20,115 @@ struct KeystrokeHighlightRows: View {
 
     var body: some View {
         Group {
-            Section("Control") {
-                Text(
-                    "Shows the keys you press as keycaps on screen, handy for demos and recordings. Passwords typed into secure fields are never shown."
-                )
-                .settingsCaption()
-                if !presentation.active {
-                    Label(
-                        "Turn the Keystroke Highlight extension on to use it and change these settings.",
-                        systemImage: "info.circle"
-                    )
-                    .settingsCaption()
+            if !presentation.active {
+                Section {
+                    DeskSettingsNotice(
+                        title: "Keystroke Highlight is off",
+                        message: "Turn it on to show your key presses and change these settings.")
                 }
-                Toggle(
-                    "Show keystrokes",
-                    isOn: $active.notifyingSettingsChange())
-                Text(
-                    "Turn this off to pause the overlay without disabling the extension. The shortcut flips it from any app."
-                )
-                .settingsCaption()
-                LabeledContent {
-                    HotKeyRecorderControl(
-                        keyPrefix: "keystrokeHighlightHotKey", defaultLabel: "⌃⌥⌘K")
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Toggle shortcut")
-                        InfoDot("Starts or pauses keystroke highlighting from anywhere.")
-                    }
+            } else if presentation.ready, let error = presentation.error {
+                Section {
+                    DeskSettingsError(
+                        title: "Keystroke Highlight is not responding", message: error,
+                        retry: presentation.retry)
                 }
             }
-
-            Section("Display") {
-                Picker(
-                    "Position",
-                    selection: $position.notifyingSettingsChange()
-                ) {
-                    ForEach(KeystrokeHighlightPosition.allCases) { option in
-                        Text(option.title).tag(option.rawValue)
+            Group {
+                Section {
+                    Toggle(isOn: $active.notifyingSettingsChange()) {
+                        Text("Show keystrokes")
+                        Text(
+                            "Draws the keys you press as keycaps on screen, handy for demos and recordings."
+                        )
                     }
+                    DeskShortcutRow(
+                        keyPrefix: "keystrokeHighlightHotKey",
+                        defaultLabel: "\u{2303}\u{2325}\u{2318}K",
+                        purpose: "Starts or pauses the keycaps from any app.")
                 }
-                VStack(alignment: .leading, spacing: UIScale.pt(7)) {
-                    LabeledContent("Visible for") {
-                        Text(String(format: "%.2g seconds", duration))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                Section("Keycaps") {
+                    Picker(selection: $position.notifyingSettingsChange()) {
+                        ForEach(KeystrokeHighlightPosition.allCases) { option in
+                            Text(option.title).tag(option.rawValue)
+                        }
+                    } label: {
+                        Text("Position")
+                        Text("The edge of the screen where keycaps appear.")
                     }
-                    Slider(
+                    DeskSliderRow(
+                        title: "Stay visible", detail: "How long each key stays before it fades.",
                         value: $duration.notifyingSettingsChange(),
-                        in: KeystrokeHighlightSettings.durationRange, step: 0.25)
-                }
-                HStack(spacing: UIScale.pt(5)) {
-                    ForEach(["⌘", "⇧", "A"], id: \.self) { key in
-                        Text(key)
-                            .font(
-                                .system(
-                                    size: UIScale.pt(14), weight: .semibold, design: .rounded)
-                            )
-                            .foregroundStyle(.white)
-                            .frame(minWidth: UIScale.pt(34), minHeight: UIScale.pt(32))
-                            .background(
-                                Color(red: 0.08, green: 0.09, blue: 0.11),
-                                in: RoundedRectangle(cornerRadius: UIScale.pt(7))
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: UIScale.pt(7))
-                                    .strokeBorder(.white.opacity(0.3))
-                            }
+                        range: KeystrokeHighlightSettings.durationRange, step: 0.25,
+                        readout: String(format: "%.2g s", duration))
+                    LabeledContent {
+                        KeystrokeCapPreview()
+                    } label: {
+                        Text("Preview")
+                        Text("Passwords typed into secure fields are never shown.")
                     }
-                    Spacer()
-                    Text("keycap preview")
-                        .settingsCaption()
                 }
-                Text("Secure keyboard input is never shown.")
-                    .settingsCaption()
+                Section("Status") {
+                    status
+                }
             }
+            .disabled(!presentation.active)
+            .opacity(presentation.active ? 1 : 0.5)
+        }
+    }
 
-            Section("Status") {
-                if !active {
-                    LabeledContent("Keyboard monitor", value: "Paused")
-                    Text(
-                        "Turn on Show keystrokes to start. Edith is not reading key presses while paused."
-                    )
-                    .settingsCaption()
-                } else if runtimeError.isEmpty {
-                    LabeledContent(
-                        "Keyboard monitor", value: runtimeActive ? "Active" : "Starting")
-                } else {
-                    Label(runtimeError, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Text(
-                        "macOS needs your permission before Edith can see key presses. Choose Allow Input Monitoring, then switch Edith on in System Settings."
-                    )
-                    .settingsCaption()
-                    Button("Allow Input Monitoring") {
-                        presentation.perform("inputMonitoring")
-                    }.disabled(!presentation.active)
-                }
+    @ViewBuilder private var status: some View {
+        if !active {
+            LabeledContent {
+                Text("Paused").foregroundStyle(.secondary)
+            } label: {
+                Text("Keyboard monitoring")
+                Text("Edith is not reading key presses. Turn on Show keystrokes to start.")
+            }
+        } else if runtimeError.isEmpty {
+            LabeledContent {
+                Label(
+                    runtimeActive ? "Active" : "Starting",
+                    systemImage: runtimeActive ? "checkmark.circle.fill" : "clock"
+                )
+                .foregroundStyle(runtimeActive ? Color.green : Color.secondary)
+            } label: {
+                Text("Keyboard monitoring")
+                Text("Key presses are only used to draw the keycaps and are never saved.")
+            }
+        } else {
+            LabeledContent {
+                Button("Allow Access") { presentation.perform("inputMonitoring") }
+                    .buttonStyle(.edith(.secondary))
+            } label: {
+                Text(Image(systemName: "exclamationmark.triangle.fill")).foregroundColor(.orange)
+                    + Text(" Input Monitoring is needed")
+                Text(
+                    "macOS asks before Edith can see key presses. Choose Allow Access, then switch on Edith in System Settings."
+                )
             }
         }
-        .disabled(!presentation.active)
-        .opacity(presentation.active ? 1 : 0.5)
+    }
+}
+
+private struct KeystrokeCapPreview: View {
+    var body: some View {
+        HStack(spacing: UIScale.pt(4)) {
+            ForEach(["\u{2318}", "\u{21E7}", "A"], id: \.self) { key in
+                Text(key)
+                    .font(.system(size: UIScale.pt(13), weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: UIScale.pt(28), minHeight: UIScale.pt(28))
+                    .background(
+                        Color(red: 0.08, green: 0.09, blue: 0.11),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: UIScale.pt(6))
+                            .strokeBorder(.white.opacity(0.24))
+                    }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Keycap preview: Command, Shift, A")
     }
 }

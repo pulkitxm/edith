@@ -92,7 +92,7 @@ struct BifrostUIChange: Codable { let key: String; let value: String }
             if let usage = value.usage, usage.utf8.count <= 1_048_576 {
                 SharedDefaults.store.set(usage, forKey: AppStorageKeys.Bifrost.usage)
             }
-            previous = value.values; index = value.index; loaded = true
+            previous = value.values; index = value.index; loaded = true; error = nil
             applying = false
         } catch { if !stopped, !Task.isCancelled { self.error = error.localizedDescription } }
     }

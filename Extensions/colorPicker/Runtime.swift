@@ -180,11 +180,7 @@ final class ColorPickerService: ExtensionService {
         return NSHostingController(
             rootView: ExtensionPageHost {
                 ControlSettingsHost(presentation: presentation) {
-                    PageWorkspace {
-                        PageHeader("Color Picker")
-                    } content: {
-                        Form { ColorPickerRows(presentation: presentation) }.formStyle(.grouped)
-                    }
+                    Form { ColorPickerRows(presentation: presentation) }.deskForm()
                 }
             })
     }

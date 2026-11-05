@@ -14,124 +14,126 @@ struct BifrostRows: View {
         var resultLimit = BifrostQuery.defaultLimit
     @AppStorage(AppStorageKeys.Bifrost.pasteSnippets, store: SharedDefaults.store) private
         var pasteSnippets = true
+    var error: String? = nil
     @State private var index: BifrostIndex?
 
     var body: some View {
         Group {
-            Section {
-                Text(
-                    "Press the shortcut anywhere to open a search bar. Type an app name to launch it, a sum like 12 * 8 to calculate, or a word to find files and clipboard items. Nothing happens until you pick a result."
-                )
-                .settingsCaption()
-                if !bifrostEnabled {
-                    Label(
-                        "Turn the Launcher extension on to use it and change these settings.",
-                        systemImage: "info.circle"
-                    )
-                    .settingsCaption()
-                }
-                Button("Try the launcher now") {
-                    BifrostUIContext.perform("open")
-                }
-                LabeledContent {
-                    HotKeyRecorderControl(keyPrefix: "bifrostHotKey", defaultLabel: "⌥␣")
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Launcher hotkey")
-                        InfoDot("Opens the bar over whatever you are doing.")
-                    }
-                }
-                Picker(selection: $popupAt.bifrostSetting(AppStorageKeys.Bifrost.popupAt)) {
-                    ForEach(PopupPosition.allCases) { position in
-                        Text(position.title).tag(position.rawValue)
-                    }
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Bar opens at")
-                        InfoDot("Where the launcher appears when you summon it.")
-                    }
-                }
-                Stepper(
-                    value: $resultLimit.bifrostSetting(AppStorageKeys.Bifrost.resultLimit),
-                    in: BifrostQuery.minimumResultLimit...BifrostQuery.maximumResultLimit
-                ) {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Text("Results shown: \(resultLimit)")
-                        InfoDot("How many rows the bar lists under the field.")
-                    }
-                }
-            } header: {
-                Text("Launcher")
-            } footer: {
-                Text(BifrostSummary.availability(index: index))
-                    .font(.system(size: UIScale.pt(10)))
-            }
-            .disabled(!bifrostEnabled)
-            .opacity(bifrostEnabled ? 1 : 0.5)
-
-            Section {
-                ForEach(BifrostSource.allCases, id: \.self) { source in
-                    BifrostSourceToggle(source: source)
-                }
-                Toggle(
-                    "Paste snippets into the app you were typing in",
-                    isOn: $pasteSnippets.bifrostSetting(AppStorageKeys.Bifrost.pasteSnippets))
-                Text("Needs Accessibility. Without it a snippet is only copied.")
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("What else it searches")
-            } footer: {
-                Text(
-                    "Applications, the calculator, unit and currency conversion, clipboard history and file search are always on. These are the extra sources."
-                )
-                .font(.system(size: UIScale.pt(10)))
-            }
-            .disabled(!bifrostEnabled)
-            .opacity(bifrostEnabled ? 1 : 0.5)
-
-            Section {
-                BifrostQuicklinkEditor()
-            } header: {
-                Text("Quicklinks")
-            }
-            .disabled(!bifrostEnabled)
-            .opacity(bifrostEnabled ? 1 : 0.5)
-
-            Section {
-                BifrostSnippetEditor()
-            } header: {
-                Text("Snippets")
-            }
-            .disabled(!bifrostEnabled)
-            .opacity(bifrostEnabled ? 1 : 0.5)
-
-            Section {
-                BifrostShellCommandEditor()
-            } header: {
-                Text("Shell commands")
-            }
-            .disabled(!bifrostEnabled)
-            .opacity(bifrostEnabled ? 1 : 0.5)
-
-            if bifrostEnabled {
+            if !bifrostEnabled {
                 Section {
-                    Button("Rebuild index") {
-                        BifrostUIContext.perform("reindex")
+                    DeskSettingsNotice(
+                        title: "Launcher is off",
+                        message: "Turn it on to open apps and search from one bar, and to change these settings."
+                    )
+                }
+            } else if let error {
+                Section {
+                    DeskSettingsError(
+                        title: "A change was not saved", message: error,
+                        retry: { Task { await BifrostUIContext.current?.load() } })
+                }
+            }
+            Group {
+                Section {
+                    LabeledContent {
+                        Button("Open Launcher") { BifrostUIContext.perform("open") }
+                            .buttonStyle(.edith(.primary))
+                    } label: {
+                        Text("Search anything")
+                        Text("Type an app name, a sum like 12 * 8, or part of a file name.")
                     }
-                    Button("Forget frequently opened apps", role: .destructive) {
-                        BifrostUIContext.perform("clear")
-                        index = BifrostUIContext.loadIndex()
+                    DeskShortcutRow(
+                        keyPrefix: "bifrostHotKey", defaultLabel: "\u{2325}\u{2423}",
+                        purpose: "Opens the launcher over whatever you are doing.")
+                }
+                Section {
+                    Picker(selection: $popupAt.bifrostSetting(AppStorageKeys.Bifrost.popupAt)) {
+                        ForEach(PopupPosition.allCases) { position in
+                            Text(position.title).tag(position.rawValue)
+                        }
+                    } label: {
+                        Text("Opens at")
+                        Text("Where the launcher appears when you press the shortcut.")
+                    }
+                    LabeledContent {
+                        HStack(spacing: UIScale.pt(8)) {
+                            Text("\(resultLimit)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: UIScale.pt(28), alignment: .trailing)
+                            Stepper(
+                                "Results to show",
+                                value: $resultLimit.bifrostSetting(
+                                    AppStorageKeys.Bifrost.resultLimit),
+                                in: BifrostQuery.minimumResultLimit...BifrostQuery.maximumResultLimit
+                            )
+                            .labelsHidden()
+                        }
+                    } label: {
+                        Text("Results to show")
+                        Text("How many matches are listed under the search field.")
                     }
                 } header: {
-                    Text("Index")
+                    Text("Launcher")
                 } footer: {
-                    Text(
-                        "The launcher indexes the application folders on this Mac. Rebuild it after installing something it has not noticed. Forgetting frequently opened apps only resets the ranking; no apps or files are removed."
+                    BifrostFootnote(BifrostSummary.availability(index: index))
+                }
+                Section {
+                    ForEach(BifrostSource.allCases, id: \.self) { source in
+                        BifrostSourceToggle(source: source)
+                    }
+                } header: {
+                    Text("Also search")
+                } footer: {
+                    BifrostFootnote(
+                        "Apps, math, unit and currency conversion, clipboard history and files are always searched."
                     )
-                    .font(.system(size: UIScale.pt(10)))
+                }
+                Section {
+                    BifrostQuicklinkEditor()
+                } header: {
+                    Text("Quicklinks")
+                }
+                Section {
+                    Toggle(
+                        isOn: $pasteSnippets.bifrostSetting(AppStorageKeys.Bifrost.pasteSnippets)
+                    ) {
+                        Text("Paste snippets for me")
+                        Text(
+                            "Types the snippet into the app you were using. Needs Accessibility; without it the snippet is only copied."
+                        )
+                    }
+                    BifrostSnippetEditor()
+                } header: {
+                    Text("Snippets")
+                }
+                Section {
+                    BifrostShellCommandEditor()
+                } header: {
+                    Text("Shell commands")
+                }
+                Section("Index") {
+                    LabeledContent {
+                        Button("Rebuild") { BifrostUIContext.perform("reindex") }
+                            .buttonStyle(.edith(.secondary))
+                    } label: {
+                        Text("Find new apps")
+                        Text("Scans your application folders again. Use it if a new app is missing.")
+                    }
+                    LabeledContent {
+                        Button("Reset", role: .destructive) {
+                            BifrostUIContext.perform("clear")
+                            index = BifrostUIContext.loadIndex()
+                        }
+                        .buttonStyle(.edith(.secondary))
+                    } label: {
+                        Text("Reset app ranking")
+                        Text("Forgets which apps you open most. No apps or files are removed.")
+                    }
                 }
             }
+            .disabled(!bifrostEnabled)
+            .opacity(bifrostEnabled ? 1 : 0.5)
         }
         .onAppear { index = BifrostUIContext.loadIndex() }
         .pageRefresh(interval: { .seconds(4) }) {
@@ -145,20 +147,32 @@ struct BifrostRows: View {
     }
 }
 
+struct BifrostFootnote: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.edithText(.subheadline))
+            .foregroundStyle(.secondary)
+    }
+}
+
 private struct BifrostSourceToggle: View {
     let source: BifrostSource
 
     @State private var isOn = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            Toggle(source.title, isOn: $isOn)
-                .onChange(of: isOn) { _, value in
-                    BifrostUIContext.write(source.defaultsKey, value: value)
-                }
+        Toggle(isOn: $isOn) {
+            Text(source.title)
             Text(source.summary)
-                .font(.system(size: UIScale.pt(10)))
-                .foregroundStyle(.secondary)
+        }
+        .onChange(of: isOn) { _, value in
+            BifrostUIContext.write(source.defaultsKey, value: value)
         }
         .onAppear { isOn = source.isEnabled() }
     }
