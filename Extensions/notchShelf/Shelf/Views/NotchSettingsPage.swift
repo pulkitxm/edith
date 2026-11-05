@@ -25,18 +25,19 @@ struct NotchSettingsPage: View {
             if let error = model.error {
                 Section {
                     Text(error).font(.edithText(.callout)).foregroundStyle(.secondary)
-                    Button("Retry") { Task { await model.refresh() } }.buttonStyle(
+                    Button("Try again") { Task { await model.refresh() } }.buttonStyle(
                         .edith(.secondary))
                 }
             }
             if !model.available {
                 Section {
-                    Text("Enable Notch Shelf to configure its running engine.").font(
-                        .edithText(.callout))
+                    PageNotice(
+                        "Notch Shelf is switched off, so these settings are locked. Turn it on in Extensions to use the shelf, browser and alerts.",
+                        title: "Notch Shelf is not running", symbol: "power")
                 }
             }
             Section("Layout") {
-                Button("Customize Home & Notch") { model.perform("notch.customize") }
+                Button("Customize Home & Notch...") { model.perform("notch.customize") }
                 Text(
                     "Arrange widgets, resize cards, and configure your Notch in the visual editor."
                 ).settingsCaption()
@@ -81,6 +82,9 @@ struct NotchSettingsPage: View {
                             Button("Detach and Clear Data", role: .destructive) {
                                 model.perform("notch.browser.detach")
                             }
+                            .help(
+                                "Deletes the cookies and site data copied from Chrome. Your Chrome profile is not changed."
+                            )
                         }
                     } label: {
                         Text(
@@ -88,7 +92,7 @@ struct NotchSettingsPage: View {
                                 ?? "No Chrome profile attached")
                         Text(
                             model.snapshot.browserProfile == nil
-                                ? "Open the shelf's browser tab to pick a profile."
+                                ? "Open the notch and choose the Browser tab to sign in with a Chrome profile."
                                 : "Cookies and site storage copied from Chrome stay on this Mac.")
                     }
                 }

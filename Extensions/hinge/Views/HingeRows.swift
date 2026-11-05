@@ -19,27 +19,44 @@ struct HingeRows: View {
 
     var body: some View {
         Form {
+            if !presentation.active {
+                Section {
+                    PageNotice(
+                        "Hinge is switched off. Turn it on in Extensions to change these settings.",
+                        title: "Hinge is not running", symbol: "power")
+                }
+            }
             Section {
                 Toggle("Fold the desktop", isOn: $active.notifyingSettingsChange())
                 Text(
-                    "Close the lid and the desktop bends with it. The shortcut keeps working either way."
+                    "Close the lid and the desktop bends with it. This only changes how the screen is drawn, and turning it off puts everything back."
                 )
                 .settingsCaption()
                 if !status.isEmpty {
                     Text(status)
                         .settingsCaption()
                 }
+                if !sensorAvailable {
+                    Text(
+                        "This Mac has no lid angle sensor Hinge can read, so the fold cannot follow the lid and the open position cannot be set."
+                    )
+                    .settingsCaption()
+                }
                 LabeledContent("Open position") {
                     HStack(spacing: UIScale.pt(8)) {
                         Text("\(Int(openAngle.rounded()))°")
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
-                        Button("Set") { presentation.perform("calibrate") }
+                        Button("Use current angle") { presentation.perform("calibrate") }
                             .disabled(!sensorAvailable)
+                            .help(
+                                sensorAvailable
+                                    ? "Saves the lid angle right now as your open position."
+                                    : "Needs a Mac with a lid angle sensor.")
                     }
                 }
                 Text(
-                    "Starts at 100°. Set the lid angle you actually sit at, and Hinge remembers it."
+                    "Starts at 100°. Open the lid the way you normally work, then press Use current angle. Hinge remembers it."
                 )
                 .settingsCaption()
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {

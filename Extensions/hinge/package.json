@@ -26,5 +26,27 @@
   "notchCards": [
     "extension:hinge"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Fold your desktop as you close the lid.",
+    "summary": "Hinge bends your desktop like a hinge when you close the laptop lid, using the lid angle sensor. It is a visual effect only: nothing on your Mac changes. Turn it on with the switch or the shortcut, and turn it off the same way.",
+    "steps": [
+      {
+        "symbolName": "power",
+        "title": "Turn on the fold",
+        "detail": "Use the switch in settings or press Control Option H."
+      },
+      {
+        "symbolName": "laptopcomputer",
+        "title": "Set your open angle",
+        "detail": "Sit as you normally do and press Set so Hinge knows what open means."
+      },
+      {
+        "symbolName": "slider.horizontal.3",
+        "title": "Shape the effect",
+        "detail": "Adjust strength, side fill and blur until the fold looks right."
+      }
+    ],
+    "examples": []
+  }
 }

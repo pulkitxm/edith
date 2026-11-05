@@ -24,9 +24,7 @@ struct AudioMixerView: View {
                     errorView(error)
                 }
                 if engine.apps.isEmpty, engine.errorMessage == nil {
-                    Text("Play audio in an app to control it here")
-                        .font(bodyFont).foregroundStyle(notch ? .white.opacity(0.5) : .secondary)
-                        .frame(maxWidth: .infinity, minHeight: 60)
+                    emptyView
                 } else {
                     ForEach(engine.apps) { app in
                         row(app)
@@ -39,6 +37,26 @@ struct AudioMixerView: View {
         .environment(\.colorScheme, notch ? .dark : colorScheme)
         .onAppear { if monitorsWhileVisible { engine.viewAppeared() } }
         .onDisappear { if monitorsWhileVisible { engine.viewDisappeared() } }
+    }
+
+    @ViewBuilder private var emptyView: some View {
+        if notch {
+            VStack(spacing: 4) {
+                Text("Nothing is playing sound right now")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.8))
+                Text("Start music or a video and its volume slider appears here.")
+                    .font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, minHeight: 60)
+        } else {
+            PageEmptyState(
+                symbolName: "speaker.wave.2",
+                title: "Nothing is playing sound right now",
+                message:
+                    "Apps show up here while they make sound. Start music or a video, then set each app's volume separately.",
+                footnote: "Setting an app back to 100 restores its normal volume.")
+        }
     }
 
     private var bodyFont: Font { notch ? .system(size: 12) : .edithText(.body) }
@@ -76,8 +94,8 @@ struct AudioMixerView: View {
             .font(notch ? .system(size: 10.5) : .edithText(.caption))
             .foregroundStyle(.orange)
             HStack(spacing: 10) {
-                Button("Retry") { engine.retry() }
-                Button("Open Settings") {
+                Button("Try again") { engine.retry() }
+                Button("Open Privacy settings") {
                     if let url = URL(
                         string:
                             "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
@@ -108,11 +126,11 @@ struct AudioMixerSettingsPage: View {
     var body: some View {
         Form {
             Section("Mixer") {
-                LabeledContent("Lives in", value: "Notch Shelf")
+                LabeledContent("Lives in", value: "Notch Shelf, Audio tab")
                 Text(
                     available
-                        ? "Set the volume of each app from the shelf's audio tab."
-                        : "Requires macOS 14.4 or later."
+                        ? "Open the notch and choose Audio to set the volume of each app that is playing sound. macOS asks for audio access the first time. Turn the mixer on under Notch Shelf settings."
+                        : "Per-app volume needs macOS 14.4 or later, so it is unavailable on this Mac."
                 )
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
             }

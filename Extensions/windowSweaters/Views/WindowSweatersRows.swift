@@ -31,10 +31,17 @@ struct WindowSweatersRows: View {
     private var minimumGauge: Double { SweaterPatternCatalog.minimumRows(for: selection) }
 
     var body: some View {
+        if !presentation.active {
+            Section {
+                PageNotice(
+                    "Window Sweaters is switched off. Turn it on in Extensions to change these settings.",
+                    title: "Window Sweaters is not running", symbol: "power")
+            }
+        }
         Section {
             Toggle("Sweaters on", isOn: $active.notifyingSettingsChange())
             Text(
-                "Takes the knitting off every window without removing the extension. Your colourways are kept."
+                "Shows or hides the knitting on every window. Nothing about your windows changes, and your colours are kept."
             )
             .settingsCaption()
 
