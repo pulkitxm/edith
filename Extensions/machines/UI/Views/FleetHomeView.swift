@@ -5,6 +5,7 @@ import SwiftUI
 struct FleetHomeView: View {
     let model: MachinesModel
     let onSelect: (UUID) -> Void
+    var onAddMachine: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.windowVisible) private var windowVisible
@@ -25,6 +26,7 @@ struct FleetHomeView: View {
                 metricsGrid
                 storageCard
                 if !model.fleet.alerts.isEmpty { alertsCard }
+                if FleetFirstRun.needsRemoteMachine(model.snapshots) { firstRunCard }
                 machinesCard
             }
         }
@@ -156,6 +158,19 @@ struct FleetHomeView: View {
         }
     }
 
+    private var firstRunCard: some View {
+        PageEmptyState(
+            symbolName: "server.rack", title: "Add your first remote machine",
+            message:
+                "Only this Mac is listed. Add a server, a Raspberry Pi or any computer you can reach over SSH to see its CPU, memory and disk here, open a terminal, browse its files and manage its containers.",
+            primary: PageAction("Add machine", symbolName: "plus", perform: onAddMachine),
+            footnote:
+                "Edith connects with your SSH keys or a password stored in your keychain. Removing a machine later only forgets it; nothing on the machine changes."
+        )
+        .frame(minHeight: UIScale.pt(260))
+        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+    }
+
     private var machinesCard: some View {
         let snapshots = FleetMath.sortedByPressure(model.snapshots)
         return PageCard(title: "Machines") {
@@ -195,7 +210,7 @@ private struct FleetMachineRow: View {
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                                 Text(snapshot.name).font(.edithText(.headline)).lineLimit(1)
-                                Text(snapshot.online ? snapshot.os : "Not connected")
+                                Text(snapshot.online ? snapshot.os : "Not connected, open to connect")
                                     .font(.edithText(.caption)).foregroundStyle(
                                         DashSkin.inkFaint(dark))
                             }
@@ -242,7 +257,7 @@ private struct FleetMachineRow: View {
                                         .help("Runs the companion")
                                 }
                             }
-                            Text(snapshot.online ? snapshot.os : "Not connected")
+                            Text(snapshot.online ? snapshot.os : "Not connected, open to connect")
                                 .font(.system(size: UIScale.pt(10.5)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
@@ -296,6 +311,12 @@ private struct FleetMachineRow: View {
             MeterBar(fraction: percent / 100, color: color, track: DashSkin.line(dark))
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+enum FleetFirstRun {
+    static func needsRemoteMachine(_ snapshots: [MachineSnapshot]) -> Bool {
+        !snapshots.contains { !$0.isLocal }
     }
 }
 

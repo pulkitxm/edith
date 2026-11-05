@@ -503,8 +503,10 @@ struct CompanionLibraryScreen: View {
                             layout: .list, retry: model.searchChanged
                         ) {
                             if model.hits.isEmpty {
-                                Text("Nothing in the memory matches that.")
-                                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+                                Text(
+                                    "Nothing in your memory matches that. Try fewer or different words."
+                                )
+                                .font(.edithText(.callout)).foregroundStyle(.secondary)
                             }
                             ForEach(model.hits, id: \.chunkId) { hit in
                                 hitRow(hit)
@@ -521,10 +523,15 @@ struct CompanionLibraryScreen: View {
                                 episodeRow(episode)
                             }
                             if model.episodes.isEmpty {
-                                Text("Nothing ingested yet. Drop files above to give it memory.")
-                                    .font(.system(size: UIScale.pt(12)))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                                    .padding(.top, UIScale.pt(12))
+                                PageEmptyState(
+                                    symbolName: "books.vertical", title: "Nothing saved yet",
+                                    message:
+                                        "Add notes, PDFs, photos or recordings. Each one becomes an entry here that Chat can search and cite.",
+                                    primary: PageAction(
+                                        "Add to memory", symbolName: "plus",
+                                        perform: pickAndIngest),
+                                    footnote: "Files are copied into your memory. The originals stay where they are.")
+                                .frame(minHeight: UIScale.pt(300))
                             }
                         }
                     }

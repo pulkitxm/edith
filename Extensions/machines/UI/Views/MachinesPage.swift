@@ -107,6 +107,8 @@ struct MachinesPage: View {
                 } label: {
                     Label("Add machine", systemImage: "plus")
                 }
+                .buttonStyle(.edith(.primary))
+                .help("Connect a computer over SSH")
             },
             accessory: { machineStrip })
     }
@@ -190,10 +192,13 @@ struct MachinesPage: View {
         if !connectionsEnabled {
             Color.clear
         } else if mode == .fleet {
-            FleetHomeView(model: model) { id in
-                modeRaw = MachinesMode.machine.rawValue
-                model.selection = id
-            }
+            FleetHomeView(
+                model: model,
+                onSelect: { id in
+                    modeRaw = MachinesMode.machine.rawValue
+                    model.selection = id
+                },
+                onAddMachine: { addSheetPresented = true })
         } else if mode == .workspace {
             WorkspaceView(machines: model, model: workspace)
         } else if let session = model.selectedSession() {
@@ -208,23 +213,14 @@ struct MachinesPage: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: UIScale.pt(12)) {
-            Image(systemName: "server.rack")
-                .font(.system(size: UIScale.pt(38)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text("No machines yet")
-                .font(DashSkin.heading(20))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text(
-                "Add a computer you can reach over SSH to watch its resources, browse its files, and run its containers."
-            )
-            .font(.system(size: UIScale.pt(12.5)))
-            .foregroundStyle(DashSkin.inkFaint(dark))
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: UIScale.pt(420))
-            Button("Add machine") { addSheetPresented = true }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        PageEmptyState(
+            symbolName: "server.rack", title: "No machine selected",
+            message:
+                "Pick a machine from the strip above, or add a computer you can reach over SSH to watch its resources, browse its files and run its containers.",
+            primary: PageAction("Add machine", symbolName: "plus") { addSheetPresented = true },
+            secondary: PageAction("Show all machines") {
+                modeRaw = MachinesMode.fleet.rawValue
+            })
     }
 
     private func changes(_ secrets: AddMachineSheet.Secrets) -> MachineSecretChanges {

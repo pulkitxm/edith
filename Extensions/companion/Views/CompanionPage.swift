@@ -78,6 +78,7 @@ struct CompanionPage: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.windowVisible) private var windowVisible
     @State private var checkedSetup = false
+    @State private var hasDeployment = false
     @State private var refreshTick = 0
     @State private var visited: Set<CompanionTab> = []
     @State private var setupModel: CompanionSetupModel?
@@ -102,7 +103,7 @@ struct CompanionPage: View {
             tabBar
             Divider().opacity(0.35)
         } content: {
-            screens.presenterCover(presenting, dark: dark)
+            screens.overlay { backendGate }.presenterCover(presenting, dark: dark)
         }
         .navigationRoute("tab", selection: tabBinding)
         .edithSheet(
@@ -143,17 +144,34 @@ struct CompanionPage: View {
             await home.refresh()
             guard !Task.isCancelled else { return }
             if !checkedSetup {
-                checkedSetup = true
                 if workspace.transport.remoteBridge != nil { await backend.refreshSnapshot() }
-                if (workspace.transport.remoteBridge != nil
-                    ? backend.deployment : CompanionDeploymentStore.load()) == nil, !home.reachable,
-                    !setupDeclined
-                {
+                hasDeployment =
+                    (workspace.transport.remoteBridge != nil
+                    ? backend.deployment : CompanionDeploymentStore.load()) != nil
+                checkedSetup = true
+                if !hasDeployment, !home.reachable, !setupDeclined {
                     openSetup()
                 } else if !home.reachable {
                     select(.setup)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var backendGate: some View {
+        let gate = CompanionBackendGate.resolve(
+            tab: tab, checked: checkedSetup && home.hasAttemptedRefresh,
+            reachable: home.reachable, hasDeployment: hasDeployment)
+        if gate != .proceed {
+            CompanionBackendGateView(
+                gate: gate, setUp: { openSetup() }, openBackend: { select(.setup) },
+                retry: {
+                    refreshTick += 1
+                    Task { await home.refresh() }
+                }
+            )
+            .background(DashSkin.paper(dark))
         }
     }
 
@@ -171,7 +189,7 @@ struct CompanionPage: View {
 
     private var header: some View {
         PageHeader(
-            "Companion",
+            "Memory",
             trailing: {
                 HStack(spacing: UIScale.pt(10)) {
                     Button {
@@ -185,6 +203,7 @@ struct CompanionPage: View {
                     }
                     .buttonStyle(.edith(.borderless))
                     .help("Refresh this screen")
+                    .accessibilityLabel("Refresh")
                     Button {
                         select(.setup)
                     } label: {
@@ -307,7 +326,9 @@ struct CompanionPage: View {
                 openEpisode: { id in
                     select(.library)
                     Task { await library.select(id) }
-                })
+                },
+                openLibrary: { select(.library) },
+                openCapture: { select(.capture) })
         case .capture:
             CompanionCaptureScreen(model: capture, home: home, isActive: tab == .capture)
         case .desk: CompanionDeskScreen(model: desk, isActive: tab == .desk)

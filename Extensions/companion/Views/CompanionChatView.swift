@@ -337,6 +337,8 @@ struct CompanionChatScreen: View {
     let home: CompanionHomeModel
     var isActive = true
     var openEpisode: (String) -> Void = { _ in }
+    var openLibrary: () -> Void = {}
+    var openCapture: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -475,7 +477,11 @@ struct CompanionChatScreen: View {
                     transcript
                 }
             } else if model.messages.isEmpty {
-                greeting
+                if CompanionMemoryState.resolve(status: home.status) == .empty {
+                    emptyMemory
+                } else {
+                    greeting
+                }
             } else {
                 transcript
             }
@@ -578,6 +584,27 @@ struct CompanionChatScreen: View {
         let message = model.messages[index]
         let previous = model.messages[index - 1]
         return previous.role == message.role ? UIScale.pt(10) : UIScale.pt(22)
+    }
+
+    private var emptyMemory: some View {
+        PageEmptyState(
+            symbolName: "tray.and.arrow.down", title: "Your memory is empty",
+            message:
+                "Chat answers only from what you have saved. Add a few notes, PDFs or a voice memo first, then ask a question and it will cite the notes it used.",
+            steps: [
+                PageGuideStep(
+                    symbolName: "doc.text", title: "Add notes or files",
+                    detail: "Markdown, PDFs, photos and recordings all work."),
+                PageGuideStep(
+                    symbolName: "mic", title: "Or record a memo",
+                    detail: "Capture turns speech into searchable text."),
+                PageGuideStep(
+                    symbolName: "bubble.left.and.text.bubble.right", title: "Then ask",
+                    detail: "Answers show which notes they came from."),
+            ],
+            primary: PageAction("Add to memory", symbolName: "plus", perform: openLibrary),
+            secondary: PageAction("Record a voice memo", symbolName: "mic", perform: openCapture),
+            footnote: "You can also drop files anywhere on this page.")
     }
 
     private var greeting: some View {
