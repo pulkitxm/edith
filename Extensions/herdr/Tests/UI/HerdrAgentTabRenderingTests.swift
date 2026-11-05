@@ -62,7 +62,8 @@ import Testing
             await page.settle()
             for (candidate, view) in views.enumerated() {
                 #expect(holders[candidate].ghosttyView === view)
-                #expect(view.isHidden == (candidate != index))
+                #expect(!view.isHidden)
+                #expect(view.acceptsFirstResponder == (candidate == index))
                 #expect(view.hasInputFocus == (candidate == index))
             }
             let inactiveReads = reads

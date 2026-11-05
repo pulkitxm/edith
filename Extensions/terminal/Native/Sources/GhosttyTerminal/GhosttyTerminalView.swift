@@ -68,7 +68,11 @@ public final class GhosttyTerminalView: NSView {
 
     public override var isFlipped: Bool { false }
 
-    public override var acceptsFirstResponder: Bool { true }
+    public override var acceptsFirstResponder: Bool { renderingActive }
+
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        renderingActive ? super.hitTest(point) : nil
+    }
 
     public var hasSelection: Bool {
         guard let surface else { return false }
@@ -425,7 +429,6 @@ public final class GhosttyTerminalView: NSView {
     public func setRenderingActive(_ active: Bool) {
         guard renderingActive != active else { return }
         renderingActive = active
-        isHidden = !active
         if !active {
             mouseOverSurface = false
             cancelSelectionGesture()
