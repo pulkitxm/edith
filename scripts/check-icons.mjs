@@ -16,10 +16,36 @@ const SYSTEM_APIS = [
   /\.symbolVariant\(/g,
 ];
 const DOTTED_LITERAL = /"([a-z0-9]+(?:\.[a-z0-9]+)+)"/g;
+const WORD_LITERAL = /"([a-z]+)"/g;
+const ICON_NAME_LITERAL = /\bEdithIcon\(\s*name:\s*"([^"\\]*)"/g;
+const UNDOTTED_SYMBOLS = new Set([
+  "archivebox",
+  "checkmark",
+  "cursorarrow",
+  "curlybraces",
+  "desktopcomputer",
+  "externaldrive",
+  "gearshape",
+  "internaldrive",
+  "laptopcomputer",
+  "macwindow",
+  "magnifyingglass",
+  "memorychip",
+  "nosign",
+  "paintpalette",
+  "paperplane",
+  "shippingbox",
+  "sparkle",
+  "sparkles",
+  "speedometer",
+  "tablecells",
+  "textformat",
+  "xmark",
+]);
 
 const lineOf = (text, index) => text.slice(0, index).split("\n").length;
 
-export function findViolations(text, symbolNames) {
+export function findViolations(text, symbolNames, iconNames) {
   const found = [];
   for (const pattern of SYSTEM_APIS)
     for (const match of text.matchAll(pattern))
@@ -29,6 +55,18 @@ export function findViolations(text, symbolNames) {
       found.push({
         line: lineOf(text, match.index),
         reason: `system symbol name ${match[1]}`,
+      });
+  for (const match of text.matchAll(WORD_LITERAL))
+    if (UNDOTTED_SYMBOLS.has(match[1]))
+      found.push({
+        line: lineOf(text, match.index),
+        reason: `system symbol name ${match[1]}`,
+      });
+  for (const match of text.matchAll(ICON_NAME_LITERAL))
+    if (!iconNames.has(match[1]))
+      found.push({
+        line: lineOf(text, match.index),
+        reason: `unknown icon name ${match[1]}`,
       });
   return found.sort((a, b) => a.line - b.line);
 }
@@ -56,12 +94,17 @@ if (import.meta.main) {
   const symbolNames = new Set(
     Object.keys(map.symbols).filter((name) => name.includes(".")),
   );
+  const { icons, aliases } = JSON.parse(
+    readFileSync(`${OWN_PACKAGE}names.json`, "utf8"),
+  );
+  const iconNames = new Set([...icons, ...Object.keys(aliases)]);
   const failures = [];
   for (const path of trackedFiles("'*.swift'")) {
     if (path.startsWith(OWN_PACKAGE)) continue;
     for (const { line, reason } of findViolations(
       readFileSync(path, "utf8"),
       symbolNames,
+      iconNames,
     ))
       failures.push(`${path}:${line}: ${reason}`);
   }

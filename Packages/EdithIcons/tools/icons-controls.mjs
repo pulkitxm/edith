@@ -60,6 +60,12 @@ const level = (g, width) => {
 };
 const layoutFrame = (g) => (g === 16 ? R(1, 2, 14, 12, 1.5) : R(2, 3, 16, 14, 2));
 
+const moonShape = (g) => (g === 16 ? minus(C(8, 8, 7), C(11, 6, 5.5)) : minus(C(10, 10, 8), C(14, 7, 7)));
+const pinShape = (g) =>
+  g === 16
+    ? U(R(5, 1, 6, 2), R(6, 3, 4, 5), R(3, 8, 10, 2, 1), R(7, 11, 2, 4))
+    : U(R(6, 2, 8, 2), R(7, 4, 6, 6), R(4, 10, 12, 2, 1), R(9, 13, 2, 5));
+
 const chevronIcon = directional(chevronRight);
 const arrowIcon = directional(arrowRight);
 
@@ -80,8 +86,8 @@ const frameForward = cuts(
   () => ({ front: [Poly([[7, 4], [15, 10], [7, 16]], 1)], back: [R(3, 4, 2, 12)] }),
 );
 const seekForward = cuts(
-  () => ({ front: [...clockwise(16), Poly([[7, 6], [10, 8], [7, 10]], 0.25)] }),
-  () => ({ front: [...clockwise(20), Poly([[9, 7], [13, 10], [9, 13]], 0.25)] }),
+  () => ({ front: [...halfTurn(16), Poly([[4, 9], [10, 12], [4, 15]], 0.5)] }),
+  () => ({ front: [...halfTurn(20), Poly([[5, 11], [12, 14.5], [5, 18]], 0.5)] }),
 );
 const sidebarLeft = cuts(
   () => ({ front: [R(1, 2, 5, 12, [2, 0, 0, 2])], back: [R(7, 2, 8, 12, [0, 2, 2, 0])] }),
@@ -252,6 +258,10 @@ export const CONTROLS = {
   checkboxOn: cuts(
     () => ({ front: [R(2, 2, 12, 12, 2)], cut: [S("M4.25 7.75L7 10.5L11.75 5.75", W)] }),
     () => ({ front: [R(3, 3, 14, 14, 3)], cut: [S("M5.25 9.75L8.5 13L14.25 7.25", W)] }),
+  ),
+  checkboxMixed: cuts(
+    () => ({ front: [R(2, 2, 12, 12, 2)], cut: [R(4, 7, 8, 2)] }),
+    () => ({ front: [R(3, 3, 14, 14, 3)], cut: [R(6, 9, 8, 2)] }),
   ),
   triangle: cuts(() => ({ front: [Poly([[8, 2], [14, 14], [2, 14]], 1)] }), () => ({ front: [Poly([[10, 3], [18, 17], [2, 17]], 1.25)] })),
   selection: cuts(
@@ -457,7 +467,11 @@ export const CONTROLS = {
     () => ({ front: [C(8, 8, 3), ...bars([[7, 1, 2, 2], [7, 13, 2, 2], [1, 7, 2, 2], [13, 7, 2, 2], [3, 3, 2, 2], [11, 3, 2, 2], [3, 11, 2, 2], [11, 11, 2, 2]])] }),
     () => ({ front: [C(10, 10, 4), ...bars([[9, 2, 2, 2], [9, 16, 2, 2], [2, 9, 2, 2], [16, 9, 2, 2], [4, 4, 2, 2], [14, 4, 2, 2], [4, 14, 2, 2], [14, 14, 2, 2]])] }),
   ),
-  moon: cuts(() => ({ front: [minus(C(8, 8, 7), C(11, 6, 5.5))] }), () => ({ front: [minus(C(10, 10, 8), C(14, 7, 7))] })),
+  moon: cuts(() => ({ front: [moonShape(16)] }), () => ({ front: [moonShape(20)] })),
+  keepAwakeOn: cuts(
+    () => ({ front: [moonShape(16), minus(C(11, 6, 4), C(11, 6, 1))] }),
+    () => ({ front: [moonShape(20), minus(C(13, 7, 5), C(13, 7, 2))] }),
+  ),
   thermometer: cuts(
     () => ({ back: [R(6, 1, 4, 5, [2, 2, 0, 0])], front: [R(6, 7, 4, 6), C(8, 11, 4)] }),
     () => ({ back: [R(8, 2, 4, 6, [2, 2, 0, 0])], front: [R(8, 9, 4, 6), C(10, 14, 4)] }),
@@ -505,9 +519,11 @@ export const CONTROLS = {
     () => ({ front: [R(3, 1, 2, 14), Poly([[5, 2], [14, 2], [11, 5.5], [14, 9], [5, 9]])] }),
     () => ({ front: [R(4, 2, 2, 16), Poly([[6, 3], [17, 3], [13.5, 7], [17, 11], [6, 11]])] }),
   ),
-  pin: cuts(
-    () => ({ front: [R(5, 1, 6, 2), R(6, 3, 4, 5), R(3, 8, 10, 2, 1), R(7, 11, 2, 4)] }),
-    () => ({ front: [R(6, 2, 8, 2), R(7, 4, 6, 6), R(4, 10, 12, 2, 1), R(9, 13, 2, 5)] }),
+  pin: both((g) => ({ front: [pinShape(g)] })),
+  pinOff: both((g) => ({ front: [slitBy(pinShape(g), slash(g)), slash(g)] })),
+  driveExternal: cuts(
+    () => ({ front: [R(2, 1, 9, 10, 1.5)], cut: [R(4, 3, 5, 2), R(7, 7, 2, 2)], back: [R(6, 12, 2, 3), R(6, 13, 8, 2)] }),
+    () => ({ front: [R(3, 2, 11, 12, 2)], cut: [R(5, 5, 7, 2), R(10, 9, 2, 2)], back: [R(8, 15, 2, 3), R(8, 16, 9, 2)] }),
   ),
   bookmark: cuts(
     () => ({ front: [Poly([[3, 1], [13, 1], [13, 15], [8, 10], [3, 15]], [1, 1, 0, 0, 0])] }),
@@ -667,8 +683,8 @@ export const CONTROLS = {
     () => ({ front: [Poly([[10, 2], [18, 6], [10, 10], [2, 6]], 0.25)], back: [S("M2 10L10 14L18 10", 2), S("M2 14L10 18L18 14", 2)], slit: 0 }),
   ),
   filters: cuts(
-    () => ({ front: [C(8, 11, 4)], back: [C(5, 5, 4), C(11, 5, 4)] }),
-    () => ({ front: [C(10, 13, 5)], back: [C(6, 7, 5), C(14, 7, 5)] }),
+    () => ({ front: [C(8, 5, 4)], back: [C(5, 11, 4), C(11, 11, 4)], backCut: [R(7, 8, 2, 8)] }),
+    () => ({ front: [C(10, 7, 5)], back: [C(6, 13, 5), C(14, 13, 5)], backCut: [R(9, 10, 2, 10)] }),
   ),
   contrast: cuts(
     () => ({ front: [minus(C(8, 8, 7), R(7, 0, 9, 16))], back: [minus(C(8, 8, 7), R(0, 0, 9, 16))] }),
