@@ -29,3 +29,21 @@ import Testing
         #expect(!state.hideApps)
     }
 }
+
+@Suite struct RunningAppsListStateTests {
+    @Test func listShowsAppsWhenAnyAreVisible() {
+        #expect(RunningAppsListState(hasApps: true, hasVisibleApps: true, searching: true) == .apps)
+    }
+
+    @Test func searchWithoutMatchesIsDistinctFromNothingRunning() {
+        #expect(
+            RunningAppsListState(hasApps: true, hasVisibleApps: false, searching: true)
+                == .noMatches)
+        #expect(
+            RunningAppsListState(hasApps: false, hasVisibleApps: false, searching: false)
+                == .noneRunning)
+        #expect(
+            RunningAppsListState(hasApps: false, hasVisibleApps: false, searching: true)
+                == .noneRunning)
+    }
+}

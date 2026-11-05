@@ -162,6 +162,10 @@ struct AppMaintenanceSettings: View {
                 }
                 .accessibilityLabel("Default package kind")
                 .disabled(!model.packageLoaded || model.stopped)
+                Text(
+                    "Which Homebrew list opens first: command line tools (formulae) or Mac apps (casks)."
+                )
+                .settingsCaption()
                 if let error = model.packageError {
                     Text(error).settingsCaption().foregroundStyle(.red)
                 }
@@ -182,6 +186,7 @@ struct AppMaintenanceSettings: View {
                 }
                 .accessibilityLabel("Disk image destination")
                 .disabled(!model.loaded || model.stopped)
+                Text("Where apps installed from a .dmg are placed.").settingsCaption()
                 LabeledContent("Location", value: "Main sidebar")
                 if let error = model.errorMessage {
                     Text(error).settingsCaption().foregroundStyle(.red)

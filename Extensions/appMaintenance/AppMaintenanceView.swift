@@ -101,6 +101,10 @@ struct AppMaintenanceView: View {
 
     var body: some View {
         PageWorkspace {
+            PageSubtitle(section.summary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .pageGutter(compact)
+                .padding(.vertical, UIScale.pt(10))
             if section.reviewsSelection {
                 toolbar
                 Divider()
@@ -110,7 +114,11 @@ struct AppMaintenanceView: View {
         }
         .onChange(of: section, initial: true) { _, section in model.scope = section.uiScope }
         .onChange(of: model.focusedUpdateID) { Task { await model.refreshRemote() } }
-        .pageRefresh(interval: { .seconds(1) }) { await model.refreshRemote() }
+        .pageRefresh(interval: {
+            AppMaintenanceRefresh.interval(busy: model.phase != .ready || model.checkingUpdates)
+        }) {
+            await model.refreshRemote()
+        }
         .pageTask(cancel: model.cancelDiscovery) {
             model.refresh(interval: updateRefreshInterval)
         }
@@ -137,15 +145,21 @@ struct AppMaintenanceView: View {
                         moveImageToTrash: moveImageToTrash)
                 })
         }
-        .alert("Move selected items to the Trash?", isPresented: $confirmingRemoval) {
+        .alert(
+            "Move \(model.selectedItems.count) \(model.selectedItems.count == 1 ? "item" : "items") to the Trash?",
+            isPresented: $confirmingRemoval
+        ) {
             Button("Cancel", role: .cancel) {}
             Button("Move to Trash", role: .destructive) { model.removeSelected() }
         } message: {
             Text(
-                "\(model.selectedItems.count) reviewed items use \(AppMaintenanceFiles.format(model.selectedBytes)). You can restore them from the Trash until it is emptied."
+                "\(model.selectedApplication?.name ?? "The app") and the \(AppMaintenanceFiles.format(model.selectedBytes)) you ticked will go to the Trash. You can restore them until you empty it."
             )
         }
-        .alert("Run selected updates?", isPresented: $confirmingUpdates) {
+        .alert(
+            "Update \(model.selectedUpdateIDs.count) \(model.selectedUpdateIDs.count == 1 ? "app" : "apps")?",
+            isPresented: $confirmingUpdates
+        ) {
             Button("Cancel", role: .cancel) {}
             Button("Run Updates") {
                 model.runSelectedUpdates(
@@ -153,7 +167,7 @@ struct AppMaintenanceView: View {
             }
         } message: {
             Text(
-                "\(model.selectedUpdateIDs.count) reviewed updates will run with up to \(updateConcurrency) at once. App-native updaters will open for you to finish."
+                "The ticked updates run with up to \(updateConcurrency) at once. Apps with their own updater open it so you can finish there. Nothing else on your Mac changes."
             )
         }
     }
@@ -161,17 +175,33 @@ struct AppMaintenanceView: View {
     private var toolbar: some View {
         WrapHStack(spacing: UIScale.pt(10), lineSpacing: UIScale.pt(8)) {
             Button {
-                showingUpdateSettings.toggle()
+                model.refresh(interval: updateRefreshInterval)
             } label: {
-                Image(systemName: "gearshape")
+                Label(
+                    model.checkingUpdates ? "Checking…" : "Check for updates",
+                    systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.edith(.iconOnly))
-            .accessibilityLabel("Update settings")
-            .help("Update settings")
-            .popover(isPresented: $showingUpdateSettings) { updateSettings }
+            .disabled(model.phase != .ready || model.checkingUpdates)
+            .buttonStyle(.edith(.primary))
+            .help(
+                model.phase != .ready || model.checkingUpdates
+                    ? "Wait for the current task to finish."
+                    : "Look for newer versions of your apps and Homebrew packages.")
+            Button {
+                showingDiskImagePicker = true
+            } label: {
+                Label("Install from disk image…", systemImage: "externaldrive.badge.plus")
+            }
+            .buttonStyle(.edith(.secondary))
+            .disabled(model.phase != .ready)
+            .help(
+                model.phase != .ready
+                    ? "Wait for the current task to finish."
+                    : "Choose a downloaded .dmg. Edith verifies the app inside before installing it."
+            )
             Menu {
                 Picker(
-                    "Destination",
+                    "Install apps to",
                     selection: Binding(
                         get: { installDestinationRaw },
                         set: { installDestinationRaw = $0 })
@@ -182,26 +212,21 @@ struct AppMaintenanceView: View {
                     }
                 }
             } label: {
-                Label(installDestination.title, systemImage: "folder")
+                Label("Install to: \(installDestination.title)", systemImage: "folder")
             }
-            if model.checkingUpdates {
-                Text("Checking updates")
-                    .font(.system(size: UIScale.pt(12)))
+            .help("Where apps from disk images are installed.")
+            Button {
+                showingUpdateSettings.toggle()
+            } label: {
+                Label("Update settings", systemImage: "gearshape")
+            }
+            .buttonStyle(.edith(.secondary))
+            .popover(isPresented: $showingUpdateSettings) { updateSettings }
+            if let checked = model.lastUpdateRefresh, !model.checkingUpdates {
+                Text("Last checked \(checked.formatted(.relative(presentation: .named)))")
+                    .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
             }
-            Button {
-                showingDiskImagePicker = true
-            } label: {
-                Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
-            }
-            .disabled(model.phase != .ready)
-            Button {
-                model.refresh(interval: updateRefreshInterval)
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-            }
-            .disabled(model.phase != .ready)
-            .buttonStyle(.edith(.secondary))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .pageGutter(compact)
@@ -215,6 +240,8 @@ struct AppMaintenanceView: View {
                 PageSkeleton(layout: .list)
                     .pageContent(compact)
             }
+        } else if section == .updates, updatesState != .list {
+            updatesStateView.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if !section.reviewsSelection {
             sectionInventory.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if compact {
@@ -237,6 +264,88 @@ struct AppMaintenanceView: View {
         }
     }
 
+    private var updatesState: AppMaintenanceUpdatesState {
+        AppMaintenanceUpdatesState(
+            loading: model.phase == .loading, checking: model.checkingUpdates,
+            hasUpdates: !model.updates.isEmpty, matchesFilter: !filteredUpdates.isEmpty,
+            hasError: model.errorMessage != nil, checkedBefore: model.lastUpdateRefresh != nil)
+    }
+
+    @ViewBuilder
+    private var updatesStateView: some View {
+        switch updatesState {
+        case .checking:
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                Text("Checking your apps and Homebrew packages…")
+                    .font(.edithText(.headline))
+                Text("This can take a minute. You can leave this page; the check keeps going.")
+                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+                PageSkeleton(layout: .list)
+                Button("Cancel check") { model.cancel() }.buttonStyle(.edith(.secondary))
+            }
+            .pageContent(compact)
+        case .failed:
+            PageEmptyState(
+                symbolName: "exclamationmark.triangle",
+                title: "Updates could not be checked",
+                message: model.errorMessage ?? "Something went wrong while looking for updates.",
+                primary: PageAction(
+                    "Try again", symbolName: "arrow.clockwise", identifier: "updates.retry"
+                ) {
+                    model.refresh(interval: updateRefreshInterval)
+                })
+        case .neverChecked:
+            PageEmptyState(
+                symbolName: "arrow.down.app",
+                title: "Find out which apps are out of date",
+                message:
+                    "Edith looks at the apps on this Mac and your Homebrew packages, and lists the ones with a newer version. Checking never installs anything.",
+                steps: [
+                    PageGuideStep(
+                        symbolName: "arrow.clockwise", title: "Check",
+                        detail: "Reads your apps and asks each source for the latest version."),
+                    PageGuideStep(
+                        symbolName: "checklist", title: "Review",
+                        detail: "See release notes and the exact command before you run anything."),
+                    PageGuideStep(
+                        symbolName: "arrow.up.circle", title: "Update",
+                        detail: "Tick the ones you want and run them together."),
+                ],
+                primary: PageAction(
+                    "Check for updates", symbolName: "arrow.clockwise", identifier: "updates.check"
+                ) {
+                    model.refresh(interval: updateRefreshInterval)
+                })
+        case .upToDate:
+            PageEmptyState(
+                symbolName: "checkmark.seal",
+                title: "Everything is up to date",
+                message:
+                    "No newer versions were found. Updates you ignored or snoozed stay hidden; you can bring them back in Update settings.",
+                primary: PageAction(
+                    "Check again", symbolName: "arrow.clockwise", identifier: "updates.check"
+                ) {
+                    model.refresh(interval: updateRefreshInterval)
+                },
+                secondary: PageAction(
+                    "Update settings", symbolName: "gearshape", identifier: "updates.settings"
+                ) {
+                    showingUpdateSettings = true
+                },
+                footnote: model.lastUpdateRefresh.map {
+                    "Last checked \($0.formatted(date: .abbreviated, time: .shortened))."
+                })
+        case .noMatches:
+            PageEmptyState(
+                symbolName: "magnifyingglass",
+                title: "No updates match your search",
+                message: "Clear the search to see all \(model.updates.count) available updates.",
+                primary: PageAction("Clear search", identifier: "updates.clear") { query = "" })
+        case .list:
+            EmptyView()
+        }
+    }
+
     @ViewBuilder
     private var sectionInventory: some View {
         switch section {
@@ -248,13 +357,24 @@ struct AppMaintenanceView: View {
 
     private var removalInventory: some View {
         VStack(spacing: 0) {
-            SearchField(placeholder: "Search applications", text: $query)
+            SearchField(placeholder: "Search your apps", text: $query)
                 .padding(UIScale.pt(12))
             Divider()
             if filteredApplications.isEmpty {
                 ContentStatusView(
-                    "No applications", message: "No installed app matches this search.",
-                    symbol: "app.dashed")
+                    model.applications.isEmpty ? "No applications found" : "No match",
+                    message: model.applications.isEmpty
+                        ? "Edith could not find any installed apps. Check again in a moment."
+                        : "No installed app matches \"\(query)\". Try part of its name.",
+                    symbol: "app.dashed",
+                    actionTitle: model.applications.isEmpty ? "Check again" : "Clear search",
+                    action: {
+                        if model.applications.isEmpty {
+                            model.refresh(interval: updateRefreshInterval)
+                        } else {
+                            query = ""
+                        }
+                    }, secondaryTitle: "", secondaryAction: nil)
             } else {
                 VirtualList(
                     applicationRows,
@@ -272,7 +392,7 @@ struct AppMaintenanceView: View {
                 Text("\(model.applications.count) applications")
                 Spacer()
                 let updates = model.applications.filter { $0.update != nil }.count
-                if updates > 0 { Text("\(updates) updates") }
+                if updates > 0 { Text("\(updates) with updates available") }
             }
             .settingsCaption()
             .padding(.horizontal, UIScale.pt(12))
@@ -282,7 +402,7 @@ struct AppMaintenanceView: View {
 
     private var updateInventory: some View {
         VStack(spacing: 0) {
-            SearchField(placeholder: "Search updates", text: $query)
+            SearchField(placeholder: "Search available updates", text: $query)
                 .padding(UIScale.pt(12))
             Divider()
             if filteredUpdates.isEmpty {
@@ -308,7 +428,7 @@ struct AppMaintenanceView: View {
             HStack {
                 Text("\(model.updates.count) available")
                 Spacer()
-                Text("\(model.selectedUpdateIDs.count) selected")
+                Text("\(model.selectedUpdateIDs.count) ticked to update")
             }
             .settingsCaption()
             .padding(.horizontal, UIScale.pt(12))
@@ -319,19 +439,25 @@ struct AppMaintenanceView: View {
     private var historyInventory: some View {
         Group {
             if model.updateHistory.isEmpty {
-                ContentStatusView(
-                    "No Update History", message: "Completed update attempts will appear here.",
-                    symbol: "clock")
+                PageEmptyState(
+                    symbolName: "clock.arrow.circlepath",
+                    title: "No updates have been run yet",
+                    message:
+                        "Each time you run updates, the result is saved here, including anything that failed, so you can see what changed and when.",
+                    footnote: "Go to Updates to check for newer versions.")
             } else {
                 List(model.updateHistory, id: \.finishedAt) { result in
                     VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                         HStack {
                             Text(result.name).lineLimit(1)
                             Spacer()
-                            Image(
-                                systemName: result.status == .succeeded
+                            Label(
+                                result.status == .succeeded ? "Updated" : "Needs attention",
+                                systemImage: result.status == .succeeded
                                     ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
                             )
+                            .labelStyle(.titleAndIcon)
+                            .font(.edithText(.caption))
                             .foregroundStyle(result.status == .succeeded ? .green : .orange)
                         }
                         Text("\(result.version) · \(result.source.title)").settingsCaption()
@@ -389,22 +515,26 @@ struct AppMaintenanceView: View {
         } else if let application = model.selectedApplication, let plan = model.plan {
             removalPlan(application: application, plan: plan)
         } else {
-            VStack(spacing: UIScale.pt(14)) {
-                Image(systemName: "checklist")
-                    .font(.system(size: UIScale.pt(44), weight: .light))
-                    .foregroundStyle(.secondary)
-                Text("Choose an application")
-                    .font(.edithText(.headline))
-                Text(
-                    "Edith will show the app and exact bundle-identifier matches before anything moves."
-                )
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: UIScale.pt(360))
-                statusMessage
+            VStack(spacing: UIScale.pt(0)) {
+                PageEmptyState(
+                    symbolName: "trash",
+                    title: "Choose an app to remove",
+                    message:
+                        "Pick an app on the left. Edith lists the app and the files it left behind, matched exactly, so nothing unrelated is touched.",
+                    steps: [
+                        PageGuideStep(
+                            symbolName: "app.dashed", title: "Pick an app",
+                            detail: "Search or scroll the list."),
+                        PageGuideStep(
+                            symbolName: "checklist", title: "Review the files",
+                            detail: "Untick anything you want to keep."),
+                        PageGuideStep(
+                            symbolName: "trash", title: "Move to the Trash",
+                            detail: "You can restore it until you empty the Trash."),
+                    ])
+                statusMessage.padding(.bottom, UIScale.pt(16))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(UIScale.pt(28))
         }
     }
 
@@ -436,6 +566,9 @@ struct AppMaintenanceView: View {
                     VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
                         Text(item.source.title).fontWeight(.medium)
                         Text("\(item.confidence.title) confidence").settingsCaption()
+                            .help(
+                                "How sure Edith is that this update belongs to the app you have installed."
+                            )
                     }
                 }
                 GroupBox("Release") {
@@ -459,8 +592,12 @@ struct AppMaintenanceView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(UIScale.pt(6))
                 }
-                GroupBox("Reviewed action") {
+                GroupBox("What will run") {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        Text(
+                            "This is the exact command Edith runs. Apps with their own updater open it instead."
+                        )
+                        .settingsCaption()
                         Text(item.command).font(.edithText(.callout, design: .monospaced))
                             .textSelection(.enabled)
                         Text(
@@ -474,7 +611,7 @@ struct AppMaintenanceView: View {
                 statusMessage
                 Spacer()
                 HStack {
-                    Menu("More") {
+                    Menu("More actions") {
                         Button("Copy Command") { copy(item.command) }
                         if let path = item.applicationPath {
                             Button("Reveal in Finder") {
@@ -493,19 +630,24 @@ struct AppMaintenanceView: View {
                     Button(
                         item.action == .openUpdater && model.selectedUpdateIDs.count == 1
                             ? "Open App Updater"
-                            : "Run \(model.selectedUpdateIDs.count) Updates"
+                            : "Update \(model.selectedUpdateIDs.count) \(model.selectedUpdateIDs.count == 1 ? "app" : "apps")"
                     ) {
                         confirmingUpdates = true
                     }
                     .buttonStyle(.edith(.primary))
                     .disabled(model.selectedUpdateIDs.isEmpty)
+                    .help(
+                        model.selectedUpdateIDs.isEmpty
+                            ? "Tick at least one update in the list first."
+                            : "You will be asked to confirm before anything runs.")
                 }
             }
             .padding(UIScale.pt(22))
         } else {
             ContentStatusView(
                 "Select an update",
-                message: "Choose updates to review their source, command, and release information.",
+                message:
+                    "Click an update on the left to read its release notes and see exactly what will run.",
                 symbol: "arrow.down.app")
         }
     }
@@ -513,10 +655,10 @@ struct AppMaintenanceView: View {
     private var updateSettings: some View {
         Form {
             Toggle(
-                "Automatic refresh",
+                "Check automatically",
                 isOn: Binding(get: { updateAutoRefresh }, set: { updateAutoRefresh = $0 }))
             Picker(
-                "Refresh",
+                "Check",
                 selection: Binding(
                     get: { updateRefreshInterval }, set: { updateRefreshInterval = $0 })
             ) {
@@ -529,20 +671,22 @@ struct AppMaintenanceView: View {
                 "Notifications",
                 isOn: Binding(get: { updateNotifications }, set: { updateNotifications = $0 }))
             Stepper(
-                "Concurrency: \(updateConcurrency)",
+                "Run \(updateConcurrency) at once",
                 value: Binding(get: { updateConcurrency }, set: { updateConcurrency = $0 }),
                 in: 1...4)
             Stepper(
-                "Retries: \(updateRetries)",
+                "Retry failed updates \(updateRetries) \(updateRetries == 1 ? "time" : "times")",
                 value: Binding(get: { updateRetries }, set: { updateRetries = $0 }), in: 0...3)
             Button("Reset Ignored, Snoozed, and Excluded Apps") {
                 model.resetUpdatePolicies()
             }
-            Text("Automatic refresh only checks. Updates always require an explicit action.")
-                .settingsCaption()
+            Text(
+                "Automatic refresh only checks for updates and can notify you. Updates always wait for you to run them."
+            )
+            .settingsCaption()
         }
         .edithForm()
-        .frame(width: UIScale.pt(360), height: UIScale.pt(300))
+        .frame(width: UIScale.pt(380), height: UIScale.pt(320))
     }
 
     private func copy(_ value: String) {
@@ -605,15 +749,24 @@ struct AppMaintenanceView: View {
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text("\(model.selectedItems.count) of \(plan.items.count) selected")
                             .fontWeight(.medium)
-                        Text(AppMaintenanceFiles.format(model.selectedBytes))
+                        Text("\(AppMaintenanceFiles.format(model.selectedBytes)) will be freed")
                             .settingsCaption()
                     }
                     Spacer()
-                    Button("Move to Trash", role: .destructive) {
+                    Button(
+                        model.selectedItems.isEmpty
+                            ? "Move to Trash"
+                            : "Move \(model.selectedItems.count) \(model.selectedItems.count == 1 ? "item" : "items") to Trash",
+                        role: .destructive
+                    ) {
                         confirmingRemoval = true
                     }
                     .buttonStyle(.edith(.destructive))
                     .disabled(model.selectedItems.isEmpty)
+                    .help(
+                        model.selectedItems.isEmpty
+                            ? "Tick the items you want to remove."
+                            : "You will be asked to confirm. Items can be restored from the Trash.")
                 }
             }
             .padding(UIScale.pt(16))

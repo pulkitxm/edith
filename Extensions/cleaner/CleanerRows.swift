@@ -32,6 +32,25 @@ struct CleanerRow: Identifiable, Equatable, Sendable {
     let kind: Kind
 }
 
+enum CleanerPresentation: Equatable {
+    case firstRun
+    case scanning
+    case nothingToClean
+    case results
+
+    init(scanned: Bool, scanning: Bool, hasCategories: Bool) {
+        if scanning && !hasCategories {
+            self = .scanning
+        } else if !scanned && !scanning {
+            self = .firstRun
+        } else if scanned && !hasCategories {
+            self = .nothingToClean
+        } else {
+            self = .results
+        }
+    }
+}
+
 final class CleanerSizeText {
     private var cache: [Int64: String] = [:]
 

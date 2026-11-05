@@ -249,3 +249,44 @@ private final class AppMaintenanceRequestCapture: @unchecked Sendable {
         try data.write(to: url)
     }
 }
+
+@Suite struct AppMaintenancePresentationTests {
+    @Test func firstVisitInvitesACheckAndAnEmptyResultIsExplained() {
+        #expect(
+            AppMaintenanceUpdatesState(
+                loading: false, checking: false, hasUpdates: false, matchesFilter: false,
+                hasError: false, checkedBefore: false) == .neverChecked)
+        #expect(
+            AppMaintenanceUpdatesState(
+                loading: false, checking: false, hasUpdates: false, matchesFilter: false,
+                hasError: false, checkedBefore: true) == .upToDate)
+    }
+
+    @Test func checkingAndFailureWinOverEmptiness() {
+        #expect(
+            AppMaintenanceUpdatesState(
+                loading: false, checking: true, hasUpdates: false, matchesFilter: false,
+                hasError: true, checkedBefore: true) == .checking)
+        #expect(
+            AppMaintenanceUpdatesState(
+                loading: false, checking: false, hasUpdates: false, matchesFilter: false,
+                hasError: true, checkedBefore: false) == .failed)
+    }
+
+    @Test func updatesStayVisibleWhileRefreshingAndSearchCanEmptyTheList() {
+        #expect(
+            AppMaintenanceUpdatesState(
+                loading: false, checking: true, hasUpdates: true, matchesFilter: true,
+                hasError: false, checkedBefore: true) == .list)
+        #expect(
+            AppMaintenanceUpdatesState(
+                loading: false, checking: false, hasUpdates: true, matchesFilter: false,
+                hasError: false, checkedBefore: true) == .noMatches)
+    }
+
+    @Test func idlePageObservesRarely() {
+        #expect(
+            AppMaintenanceRefresh.interval(busy: false) > AppMaintenanceRefresh.interval(busy: true)
+        )
+    }
+}

@@ -125,6 +125,11 @@ final class CleanerModel {
     @ObservationIgnored private var remoteStamp: Int?
     private let sizeText = CleanerSizeText()
 
+    var presentation: CleanerPresentation {
+        CleanerPresentation(
+            scanned: scanned, scanning: scanning, hasCategories: !categories.isEmpty)
+    }
+
     var uiStamp: Int { revision &* 2 &+ (driveOptionsLoad.isRunning ? 1 : 0) }
 
     private func refreshList() {
@@ -831,7 +836,7 @@ final class CleanerModel {
         cancelScan()
         scanning = true
         cleaning = true
-        operationTitle = "Scanning…"
+        operationTitle = "Moving items to the Trash…"
         let token = CleanerCancellation()
         scanToken = token
         workTask = track { [self, services] in

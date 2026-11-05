@@ -39,5 +39,32 @@
   "notchCards": [
     "extension:appMaintenance"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Keep your apps current and remove them cleanly.",
+    "summary": "App Updates checks your apps and Homebrew for newer versions, lets you review and run them together, installs apps from disk images after verifying them, and removes apps along with the files they leave behind.",
+    "steps": [
+      {
+        "symbolName": "arrow.clockwise",
+        "title": "Check for updates",
+        "detail": "Edith lists apps with a newer version. Checking never installs anything."
+      },
+      {
+        "symbolName": "checklist",
+        "title": "Review and update",
+        "detail": "Read release notes and the exact command, then update the ones you tick."
+      },
+      {
+        "symbolName": "trash",
+        "title": "Remove apps fully",
+        "detail": "Pick an app, untick any file to keep, and move the rest to the Trash."
+      }
+    ],
+    "examples": [
+      "ed maintenance updates",
+      "ed maintenance update",
+      "ed maintenance scan Safari",
+      "ed maintenance history"
+    ]
+  }
 }

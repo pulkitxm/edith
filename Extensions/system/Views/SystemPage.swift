@@ -44,7 +44,9 @@ struct SystemPage: View {
             }
             Button("Cancel", role: .cancel) { pendingQuit = nil }
         } message: {
-            Text("The app will close. Unsaved changes will prompt you first.")
+            Text(
+                "The app asks to quit. If it has unsaved changes, it will ask whether to save first."
+            )
         }
         .onDisappear { model.setScrolling(false) }
         .pageRefresh(interval: { .seconds(2) }, cancel: { model.loading.cancel() }) {
@@ -62,9 +64,18 @@ struct SystemPage: View {
                 Button(role: .destructive) {
                     confirmQuitAll = true
                 } label: {
-                    Label("Quit all apps", systemImage: "xmark.circle")
+                    Label(
+                        model.quitAllTargetCount > 0
+                            ? "Quit all apps (\(model.quitAllTargetCount))" : "Quit all apps",
+                        systemImage: "xmark.circle")
                 }
                 .buttonStyle(EdithButtonStyle(.destructive))
+                .disabled(model.quitAllTargetCount == 0)
+                .help(
+                    model.quitAllTargetCount == 0
+                        ? "There are no apps to quit."
+                        : "Ask every app except Finder and Edith to quit. You confirm first."
+                )
                 .confirmationDialog(
                     "Quit all apps?", isPresented: $confirmQuitAll, titleVisibility: .visible
                 ) {
@@ -72,11 +83,20 @@ struct SystemPage: View {
                         model.quitAll()
                     }
                 } message: {
-                    Text("Finder and Edith stay open. Apps with unsaved changes will ask first.")
+                    Text(
+                        "Finder, Edith and essential system apps stay open. Any app with unsaved changes asks whether to save before it quits."
+                    )
                 }
             },
             accessory: {
-                SearchField(placeholder: "Filter app, bundle identifier or PID", text: $model.query)
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    PageSubtitle(
+                        "See which apps are open and how much processor and memory each one uses. Quit the ones you are not using to free resources."
+                    )
+                    SearchField(
+                        placeholder: "Filter by app name, bundle identifier or PID",
+                        text: $model.query)
+                }
             })
     }
 
@@ -125,7 +145,8 @@ struct SystemPage: View {
     private var summary: some View {
         HStack(spacing: UIScale.pt(12)) {
             summaryCard("Running apps", "\(model.apps.count)")
-            summaryCard("App memory", String(format: "%.1f GB", model.totalMemoryMB / 1024))
+            summaryCard(
+                "Memory used by apps", String(format: "%.1f GB", model.totalMemoryMB / 1024))
         }
     }
 
@@ -147,7 +168,9 @@ struct SystemPage: View {
                 .padding(.leading, UIScale.pt(32))
             Spacer()
             headerButton("CPU", .cpu, width: UIScale.pt(48), alignment: .trailing)
+                .help("Processor use. 100% is one full core. Click to sort.")
             headerButton("Memory", .memory, width: UIScale.pt(72), alignment: .trailing)
+                .help("Memory the app is holding. Click to sort.")
             Color.clear.frame(width: UIScale.pt(16))
         }
         .padding(.bottom, UIScale.pt(6))
@@ -179,20 +202,35 @@ struct SystemPage: View {
         )
     }
 
+    private var listState: RunningAppsListState {
+        RunningAppsListState(
+            hasApps: !model.apps.isEmpty, hasVisibleApps: !model.visibleApps.isEmpty,
+            searching: !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     private var appList: some View {
         let apps = model.visibleApps
         return VStack(spacing: UIScale.pt(0)) {
             columnHeaders
             Divider().opacity(0.4)
-            if apps.isEmpty {
-                Text(
-                    model.query.isEmpty
-                        ? "No user applications are running." : "No apps match this search."
+            switch listState {
+            case .apps: EmptyView()
+            case .noneRunning:
+                PageEmptyState(
+                    symbolName: "app.dashed",
+                    title: "No apps are running",
+                    message:
+                        "Only regular apps with a Dock icon are listed. When you open one, it appears here with its processor and memory use."
                 )
-                .font(.system(size: UIScale.pt(12)))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, UIScale.pt(24))
+            case .noMatches:
+                PageEmptyState(
+                    symbolName: "magnifyingglass",
+                    title: "No apps match your search",
+                    message:
+                        "Nothing running matches \"\(model.query.trimmingCharacters(in: .whitespacesAndNewlines))\". Try part of the name, or clear the search.",
+                    primary: PageAction("Clear search", identifier: "system.clear-search") {
+                        model.query = ""
+                    })
             }
             LazyVStack(spacing: UIScale.pt(0)) {
                 ForEach(apps) { app in
@@ -310,7 +348,9 @@ struct SystemAppRow: View {
             .help(
                 hidesName
                     ? (canQuit ? "Quit app" : "This app stays open")
-                    : (canQuit ? "Quit \(app.name)" : "\(app.name) stays open"))
+                    : (canQuit
+                        ? "Ask \(app.name) to quit"
+                        : "\(app.name) is essential, so Edith keeps it open"))
         }
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(7))
@@ -333,13 +373,13 @@ struct SystemSettings: View {
                 HStack {
                     Text("Keyboard cleaning")
                     InfoDot(
-                        "Locks the keyboard so you can wipe it without typing anything. Press the on-screen button or wait for the timer to unlock."
+                        "Locks the keyboard for a few seconds so you can wipe it without typing anything by accident. Click Done cleaning with the mouse, or wait for the timer, to unlock."
                     )
                     Spacer()
                     if started {
-                        Text("Locked - check the overlay").settingsCaption()
+                        Text("Keyboard locked. Look for the full-screen overlay.").settingsCaption()
                     }
-                    Button("Clean now") {
+                    Button("Start cleaning mode") {
                         Task { await clean() }
                         started = true
                         reset?.cancel()

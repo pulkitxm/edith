@@ -286,3 +286,41 @@ private final class CLIHomebrewModelRecorder: @unchecked Sendable {
         return storage
     }
 }
+
+@Suite struct HomebrewListingStateTests {
+    @Test func missingHomebrewWinsOverEveryOtherState() {
+        #expect(
+            HomebrewListingState(
+                available: false, mode: .installed, hasQuery: false, filtersActive: false,
+                hasPackages: true) == .notInstalled)
+    }
+
+    @Test func discoverExplainsHowToSearchBeforeAnyQuery() {
+        #expect(
+            HomebrewListingState(
+                available: true, mode: .search, hasQuery: false, filtersActive: false,
+                hasPackages: false) == .discoverPrompt)
+        #expect(
+            HomebrewListingState(
+                available: true, mode: .search, hasQuery: true, filtersActive: false,
+                hasPackages: false) == .noSearchResults)
+    }
+
+    @Test func installedDistinguishesEmptyFromFiltered() {
+        #expect(
+            HomebrewListingState(
+                available: true, mode: .installed, hasQuery: false, filtersActive: false,
+                hasPackages: false) == .nothingInstalled)
+        #expect(
+            HomebrewListingState(
+                available: true, mode: .installed, hasQuery: false, filtersActive: true,
+                hasPackages: false) == .noMatchingFilters)
+    }
+
+    @Test func packagesShowTheTable() {
+        #expect(
+            HomebrewListingState(
+                available: nil, mode: .installed, hasQuery: false, filtersActive: false,
+                hasPackages: true) == .packages)
+    }
+}

@@ -13,69 +13,132 @@ private enum CleanerPendingClean: Equatable {
     }
 }
 
-private enum CleanerDrivePicker: Identifiable {
-    case scan
-    case choose
-
-    var id: Self { self }
-}
-
 struct CleanerCard: View {
     let dark: Bool
     let compact: Bool
     let model: CleanerModel
-    @State private var drivePicker: CleanerDrivePicker?
+    let pickDrives: (CleanerDrivePicker) -> Void
     @State private var pendingClean: CleanerPendingClean?
 
     var body: some View {
+        content
+            .confirmationDialog(
+                "Move \(pendingCount) items to the Trash?",
+                isPresented: Binding(
+                    get: { pendingClean != nil }, set: { if !$0 { pendingClean = nil } }),
+                titleVisibility: .visible, presenting: pendingClean
+            ) { pending in
+                Button(
+                    "Move \(JunkScanner.format(pendingBytes)) to the Trash", role: .destructive
+                ) {
+                    model.clean(categoryID: pending.categoryID)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { pending in
+                Text(
+                    pending == .all
+                        ? "\(pendingCount) selected items (\(JunkScanner.format(pendingBytes))) go to the Trash, so you can restore them until you empty it. Worktrees are pruned from their repository; their branches stay."
+                        : "\(pendingCount) selected items in this category (\(JunkScanner.format(pendingBytes))) go to the Trash, so you can restore them until you empty it."
+                )
+            }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch model.presentation {
+        case .firstRun: firstRun
+        case .scanning: scanningView
+        case .nothingToClean: nothingToClean
+        case .results: results
+        }
+    }
+
+    private var firstRun: some View {
+        PageEmptyState(
+            symbolName: "sparkles.rectangle.stack",
+            title: "Get back disk space",
+            message:
+                "Cleaner finds build caches, package manager downloads, old Xcode data and unused git worktrees. You review everything before anything is removed.",
+            steps: [
+                PageGuideStep(
+                    symbolName: "magnifyingglass", title: "Scan",
+                    detail: "Takes a minute. It only reads folders and changes nothing."),
+                PageGuideStep(
+                    symbolName: "checklist", title: "Review",
+                    detail: "Untick anything you want to keep. Sizes show what you get back."),
+                PageGuideStep(
+                    symbolName: "trash", title: "Clean",
+                    detail: "Selected items move to the Trash, so you can restore them."),
+            ],
+            primary: PageAction(
+                "Scan my Mac", symbolName: "magnifyingglass", identifier: "cleaner.scan"
+            ) { pickDrives(.scan) },
+            secondary: PageAction("Choose where to search…", identifier: "cleaner.choose") {
+                pickDrives(.choose)
+            },
+            footnote:
+                "Most of what it finds is rebuilt automatically the next time you need it.")
+    }
+
+    private var nothingToClean: some View {
+        PageEmptyState(
+            symbolName: "checkmark.seal",
+            title: "Nothing to clean",
+            message:
+                "The scan found no caches or leftovers worth removing in the places it searched. Add a folder if your projects live somewhere else.",
+            primary: PageAction(
+                "Scan again", symbolName: "arrow.clockwise", identifier: "cleaner.scan"
+            ) {
+                pickDrives(.scan)
+            },
+            secondary: PageAction("Choose where to search…", identifier: "cleaner.choose") {
+                pickDrives(.choose)
+            })
+    }
+
+    private var scanningView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                progressRow
+                if !model.logs.isEmpty { logView }
+                drivesView
+                PageSkeleton(layout: .list)
+            }
+            .pageContent(compact)
+        }
+        .scrollIndicators(.never)
+    }
+
+    private var progressRow: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            SkeletonGroup {
+                SkeletonBlock(width: 52, height: 22, corner: 11)
+            }
+            Text(model.operationTitle).font(.edithText(.callout))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+            Spacer()
+        }
+    }
+
+    private var results: some View {
         VStack(spacing: UIScale.pt(0)) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(0)) {
                     controls.padding(.bottom, UIScale.pt(12))
-                    if showsList {
-                        ForEach(model.list.rows) { row in
-                            CleanerRowView(row: row, model: model, dark: dark) {
-                                pendingClean = .category($0)
-                            }
-                            .equatable()
+                    ForEach(model.list.rows) { row in
+                        CleanerRowView(row: row, model: model, dark: dark) {
+                            pendingClean = .category($0)
                         }
+                        .equatable()
                     }
                 }
                 .pageContent(compact)
             }
             .scrollIndicators(.never)
-            if showsList {
-                footer
-                    .pageGutter(compact)
-                    .padding(.vertical, UIScale.pt(10))
-            }
-        }
-        .edithSheet(item: $drivePicker) { picker in
-            DrivePickerSheet(
-                model: model, dark: dark, confirmTitle: picker == .scan ? "Scan" : "Done"
-            ) {
-                if picker == .scan { model.scan() }
-            }
-        }
-        .confirmationDialog(
-            "Clean \(JunkScanner.format(pendingBytes))?",
-            isPresented: Binding(
-                get: { pendingClean != nil }, set: { if !$0 { pendingClean = nil } }),
-            titleVisibility: .visible, presenting: pendingClean
-        ) { pending in
-            Button("Move \(pendingCount) items to Trash", role: .destructive) {
-                model.clean(categoryID: pending.categoryID)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { pending in
-            Text(
-                pending == .all
-                    ? "Items go to the Trash, so you can restore them until you empty it. Worktrees are pruned from their repository; their branches stay."
-                    : "Items go to the Trash, so you can restore them until you empty it.")
+            footer
+                .pageGutter(compact)
+                .padding(.vertical, UIScale.pt(10))
         }
     }
-
-    private var showsList: Bool { model.scanned && !model.categories.isEmpty }
 
     private var pendingBytes: Int64 {
         guard let pendingClean else { return 0 }
@@ -91,80 +154,48 @@ struct CleanerCard: View {
 
     @ViewBuilder private var controls: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            if !model.scanned && !model.scanning {
-                intro
-            } else {
-                header
-                if model.logsExpanded { logView }
-                if model.lastReclaimed > 0 {
-                    Text("Reclaimed \(JunkScanner.format(model.lastReclaimed)) last clean.")
-                        .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.sage)
-                }
-                if model.scanned {
-                    drivesView
-                    if !model.categories.isEmpty {
-                        searchBar
-                        CleanerFilterBar(model: model, dark: dark)
-                        selectAllRow
-                        if !model.list.matchesSearch {
-                            Label("No items match these filters", systemImage: "magnifyingglass")
-                                .font(.system(size: UIScale.pt(12)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
-                        }
-                    } else {
-                        Text("Nothing to clean. You're already tidy.")
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                    }
-                }
+            summary
+            if model.logsExpanded { logView }
+            if model.lastReclaimed > 0 {
+                Label(
+                    "Moved \(JunkScanner.format(model.lastReclaimed)) to the Trash last time.",
+                    systemImage: "checkmark.circle"
+                )
+                .font(.edithText(.caption)).foregroundStyle(DashSkin.sage)
+            }
+            drivesView
+            searchBar
+            CleanerFilterBar(model: model, dark: dark)
+            selectAllRow
+            if !model.list.matchesSearch {
+                Label("No items match these filters", systemImage: "magnifyingglass")
+                    .font(.edithText(.caption))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
     }
 
-    private var intro: some View {
-        HStack {
-            Text("Scan build caches, package managers, git worktrees and your drives.")
-                .font(.system(size: UIScale.pt(12))).foregroundStyle(DashSkin.inkFaint(dark))
-            Spacer()
-            Button("Scan") { openPicker(scan: true) }
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            if model.scanning {
-                SkeletonGroup {
-                    SkeletonBlock(width: 52, height: 22, corner: 11)
-                }
-                Text(model.operationTitle).font(.system(size: UIScale.pt(12))).foregroundStyle(
-                    DashSkin.inkSoft(dark))
-                Button("Cancel") { model.cancelScan() }
-                    .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(
-                        .edith(.borderless)
-                    )
-                    .foregroundStyle(DashSkin.accent(dark))
-            } else {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.3)) { model.logsExpanded.toggle() }
-                } label: {
-                    HStack(spacing: UIScale.pt(5)) {
-                        Image(systemName: "terminal")
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        Text("Logs")
-                            .font(.system(size: UIScale.pt(11), weight: .medium))
-                        Image(systemName: model.logsExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: UIScale.pt(8), weight: .semibold))
-                    }
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .padding(.horizontal, UIScale.pt(9)).padding(.vertical, UIScale.pt(4))
-                    .background(DashSkin.paper2(dark), in: Capsule())
-                }
-                .buttonStyle(.edith(.borderless))
+    private var summary: some View {
+        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text("\(JunkScanner.format(model.reclaimableTotal)) can be reclaimed")
+                    .font(.edithText(.headline))
+                Text(
+                    "Found in \(model.categories.count) \(model.categories.count == 1 ? "category" : "categories"). Open a category to see exactly what is inside."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             Spacer()
-            if !model.scanning {
-                Button("Scan again", systemImage: "arrow.clockwise") { openPicker(scan: true) }
+            Button {
+                withAnimation(.easeInOut(duration: 0.3)) { model.logsExpanded.toggle() }
+            } label: {
+                Label(
+                    model.logsExpanded ? "Hide scan log" : "Show scan log",
+                    systemImage: "terminal")
             }
+            .buttonStyle(.edith(.borderless))
+            .font(.edithText(.caption))
+            .help("What the last scan looked at.")
         }
     }
 
@@ -187,28 +218,25 @@ struct CleanerCard: View {
     private var drivesView: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(10)) {
-                Text("DRIVES").font(.system(size: UIScale.pt(10), weight: .bold)).tracking(
+                Text("SEARCHED").font(.system(size: UIScale.pt(10), weight: .bold)).tracking(
                     UIScale.pt(0.6)
                 )
                 .foregroundStyle(DashSkin.inkFaint(dark))
+                InfoDot(
+                    "Cleaning moves items to the Trash, so it stays reversible. System caches always come from your home folder."
+                )
                 Spacer()
-                Button("Rescan") { model.scan() }
-                    .font(.system(size: UIScale.pt(11), weight: .medium)).buttonStyle(
-                        .edith(.borderless)
-                    )
+                Button("Change…") { pickDrives(.choose) }
+                    .font(.edithText(.caption)).buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.accent(dark)).disabled(model.scanning)
-                InfoDot("Cleaning moves items to the Trash, so it stays reversible.")
-                Button("Choose drives…") { openPicker(scan: false) }
-                    .font(.system(size: UIScale.pt(11))).buttonStyle(.edith(.borderless))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .help("Choose which drives and folders are searched on the next scan.")
             }
             if model.drives.isEmpty {
                 if model.scanning {
                     ForEach(0..<2, id: \.self) { _ in DriveSkeleton(dark: dark) }
                 } else {
-                    Text("No drives selected.")
-                        .font(.system(size: UIScale.pt(11))).foregroundStyle(
-                            DashSkin.inkFaint(dark))
+                    Text("No drives selected. Choose where to search, then scan again.")
+                        .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
                 }
             } else {
                 ForEach(model.drives) { drive in DriveRow(drive: drive, dark: dark) }
@@ -218,7 +246,7 @@ struct CleanerCard: View {
 
     private var searchBar: some View {
         SearchField(
-            placeholder: "Filter",
+            placeholder: "Filter categories and items",
             text: Binding(get: { model.search }, set: { model.search = $0 }))
     }
 
@@ -232,10 +260,11 @@ struct CleanerCard: View {
                         model.overallSelection == .none ? .secondary : DashSkin.accent(dark))
             }
             .buttonStyle(.edith(.borderless))
-            Text("Select all").font(.system(size: UIScale.pt(12), weight: .medium))
+            .accessibilityLabel("Select all items")
+            Text("Select all").font(.edithText(.callout)).fontWeight(.medium)
             Spacer()
             Text(selectionSummary)
-                .font(.system(size: UIScale.pt(10.5))).foregroundStyle(DashSkin.inkFaint(dark))
+                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
         }
         .padding(.vertical, UIScale.pt(4))
     }
@@ -247,26 +276,32 @@ struct CleanerCard: View {
     }
 
     private var footer: some View {
-        Button {
-            pendingClean = .all
-        } label: {
-            Text(
-                model.selectedTotal > 0
-                    ? "Clean \(JunkScanner.format(model.selectedTotal))" : "Select items to clean"
-            )
-            .font(.system(size: UIScale.pt(14), weight: .semibold))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, UIScale.pt(9))
+        VStack(spacing: UIScale.pt(4)) {
+            Button {
+                pendingClean = .all
+            } label: {
+                Text(
+                    model.selectedTotal > 0
+                        ? "Move \(JunkScanner.format(model.selectedTotal)) to the Trash"
+                        : "Select items to clean"
+                )
+                .font(.system(size: UIScale.pt(14), weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, UIScale.pt(9))
+            }
+            .buttonStyle(.edith(.primary))
+            .tint(DashSkin.accent(dark))
+            .controlSize(.large)
+            .disabled(model.scanning || model.selectedTotal == 0)
+            .help(
+                model.selectedTotal == 0
+                    ? "Tick at least one item above to enable cleaning."
+                    : "You will be asked to confirm. Nothing is deleted permanently.")
+            if model.selectedTotal > 0 {
+                Text("You will confirm first. Items can be restored from the Trash.")
+                    .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
+            }
         }
-        .buttonStyle(.edith(.primary))
-        .tint(DashSkin.accent(dark))
-        .controlSize(.large)
-        .disabled(model.scanning || model.selectedTotal == 0)
-    }
-
-    private func openPicker(scan: Bool) {
-        model.loadDriveOptions()
-        drivePicker = scan ? .scan : .choose
     }
 }
 
@@ -364,11 +399,16 @@ private struct CleanerCategoryHeader: View {
                         .foregroundStyle(selection == .none ? .secondary : DashSkin.accent(dark))
                 }
                 .buttonStyle(.edith(.borderless))
+                .accessibilityLabel("Select \(category.name)")
                 Spacer()
                 Button("Clean") { onClean(category.id) }
                     .font(.system(size: UIScale.pt(10.5), weight: .medium))
                     .buttonStyle(.edith(.borderless))
                     .disabled(model.selectedItemCount(categoryID: category.id) == 0)
+                    .help(
+                        model.selectedItemCount(categoryID: category.id) == 0
+                            ? "Tick items in this category to clean them."
+                            : "Move the selected items in \(category.name) to the Trash.")
             }
             .padding(.horizontal, UIScale.pt(6))
             .padding(.vertical, UIScale.pt(7))
@@ -449,7 +489,7 @@ private struct CleanerItemLine: View {
     }
 }
 
-private struct DrivePickerSheet: View {
+struct DrivePickerSheet: View {
     let model: CleanerModel
     let dark: Bool
     let confirmTitle: String

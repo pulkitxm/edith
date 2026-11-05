@@ -13,34 +13,24 @@ struct BlitzTreePage: View {
 
     var body: some View {
         PageScaffold {
-            PageHeader {
-                Text(Self.title)
-            } accessory: {
-                HStack {
-                    if model.scanning {
-                        LoadingIndicator()
-                        Button("Cancel", action: model.cancel)
-                    } else if let root = model.root {
-                        Button("Rescan", systemImage: "arrow.clockwise") {
-                            model.scan(root, remember: false)
-                        }
-                    }
-                    Button("Choose folder", systemImage: "folder") { chooseFolder() }
-                        .buttonStyle(.edith(.primary))
-                        .disabled(model.removing)
-                }
-            }
+            PageHeader(
+                title: { Text(Self.title) },
+                trailing: { headerActions },
+                accessory: { PageSubtitle(subtitle) })
         } content: {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                if let root = model.root { navigation(root) }
-                if let error = model.error {
-                    Label(error, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.orange)
-                        .textSelection(.enabled)
+                if let root = model.root, presentation == .results || presentation == .scanning {
+                    navigation(root)
                 }
-                if model.root == nil {
-                    emptyState
-                } else {
+                if let error = model.error, presentation == .results {
+                    PageNotice(error, title: "Something went wrong", tone: .warning)
+                }
+                switch presentation {
+                case .intro: introState
+                case .scanning: scanningState
+                case .failed: failedState
+                case .cancelled: cancelledState
+                case .results:
                     PageLoading(
                         state: model.loading.state,
                         message: model.loading.errorMessage ?? "The folder scan was interrupted.",
@@ -57,7 +47,7 @@ struct BlitzTreePage: View {
         .navigationRoute("folder", selection: folderBinding, isValid: folderIsValid)
         .onDisappear { model.cancel() }
         .confirmationDialog(
-            "Move this item to Trash?",
+            "Move \(pendingRemoval?.name ?? "this item") to the Trash?",
             isPresented: Binding(
                 get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }
             ), titleVisibility: .visible
@@ -70,11 +60,131 @@ struct BlitzTreePage: View {
         } message: {
             if let entry = pendingRemoval {
                 Text(
-                    "\(entry.path)\n\(bytes(entry.allocatedBytes)) allocated. The item stays in Trash until you empty it."
+                    "\(entry.path)\nAbout \(bytes(entry.allocatedBytes)) of disk space. It stays in the Trash until you empty it, so you can put it back."
                 )
             }
         }
         .pageRefresh(interval: { model.refreshInterval }) { await model.refreshRemote() }
+    }
+
+    private var presentation: BlitzTreePresentation {
+        BlitzTreePresentation(
+            hasRoot: model.root != nil, hasReport: model.report != nil,
+            scanning: model.scanning, hasError: model.error != nil)
+    }
+
+    private var subtitle: String {
+        switch presentation {
+        case .intro, .cancelled, .failed:
+            "Pick a folder to see which files and folders take the most space. Scanning never changes anything."
+        case .scanning:
+            "Measuring the folder. You can cancel at any time."
+        case .results:
+            "Bigger blocks use more space. Click a folder to look inside it."
+        }
+    }
+
+    @ViewBuilder private var headerActions: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            if model.scanning {
+                Button("Cancel scan", action: model.cancel).buttonStyle(.edith(.secondary))
+            } else if let root = model.root, model.report != nil {
+                Button("Rescan", systemImage: "arrow.clockwise") {
+                    model.scan(root, remember: false)
+                }
+                .buttonStyle(.edith(.secondary))
+                .disabled(model.removing)
+                .help(
+                    model.removing
+                        ? "Wait for the item to finish moving to the Trash."
+                        : "Measure this folder again.")
+            }
+            if presentation != .intro {
+                Button("Choose folder…", systemImage: "folder") { chooseFolder() }
+                    .buttonStyle(.edith(.primary))
+                    .disabled(model.removing)
+                    .help(
+                        model.removing
+                            ? "Wait for the item to finish moving to the Trash."
+                            : "Pick a different folder to measure.")
+            }
+        }
+    }
+
+    private var introState: some View {
+        PageEmptyState(
+            symbolName: "square.grid.3x3.fill",
+            title: "See where your space goes",
+            message:
+                "Disk Map measures a folder and draws it as blocks sized by how much space each file or folder uses.",
+            steps: [
+                PageGuideStep(
+                    symbolName: "folder", title: "Pick a folder",
+                    detail: "Start with your home folder or any drive. Nothing is changed."),
+                PageGuideStep(
+                    symbolName: "square.grid.3x3.fill", title: "Explore",
+                    detail: "Click a block to open that folder. The largest items are listed below."
+                ),
+                PageGuideStep(
+                    symbolName: "trash", title: "Free up space",
+                    detail:
+                        "Review cleanup candidates, reveal them in Finder, or move them to the Trash."
+                ),
+            ],
+            primary: PageAction(
+                "Choose a folder…", symbolName: "folder", identifier: "blitztree.choose"
+            ) {
+                chooseFolder()
+            },
+            secondary: PageAction("Scan my home folder", identifier: "blitztree.scan-home") {
+                model.scan(NSHomeDirectory())
+            },
+            footnote: "Large folders can take a minute. Cloud-only files are skipped.")
+    }
+
+    private var scanningState: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                Text("Scanning \((model.root ?? "") as NSString)").font(.edithText(.headline))
+                    .lineLimit(1).truncationMode(.middle)
+                Text("\(model.scannedEntries.formatted()) entries measured so far.")
+                    .font(.edithText(.callout)).foregroundStyle(.secondary).monospacedDigit()
+            }
+            PageSkeleton(layout: .analytics)
+        }
+    }
+
+    private var failedState: some View {
+        PageEmptyState(
+            symbolName: "exclamationmark.triangle",
+            title: "This folder could not be scanned",
+            message: model.error ?? "The scan stopped before it finished.",
+            primary: PageAction(
+                "Try again", symbolName: "arrow.clockwise", identifier: "blitztree.retry"
+            ) {
+                if let root = model.root { model.scan(root, remember: false) }
+            },
+            secondary: PageAction("Choose another folder…", identifier: "blitztree.choose") {
+                chooseFolder()
+            },
+            footnote:
+                "If macOS blocked access, allow Edith in System Settings > Privacy & Security > Files and Folders."
+        )
+    }
+
+    private var cancelledState: some View {
+        PageEmptyState(
+            symbolName: "stop.circle",
+            title: "Scan stopped",
+            message: "No results were kept. Start again whenever you are ready.",
+            primary: PageAction(
+                "Scan again", symbolName: "arrow.clockwise", identifier: "blitztree.retry"
+            ) {
+                if let root = model.root { model.scan(root, remember: false) }
+            },
+            secondary: PageAction("Choose another folder…", identifier: "blitztree.choose") {
+                chooseFolder()
+            })
     }
 
     private var folderBinding: Binding<String> {
@@ -111,24 +221,6 @@ struct BlitzTreePage: View {
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: UIScale.pt(12)) {
-            Image(systemName: "square.grid.3x3.fill")
-                .font(.system(size: UIScale.pt(40)))
-                .foregroundStyle(.secondary)
-            Text(model.scanning ? "Scanning folder..." : "See where your space goes")
-                .font(DashSkin.heading(24))
-            Text(
-                model.scanning
-                    ? "\(model.scannedEntries.formatted()) entries scanned. You can cancel at any time."
-                    : "Explore a disk-space treemap, large files and cleanup candidates."
-            )
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, UIScale.pt(64))
-    }
-
     @ViewBuilder private func results(_ report: BlitzTreeReport) -> some View {
         LazyVGrid(
             columns: [GridItem(.adaptive(minimum: UIScale.pt(130)), spacing: UIScale.pt(24))],
@@ -137,19 +229,20 @@ struct BlitzTreePage: View {
             metric("Allocated", bytes(report.summary.allocatedBytes))
             metric("Files", report.summary.fileCount.formatted())
             metric("Folders", report.summary.directoryCount.formatted())
-            metric("Scan", String(format: "%.2f s", report.scanSeconds))
+            metric("Scan time", String(format: "%.1f s", report.scanSeconds))
         }
         if !report.coverage.complete {
             Label(
-                "Partial scan: \(report.coverage.errors) errors, \(report.coverage.skippedCloudDirectories) cloud folders and \(report.coverage.skippedMountPoints) mount points skipped.",
+                "Partial scan: \(report.coverage.errors) items could not be read, and \(report.coverage.skippedCloudDirectories) cloud folders and \(report.coverage.skippedMountPoints) other drives were skipped, so totals may be low.",
                 systemImage: "exclamationmark.triangle.fill"
             )
             .font(.edithText(.callout))
             .foregroundStyle(.orange)
         }
         HStack {
-            Text(model.removing ? "Moving to Trash..." : "Folder overview")
-                .font(.edithText(.headline))
+            PageSectionHeader(
+                model.removing ? "Moving to the Trash…" : "Folder overview",
+                subtitle: "Bigger blocks use more space.")
             Spacer()
             EdithSegmentedPicker(
                 "Visualization", selection: $model.rings, options: [false, true],
@@ -167,14 +260,16 @@ struct BlitzTreePage: View {
         }
         .frame(height: UIScale.pt(280))
         .disabled(model.removing)
-        Text("Allocated space, not guaranteed recoverable space. Click a folder to scan inside it.")
-            .font(.edithText(.caption))
-            .foregroundStyle(.secondary)
+        Text(
+            "Sizes are space allocated on disk, which is not always what you get back after deleting. Click a folder to scan inside it."
+        )
+        .font(.edithText(.caption))
+        .foregroundStyle(.secondary)
         EdithSegmentedPicker(
             "Show", selection: $model.list, options: BlitzTreeList.allCases, label: { $0.rawValue })
         if model.list == .candidates {
             Text(
-                "\(report.report.candidateCount) candidates. Review each folder in Finder before removing anything.\(report.report.truncated ? " Showing the largest 200." : "")"
+                "\(report.report.candidateCount) large items that are often safe to remove, such as caches and build output. Reveal each one in Finder to check before moving it to the Trash.\(report.report.truncated ? " Showing the largest 200." : "")"
             )
             .font(.edithText(.callout))
             .foregroundStyle(.secondary)
@@ -183,7 +278,8 @@ struct BlitzTreePage: View {
         if entries.isEmpty {
             Text(
                 model.list == .candidates
-                    ? "No cleanup candidates meet the 50 MB threshold." : "No entries to show."
+                    ? "Nothing here is large enough (50 MB or more) to suggest cleaning up."
+                    : "This folder is empty."
             )
             .foregroundStyle(.secondary)
             .padding(.vertical, UIScale.pt(24))
@@ -216,10 +312,14 @@ struct BlitzTreePage: View {
                     Text(bytes(entry.allocatedBytes)).monospacedDigit()
                     Button("Reveal", systemImage: "arrow.up.forward.square") { reveal(entry) }
                         .labelStyle(.iconOnly)
-                        .help("Reveal in Finder")
+                        .help("Show in Finder")
                     Button("Move to Trash", systemImage: "trash") { pendingRemoval = entry }
                         .labelStyle(.iconOnly)
-                        .help("Move to Trash")
+                        .help(
+                            model.removing
+                                ? "Wait for the current move to finish."
+                                : "Move to the Trash. You can put it back."
+                        )
                         .disabled(model.removing)
                 }
                 .padding(.vertical, UIScale.pt(10))
@@ -258,11 +358,33 @@ struct BlitzTreeSettings: View {
             Section("Disk space") {
                 LabeledContent("Extension", value: Self.summaryName)
                 Text(
-                    "Choose a folder to explore allocated space and review cleanup candidates in Finder."
+                    "Open Disk Map from the sidebar, choose a folder, and Edith draws what takes the most space. Nothing is deleted unless you move an item to the Trash."
                 )
                 .settingsCaption()
             }
         }
         .edithForm()
+    }
+}
+
+enum BlitzTreePresentation: Equatable {
+    case intro
+    case scanning
+    case failed
+    case cancelled
+    case results
+
+    init(hasRoot: Bool, hasReport: Bool, scanning: Bool, hasError: Bool) {
+        if hasReport {
+            self = .results
+        } else if scanning {
+            self = .scanning
+        } else if !hasRoot {
+            self = .intro
+        } else if hasError {
+            self = .failed
+        } else {
+            self = .cancelled
+        }
     }
 }
