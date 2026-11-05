@@ -21,14 +21,14 @@ enum ImageTools {
         id: "image.edit", title: "Photo editor",
         summary:
             "Crop, straighten, adjust colors, apply filters, and add text, shapes, stickers and blur.",
-        icon: .adjust, group: .edit, inputs: [.image],
+        iconName: "adjust", group: .edit, inputs: [.image],
         produces: .kind(.image), style: .editor(.image, pdfMode: nil),
         keywords: ["edit", "filters", "text", "stickers", "draw", "crop", "adjust", "photo"])
 
     static let compress = StudioTool(
         id: "image.compress", title: "Compress image",
         summary: "Shrink JPG, PNG, GIF, HEIC and SVG files while keeping them looking the same.",
-        icon: .collapse, group: .optimize, inputs: [.image],
+        iconName: "collapse", group: .optimize, inputs: [.image],
         options: [
             .choice(
                 "level", "Compression",
@@ -156,7 +156,7 @@ enum ImageTools {
     static let resize = StudioTool(
         id: "image.resize", title: "Resize image",
         summary: "Set exact pixels, a percentage or a longest side. Works on many images at once.",
-        icon: .expand, group: .optimize, inputs: [.image],
+        iconName: "expand", group: .optimize, inputs: [.image],
         options: [
             .choice(
                 "mode", "Resize",
@@ -201,7 +201,7 @@ enum ImageTools {
     static let crop = StudioTool(
         id: "image.crop", title: "Crop image",
         summary: "Crop to an aspect ratio, an exact area, or trim plain borders automatically.",
-        icon: .crop, group: .edit, inputs: [.image],
+        iconName: "crop", group: .edit, inputs: [.image],
         options: [
             .choice(
                 "mode", "Crop",
@@ -278,7 +278,7 @@ enum ImageTools {
     static let convert = StudioTool(
         id: "image.convert", title: "Convert image",
         summary: "Turn PNG, HEIC, WEBP, SVG, PSD, RAW and more into JPG, PNG or any other format.",
-        icon: .sync, group: .convert, inputs: [.image],
+        iconName: "sync", group: .convert, inputs: [.image],
         options: [
             .choice("format", "Convert to", formatChoices, default: "jpg"),
             .percent(
@@ -320,7 +320,7 @@ enum ImageTools {
         id: "image.rotate", title: "Rotate image",
         summary:
             "Rotate, flip or straighten many images at once, or only the landscape or portrait ones.",
-        icon: .rotate, group: .edit, inputs: [.image],
+        iconName: "rotate", group: .edit, inputs: [.image],
         options: [
             .choice(
                 "angle", "Rotate",
@@ -382,7 +382,7 @@ enum ImageTools {
         id: "image.metadata", title: "Remove metadata",
         summary:
             "Strip camera details and GPS location from photos before you share them, without recompressing.",
-        icon: .location, group: .security, inputs: [.image],
+        iconName: "location", group: .security, inputs: [.image],
         options: [
             .choice(
                 "mode", "Remove",
@@ -405,7 +405,7 @@ enum ImageTools {
     static let toText = StudioTool(
         id: "image.to-text", title: "Image to text",
         summary: "Read the text in screenshots, photos and scans with on-device recognition.",
-        icon: .scan, group: .convert, inputs: [.image], produces: .kind(.document),
+        iconName: "scan", group: .convert, inputs: [.image], produces: .kind(.document),
         options: [
             .choice("language", "Language", StudioVision.languageChoices, default: "auto"),
             .choice(
@@ -438,7 +438,7 @@ enum ImageTools {
     static let icon = StudioTool(
         id: "image.icon", title: "Make an icon",
         summary: "Turn an image into a macOS .icns or Windows .ico file with every size included.",
-        icon: .selection, group: .convert, inputs: [.image], produces: .kind(.image),
+        iconName: "selection", group: .convert, inputs: [.image], produces: .kind(.image),
         options: [
             .choice(
                 "format", "Format",

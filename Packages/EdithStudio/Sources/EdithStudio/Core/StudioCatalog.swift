@@ -1,4 +1,3 @@
-import EdithIcons
 import Foundation
 
 public enum StudioQuickAction: String, CaseIterable, Sendable {
@@ -14,11 +13,11 @@ public enum StudioQuickAction: String, CaseIterable, Sendable {
         }
     }
 
-    public var icon: EdithIcon {
+    public var iconName: String {
         switch self {
-        case .edit: .adjust
-        case .compress: .collapse
-        case .convert: .sync
+        case .edit: "adjust"
+        case .compress: "collapse"
+        case .convert: "sync"
         }
     }
 }

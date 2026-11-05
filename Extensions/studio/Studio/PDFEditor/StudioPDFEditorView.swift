@@ -166,7 +166,7 @@ struct StudioPDFEditorView: View {
                 Button {
                     editor.zoomToFit()
                 } label: {
-                    EdithIconView(.zoomIn)
+                    EdithIconView(.expand)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut("0", modifiers: .command)

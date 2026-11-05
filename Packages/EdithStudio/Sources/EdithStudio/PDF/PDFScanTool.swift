@@ -10,7 +10,7 @@ enum DocumentScan {
     static let base = StudioTool(
         id: "pdf.scan", title: "Scan to PDF",
         summary: "Turn photos of paper into straight, clean PDF pages, like a document scanner.",
-        icon: .scan, group: .convert, inputs: [.image],
+        iconName: "scan", group: .convert, inputs: [.image],
         arity: .combine(minimum: 1, maximum: nil), produces: .kind(.pdf),
         options: [
             .choice(

@@ -11,7 +11,7 @@ enum PDFImageTools {
     static let toImages = StudioTool(
         id: "pdf.to-images", title: "PDF to JPG",
         summary: "Turn each page into an image, or pull out every image inside the PDF.",
-        icon: .photoStack, group: .convert, inputs: [.pdf], produces: .kind(.image),
+        iconName: "photoStack", group: .convert, inputs: [.pdf], produces: .kind(.image),
         options: [
             .choice(
                 "mode", "Convert",
@@ -77,7 +77,7 @@ enum PDFImageTools {
     static let fromImages = StudioTool(
         id: "pdf.from-images", title: "JPG to PDF",
         summary: "Make a PDF from photos and scans with the page size and margins you want.",
-        icon: .docAdd, group: .convert, inputs: [.image],
+        iconName: "docAdd", group: .convert, inputs: [.image],
         arity: .combine(minimum: 1, maximum: nil), produces: .kind(.pdf),
         options: [
             .choice(

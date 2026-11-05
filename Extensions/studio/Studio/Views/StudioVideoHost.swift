@@ -28,7 +28,7 @@ struct StudioVideoHost: View {
                             }
                         }
                     }
-                    .menuStyle(.borderlessButton)
+                    .borderlessMenu()
                     .fixedSize()
                 }
             }

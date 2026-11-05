@@ -316,10 +316,10 @@ struct StudioHeaderActions: View {
                     Label {
                         Text("\(model.runningCount) running")
                     } icon: {
-                        EdithIcon.gear.image(tint: .themeAccent)
+                        EdithIcon.gear.image()
                     }
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .fixedSize()
             }
             StudioScanButton { urls in model.add(urls) }

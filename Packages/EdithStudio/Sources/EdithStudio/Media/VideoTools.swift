@@ -15,14 +15,14 @@ enum VideoTools {
     static let edit = StudioTool(
         id: "video.edit", title: "Video editor",
         summary: "Cut, zoom, add text and transitions on a timeline, then export.",
-        icon: .film, group: .edit, inputs: [.video], produces: .kind(.video),
+        iconName: "film", group: .edit, inputs: [.video], produces: .kind(.video),
         style: .editor(.video, pdfMode: nil),
         keywords: ["timeline", "cut", "zoom", "captions", "editor", "project"])
 
     static let compress = StudioTool(
         id: "video.compress", title: "Compress video",
         summary: "Shrink videos for sharing while keeping them sharp.",
-        icon: .collapse, group: .optimize, inputs: [.video],
+        iconName: "collapse", group: .optimize, inputs: [.video],
         extraExtensions: gif,
         options: [
             .choice(
@@ -136,7 +136,7 @@ enum VideoTools {
     static let convert = StudioTool(
         id: "video.convert", title: "Convert video",
         summary: "Change a video to MP4, MOV, WebM, MKV, AVI or an animated GIF.",
-        icon: .sync, group: .convert, inputs: [.video],
+        iconName: "sync", group: .convert, inputs: [.video],
         extraExtensions: gif,
         options: [
             .choice(
@@ -193,7 +193,7 @@ enum VideoTools {
     static let trim = StudioTool(
         id: "video.trim", title: "Trim video",
         summary: "Keep only the part of a video you need.",
-        icon: .timeline, group: .edit, inputs: [.video], extraExtensions: gif,
+        iconName: "timeline", group: .edit, inputs: [.video], extraExtensions: gif,
         options: [
             .span(
                 help: "Start and end, for example 0:05-0:12. Leave the end empty to keep the rest."),
@@ -236,7 +236,7 @@ enum VideoTools {
     static let split = StudioTool(
         id: "video.split", title: "Split video",
         summary: "Cut a video into equal parts, fixed-length pieces or at the times you choose.",
-        icon: .scissors, group: .organize, inputs: [.video],
+        iconName: "scissors", group: .organize, inputs: [.video],
         options: [
             .choice(
                 "mode", "Split",
@@ -306,7 +306,7 @@ enum VideoTools {
     static let merge = StudioTool(
         id: "video.merge", title: "Merge videos",
         summary: "Join clips into one video. Sizes, frame rates and sound are matched for you.",
-        icon: .layers, group: .organize, inputs: [.video],
+        iconName: "layers", group: .organize, inputs: [.video],
         extraExtensions: gif, arity: .combine(minimum: 2, maximum: nil),
         options: [
             .choice(
@@ -374,7 +374,7 @@ enum VideoTools {
     static let toGIF = StudioTool(
         id: "video.to-gif", title: "Video to GIF",
         summary: "Turn a moment of a video into a smooth, well-colored animated GIF.",
-        icon: .photoStack, group: .convert, inputs: [.video], produces: .kind(.image),
+        iconName: "photoStack", group: .convert, inputs: [.video], produces: .kind(.image),
         options: [
             .span(help: "Leave empty to use the whole video."),
             .integer("fps", "Frames per second", 5...30, default: 12),
@@ -409,7 +409,7 @@ enum VideoTools {
     static let extractAudio = StudioTool(
         id: "video.extract-audio", title: "Extract audio",
         summary: "Save the soundtrack of a video as MP3, M4A, WAV, FLAC or Opus.",
-        icon: .waveform, group: .convert, inputs: [.video], produces: .kind(.audio),
+        iconName: "waveform", group: .convert, inputs: [.video], produces: .kind(.audio),
         options: [
             .choice(
                 "format", "Format",
@@ -440,7 +440,7 @@ enum VideoTools {
     static let frames = StudioTool(
         id: "video.frames", title: "Video to images",
         summary: "Save frames as JPG or PNG, every few seconds, at set times or as one thumbnail.",
-        icon: .photoStack, group: .convert, inputs: [.video],
+        iconName: "photoStack", group: .convert, inputs: [.video],
         extraExtensions: gif, produces: .kind(.image),
         options: [
             .choice(
@@ -546,7 +546,7 @@ enum VideoTools {
     static let mute = StudioTool(
         id: "video.mute", title: "Mute video",
         summary: "Remove the sound from a video without touching the picture.",
-        icon: .speakerOff, group: .edit, inputs: [.video],
+        iconName: "speakerOff", group: .edit, inputs: [.video],
         requirements: ffmpeg, keywords: ["silent", "remove audio", "no sound"],
         actionTitle: "Mute"
     ) { run in
@@ -568,7 +568,7 @@ enum VideoTools {
     static let rotate = StudioTool(
         id: "video.rotate", title: "Rotate video",
         summary: "Turn a video sideways or upside down, or mirror it.",
-        icon: .rotate, group: .edit, inputs: [.video], extraExtensions: gif,
+        iconName: "rotate", group: .edit, inputs: [.video], extraExtensions: gif,
         options: [
             .choice(
                 "turn", "Rotate",
@@ -595,7 +595,7 @@ enum VideoTools {
     static let crop = StudioTool(
         id: "video.crop", title: "Crop video",
         summary: "Crop to square, vertical or widescreen, a custom area, or remove black bars.",
-        icon: .crop, group: .edit, inputs: [.video], extraExtensions: gif,
+        iconName: "crop", group: .edit, inputs: [.video], extraExtensions: gif,
         options: [
             .choice(
                 "mode", "Crop",
@@ -656,7 +656,7 @@ enum VideoTools {
     static let resize = StudioTool(
         id: "video.resize", title: "Resize video",
         summary: "Change the resolution to 4K, 1080p, 720p, 480p or a custom width.",
-        icon: .expand, group: .edit, inputs: [.video],
+        iconName: "expand", group: .edit, inputs: [.video],
         extraExtensions: gif,
         options: [
             .choice(
@@ -701,7 +701,7 @@ enum VideoTools {
     static let speed = StudioTool(
         id: "video.speed", title: "Video speed",
         summary: "Speed a video up for timelapses or slow it down, with matching sound.",
-        icon: .gauge, group: .edit, inputs: [.video],
+        iconName: "gauge", group: .edit, inputs: [.video],
         extraExtensions: gif,
         options: [
             .choice(
@@ -732,7 +732,7 @@ enum VideoTools {
     static let reverse = StudioTool(
         id: "video.reverse", title: "Reverse video",
         summary: "Play a video backwards, sound included.",
-        icon: .rewind, group: .edit, inputs: [.video], extraExtensions: gif,
+        iconName: "rewind", group: .edit, inputs: [.video], extraExtensions: gif,
         options: [.toggle("sound", "Reverse the sound too", default: true)],
         requirements: ffmpeg, keywords: ["backwards", "rewind", "boomerang"],
         actionTitle: "Reverse"
@@ -745,7 +745,7 @@ enum VideoTools {
     static let addAudio = StudioTool(
         id: "video.add-audio", title: "Add music",
         summary: "Replace the soundtrack or mix in background music.",
-        icon: .music, group: .edit, inputs: [.video],
+        iconName: "music", group: .edit, inputs: [.video],
         options: [
             .file("audio", "Music", kinds: [.audio, .video], required: true),
             .choice(
@@ -811,7 +811,7 @@ enum VideoTools {
     static let volume = StudioTool(
         id: "video.volume", title: "Adjust volume",
         summary: "Make a video louder or quieter, or even out loudness automatically.",
-        icon: .speaker, group: .edit, inputs: [.video],
+        iconName: "speaker", group: .edit, inputs: [.video],
         options: [
             .choice(
                 "mode", "Volume",
@@ -839,7 +839,7 @@ enum VideoTools {
     static let watermark = StudioTool(
         id: "video.watermark", title: "Watermark video",
         summary: "Stamp text or a logo on every frame, with the position and opacity you choose.",
-        icon: .drop, group: .edit, inputs: [.video], extraExtensions: gif,
+        iconName: "drop", group: .edit, inputs: [.video], extraExtensions: gif,
         options: [
             .choice(
                 "kind", "Watermark",
@@ -877,7 +877,7 @@ enum VideoTools {
         id: "video.subtitles", title: "Add subtitles",
         summary:
             "Add an SRT or VTT file as a subtitle track, or burn the captions into the picture.",
-        icon: .captions, group: .edit, inputs: [.video],
+        iconName: "captions", group: .edit, inputs: [.video],
         options: [
             .file("subtitles", "Subtitles", kinds: [.document, .other], required: true),
             .choice(
@@ -918,7 +918,7 @@ enum VideoTools {
     static let loop = StudioTool(
         id: "video.loop", title: "Loop video",
         summary: "Repeat a clip several times in a row.",
-        icon: .repeatAll, group: .edit, inputs: [.video], extraExtensions: gif,
+        iconName: "repeatAll", group: .edit, inputs: [.video], extraExtensions: gif,
         options: [.integer("times", "Play it", 2...50, default: 3, unit: "times")],
         requirements: ffmpeg, keywords: ["repeat", "loop", "boomerang"], actionTitle: "Loop"
     ) { run in
@@ -961,7 +961,7 @@ enum VideoTools {
     static let fps = StudioTool(
         id: "video.fps", title: "Change frame rate",
         summary: "Convert to 24, 25, 30, 50 or 60 frames per second.",
-        icon: .gauge, group: .convert, inputs: [.video], extraExtensions: gif,
+        iconName: "gauge", group: .convert, inputs: [.video], extraExtensions: gif,
         options: [
             .choice(
                 "fps", "Frame rate",
@@ -978,7 +978,7 @@ enum VideoTools {
     static let fromImages = StudioTool(
         id: "video.from-images", title: "Images to video",
         summary: "Make a slideshow video from photos, with crossfades and optional music.",
-        icon: .photoStack, group: .create, inputs: [.image],
+        iconName: "photoStack", group: .create, inputs: [.image],
         arity: .combine(minimum: 1, maximum: nil), produces: .kind(.video),
         options: [
             .number("seconds", "Each photo", 0.5...60, step: 0.5, default: 3, unit: "s"),
@@ -1007,7 +1007,7 @@ enum VideoTools {
     static let stabilize = StudioTool(
         id: "video.stabilize", title: "Stabilize video",
         summary: "Smooth out shaky handheld footage.",
-        icon: .hand, group: .optimize, inputs: [.video],
+        iconName: "hand", group: .optimize, inputs: [.video],
         options: [
             .choice(
                 "strength", "Strength",
@@ -1027,7 +1027,7 @@ enum VideoTools {
     static let denoise = StudioTool(
         id: "video.denoise", title: "Reduce video noise",
         summary: "Clean up grainy low-light video and, optionally, background hiss.",
-        icon: .adjust, group: .optimize, inputs: [.video],
+        iconName: "adjust", group: .optimize, inputs: [.video],
         options: [
             .choice(
                 "strength", "Strength",
@@ -1057,7 +1057,7 @@ enum VideoTools {
     static let fade = StudioTool(
         id: "video.fade", title: "Fade video",
         summary: "Fade the picture and sound in from black and out to black.",
-        icon: .contrast, group: .edit, inputs: [.video],
+        iconName: "contrast", group: .edit, inputs: [.video],
         options: [
             .number("fadeIn", "Fade in", 0...10, step: 0.5, default: 1, unit: "s"),
             .number("fadeOut", "Fade out", 0...10, step: 0.5, default: 1, unit: "s"),
@@ -1097,7 +1097,7 @@ enum VideoTools {
     static let adjust = StudioTool(
         id: "video.adjust", title: "Adjust colors",
         summary: "Change brightness, contrast, saturation and gamma.",
-        icon: .adjust, group: .edit, inputs: [.video], extraExtensions: gif,
+        iconName: "adjust", group: .edit, inputs: [.video], extraExtensions: gif,
         options: [
             .number("brightness", "Brightness", -0.5...0.5, step: 0.02, default: 0.05),
             .number("contrast", "Contrast", 0.5...2, step: 0.05, default: 1.1),
@@ -1119,7 +1119,7 @@ enum VideoTools {
     static let social = StudioTool(
         id: "video.social", title: "Resize for social",
         summary: "Fit a video to Reels, TikTok, Shorts, square or widescreen, with a blurred fill.",
-        icon: .copy, group: .convert, inputs: [.video],
+        iconName: "copy", group: .convert, inputs: [.video],
         extraExtensions: gif,
         options: [
             .choice(

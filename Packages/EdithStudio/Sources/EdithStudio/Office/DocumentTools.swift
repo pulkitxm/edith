@@ -18,7 +18,7 @@ enum DocumentTools {
     static let toPDF = StudioTool(
         id: "document.to-pdf", title: "Office to PDF",
         summary: "Convert Word, Excel, PowerPoint, text, Markdown and HTML files into PDF.",
-        icon: .docText, group: .convert, inputs: [.document, .spreadsheet, .presentation],
+        iconName: "docText", group: .convert, inputs: [.document, .spreadsheet, .presentation],
         produces: .kind(.pdf), options: pageOptions + [headerOption],
         keywords: [
             "word", "docx", "excel", "xlsx", "powerpoint", "pptx", "csv", "markdown", "rtf",
@@ -28,21 +28,21 @@ enum DocumentTools {
     static let wordToPDF = StudioTool(
         id: "document.word-to-pdf", title: "Word to PDF",
         summary: "Make DOC, DOCX, RTF, ODT, text and Markdown files easy to read and share as PDF.",
-        icon: .docText, group: .convert, inputs: [.document], produces: .kind(.pdf),
+        iconName: "docText", group: .convert, inputs: [.document], produces: .kind(.pdf),
         options: pageOptions, keywords: ["docx", "doc", "rtf", "odt", "pages", "text", "markdown"],
         actionTitle: "Convert to PDF", family: .document, perform: { try await convert($0) })
 
     static let excelToPDF = StudioTool(
         id: "document.excel-to-pdf", title: "Excel to PDF",
         summary: "Print XLSX and CSV spreadsheets as clean, paginated PDF tables.",
-        icon: .table, group: .convert, inputs: [.spreadsheet], produces: .kind(.pdf),
+        iconName: "table", group: .convert, inputs: [.spreadsheet], produces: .kind(.pdf),
         options: pageOptions + [headerOption], keywords: ["xlsx", "xls", "csv", "tsv", "sheet"],
         actionTitle: "Convert to PDF", family: .document, perform: { try await convert($0) })
 
     static let powerPointToPDF = StudioTool(
         id: "document.powerpoint-to-pdf", title: "PowerPoint to PDF",
         summary: "Turn PPTX slideshows into a PDF with one slide per page.",
-        icon: .windows, group: .convert, inputs: [.presentation],
+        iconName: "windows", group: .convert, inputs: [.presentation],
         produces: .kind(.pdf), keywords: ["pptx", "ppt", "slides", "deck", "keynote"],
         actionTitle: "Convert to PDF", family: .document, perform: { try await convert($0) })
 
@@ -50,7 +50,7 @@ enum DocumentTools {
         id: "document.to-markdown", title: "Convert to Markdown",
         summary:
             "Turn Word, HTML, RTF, slides and spreadsheets into clean Markdown for notes or LLMs.",
-        icon: .hash, group: .convert, inputs: [.document, .spreadsheet, .presentation],
+        iconName: "hash", group: .convert, inputs: [.document, .spreadsheet, .presentation],
         excludedExtensions: ["md", "markdown"], produces: .kind(.document),
         keywords: ["md", "markdown", "llm", "notes", "docx", "html"], actionTitle: "Convert",
         family: .document
@@ -65,7 +65,7 @@ enum DocumentTools {
     static let toText = StudioTool(
         id: "document.to-text", title: "Extract text",
         summary: "Save the plain text of documents, slides and spreadsheets as a .txt file.",
-        icon: .textLines, group: .convert,
+        iconName: "textLines", group: .convert,
         inputs: [.document, .spreadsheet, .presentation],
         excludedExtensions: ["txt", "text"], produces: .kind(.document),
         keywords: ["txt", "plain text", "copy"], actionTitle: "Extract text", family: .document

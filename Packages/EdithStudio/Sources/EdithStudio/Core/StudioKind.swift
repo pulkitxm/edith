@@ -1,4 +1,3 @@
-import EdithIcons
 import Foundation
 import UniformTypeIdentifiers
 
@@ -41,17 +40,17 @@ public enum StudioKind: String, CaseIterable, Codable, Hashable, Sendable {
         }
     }
 
-    public var icon: EdithIcon {
+    public var iconName: String {
         switch self {
-        case .image: .photo
-        case .pdf: .docText
-        case .video: .film
-        case .audio: .waveform
-        case .document: .docText
-        case .presentation: .windows
-        case .spreadsheet: .table
-        case .archive: .archive
-        case .other: .doc
+        case .image: "photo"
+        case .pdf: "docText"
+        case .video: "film"
+        case .audio: "waveform"
+        case .document: "docText"
+        case .presentation: "windows"
+        case .spreadsheet: "table"
+        case .archive: "archive"
+        case .other: "doc"
         }
     }
 

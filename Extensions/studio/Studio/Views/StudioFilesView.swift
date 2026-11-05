@@ -307,9 +307,9 @@ struct StudioFileMenu: View {
         Menu {
             StudioFileMenuItems(model: model, item: item)
         } label: {
-            EdithIcon.more.image(size: 12, tint: .themeAccent)
+            EdithIcon.more.image(size: 12)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenu()
         .menuIndicator(.hidden)
         .fixedSize()
         .padding(.horizontal, UIScale.pt(6))
@@ -386,7 +386,7 @@ struct StudioSelectionBar: View {
                         }
                     }
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenu()
                 .fixedSize()
             }
             Spacer(minLength: UIScale.pt(8))

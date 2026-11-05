@@ -28,7 +28,7 @@ public enum StudioTranscription {
     static let tool = StudioTool(
         id: "ai.transcribe", title: "Transcribe",
         summary: "Turn speech in audio and video into text or subtitles, on this Mac.",
-        icon: .captions, group: .intelligence, inputs: [.audio, .video],
+        iconName: "captions", group: .intelligence, inputs: [.audio, .video],
         produces: .kind(.document),
         options: [
             .choice(

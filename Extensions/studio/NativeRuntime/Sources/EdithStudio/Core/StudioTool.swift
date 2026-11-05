@@ -1,4 +1,3 @@
-import EdithIcons
 import Foundation
 
 public enum StudioToolGroup: String, CaseIterable, Codable, Sendable {
@@ -114,7 +113,7 @@ public struct StudioTool: Identifiable, Sendable {
     public let id: String
     public let title: String
     public let summary: String
-    public let icon: EdithIcon
+    public let iconName: String
     public let group: StudioToolGroup
     public let inputs: Set<StudioKind>
     public let extraExtensions: Set<String>
@@ -131,7 +130,7 @@ public struct StudioTool: Identifiable, Sendable {
     let perform: Perform?
 
     public init(
-        id: String, title: String, summary: String, icon: EdithIcon, group: StudioToolGroup,
+        id: String, title: String, summary: String, iconName: String, group: StudioToolGroup,
         inputs: Set<StudioKind>, extraExtensions: Set<String> = [],
         excludedExtensions: Set<String> = [], arity: StudioArity = .each,
         produces: StudioProduct = .same, options: [StudioOption] = [],
@@ -142,7 +141,7 @@ public struct StudioTool: Identifiable, Sendable {
         self.id = id
         self.title = title
         self.summary = summary
-        self.icon = icon
+        self.iconName = iconName
         self.group = group
         self.inputs = inputs
         self.extraExtensions = extraExtensions

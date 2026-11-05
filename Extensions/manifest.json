@@ -1511,6 +1511,7 @@
         "Extensions/studio/Support/StudioDataRoot.swift",
         "Extensions/studio/Support/StudioFinderReveal.swift",
         "Extensions/studio/Support/StudioIPC.swift",
+        "Extensions/studio/Support/StudioIconNames.swift",
         "Extensions/studio/Support/StudioMediaLibrary.swift",
         "Extensions/studio/Support/StudioRecordCommand.swift",
         "Extensions/studio/Support/StudioToolInstaller.swift",

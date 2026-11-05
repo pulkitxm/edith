@@ -8,7 +8,7 @@ enum IntelligenceTools {
     static let summarize = StudioTool(
         id: "ai.summarize", title: "AI summarizer",
         summary: "Get the key points of a PDF or document in seconds, generated on this Mac.",
-        icon: .jev, group: .intelligence, inputs: [.pdf, .document],
+        iconName: "jev", group: .intelligence, inputs: [.pdf, .document],
         produces: .kind(.document),
         options: [
             .choice(
@@ -67,7 +67,7 @@ enum IntelligenceTools {
         id: "ai.translate", title: "Translate PDF",
         summary:
             "Translate PDFs on this Mac and keep their layout, or save any document as Word or Markdown.",
-        icon: .text, group: .intelligence, inputs: [.pdf, .document],
+        iconName: "text", group: .intelligence, inputs: [.pdf, .document],
         produces: .kind(.document),
         options: [
             .choice("target", "Translate to", languages, default: "es"),
