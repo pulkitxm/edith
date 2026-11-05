@@ -65,8 +65,17 @@ struct SystemStatsRows: View {
             if statsColorMode == "custom" {
                 ColorPicker("Custom color", selection: colorBinding, supportsOpacity: false)
             }
-            Text("Sampled every couple of seconds; costs nothing measurable.")
-                .settingsCaption()
+            Text(
+                "Automatic follows your menu bar. The menu bar shows CPU and memory percentages, updated every couple of seconds, and pauses while your Mac sleeps or is locked."
+            )
+            .settingsCaption()
+        } header: {
+            Text("Menu bar appearance")
+        } footer: {
+            if !presentation.active || !presentation.running {
+                Text("Menu Bar Stats is not running. Turn it on in Extensions to change these.")
+                    .settingsCaption()
+            }
         }
         .disabled(!presentation.active || !presentation.running)
         .opacity(presentation.active ? 1 : 0.5)

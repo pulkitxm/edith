@@ -23,5 +23,31 @@
     "calendar",
     "extension:calendar"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Your next meetings at a glance, with one-click join.",
+    "summary": "Calendar shows your upcoming events from the macOS Calendar app on its page, on Home and in the notch. It only reads events and never changes them. Allow access once and it keeps itself up to date.",
+    "steps": [
+      {
+        "symbolName": "hand.raised",
+        "title": "Allow calendar access",
+        "detail": "Click Allow Calendar Access and choose Allow Full Access when macOS asks."
+      },
+      {
+        "symbolName": "calendar",
+        "title": "See what is next",
+        "detail": "Events from every calendar in the Calendar app are grouped by day."
+      },
+      {
+        "symbolName": "video",
+        "title": "Join or get directions",
+        "detail": "Meetings with a call link show Join, and events with a place show Directions."
+      }
+    ],
+    "examples": [
+      "ed calendar ls",
+      "ed calendar join <event>",
+      "ed calendar directions <event>"
+    ]
+  }
 }

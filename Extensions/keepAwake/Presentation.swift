@@ -347,9 +347,6 @@ struct ControlSettingsHost<Content: View>: View {
                     Button("Retry", action: retry)
                 }.padding()
             }
-            if presentation.active, !presentation.ready {
-                Button("Load settings", action: retry).padding()
-            }
             PageLoading(
                 state: presentation.load.state, title: "Settings unavailable",
                 message: presentation.error ?? "The extension engine is unavailable.",

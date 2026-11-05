@@ -44,6 +44,10 @@ struct PresenterRows: View {
                 }
             } header: {
                 Text("Manual")
+            } footer: {
+                Text(
+                    "Turn manual mode on before you present. Only the kinds of details switched on below are blurred, and only inside Edith."
+                )
             }
 
             Section {
@@ -122,6 +126,12 @@ struct PresenterRows: View {
                 Button("Open Screen Recording Settings…") {
                     presentation.perform("screenRecording")
                 }.disabled(!presentation.active)
+                Text(
+                    "Optional. Granting Edith Screen Recording access lets auto detection recognize share windows by title. Nothing is recorded."
+                )
+                .settingsCaption()
+            } header: {
+                Text("Permission")
             }
 
             Section {

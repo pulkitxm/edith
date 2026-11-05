@@ -37,12 +37,9 @@ struct CalendarPage: View {
                         .padding(.horizontal, UIScale.pt(24))
                     }
                     if !store.authorized {
-                        CalendarPermissionPrompt(
-                            style: calendarStyle, accentColor: theme,
-                            onGrant: { store.perform(.permission) }
-                        )
-                        .frame(maxWidth: UIScale.pt(420))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        permissionState
+                    } else if store.groupedDays.isEmpty {
+                        emptyState
                     } else {
                         agenda
                     }
@@ -54,6 +51,48 @@ struct CalendarPage: View {
         }
         .navigationTitle("Calendar")
         .pageTask(cancel: store.suspend) { await store.observe() }
+    }
+
+    private var permissionState: some View {
+        PageEmptyState(
+            symbolName: "calendar.badge.exclamationmark",
+            title: "Allow Edith to read your calendar",
+            message:
+                "Edith shows your upcoming meetings here, in the notch and on Home, and can join a call in one click. It only reads events from the macOS Calendar app and never changes them.",
+            steps: [
+                PageGuideStep(
+                    symbolName: "hand.raised", title: "Allow access",
+                    detail: "macOS asks once. Choose Allow Full Access."),
+                PageGuideStep(
+                    symbolName: "calendar", title: "See what is next",
+                    detail: "Events from every calendar in the Calendar app appear here."),
+                PageGuideStep(
+                    symbolName: "video", title: "Join in one click",
+                    detail: "Meetings with a call link get a Join button."),
+            ],
+            primary: PageAction(
+                "Allow Calendar Access", symbolName: "calendar.badge.checkmark",
+                identifier: "calendar.grant"
+            ) { store.perform(.permission) },
+            secondary: PageAction(
+                "Open System Settings", symbolName: "gearshape", identifier: "calendar.settings"
+            ) {
+                if let url = CalendarUIEngine.privacySettingsURL { NSWorkspace.shared.open(url) }
+            },
+            footnote:
+                "If you chose Don't Allow before, turn Edith on under Privacy & Security, Calendars.")
+    }
+
+    private var emptyState: some View {
+        PageEmptyState(
+            symbolName: "calendar.badge.checkmark",
+            title: "Nothing coming up",
+            message:
+                "No events were found in your calendars for the next few weeks. Add an event in the Calendar app and it shows up here within seconds.",
+            primary: PageAction(
+                "Open Calendar", symbolName: "arrow.up.forward.app", identifier: "calendar.open"
+            ) { store.perform(.open) },
+            footnote: "Edith reads every calendar that is turned on in the Calendar app.")
     }
 
     private var pageHeader: some View {

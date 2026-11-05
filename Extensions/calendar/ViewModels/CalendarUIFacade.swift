@@ -20,6 +20,7 @@ final class CalendarUIFacade {
     private var stopped = false
     private let commandTasks = CalendarUITaskOwner()
     private var generation: UInt64 = 0
+    @ObservationIgnored private var lastAdopted: CalendarUISnapshot?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var actions: [UUID: Task<Void, Never>] = [:]
 
@@ -54,7 +55,7 @@ final class CalendarUIFacade {
         await read("calendar.ui.metadata")
         await refreshAndWait()
         while !stopped && !Task.isCancelled {
-            do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            do { try await Task.sleep(for: .seconds(authorized ? 3 : 1)) } catch { return }
             await read("calendar.ui.metadata")
         }
     }
@@ -175,6 +176,9 @@ final class CalendarUIFacade {
                 })
             else { throw ExtensionPeerError.invalidRequest }
             let settled = operation != "calendar.ui.metadata" || snapshot.ready || loaded
+            if operation == "calendar.ui.metadata", loaded, error == nil, snapshot == lastAdopted {
+                return
+            }
             adopt(snapshot, settled: settled)
             if settled { memory?.remember(snapshot) }
         } catch {
@@ -186,6 +190,7 @@ final class CalendarUIFacade {
     }
 
     private func adopt(_ snapshot: CalendarUISnapshot, settled: Bool = true) {
+        lastAdopted = snapshot
         blurEvents = snapshot.blurEvents
         authorized = snapshot.authorized
         days = snapshot.days

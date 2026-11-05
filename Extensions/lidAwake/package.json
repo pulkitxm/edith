@@ -21,5 +21,31 @@
     "actions",
     "extension:lidAwake"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Keep your Mac running with the lid closed.",
+    "summary": "Lid Awake stops the Mac from sleeping when you close the lid, so downloads, builds and agents keep going. It can stop on a timer or when the battery runs low. The first use asks you to approve Edith's helper in Login Items.",
+    "steps": [
+      {
+        "symbolName": "checkmark.shield",
+        "title": "Approve the helper once",
+        "detail": "macOS asks you to allow Edith's background helper in Login Items."
+      },
+      {
+        "symbolName": "timer",
+        "title": "Choose how long",
+        "detail": "Pick a session: until you turn it off, a set time, or until the lid reopens."
+      },
+      {
+        "symbolName": "battery.50",
+        "title": "Stay safe on battery",
+        "detail": "Set a battery floor so it pauses before the battery runs flat."
+      }
+    ],
+    "examples": [
+      "ed lid-awake status",
+      "ed lid-awake on --for 1h",
+      "ed lid-awake off"
+    ]
+  }
 }

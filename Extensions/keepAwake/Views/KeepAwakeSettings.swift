@@ -19,9 +19,17 @@ struct KeepAwakeSettings: View {
                     .accessibilityIdentifier("keepAwake.preventSleep")
                     .accessibilityAction(.default) { preventSleep.toggle() }
                 Text(
-                    "Keeps the Mac and display awake until turned off. Closing the lid still sleeps the Mac; use Lid Awake for that."
+                    preventSleep
+                        ? "On: your Mac and display will not go to sleep on their own. Turn this off to go back to your normal sleep settings."
+                        : "Off: your Mac sleeps normally. Turn this on before a long download, build or presentation."
                 )
                 .settingsCaption()
+                Text(
+                    "Closing the lid still puts the Mac to sleep. Use Lid Awake if you need it to keep running with the lid closed."
+                )
+                .settingsCaption()
+            } header: {
+                Text("Stay awake")
             }
         }
         .edithForm()

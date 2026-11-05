@@ -55,6 +55,10 @@ struct LidAwakeRows: View {
     var body: some View {
         Group {
             Section {
+                if !enabled {
+                    Text("Lid Awake is turned off. Turn it on in Extensions to use these controls.")
+                        .settingsCaption()
+                }
                 Toggle(isOn: activeBinding) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Keep running with lid closed")
@@ -66,8 +70,8 @@ struct LidAwakeRows: View {
                 Text(
                     "The first activation may open Login Items for one-time approval of Edith's background helper. After that, shelf toggles are silent."
                 )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
-                Picker("Session", selection: sessionBinding) {
+                .settingsCaption()
+                Picker("How long", selection: sessionBinding) {
                     ForEach(LidAwakeSession.allCases, id: \.self) { session in
                         Text(session.title).tag(session)
                     }
@@ -79,9 +83,9 @@ struct LidAwakeRows: View {
                     Text("30% battery").tag(30)
                 }
                 Text(
-                    "When the Mac is on battery and reaches this floor, lid awake pauses until it is charged again. Starting it manually below the floor overrides the pause for that discharge."
+                    "When the Mac is on battery and reaches this level, Lid Awake pauses and the Mac can sleep again until it is charged. Starting it manually below the level overrides the pause for that discharge."
                 )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
                 Toggle(isOn: restoration.binding) {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Restore normal sleep when Edith quits")
@@ -93,7 +97,7 @@ struct LidAwakeRows: View {
                 Text(
                     "While this is on the Mac stays awake with a closed lid, so it keeps drawing power and shedding heat. Do not put it in a bag like this."
                 )
-                .font(.system(size: UIScale.pt(10))).foregroundStyle(.secondary)
+                .settingsCaption()
                 if operations.applying {
                     HStack {
                         SkeletonGroup {
