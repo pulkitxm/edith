@@ -284,7 +284,10 @@ struct SocialManagerFixture {
     let model: SocialManagerModel
     let defaults: UserDefaults
 
-    init(website: URL = URL(string: "about:blank")!, persistent: Bool = false) throws {
+    init(
+        website: URL = URL(string: "about:blank")!, persistent: Bool = false,
+        profiles: Bool = true, accounts: Bool = true, start: Bool = true
+    ) throws {
         _ = TestWindowHost.application
         folder = FileManager.default.temporaryDirectory.appendingPathComponent(
             "social-manager-\(UUID().uuidString)")
@@ -300,6 +303,8 @@ struct SocialManagerFixture {
                 profileID: catalog.profiles[index % 2].id,
                 platformID: catalog.platforms[index / 2].id, name: name)
         }
+        if !accounts { catalog.accounts = [] }
+        if !profiles { catalog.profiles = []; catalog.accounts = [] }
         try file.save(catalog)
         model = SocialManagerModel(
             file: file, defaults: defaults,
@@ -311,7 +316,7 @@ struct SocialManagerFixture {
                             ? WKWebsiteDataStore(forIdentifier: account.dataStoreID)
                             : .nonPersistent()))
             })
-        model.start()
+        if start { model.start() }
     }
 
     func remove() {

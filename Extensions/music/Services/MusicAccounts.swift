@@ -265,31 +265,6 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
     }
 
-    var playerTitle: String? {
-        switch selected {
-        case .local: MusicRemote.shared.current?.title
-        case .spotify: spotify.title.isEmpty ? nil : spotify.title
-        case .youtubeMusic: youtubeConnected ? "YouTube Music" : nil
-        }
-    }
-
-    var isPlaying: Bool {
-        switch selected {
-        case .local: MusicRemote.shared.isPlaying
-        case .spotify: spotify.playing
-        case .youtubeMusic: false
-        }
-    }
-
-    var progress: Double {
-        switch selected {
-        case .local: MusicRemote.shared.progress
-        case .spotify:
-            MusicBarProgress.fraction(elapsed: spotify.elapsed, duration: spotify.duration)
-        case .youtubeMusic: 0
-        }
-    }
-
     init(
         defaults: UserDefaults = SharedDefaults.store, spotify: MusicSpotifySession? = nil,
         pauseLocal: @escaping @MainActor () -> Void = { MusicRemote.shared.pausePlayback() }

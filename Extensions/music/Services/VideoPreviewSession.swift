@@ -6,24 +6,6 @@ import MediaPlayer
 import Observation
 import SwiftUI
 
-struct NativeVideoPlayer: NSViewRepresentable {
-    let player: AVPlayer
-
-    func makeNSView(context: Context) -> AVPlayerView {
-        let view = AVPlayerView()
-        view.player = player
-        view.controlsStyle = .floating
-        view.showsFullScreenToggleButton = true
-        view.allowsPictureInPicturePlayback = true
-        view.updatesNowPlayingInfoCenter = false
-        return view
-    }
-
-    func updateNSView(_ view: AVPlayerView, context: Context) {
-        if view.player !== player { view.player = player }
-    }
-}
-
 @MainActor
 @Observable
 final class VideoPreviewSession {
@@ -159,36 +141,5 @@ final class VideoPreviewSession {
 extension Track {
     var isVideo: Bool {
         ["mp4", "mov", "m4v"].contains(url.pathExtension.lowercased())
-    }
-}
-
-struct VideoStage: View {
-    @State private var remote = MusicRemote.shared
-    @State private var session: VideoPreviewSession
-
-    init(track: Track, startAt: TimeInterval) {
-        _session = State(
-            wrappedValue: VideoPreviewSession(track: track, startingAt: startAt))
-    }
-
-    var body: some View {
-        NativeVideoPlayer(player: session.player)
-            .aspectRatio(16.0 / 9.0, contentMode: .fit)
-            .frame(maxWidth: .infinity)
-            .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
-            .shadow(color: .black.opacity(0.3), radius: UIScale.pt(16), y: UIScale.pt(8))
-            .onAppear {
-                let takesOverPlayback = remote.isPlaying
-                remote.attachVideo(session, resumesAudio: takesOverPlayback)
-                if takesOverPlayback {
-                    session.start()
-                } else {
-                    session.prepare()
-                }
-            }
-            .onDisappear {
-                remote.detachVideo(session)
-                session.stop()
-            }
     }
 }

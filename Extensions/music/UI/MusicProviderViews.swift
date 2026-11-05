@@ -40,7 +40,6 @@ struct EmbeddedMusicProviderContent: View {
 
     private var spotify: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            PageSectionHeader("Spotify", subtitle: "Your music, inside Edith")
             if let error = accounts.spotify.error { errorNotice(error) }
             connectionCard(
                 provider: .spotify, title: "Listen with Spotify",
@@ -87,7 +86,6 @@ struct EmbeddedMusicProviderContent: View {
 
     private var youtube: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            PageSectionHeader("YouTube Music", subtitle: "Your library and mixes, in Edith")
             youtubeErrors
             connectionCard(
                 provider: .youtubeMusic, title: "Listen with YouTube Music",

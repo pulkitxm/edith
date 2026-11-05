@@ -123,17 +123,58 @@ struct SocialManagerRenderTests {
         try await capture(model, width: 1440, scheme: .light, name: "account-and-email")
     }
 
+    @Test func firstRunLoadingAndErrorStatesGuideTheNextStep() async throws {
+        let previousScale = UIScale.current
+        defer { UIScale.apply(previousScale) }
+        let empty = try SocialManagerFixture(profiles: false)
+        defer { empty.remove() }
+        #expect(empty.model.catalog.profiles.isEmpty)
+        let noAccounts = try SocialManagerFixture(accounts: false)
+        defer { noAccounts.remove() }
+        noAccounts.model.browse(.accounts)
+        let profileOnly = try SocialManagerFixture(accounts: false)
+        defer { profileOnly.remove() }
+        profileOnly.model.profileID = profileOnly.model.catalog.profiles.first?.id
+        let loading = try SocialManagerFixture(start: false)
+        defer { loading.remove() }
+        let broken = try SocialManagerFixture(start: false)
+        defer { broken.remove() }
+        try Data("not json".utf8).write(to: broken.file.url)
+        broken.model.start()
+        #expect(broken.model.load.errorMessage != nil)
+        for (label, model) in [
+            ("first-profile", empty.model), ("first-account", noAccounts.model),
+            ("profile-empty", profileOnly.model), ("loading", loading.model),
+            ("error", broken.model),
+        ] {
+            for scheme in [ColorScheme.light, .dark] {
+                UIScale.apply(1)
+                try await capture(
+                    model, width: 1100, height: 760, scheme: scheme,
+                    name: "state-\(label)-1100-\(scheme)")
+                try await capture(
+                    model, width: 640, height: 700, scheme: scheme,
+                    name: "state-\(label)-640-\(scheme)")
+            }
+            UIScale.apply(1.6)
+            try await capture(
+                model, width: 1100, height: 760, scheme: .dark, name: "state-\(label)-zoom")
+        }
+    }
+
     private func capture(
-        _ model: SocialManagerModel, width: CGFloat, scheme: ColorScheme, name: String
+        _ model: SocialManagerModel, width: CGFloat, height: CGFloat = 940, scheme: ColorScheme,
+        name: String
     ) async throws {
         let host = NSHostingView(
             rootView: SocialManagerPage(model: model)
-                .environment(\.compactLayout, width < UIScale.pt(640))
+                .environment(\.compactLayout, width < UIScale.pt(720))
                 .environment(\.automaticViewActionsEnabled, false)
                 .environment(\.loadingAnimationsEnabled, false)
+                .environment(\.controlActiveState, .key)
                 .environment(\.colorScheme, scheme))
         host.sizingOptions = []
-        host.frame = CGRect(x: 0, y: 0, width: width, height: 940)
+        host.frame = CGRect(x: 0, y: 0, width: width, height: height)
         let window = TestWindowHost.window(contentRect: host.frame)
         window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
         window.contentView = host
@@ -143,7 +184,7 @@ struct SocialManagerRenderTests {
         try await Task.sleep(for: .milliseconds(350))
         host.layoutSubtreeIfNeeded()
         #expect(abs(host.bounds.width - width) < 2)
-        #expect(abs(host.bounds.height - 940) < 2)
+        #expect(abs(host.bounds.height - height) < 2)
         #expect(!TestWindowHost.isExposedOnDesktop(window))
         var snapshots: [(NSImage, CGRect)] = []
         if !model.showingAccounts, let tab = model.currentTab {
@@ -177,7 +218,9 @@ struct SocialManagerRenderTests {
             }
             NSGraphicsContext.restoreGraphicsState()
         }
-        if let directory = ProcessInfo.processInfo.environment["EDITH_SOCIAL_MANAGER_EVIDENCE_DIR"]
+        let environment = ProcessInfo.processInfo.environment
+        if let directory = environment["EDITH_SOCIAL_MANAGER_EVIDENCE_DIR"]
+            ?? environment["EDITH_TEST_CAPTURE_SURFACES"]
         {
             let output = URL(fileURLWithPath: directory)
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)

@@ -258,8 +258,10 @@ struct EmbeddedMusicPage: View {
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(.secondary)
                     }
-                    searchField
-                    breadcrumbBar
+                    if !libraryIsEmpty {
+                        searchField
+                        breadcrumbBar
+                    }
                     if remote.restorePending > 0 {
                         Text("Restoring your music from iCloud, \(remote.restorePending) remaining")
                             .settingsCaption()
@@ -268,6 +270,18 @@ struct EmbeddedMusicPage: View {
                 }
             }
         }
+    }
+
+    private var viewIsEmpty: Bool {
+        let loaded =
+            remote.showingFavourites
+            ? remote.favouritesLoaded
+            : (search.isEmpty ? remote.entriesLoaded : remote.searchLoaded)
+        return loaded && filteredFolders.isEmpty && filteredTracks.isEmpty
+    }
+
+    private var libraryIsEmpty: Bool {
+        viewIsEmpty && search.isEmpty && !remote.showingFavourites && remote.folderPath.isEmpty
     }
 
     private var headerActions: some View {
@@ -375,15 +389,14 @@ struct EmbeddedMusicPage: View {
                     remote.playCurrentFolder()
                 }
             } label: {
-                Label("Play", systemImage: "play.fill")
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, UIScale.pt(14))
-                    .padding(.vertical, UIScale.pt(7))
-                    .embeddedLiquidGlass(in: Capsule(), tint: theme, interactive: true, dark: dark)
+                Label(
+                    remote.showingFavourites ? "Play favourites" : "Play all",
+                    systemImage: "play.fill")
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edith(.primary))
             .disabled(!remote.canPlayView)
+            .opacity(viewIsEmpty ? 0 : 1)
+            .accessibilityHidden(viewIsEmpty)
             .help(
                 remote.showingFavourites
                     ? "Play your favourites" : "Play everything in this folder")
@@ -678,7 +691,8 @@ private struct EmbeddedMusicFolderRow: View {
                             .foregroundStyle(.primary)
                             .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                         Text(
-                            location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " "
+                            location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" }
+                                ?? "Folder"
                         )
                         .presenterBlur(
                             location != nil && EmbeddedMusicPrivacyState.shared.hides(.music)
@@ -906,7 +920,7 @@ struct EmbeddedMusicLibrarySkeleton: View {
                 LazyVStack(spacing: UIScale.pt(2)) {
                     ForEach(0..<8, id: \.self) { index in
                         HStack(spacing: UIScale.pt(10)) {
-                            SkeletonBlock(width: 38, height: 38, corner: 6)
+                            SkeletonBlock(width: 34, height: 34, corner: 7.5)
                             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                                 SkeletonBlock(
                                     width: index.isMultiple(of: 2) ? 164 : 132, height: 13)
@@ -982,7 +996,7 @@ private struct EmbeddedMusicFolderTile: View {
                     .font(.system(size: UIScale.pt(12), weight: .medium))
                     .lineLimit(1)
                     .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
-                Text(location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
+                Text(location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? "Folder")
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -1047,7 +1061,7 @@ private struct EmbeddedMusicTrackTile: View {
         VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             ZStack(alignment: .topTrailing) {
                 Button(action: onToggle) {
-                    EmbeddedPageArtworkThumb(track: track, size: EmbeddedMusicTile.artSize)
+                    EmbeddedPageArtworkThumb(track: track, size: EmbeddedMusicTile.art)
                         .overlay(alignment: .bottomTrailing) {
                             Image(
                                 systemName: isCurrent && isPlaying
@@ -1491,20 +1505,37 @@ private enum EmbeddedGlassStyle {
     }
 }
 
+extension EnvironmentValues {
+    @Entry var musicLiquidGlass = true
+}
+
+private struct EmbeddedLiquidGlass<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let tint: Color?
+    let interactive: Bool
+    let dark: Bool
+    @Environment(\.musicLiquidGlass) private var liquidGlass
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *), liquidGlass {
+            content.glassEffect(
+                EmbeddedGlassStyle.make(tint: tint, interactive: interactive), in: shape)
+        } else if let tint {
+            content.background(tint, in: shape)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(dark ? 0.14 : 0.1), lineWidth: 1))
+        }
+    }
+}
+
 extension View {
-    @ViewBuilder
     func embeddedLiquidGlass<S: InsettableShape>(
         in shape: S, tint: Color? = nil, interactive: Bool = false, dark: Bool = false
     ) -> some View {
-        if #available(macOS 26, *) {
-            self.glassEffect(
-                EmbeddedGlassStyle.make(tint: tint, interactive: interactive), in: shape)
-        } else {
-            self
-                .background((tint ?? .clear).opacity(tint == nil ? 0 : 0.28), in: shape)
-                .background(.ultraThinMaterial, in: shape)
-                .overlay(shape.strokeBorder(.white.opacity(dark ? 0.16 : 0.4), lineWidth: 1))
-        }
+        modifier(
+            EmbeddedLiquidGlass(shape: shape, tint: tint, interactive: interactive, dark: dark))
     }
 }
 
@@ -1539,48 +1570,53 @@ struct EmbeddedMusicFooter: View {
     }
 
     private var playerBar: some View {
-        ZStack(alignment: .trailing) {
+        Group {
             if collapsed {
                 collapsedLine
             } else {
-                Group {
-                    if accounts.selected == .spotify {
-                        EmbeddedMusicStreamingControls(accounts: accounts).padding(
-                            .horizontal, UIScale.pt(22))
-                    } else if accounts.selected == .youtubeMusic {
-                        HStack {
-                            Label("YouTube Music", systemImage: "play.circle")
-                            Spacer()
-                            Button("Open player") {
-                                EmbeddedMusicRemote.shared.send(.openMusic)
-                            }
+                expandedBar
+            }
+        }
+        .frame(height: UIScale.pt(collapsed ? Self.collapsedHeight : barHeight))
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: collapsed)
+    }
+
+    private var expandedBar: some View {
+        HStack(spacing: 0) {
+            Group {
+                if accounts.selected == .spotify {
+                    EmbeddedMusicStreamingControls(accounts: accounts)
+                        .padding(.leading, UIScale.pt(20))
+                } else if accounts.selected == .youtubeMusic {
+                    HStack(spacing: UIScale.pt(12)) {
+                        Label("YouTube Music", systemImage: "play.circle")
+                            .font(.edithText(.body))
+                        Spacer(minLength: UIScale.pt(8))
+                        Button("Open player") {
+                            EmbeddedMusicRemote.shared.send(.openMusic)
                         }
-                        .font(Font.edithText(.body))
-                        .buttonStyle(.edith(.toolbar))
-                        .padding(.horizontal, UIScale.pt(22))
-                    } else if let track = remote.current {
-                        playing(track)
-                    } else {
-                        idle
+                        .buttonStyle(.edith(.secondary))
                     }
-                }
-                .frame(height: UIScale.pt(barHeight))
-                .padding(.trailing, UIScale.pt(28))
-                .frame(maxWidth: .infinity)
-                .background(.regularMaterial)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(Color(nsColor: .separatorColor))
-                        .frame(height: UIScale.pt(1))
+                    .padding(.leading, UIScale.pt(20))
+                } else if let track = remote.current {
+                    playing(track)
+                } else {
+                    idle
                 }
             }
+            .frame(maxWidth: .infinity)
             collapseToggle
+                .padding(.horizontal, UIScale.pt(8))
         }
-        .frame(
-            height: UIScale.pt(collapsed ? Self.collapsedHeight : barHeight),
-            alignment: .bottom
-        )
-        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: collapsed)
+        .frame(height: UIScale.pt(barHeight))
+        .background(.regularMaterial)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
+        }
     }
 
     private var collapsedLine: some View {
@@ -1601,21 +1637,18 @@ struct EmbeddedMusicFooter: View {
 
     private var collapseToggle: some View {
         Button {
-            collapsed.toggle()
-            EmbeddedMusicRemote.shared.send(.barCollapsed, value: collapsed ? 1 : 0)
+            collapsed = true
+            EmbeddedMusicRemote.shared.send(.barCollapsed, value: 1)
         } label: {
-            Image(systemName: "chevron.up")
+            Image(systemName: "chevron.down")
                 .font(.system(size: UIScale.pt(10), weight: .semibold))
                 .foregroundStyle(.secondary)
-                .rotationEffect(.degrees(collapsed ? 0 : 180))
-                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                .frame(width: UIScale.pt(24), height: UIScale.pt(24))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .padding(.trailing, UIScale.pt(6))
-        .padding(.bottom, UIScale.pt(collapsed ? 4 : 0))
-        .help(collapsed ? "Show the player bar" : "Collapse the player bar")
-        .accessibilityLabel(collapsed ? "Show the player bar" : "Collapse the player bar")
+        .help("Collapse the player bar")
+        .accessibilityLabel("Collapse the player bar")
     }
 
     private func playing(_ track: EmbeddedTrack) -> some View {
@@ -1653,7 +1686,7 @@ struct EmbeddedMusicFooter: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
-        .padding(.horizontal, UIScale.pt(22))
+        .padding(.leading, UIScale.pt(20))
     }
 
     private func trackInfo(_ track: EmbeddedTrack) -> some View {
@@ -1816,7 +1849,7 @@ struct EmbeddedMusicFooter: View {
             }
             .buttonStyle(.edith(.toolbar))
         }
-        .padding(.horizontal, UIScale.pt(22))
+        .padding(.leading, UIScale.pt(20))
     }
 }
 
@@ -1846,13 +1879,13 @@ private struct EmbeddedPageArtworkThumb: View {
                         ],
                         startPoint: .top, endPoint: .bottom)
                     Image(systemName: "music.note")
-                        .font(.system(size: size * 0.36))
+                        .font(.system(size: UIScale.pt(size * 0.36)))
                         .foregroundStyle(.white.opacity(0.8))
                 }
             }
         }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
+        .frame(width: UIScale.pt(size), height: UIScale.pt(size))
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(size * 0.22), style: .continuous))
         .presenterCover(EmbeddedMusicPrivacyState.shared.hides(.music))
         .pageTask(id: track.id) {
             if track.isVideo, EmbeddedTrackMeta.artworkCached(for: track) == nil {
@@ -1879,48 +1912,65 @@ struct EmbeddedMusicSidebarPill: View {
     @State private var remote = EmbeddedMusicRemote.shared
     @State private var accounts = EmbeddedMusicAccounts.shared
     @Environment(\.windowVisible) private var visible
+    @Environment(\.colorScheme) private var scheme
+    static let height: CGFloat = 40
 
     private var progress: Double {
         accounts.progress
     }
 
+    private var showsProgress: Bool {
+        accounts.playerTitle != nil && accounts.selected != .youtubeMusic
+    }
+
     var body: some View {
         Button(action: expand) {
-            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: UIScale.pt(9), weight: .semibold))
-                        .foregroundStyle(theme)
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                HStack(spacing: UIScale.pt(8)) {
+                    Image(systemName: accounts.playerTitle == nil ? "music.note" : "chevron.up")
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .foregroundStyle(
+                            accounts.playerTitle == nil
+                                ? AnyShapeStyle(.secondary) : AnyShapeStyle(theme)
+                        )
+                        .frame(width: UIScale.pt(16))
                     Text(accounts.playerTitle ?? "Nothing playing")
-                        .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .font(.edithText(.caption)).fontWeight(.medium)
+                        .foregroundStyle(accounts.playerTitle == nil ? .secondary : .primary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                         .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
                     Spacer(minLength: 0)
                     if accounts.playerTitle != nil {
                         EmbeddedPlaybackWave(
                             playing: accounts.isPlaying && visible,
-                            color: theme.opacity(0.9), maxHeight: UIScale.pt(9))
+                            color: theme.opacity(0.9), maxHeight: UIScale.pt(10))
                     }
                 }
-                if accounts.playerTitle != nil, accounts.selected != .youtubeMusic {
+                if showsProgress {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(Color.primary.opacity(0.12))
                             Capsule()
                                 .fill(theme)
-                                .frame(width: max(2, geo.size.width * progress))
+                                .frame(width: max(UIScale.pt(2), geo.size.width * progress))
                         }
                     }
                     .frame(height: UIScale.pt(2))
                 }
             }
             .padding(.horizontal, UIScale.pt(9))
-            .padding(.vertical, UIScale.pt(7))
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: UIScale.pt(Self.height))
+            .background(
+                Color.primary.opacity(scheme == .dark ? 0.07 : 0.05),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous))
         }
         .buttonStyle(.edith(.borderless))
         .help("Show the player bar")
         .accessibilityLabel("Show the player bar")
+        .accessibilityValue(accounts.playerTitle ?? "Nothing playing")
     }
 }

@@ -105,7 +105,7 @@ struct VirtualCameraSliderRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            HStack {
+            HStack(spacing: UIScale.pt(8)) {
                 Text(title)
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
@@ -116,15 +116,19 @@ struct VirtualCameraSliderRow: View {
                     } label: {
                         Image(systemName: "arrow.uturn.backward")
                             .font(.system(size: UIScale.pt(10)))
+                            .frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.edith(.iconOnly))
+                    .buttonStyle(.edith(.borderless))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
                     .help("Reset \(title.lowercased())")
                     .accessibilityLabel("Reset \(title.lowercased())")
                 }
                 Text(format(value))
-                    .font(DashSkin.mono(11))
+                    .font(.system(size: UIScale.pt(11))).monospacedDigit()
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
+            .frame(height: UIScale.pt(16))
             Slider(value: $value, in: range)
                 .controlSize(.small)
                 .accessibilityLabel(title)
@@ -697,7 +701,7 @@ struct VirtualCameraFact: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
             Spacer()
             Text(value)
-                .font(DashSkin.mono(11))
+                .font(.system(size: UIScale.pt(11))).monospacedDigit()
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
     }

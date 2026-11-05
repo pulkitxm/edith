@@ -396,7 +396,7 @@ final class VirtualCameraPageModel: ObservableObject {
             !needsCameraAccess || snapshot?.live == true, !hasPreviewFrame
         else { return nil }
         if !sourcesLoaded { return "Finding cameras" }
-        if previewFeed == .pending { return "Connecting to Edith Bar" }
+        if previewFeed == .pending { return "Connecting to the camera service" }
         switch state.media.kind {
         case .camera: return "Starting camera"
         case .video: return "Starting video"
@@ -435,8 +435,8 @@ final class VirtualCameraPageModel: ObservableObject {
         if state.privacy == .stopped { return "Stopped" }
         if state.media.kind == .video, !meetingPlaying { return "Paused" }
         if let snapshot, helperReachable { return snapshot.headline }
-        if statusPending || helperReachable { return "Checking Edith Bar" }
-        return "Edith Bar is not answering"
+        if statusPending || helperReachable { return "Starting camera service" }
+        return "Camera service is not responding"
     }
 
     var isLive: Bool { state.privacy != .stopped && snapshot?.live == true }

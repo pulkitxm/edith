@@ -74,7 +74,7 @@ struct VirtualCameraMeetingControls: View {
             )
             .frame(minWidth: UIScale.pt(88), minHeight: UIScale.pt(28))
         }
-        .buttonStyle(.edith(.primary))
+        .buttonStyle(.edith(model.meetingPlaying ? .secondary : .primary))
         .help(
             model.meetingPlaying ? "Pause your meeting video" : "Resume your meeting video")
     }

@@ -55,7 +55,7 @@ struct VirtualCameraPage: View {
     var body: some View {
         PageWorkspace {
             PageHeader(
-                "Virtual Camera",
+                "Virtual Camera", subtitle: model.meetingAppHint,
                 trailing: {
                     HStack(spacing: UIScale.pt(12)) {
                         VirtualCameraStatusPill(model: model, dark: dark)
@@ -69,11 +69,6 @@ struct VirtualCameraPage: View {
                         .buttonStyle(.edith(.secondary))
                         .help("Frame, look, background, overlays and output settings")
                     }
-                },
-                accessory: {
-                    Text(model.meetingAppHint)
-                        .font(.edithText(.subheadline)).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 })
         } content: {
             GeometryReader { geometry in
@@ -129,17 +124,13 @@ struct VirtualCameraPage: View {
 
     private var meetingStage: some View {
         VStack(spacing: UIScale.pt(12)) {
-            GeometryReader { geometry in
-                let width = min(geometry.size.width, geometry.size.height * 16 / 9)
-                let height = width * 9 / 16
-                VirtualCameraStage(model: model, dark: dark)
-                    .frame(width: max(0, width), height: max(0, height))
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-            }
+            VirtualCameraStage(model: model, dark: dark)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .frame(maxWidth: .infinity)
             VirtualCameraMeetingControls(model: model, dark: dark)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -283,7 +274,8 @@ struct VirtualCameraStage: View {
                     HStack {
                         Spacer()
                         Text(String(format: "%.1fx", model.composition.framing.zoom))
-                            .font(DashSkin.mono(12, weight: .medium))
+                            .font(.system(size: UIScale.pt(12), weight: .medium))
+                            .monospacedDigit()
                             .foregroundStyle(.white)
                             .padding(.horizontal, UIScale.pt(8))
                             .padding(.vertical, UIScale.pt(4))
@@ -297,6 +289,7 @@ struct VirtualCameraStage: View {
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous))
+        .environment(\.colorScheme, .dark)
         .help("Drag to move the picture. Command-scroll or pinch to zoom. Double-click to reset.")
     }
 }
@@ -374,15 +367,17 @@ struct VirtualCameraSceneStrip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack {
-                Text("Scenes")
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text("A scene saves your framing, look and overlays. Switch with ⌘1 to ⌘9.")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
-                Spacer()
+            HStack(alignment: .top, spacing: UIScale.pt(8)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text("Scenes")
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        .foregroundStyle(DashSkin.ink(dark))
+                    Text("Save your framing, look and overlays. Switch with ⌘1 to ⌘9.")
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: UIScale.pt(8))
                 if let active = model.state.activeScene, model.state.activeSceneIsModified {
                     Button(
                         CameraPrivacy.shared.hides(.camera)

@@ -55,7 +55,7 @@ struct EmbeddedMusicLocalEmptyState: View {
                         symbolName: "arrow.down.circle", title: "Download audio",
                         detail: "Paste a YouTube link and Edith saves the audio here."),
                     PageGuideStep(
-                        symbolName: "folder", title: "Or add your files",
+                        symbolName: "folder", title: "Add your own files",
                         detail: "Drop songs into the music folder in Finder."),
                     PageGuideStep(
                         symbolName: "play.fill", title: "Press play",
@@ -68,8 +68,8 @@ struct EmbeddedMusicLocalEmptyState: View {
                     "Open music folder", symbolName: "folder", identifier: "music.empty.folder",
                     perform: openLibrary),
                 footnote: folderLocation.map {
-                    "\($0). Added files in Finder? Use the rescan button above."
-                } ?? "Added files in Finder? Use the rescan button above.")
+                    "Music folder: \($0). Added files in Finder? Press Rescan at the top."
+                } ?? "Added files in Finder? Press Rescan at the top.")
         case .emptyFolder:
             PageEmptyState(
                 symbolName: "folder",
