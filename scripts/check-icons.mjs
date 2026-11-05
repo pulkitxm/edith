@@ -114,7 +114,7 @@ if (import.meta.main) {
   if (failures.length) {
     console.error(failures.join("\n"));
     console.error(
-      `check-icons: ${failures.length} violations. Draw the icon in Packages/EdithIcons, see skills/edith-icons/SKILL.md`,
+      `check-icons: ${failures.length} violations. Draw the icon in Packages/EdithIcons, see Packages/EdithIcons/SKILL.md`,
     );
     process.exit(1);
   }
