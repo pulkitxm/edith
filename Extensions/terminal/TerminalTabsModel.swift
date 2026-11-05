@@ -60,6 +60,7 @@ struct TerminalBroadcastDelivery: Equatable, Sendable {
     private(set) var tabs: [Tab] = []
     private(set) var selected: UUID?
     var broadcast = false
+    var presented = true
     private(set) var settings = TerminalSettings()
     private(set) var error: String?
     let client: TerminalRemoteClient
@@ -91,7 +92,9 @@ struct TerminalBroadcastDelivery: Equatable, Sendable {
             }
             self.synchronize()
             while !Task.isCancelled, !self.stopped {
-                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                do {
+                    try await Task.sleep(for: self.presented ? .milliseconds(200) : .seconds(2))
+                } catch { return }
                 await self.client.refresh()
                 self.synchronize()
             }

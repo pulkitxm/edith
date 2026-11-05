@@ -24,5 +24,37 @@
     "agents",
     "extension:herdr"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "See every coding agent on your Macs in one board, and step in when one needs you.",
+    "summary": "Agents shows the coding agents running in Herdr on this Mac and your SSH machines, grouped by what they are doing. Open any agent to watch or type to it, start new ones, and get told when one is blocked. Nothing runs until you start it.",
+    "steps": [
+      {
+        "symbolName": "arrow.clockwise",
+        "title": "Find your agents",
+        "detail": "Edith looks for Herdr on this Mac and your machines and lists every live session."
+      },
+      {
+        "symbolName": "plus",
+        "title": "Start an agent",
+        "detail": "Press New Agent, pick a folder and a coding agent, and it opens in its own pane."
+      },
+      {
+        "symbolName": "rectangle.split.3x1",
+        "title": "Watch the board",
+        "detail": "Agents are grouped as blocked, working, done or idle so you see who needs you."
+      },
+      {
+        "symbolName": "text.bubble",
+        "title": "Step in",
+        "detail": "Open an agent to read its terminal, answer a question, or send it a message."
+      }
+    ],
+    "examples": [
+      "ed herdr ls",
+      "ed herdr models",
+      "ed herdr defaults ls",
+      "ed herdr layout ls"
+    ]
+  }
 }

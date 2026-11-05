@@ -11,5 +11,27 @@
   "notchCards": [
     "extension:terminal"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "A fast built-in terminal with tabs that keeps your shells in one place.",
+    "summary": "Terminal opens a real shell in a tab inside Edith. Open as many tabs as you need, send one command to all of them with Broadcast, and adjust the font in settings. Closing a tab ends only that shell.",
+    "steps": [
+      {
+        "symbolName": "terminal",
+        "title": "Start typing",
+        "detail": "A shell opens in your home folder as soon as you visit the page."
+      },
+      {
+        "symbolName": "plus",
+        "title": "Add tabs",
+        "detail": "Press plus or Command T to open another shell, and Command Shift W to close one."
+      },
+      {
+        "symbolName": "dot.radiowaves.left.and.right",
+        "title": "Broadcast a command",
+        "detail": "Turn on Broadcast to run one command in every open tab at once."
+      }
+    ],
+    "examples": []
+  }
 }

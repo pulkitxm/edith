@@ -402,17 +402,59 @@ struct HerdrPage: View {
                 PageLoading(state: .loading, layout: .cards) { EmptyView() }
                     .pageContent(compact)
             } else if store.agents.isEmpty, let failure = store.inventoryFailureMessage {
-                emptyState(title: "Unable to load Herdr sessions", detail: failure)
-            } else if store.hosts.isEmpty {
-                emptyState(
-                    title: "No Herdr hosts found",
-                    detail: "Refresh to look for Herdr on this Mac and your configured machines.")
-            } else if store.hosts.allSatisfy({ !$0.herdrPresent }) && store.agents.isEmpty {
-                emptyState(
-                    title: "Herdr is not installed",
-                    detail:
-                        "Install Herdr on this Mac or an SSH machine, then refresh. Edith looks for the herdr binary on PATH, including ~/.local/bin."
+                PageEmptyState(
+                    symbolName: "exclamationmark.triangle",
+                    title: "Edith could not read your agents",
+                    message: failure,
+                    primary: refreshAction,
+                    footnote: "Nothing was changed. Your running agents are unaffected."
                 )
+                .pageContent(compact)
+            } else if store.hosts.isEmpty {
+                PageEmptyState(
+                    symbolName: "magnifyingglass",
+                    title: "No machines found yet",
+                    message:
+                        "Edith looks for Herdr on this Mac and on every machine you have added. Refresh to look again.",
+                    primary: refreshAction
+                )
+                .pageContent(compact)
+            } else if store.hosts.allSatisfy({ !$0.herdrPresent }) && store.agents.isEmpty {
+                PageEmptyState(
+                    symbolName: "square.and.arrow.down",
+                    title: "Herdr is not installed",
+                    message:
+                        "Agents is the board for Herdr sessions. Install the herdr command on this Mac or on an SSH machine, then refresh. Edith looks for it on your PATH, including ~/.local/bin.",
+                    primary: refreshAction,
+                    footnote: "Edith only looks for the herdr command. It installs nothing for you."
+                )
+                .pageContent(compact)
+            } else if store.agents.isEmpty && store.inventoryReceived && !store.refreshing {
+                PageEmptyState(
+                    symbolName: "rectangle.split.3x1",
+                    title: "No agents running",
+                    message:
+                        "Start a coding agent and it will appear here, grouped by whether it is working, blocked or done.",
+                    steps: [
+                        PageGuideStep(
+                            symbolName: "folder", title: "Pick a folder",
+                            detail: "Choose the project the agent should work in."),
+                        PageGuideStep(
+                            symbolName: "sparkles", title: "Choose an agent",
+                            detail:
+                                "Each agent opens in its own pane and keeps running if you leave."),
+                        PageGuideStep(
+                            symbolName: "bell", title: "Get pulled back",
+                            detail: "Blocked agents move to the front so you can answer them."),
+                    ],
+                    primary: PageAction(
+                        "New Agent", symbolName: "plus", identifier: "herdr.empty.new-agent"
+                    ) { newAgentPopupPresented = true },
+                    secondary: refreshAction,
+                    footnote:
+                        "Starting an agent only opens a terminal pane. You can close it at any time."
+                )
+                .pageContent(compact)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: UIScale.pt(12)) {
@@ -809,22 +851,11 @@ struct HerdrPage: View {
         launchSettingsPresented = true
     }
 
-    private func emptyState(title: String, detail: String) -> some View {
-        VStack(spacing: UIScale.pt(8)) {
-            Text(title)
-                .font(DashSkin.heading(22))
-                .foregroundStyle(DashSkin.ink(dark))
-            Text(detail)
-                .font(.system(size: UIScale.pt(13)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: UIScale.pt(420))
-            Button("Refresh") { HerdrWorkOwnership.start { await store.refresh() } }
-                .buttonStyle(.edith(.secondary))
-                .disabled(store.refreshing)
+    private var refreshAction: PageAction {
+        PageAction("Refresh", symbolName: "arrow.clockwise", identifier: "herdr.empty.refresh") {
+            guard !store.refreshing else { return }
+            HerdrWorkOwnership.start { await store.refresh() }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .pageContent(compact)
     }
 }
 

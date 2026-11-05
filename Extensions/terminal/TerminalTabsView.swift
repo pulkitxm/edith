@@ -29,13 +29,17 @@ struct TerminalTabsView: View {
                     .allowsHitTesting(tab.id == model.selected)
                 }
                 if model.tabs.isEmpty {
-                    VStack(spacing: UIScale.pt(10)) {
-                        Text("No terminals open.")
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                        Button("New terminal") { model.addTab() }
-                            .buttonStyle(.edith(.primary))
-                    }
+                    PageEmptyState(
+                        symbolName: "terminal",
+                        title: "No terminals open",
+                        message:
+                            "Open a terminal to get a shell inside Edith. Closing a tab only ends that shell.",
+                        primary: PageAction(
+                            "New terminal", symbolName: "plus", identifier: "terminal.empty.new"
+                        ) { model.addTab() },
+                        footnote:
+                            "Shortcut: Command T opens a terminal, Command W closes the current one."
+                    )
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -48,8 +52,14 @@ struct TerminalTabsView: View {
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .background(shortcuts)
         .background(TerminalWindowObserver(onShow: onWindowShow, onClose: onWindowClose))
-        .onAppear { if presented { model.ensureFirstTab() } }
-        .onChange(of: presented) { _, visible in if visible { model.ensureFirstTab() } }
+        .onAppear {
+            model.presented = presented
+            if presented { model.ensureFirstTab() }
+        }
+        .onChange(of: presented) { _, visible in
+            model.presented = visible
+            if visible { model.ensureFirstTab() }
+        }
     }
 
     private var shortcuts: some View {
@@ -60,6 +70,10 @@ struct TerminalTabsView: View {
                 if let selected = model.selected { model.closeTab(selected) }
             }
             .keyboardShortcut("w", modifiers: [.command, .shift])
+            Button("") {
+                if let selected = model.selected { model.closeTab(selected) }
+            }
+            .keyboardShortcut("w", modifiers: .command)
             Button("") { model.selectNext(backwards: false) }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
             Button("") { model.selectNext(backwards: true) }
@@ -82,13 +96,18 @@ struct TerminalTabsView: View {
                 Image(systemName: "plus")
             }
             .buttonStyle(.edith(.toolbar))
-            .help("New terminal (⌘T)")
+            .help(
+                model.tabs.count >= TerminalTabsModel.maximumTabs
+                    ? "Close a tab to open another (limit \(TerminalTabsModel.maximumTabs))"
+                    : "New terminal (⌘T)"
+            )
+            .accessibilityLabel("New terminal")
             .disabled(model.tabs.count >= TerminalTabsModel.maximumTabs)
 
             Toggle("Broadcast", isOn: Bindable(model).broadcast)
                 .toggleStyle(.checkbox)
                 .font(.system(size: UIScale.pt(10.5)))
-                .help("Type once, send to every tab")
+                .help("Type once, send to every tab. A bar appears below to type the command.")
 
             Button {
                 showsSettings.toggle()
