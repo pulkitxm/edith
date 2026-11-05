@@ -75,6 +75,27 @@ enum HostPermission: String, CaseIterable, Hashable, Sendable {
         }
     }
 
+    var needsRelaunch: Bool {
+        [.accessibility, .inputMonitoring, .screenRecording, .fullDisk].contains(self)
+    }
+
+    var plainWords: String {
+        switch self {
+        case .calendar: "Lets Edith read your events so your schedule shows up in the app."
+        case .notifications: "Lets Edith warn you before limits run out or when something finishes."
+        case .accessibility:
+            "Lets Edith press keys and read windows for you, for example to paste or move windows."
+        case .inputMonitoring: "Lets Edith notice key presses for hotkeys and keystroke overlays."
+        case .fullDisk: "Lets Edith read files macOS protects, such as usage data from other apps."
+        case .screenRecording:
+            "Lets Edith see what is on your screen to sample colors, blur numbers, or record."
+        case .applicationAudio: "Lets Edith change the volume of individual apps."
+        case .camera: "Lets Edith show and style your camera."
+        case .bluetooth: "Lets Edith notice when headphones and other devices connect."
+        case .automation: "Lets Edith control other apps such as your music player."
+        }
+    }
+
     var grantsOnFirstUse: Bool { [.applicationAudio, .bluetooth, .automation].contains(self) }
 
     var firstUseExplanation: String? {

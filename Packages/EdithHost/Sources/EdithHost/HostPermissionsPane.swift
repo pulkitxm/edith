@@ -64,7 +64,10 @@ struct HostPermissionsPane: View {
                 }
                 LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(12)) {
                     ForEach(sectionUsages) { usage in
-                        HostPermissionCard(usage: usage, grant: grant)
+                        HostPermissionCard(
+                            usage: usage, awaitingRelaunch: permissions.awaitingRelaunch.contains(
+                                usage.permission),
+                            grant: grant)
                     }
                 }
             }
@@ -74,6 +77,7 @@ struct HostPermissionsPane: View {
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
             summary
+            if !permissions.awaitingRelaunch.isEmpty { relaunchBanner }
             filterRow
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -92,7 +96,7 @@ struct HostPermissionsPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Permissions")
         .pageTask(id: marketplace.surfaceAvailability.activeIDs.sorted()) {
-            await permissions.refresh()
+            await permissions.watch(interval: .seconds(2))
         }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -119,14 +123,37 @@ struct HostPermissionsPane: View {
             }
             if !compact { Spacer(minLength: 0) }
             if !pending.isEmpty {
-                Button("Grant \(pending.count) Remaining") {
-                    for usage in pending { grant(usage) }
+                Button("Grant next (\(pending.count) left)") {
+                    if let next = pending.first { grant(next) }
                 }
                 .buttonStyle(.edith(.primary))
                 .tint(accent)
                 .fixedSize()
             }
         }
+        .pageGutter(compact)
+    }
+
+    private var relaunchBanner: some View {
+        let names = HostPermission.allCases.filter { permissions.awaitingRelaunch.contains($0) }
+            .map(\.displayName).joined(separator: ", ")
+        return HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            Image(systemName: "arrow.clockwise.circle.fill")
+                .font(.system(size: UIScale.pt(20))).foregroundStyle(accent)
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                Text("Relaunch Edith to finish \(names)")
+                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Turn each one on in System Settings first, then relaunch once.")
+                    .settingsCaption()
+            }
+            Spacer(minLength: 0)
+            Button("Relaunch Edith") { permissions.relaunch() }
+                .buttonStyle(.edith(.primary)).tint(accent).fixedSize()
+                .accessibilityIdentifier("permissions.relaunch")
+        }
+        .padding(UIScale.pt(12))
+        .background(accent.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .pageGutter(compact)
     }
 
@@ -205,6 +232,7 @@ struct HostPermissionsPane: View {
 
 private struct HostPermissionCard: View {
     let usage: HostPermissionUsage
+    var awaitingRelaunch = false
     let grant: (HostPermissionUsage) -> Void
     @Environment(\.compactLayout) private var compact
 
@@ -233,7 +261,7 @@ private struct HostPermissionCard: View {
                         action
                     }
                 }
-                Text(permission.firstUseExplanation ?? permission.reason)
+                Text(permission.firstUseExplanation ?? permission.plainWords)
                     .settingsCaption()
                     .fixedSize(horizontal: false, vertical: true)
                 if !usage.users.isEmpty {
@@ -259,6 +287,8 @@ private struct HostPermissionCard: View {
     @ViewBuilder private var statusBadge: some View {
         if usage.isGranted {
             badge("Granted", color: .green)
+        } else if awaitingRelaunch {
+            badge("Restart to finish", color: .orange)
         } else if usage.blocksEnabledExtension {
             badge("Needed now", color: .orange)
         } else if usage.grantsOnFirstUse {
