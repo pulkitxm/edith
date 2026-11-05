@@ -17,7 +17,22 @@ struct EmojiSettingsRows: View {
     var body: some View {
         Group {
             Section {
-                Button("Open picker") { presentation.perform("pick") }
+                Text(
+                    "Press the hotkey in any app to search emoji by name and type one right where your cursor is. Your most used emoji are kept at the top."
+                )
+                .settingsCaption()
+                if !enabled {
+                    Label(
+                        "Turn the Emoji Picker extension on to use it and change these settings.",
+                        systemImage: "info.circle"
+                    )
+                    .settingsCaption()
+                }
+                Button("Try the picker now") { presentation.perform("pick") }
+                    .help(
+                        enabled
+                            ? "Opens the picker here so you can see how it works."
+                            : "Turn the extension on first.")
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "emojiHotKey", defaultLabel: "⌃⇧E")
                 } label: {
@@ -68,13 +83,13 @@ struct EmojiSettingsRows: View {
                 Section {
                     if frequent.isEmpty {
                         Label(
-                            "No frequently used emoji yet. Pick an emoji to get started.",
+                            "No favorites yet. Emoji you pick from the picker show up here, most used first.",
                             systemImage: "face.smiling"
                         )
                         .settingsCaption()
                     } else {
                         EmojiFrequentGrid(characters: frequent)
-                        Button("Clear frequently used", role: .destructive) {
+                        Button("Forget frequently used emoji", role: .destructive) {
                             presentation.perform("clear")
                         }
                     }

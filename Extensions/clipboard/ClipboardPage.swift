@@ -14,16 +14,26 @@ struct ClipboardPage: View {
                 "Clipboard",
                 trailing: {
                     HStack(spacing: UIScale.pt(12)) {
-                        Button("Open clipboard", action: openPalette)
-                            .buttonStyle(.edith(.secondary))
+                        Button("Open clipboard history", action: openPalette)
+                            .buttonStyle(.edith(.primary))
+                            .disabled(presentation?.available == false)
+                            .help(
+                                presentation?.available == false
+                                    ? "Enable the Clipboard extension to open its history."
+                                    : "Search and paste anything you copied recently.")
                     }
+                },
+                accessory: {
+                    Text(
+                        "Everything you copy is kept here so you can paste it again. Press \u{2303}\u{21E7}C anywhere to search it."
+                    )
+                    .font(.edithText(.callout)).foregroundStyle(.secondary)
                 })
         } content: {
             if presentation?.available == false {
-                Text(
-                    "Clipboard is disabled. Enable the extension to view your history and change settings."
-                )
-                .font(.edithText(.caption)).foregroundStyle(.secondary).padding()
+                PageNotice(
+                    "Clipboard is turned off, so nothing you copy is being recorded. Enable the extension to see your history and change these settings.",
+                    tone: .warning)
             }
             if let presentation, !presentation.preferencesLoad.hasContent {
                 if let error = presentation.preferencesLoad.errorMessage {
@@ -33,7 +43,7 @@ struct ClipboardPage: View {
                             Button("Retry") { Task { await presentation.refresh() } }
                         })
                 } else if presentation.available {
-                    LoadingIndicator().padding()
+                    PageSkeleton(layout: .editor)
                 }
             }
             Form { ClipboardRows(client: client, history: history, presentation: presentation) }

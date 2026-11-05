@@ -90,7 +90,7 @@ struct ClipboardRows: View {
                     .accessibilityLabel("Loading clipboard history")
                 } else if recent.entries.isEmpty {
                     Label(
-                        "No clipboard history yet. Copy something to get started.",
+                        "Nothing copied yet. Copy some text, a link or an image anywhere and it appears here.",
                         systemImage: "doc.on.clipboard"
                     )
                     .settingsCaption()
@@ -98,7 +98,8 @@ struct ClipboardRows: View {
                 ForEach(recent.entries) { entry in
                     recentRow(entry)
                 }
-                Button("Open history ▸") { showHistory = true }
+                Button("Open full history") { showHistory = true }
+                    .help("Browse, search and pin everything Edith has recorded.")
             } header: {
                 Text("Recent")
             }

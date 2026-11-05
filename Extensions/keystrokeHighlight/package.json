@@ -22,5 +22,32 @@
     "actions",
     "extension:keystrokeHighlight"
   ],
-  "notchTabs": []
+  "notchTabs": [],
+  "guide": {
+    "tagline": "Show the keys you press on screen for demos and recordings.",
+    "summary": "Displays each shortcut and key press as a keycap overlay so viewers can follow along. It only shows keys while turned on, ignores secure password fields, and needs Input Monitoring permission.",
+    "steps": [
+      {
+        "symbolName": "lock.shield",
+        "title": "Allow Input Monitoring",
+        "detail": "macOS asks once. Edith only reads key presses to draw the keycaps."
+      },
+      {
+        "symbolName": "keyboard",
+        "title": "Press Control+Option+Command+K",
+        "detail": "Starts or pauses the overlay from any app."
+      },
+      {
+        "symbolName": "rectangle.on.rectangle",
+        "title": "Type as normal",
+        "detail": "Keycaps appear at the edge of the screen and fade away."
+      },
+      {
+        "symbolName": "slider.horizontal.3",
+        "title": "Adjust it",
+        "detail": "Choose the position and how long keys stay visible."
+      }
+    ],
+    "examples": []
+  }
 }

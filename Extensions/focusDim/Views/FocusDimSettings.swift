@@ -15,9 +15,20 @@ struct FocusDimSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Dim now", isOn: $active.notifyingSettingsChange())
                 Text(
-                    "Turns the dimming on and off. The shortcut keeps working either way; removing the extension is a separate switch."
+                    "Darkens everything behind the window you are working in so it stands out. Turn it on here or with the hotkey, and it follows you as you switch apps."
+                )
+                .settingsCaption()
+                if !presentation.active {
+                    Label(
+                        "Turn the Focus Dim extension on to use it and change these settings.",
+                        systemImage: "info.circle"
+                    )
+                    .settingsCaption()
+                }
+                Toggle("Dim background windows", isOn: $active.notifyingSettingsChange())
+                Text(
+                    "Nothing is closed or moved, only dimmed. The hotkey works whether or not this settings page is open."
                 )
                 .settingsCaption()
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -67,6 +78,11 @@ struct FocusDimSettings: View {
                 }
                 Button("Allow Screen Recording") { presentation.perform("screenRecording") }
                     .disabled(!presentation.active)
+                    .help(
+                        "macOS asks once so Edith can see where windows are. No video is recorded or saved."
+                    )
+                Text("Needed to find your windows. Nothing is recorded or saved.")
+                    .settingsCaption()
             }
             .disabled(!presentation.active)
             .opacity(presentation.active ? 1 : 0.5)

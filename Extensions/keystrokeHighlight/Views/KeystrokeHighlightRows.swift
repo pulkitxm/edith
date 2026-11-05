@@ -23,11 +23,22 @@ struct KeystrokeHighlightRows: View {
     var body: some View {
         Group {
             Section("Control") {
+                Text(
+                    "Shows the keys you press as keycaps on screen, handy for demos and recordings. Passwords typed into secure fields are never shown."
+                )
+                .settingsCaption()
+                if !presentation.active {
+                    Label(
+                        "Turn the Keystroke Highlight extension on to use it and change these settings.",
+                        systemImage: "info.circle"
+                    )
+                    .settingsCaption()
+                }
                 Toggle(
                     "Show keystrokes",
                     isOn: $active.notifyingSettingsChange())
                 Text(
-                    "Pause the overlay without removing the extension. The shortcut keeps working while the extension is enabled."
+                    "Turn this off to pause the overlay without disabling the extension. The shortcut flips it from any app."
                 )
                 .settingsCaption()
                 LabeledContent {
@@ -89,12 +100,20 @@ struct KeystrokeHighlightRows: View {
             Section("Status") {
                 if !active {
                     LabeledContent("Keyboard monitor", value: "Paused")
+                    Text(
+                        "Turn on Show keystrokes to start. Edith is not reading key presses while paused."
+                    )
+                    .settingsCaption()
                 } else if runtimeError.isEmpty {
                     LabeledContent(
                         "Keyboard monitor", value: runtimeActive ? "Active" : "Starting")
                 } else {
                     Label(runtimeError, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                    Text(
+                        "macOS needs your permission before Edith can see key presses. Choose Allow Input Monitoring, then switch Edith on in System Settings."
+                    )
+                    .settingsCaption()
                     Button("Allow Input Monitoring") {
                         presentation.perform("inputMonitoring")
                     }.disabled(!presentation.active)

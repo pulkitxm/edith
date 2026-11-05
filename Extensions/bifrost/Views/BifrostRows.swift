@@ -19,7 +19,18 @@ struct BifrostRows: View {
     var body: some View {
         Group {
             Section {
-                Button("Open Launcher") {
+                Text(
+                    "Press the shortcut anywhere to open a search bar. Type an app name to launch it, a sum like 12 * 8 to calculate, or a word to find files and clipboard items. Nothing happens until you pick a result."
+                )
+                .settingsCaption()
+                if !bifrostEnabled {
+                    Label(
+                        "Turn the Launcher extension on to use it and change these settings.",
+                        systemImage: "info.circle"
+                    )
+                    .settingsCaption()
+                }
+                Button("Try the launcher now") {
                     BifrostUIContext.perform("open")
                 }
                 LabeledContent {
@@ -108,7 +119,7 @@ struct BifrostRows: View {
                     Button("Rebuild index") {
                         BifrostUIContext.perform("reindex")
                     }
-                    Button("Clear frequently opened", role: .destructive) {
+                    Button("Forget frequently opened apps", role: .destructive) {
                         BifrostUIContext.perform("clear")
                         index = BifrostUIContext.loadIndex()
                     }
@@ -116,19 +127,16 @@ struct BifrostRows: View {
                     Text("Index")
                 } footer: {
                     Text(
-                        "The launcher indexes the application folders on this Mac. Rebuild it after installing something it has not noticed."
+                        "The launcher indexes the application folders on this Mac. Rebuild it after installing something it has not noticed. Forgetting frequently opened apps only resets the ranking; no apps or files are removed."
                     )
                     .font(.system(size: UIScale.pt(10)))
                 }
             }
         }
         .onAppear { index = BifrostUIContext.loadIndex() }
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                await BifrostUIContext.current?.load()
-                index = BifrostUIContext.loadIndex()
-            }
+        .pageRefresh(interval: { .seconds(4) }) {
+            await BifrostUIContext.current?.load()
+            index = BifrostUIContext.loadIndex()
         }
         .onReceive(NotificationCenter.default.publisher(for: BifrostIPC.Name.bifrostIndexChanged)) {
             _ in

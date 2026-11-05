@@ -19,9 +19,21 @@ struct ColorPickerRows: View {
     var body: some View {
         Group {
             Section {
-                Button("Pick now") {
+                Text(
+                    "Pick any color on your screen with a magnifier, then paste it as hex, RGB, HSL or code. Press the hotkey from any app, or start here."
+                )
+                .settingsCaption()
+                if !presentation.active {
+                    Label(
+                        "Turn the Color Picker extension on to pick colors and change these settings.",
+                        systemImage: "info.circle"
+                    )
+                    .settingsCaption()
+                }
+                Button("Pick a color now") {
                     presentation.perform("pick")
                 }
+                .help("Opens the magnifier. Click any pixel to copy its color.")
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
                 } label: {
@@ -67,7 +79,7 @@ struct ColorPickerRows: View {
                 Section {
                     if history.isEmpty {
                         Label(
-                            "No colors picked yet. Choose Pick now to start.",
+                            "No colors yet. Choose Pick a color now, click anything on screen, and it is saved here. Click a swatch to copy it.",
                             systemImage: "eyedropper"
                         )
                         .settingsCaption()
