@@ -318,9 +318,9 @@ final class CompanionChatModel {
                 return detail.isEmpty
                     ? "No reasoning provider is configured; set one in Settings." : detail
             case let .badResponse(status, detail):
-                return detail.isEmpty ? "The companion answered HTTP \(status)." : detail
+                return detail.isEmpty ? "Memory answered with an error (HTTP \(status))." : detail
             case .unreachable:
-                return "The companion is not reachable right now."
+                return "Memory is not reachable right now. Open Backend to check on it."
             }
         }
         return error.localizedDescription
@@ -396,28 +396,14 @@ struct CompanionChatScreen: View {
     }
 
     private var rail: some View {
-        VStack(spacing: UIScale.pt(6)) {
+        VStack(spacing: UIScale.pt(8)) {
             Button {
                 model.newChat()
             } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "plus")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    Text("New chat")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
-                }
-                .foregroundStyle(
-                    model.streaming ? DashSkin.inkFaint(dark) : DashSkin.accent(dark)
-                )
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, UIScale.pt(7))
-                .overlay {
-                    RoundedRectangle(cornerRadius: UIScale.pt(9))
-                        .strokeBorder(DashSkin.line(dark), style: StrokeStyle(dash: [4, 3]))
-                }
-                .contentShape(Rectangle())
+                Label("New chat", systemImage: "plus")
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edith(.secondary))
             .disabled(model.streaming || !isActive)
             .modifier(ActiveShortcut(active: isActive, key: "n", modifiers: .command))
             .help("Start a fresh conversation (⌘N)")
@@ -430,19 +416,16 @@ struct CompanionChatScreen: View {
                         retry: { Task { await model.loadConversations() } }
                     ) {
                         if model.conversations.isEmpty {
-                            Text("Nothing yet. The first chat starts the record.")
-                                .font(.system(size: UIScale.pt(11)))
+                            Text("Your chats will show up here.")
+                                .font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
-                                .padding(.horizontal, UIScale.pt(10))
-                                .padding(.top, UIScale.pt(8))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, UIScale.pt(4))
                         } else {
                             ForEach(buckets, id: \.label) { bucket in
-                                Text(bucket.label.uppercased())
-                                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                                    .tracking(UIScale.pt(0.8))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                                    .padding(.horizontal, UIScale.pt(10))
-                                    .padding(.top, UIScale.pt(10))
+                                PageCapsLabel(bucket.label)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.top, UIScale.pt(12))
                                 ForEach(bucket.items) { conversation in
                                     ConversationRow(
                                         conversation: conversation,
@@ -458,8 +441,10 @@ struct CompanionChatScreen: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, UIScale.pt(10))
-        .frame(width: UIScale.pt(230))
+        .padding(.top, UIScale.pt(16))
+        .padding(.leading, PageMetrics.gutter(compact))
+        .padding(.trailing, UIScale.pt(12))
+        .frame(width: UIScale.pt(248))
     }
 
     private var thread: some View {
@@ -511,7 +496,7 @@ struct CompanionChatScreen: View {
                 .frame(maxWidth: columnWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.horizontal, PageMetrics.gutter(compact))
-                .padding(.top, UIScale.pt(10))
+                .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                 .padding(.bottom, UIScale.pt(16))
             }
             .defaultScrollAnchor(.bottom)
@@ -587,6 +572,12 @@ struct CompanionChatScreen: View {
     }
 
     private var emptyMemory: some View {
+        CompanionFittingEmptyState {
+            emptyMemoryState
+        }
+    }
+
+    private var emptyMemoryState: some View {
         PageEmptyState(
             symbolName: "tray.and.arrow.down", title: "Your memory is empty",
             message:
@@ -613,34 +604,25 @@ struct CompanionChatScreen: View {
             Text("What do you want to remember?")
                 .font(DashSkin.heading(24, weight: .semibold))
                 .foregroundStyle(DashSkin.ink(dark))
-            Text("It answers from your own notes, days and doings.")
-                .font(.system(size: UIScale.pt(12.5)))
+            Text("Ask anything. Answers come from your own notes and activity.")
+                .font(.edithText(.body))
                 .foregroundStyle(DashSkin.inkFaint(dark))
-            WrapHStack(spacing: UIScale.pt(8), lineSpacing: UIScale.pt(8)) {
+                .multilineTextAlignment(.center)
+            CompanionCenteredChips {
                 ForEach(
                     ["How was my week?", "What am I avoiding?", "What did I write about last?"],
                     id: \.self
                 ) { suggestion in
-                    Button {
+                    PageChip(suggestion) {
                         model.draft = suggestion
                         model.send()
-                    } label: {
-                        Text(suggestion)
-                            .font(.system(size: UIScale.pt(11.5)))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
-                            .padding(.horizontal, UIScale.pt(11))
-                            .padding(.vertical, UIScale.pt(5))
-                            .overlay {
-                                Capsule().strokeBorder(DashSkin.line(dark))
-                            }
-                            .contentShape(Capsule())
                     }
-                    .buttonStyle(.edith(.borderless))
                 }
             }
-            .frame(maxWidth: UIScale.pt(500))
+            .frame(maxWidth: UIScale.pt(560))
             Spacer()
         }
+        .padding(.horizontal, PageMetrics.gutter(compact))
         .frame(maxWidth: .infinity)
     }
 
@@ -667,10 +649,7 @@ struct CompanionChatScreen: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         } else {
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                Text(eyebrow(for: message))
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                    .tracking(UIScale.pt(1.1))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(eyebrow(for: message)).pageCapsStyle()
                 MarkdownBody(
                     text: message.content, dark: dark, size: 13, bodyInk: true,
                     cacheKey: message.id)
@@ -692,7 +671,7 @@ struct CompanionChatScreen: View {
 
     private func eyebrow(for message: CompanionChatModel.DisplayMessage) -> String {
         let model = (message.model ?? self.model.model).map { " · \($0)" } ?? ""
-        return "COMPANION\(model)".uppercased()
+        return "Memory\(model)"
     }
 
     private func citationChips(_ citations: [CompanionAskCitation]) -> some View {
@@ -744,46 +723,28 @@ struct CompanionChatScreen: View {
                 }
             }
             Spacer(minLength: 0)
-            CompanionLinkButton(
-                title: model.councilRunning ? "Asking three lenses…" : "Second opinion",
-                disabled: model.councilRunning || model.streaming
-                    || model.councilSubject == nil,
-                help: model.councilRunning
-                    ? "Analyst, coach and skeptic are answering; this takes a minute"
-                    : "Ask analyst, coach and skeptic at once about the typed or last question"
-            ) {
-                Task { await model.askCouncil() }
+            if model.councilRunning || model.councilSubject != nil {
+                CompanionLinkButton(
+                    title: model.councilRunning ? "Asking three lenses…" : "Second opinion",
+                    disabled: model.councilRunning || model.streaming,
+                    help: model.councilRunning
+                        ? "Analyst, coach and skeptic are answering; this takes a minute"
+                        : "Ask analyst, coach and skeptic at once about the typed or last question"
+                ) {
+                    Task { await model.askCouncil() }
+                }
             }
         }
         .frame(maxWidth: columnWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, PageMetrics.gutter(compact))
-        .padding(.bottom, UIScale.pt(6))
+        .padding(.bottom, UIScale.pt(8))
     }
 
     private func personaChip(id: String?, label: String) -> some View {
-        let selected = model.persona == id
-        return Button {
+        PageChip(label, active: model.persona == id) {
             model.persona = id
-        } label: {
-            Text(label)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
-                .padding(.horizontal, UIScale.pt(9))
-                .padding(.vertical, UIScale.pt(4))
-                .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-                .background {
-                    if selected {
-                        Capsule().fill(DashSkin.paper2(dark))
-                    }
-                }
-                .overlay {
-                    if selected {
-                        Capsule().strokeBorder(DashSkin.lineStrong(dark))
-                    }
-                }
-                .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
     }
 
     @ViewBuilder
@@ -1005,7 +966,7 @@ private struct StreamingCaret: View {
                 }
             }
         }
-        .accessibilityLabel("Companion is responding")
+        .accessibilityLabel("Memory is responding")
     }
 }
 

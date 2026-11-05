@@ -183,7 +183,7 @@ struct CompanionDeskScreen: View {
             PageLoading(
                 state: model.loading.state,
                 message: model.loading.errorMessage
-                    ?? "The companion desk could not be loaded.",
+                    ?? "The desk could not be loaded.",
                 layout: .cards, refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.refresh() } }
             ) {

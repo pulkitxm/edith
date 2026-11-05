@@ -14,6 +14,15 @@ import Testing
         #expect(FleetFirstRun.needsRemoteMachine([snapshot(local: true)]))
     }
 
+    @Test func theBannerReadsNaturallyForOneMachine() {
+        var one = FleetMath.summarize([snapshot(local: true)])
+        #expect(FleetFirstRun.onlineSummary(one) == "1 machine online")
+        one.machinesOnline = 0
+        #expect(FleetFirstRun.onlineSummary(one) == "1 machine, offline")
+        let two = FleetMath.summarize([snapshot(local: true), snapshot(local: false)])
+        #expect(FleetFirstRun.onlineSummary(two) == "2 of 2 machines online")
+    }
+
     @Test func anyRemoteMachineEndsTheFirstRun() {
         #expect(!FleetFirstRun.needsRemoteMachine([snapshot(local: true), snapshot(local: false)]))
     }

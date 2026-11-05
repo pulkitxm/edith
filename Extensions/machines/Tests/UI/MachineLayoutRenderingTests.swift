@@ -12,11 +12,11 @@ import Testing
         }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
-        let directory = URL(
-            fileURLWithPath: ProcessInfo.processInfo.environment["EDITH_MACHINES_LAYOUT_DIR"]
-                ?? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-                .path)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let directory = MachinesCaptureRig.directory
+        if let directory {
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+        }
         let priorScale = UIScale.current
         defer { UIScale.apply(priorScale) }
         let model = MachinesModel.shared
@@ -71,7 +71,7 @@ import Testing
                     }
                     #expect(Double(matchingEdges) / Double(sampledEdges) > 0.95)
                     let name = "fleet-\(Int(width))-\(dark ? "dark" : "light")-\(zoom).png"
-                    try data.write(to: directory.appendingPathComponent(name))
+                    try directory.map { try data.write(to: $0.appendingPathComponent(name)) }
                     window.close()
                 }
             }

@@ -23,6 +23,39 @@ enum CompanionMemoryState: Equatable {
         guard let status else { return .populated }
         return status.episodes == 0 && status.chunks == 0 ? .empty : .populated
     }
+
+    static func summary(status: CompanionStatus?) -> String? {
+        guard let status, resolve(status: status) == .populated else { return nil }
+        var parts = [status.episodes == 1 ? "1 item saved" : "\(status.episodes) items saved"]
+        if status.observations > 0 {
+            parts.append(
+                status.observations == 1 ? "1 observation" : "\(status.observations) observations")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+struct CompanionFittingEmptyState<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            content()
+            ScrollView { content() }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+struct CompanionCenteredChips<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) { content() }
+            VStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) { content() }
+        }
+    }
 }
 
 struct CompanionBackendGateView: View {
@@ -32,6 +65,11 @@ struct CompanionBackendGateView: View {
     let retry: () -> Void
 
     var body: some View {
+        CompanionFittingEmptyState { state }
+    }
+
+    @ViewBuilder
+    private var state: some View {
         switch gate {
         case .proceed:
             EmptyView()
@@ -39,27 +77,29 @@ struct CompanionBackendGateView: View {
             PageEmptyState(
                 symbolName: "brain.head.profile", title: "Memory is not set up yet",
                 message:
-                    "Memory remembers your notes, voice memos and files, and answers questions from them. It needs a small background service on a machine you choose.",
+                    "Memory keeps your notes, voice memos and files, and answers questions from them. It runs as a small set of containers on a machine you choose and needs about 12 GB of disk.",
                 steps: [
                     PageGuideStep(
                         symbolName: "server.rack", title: "Pick a machine",
                         detail: "This Mac or any machine you have added."),
                     PageGuideStep(
                         symbolName: "shippingbox", title: "Install the service",
-                        detail: "Edith installs and starts it for you."),
+                        detail: "Edith sets it up and starts it for you."),
                     PageGuideStep(
                         symbolName: "tray.and.arrow.down", title: "Add your first note",
                         detail: "Drop in a file or record a voice memo."),
                 ],
                 primary: PageAction("Set up Memory", symbolName: "wand.and.stars", perform: setUp),
-                secondary: PageAction("Use an existing backend", perform: openBackend),
-                footnote: "Your memory stays on the machine you choose. You can remove it at any time.")
+                secondary: PageAction("Open Backend", perform: openBackend),
+                footnote:
+                    "Your memory stays on the machine you choose. You can remove it at any time.")
         case .notRunning:
             PageEmptyState(
                 symbolName: "bolt.horizontal.circle", title: "Memory is not running",
                 message:
                     "Edith cannot reach the memory service. Your saved notes are safe. Open Backend to start it again or see what went wrong.",
-                primary: PageAction("Open Backend", symbolName: "server.rack", perform: openBackend),
+                primary: PageAction(
+                    "Open Backend", symbolName: "server.rack", perform: openBackend),
                 secondary: PageAction("Try again", symbolName: "arrow.clockwise", perform: retry))
         }
     }

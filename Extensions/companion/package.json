@@ -24,7 +24,7 @@
   "notchTabs": [],
   "guide": {
     "tagline": "A private memory of your notes and voice memos that you can ask questions.",
-    "summary": "Memory keeps your notes, recordings and files in a searchable store that runs on a machine you choose. Ask it questions and it answers from what you saved, with sources. Setup takes a few minutes and installs a small background service.",
+    "summary": "Memory keeps your notes, recordings and files in a searchable store that runs on a machine you choose. Ask it questions and it answers from what you saved, with sources. Setup takes a few minutes and runs a small set of containers on that machine.",
     "steps": [
       {
         "symbolName": "server.rack",

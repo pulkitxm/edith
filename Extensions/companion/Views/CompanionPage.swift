@@ -147,13 +147,9 @@ struct CompanionPage: View {
                 if workspace.transport.remoteBridge != nil { await backend.refreshSnapshot() }
                 hasDeployment =
                     (workspace.transport.remoteBridge != nil
-                    ? backend.deployment : CompanionDeploymentStore.load()) != nil
+                        ? backend.deployment : CompanionDeploymentStore.load()) != nil
                 checkedSetup = true
-                if !hasDeployment, !home.reachable, !setupDeclined {
-                    openSetup()
-                } else if !home.reachable {
-                    select(.setup)
-                }
+                if !hasDeployment, !home.reachable, !setupDeclined { openSetup() }
             }
         }
     }
@@ -211,7 +207,7 @@ struct CompanionPage: View {
                             Circle()
                                 .fill(healthTint)
                                 .frame(width: UIScale.pt(8), height: UIScale.pt(8))
-                            Text(home.state.label)
+                            Text(home.hasAttemptedRefresh ? home.state.label : "checking…")
                                 .font(.system(size: UIScale.pt(11.5)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
@@ -222,13 +218,11 @@ struct CompanionPage: View {
                 }
             },
             accessory: {
-                if let status = home.status {
-                    Text(
-                        "\(status.episodes) episodes, \(status.chunks) chunks indexed, "
-                            + "\(status.observations) observations"
-                    )
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                if let summary = CompanionMemoryState.summary(status: home.status) {
+                    Text(summary)
+                        .font(.edithText(.callout).monospacedDigit())
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
                 }
             }
         )
@@ -245,7 +239,7 @@ struct CompanionPage: View {
 
     private var healthHelp: String {
         guard home.reachable else {
-            return "The companion backend is not reachable. Open Backend to choose where it runs."
+            return "Memory is not reachable. Open Backend to choose where it runs."
         }
         let failing = home.failing
         guard !failing.isEmpty else {
@@ -257,7 +251,7 @@ struct CompanionPage: View {
 
     private var tabBar: some View {
         PageTabPicker(
-            title: "Companion section",
+            title: "Memory section",
             selection: Binding(get: { tab }, set: select),
             options: CompanionTab.allCases, label: { $0.title }
         )
@@ -327,7 +321,13 @@ struct CompanionPage: View {
                     select(.library)
                     Task { await library.select(id) }
                 },
-                openLibrary: { select(.library) },
+                openLibrary: {
+                    select(.library)
+                    Task {
+                        await Task.yield()
+                        await CompanionFilePicker.ingest(into: library, home: home)
+                    }
+                },
                 openCapture: { select(.capture) })
         case .capture:
             CompanionCaptureScreen(model: capture, home: home, isActive: tab == .capture)

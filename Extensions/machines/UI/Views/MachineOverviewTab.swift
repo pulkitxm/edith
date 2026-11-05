@@ -87,6 +87,13 @@ struct Sparkline: View {
     var body: some View {
         let samples = SparkSamples(values: values)
         ZStack {
+            if values.count < 2 {
+                SparkBaseline()
+                    .stroke(
+                        color.opacity(0.35),
+                        style: StrokeStyle(
+                            lineWidth: UIScale.pt(1), dash: [UIScale.pt(3), UIScale.pt(4)]))
+            }
             SparkShape(samples: samples, maximum: maximum, capacity: capacity, filled: true)
                 .fill(
                     LinearGradient(
@@ -96,6 +103,28 @@ struct Sparkline: View {
                 .stroke(color, style: StrokeStyle(lineWidth: UIScale.pt(1.6), lineJoin: .round))
         }
         .animation(.linear(duration: cadence), value: values)
+    }
+}
+
+enum MachineConnectionPrompt: Equatable {
+    case connect
+    case retry
+
+    static func resolve(_ state: MachineConnectionState) -> MachineConnectionPrompt? {
+        switch state {
+        case .disconnected: return .connect
+        case let .failed(_, recoverable): return recoverable ? .retry : .connect
+        case .connected, .connecting, .reconnecting: return nil
+        }
+    }
+}
+
+struct SparkBaseline: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY - 0.5))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - 0.5))
+        return path
     }
 }
 
@@ -131,10 +160,7 @@ struct MetricCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title.uppercased())
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                    .tracking(UIScale.pt(0.7))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                PageCapsLabel(title)
                 Spacer()
                 Text(value)
                     .font(DashSkin.heading(21))
@@ -150,13 +176,16 @@ struct MetricCard: View {
                 .frame(height: UIScale.pt(46))
             if !footnote.isEmpty {
                 Text(footnote)
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption).monospacedDigit())
                     .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
             }
         }
-        .padding(UIScale.pt(14))
+        .padding(UIScale.pt(PageMetrics.cardPadding))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .widgetBar(cornerRadius: 14, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+        .widgetBar(
+            cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark))
     }
 }
 
@@ -389,6 +418,7 @@ struct MetricsGridLayout: Layout {
 struct MachineOverviewTab: View {
     let session: MachineSession
     let model: MachinesModel
+    var editConnection: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
@@ -396,16 +426,18 @@ struct MachineOverviewTab: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                if session.sample == nil, !session.state.isConnected {
-                    connectionNotice
-                }
-                if session.sample == nil {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                if session.sample == nil,
+                    let prompt = MachineConnectionPrompt.resolve(session.state)
+                {
+                    connectionPrompt(prompt)
+                } else if session.sample == nil {
                     MachineOverviewSkeleton(dark: dark)
                 } else {
                     loaded
                 }
             }
+            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
             .pageContent(compact)
         }
         .machineActivity(session, kind: .internetSpeed)
@@ -430,30 +462,33 @@ struct MachineOverviewTab: View {
         }
     }
 
-    private var connectionNotice: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            if session.state.isBusy {
-                SkeletonGroup {
-                    HStack(spacing: UIScale.pt(10)) {
-                        SkeletonBlock(width: 13, height: 13, corner: 6.5)
-                        SkeletonBlock(width: 226, height: 10, corner: 2)
-                    }
-                }
-                .accessibilityLabel(MachineStatusStyle.detail(session.state))
-            } else {
-                Image(systemName: "bolt.horizontal.circle")
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                Text(MachineStatusStyle.detail(session.state))
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
+    private func connectionPrompt(_ prompt: MachineConnectionPrompt) -> some View {
+        let name = session.machine.name
+        let action: PageAction
+        switch prompt {
+        case .connect:
+            action = PageAction("Connect") {
+                model.performConnection(.connect, for: session)
             }
-            Spacer(minLength: 0)
-            if case .disconnected = session.state {
-                Button("Connect") { model.performConnection(.connect, for: session) }
-            }
+        case .retry:
+            action = PageAction("Try again", symbolName: "arrow.clockwise") { session.retry() }
         }
-        .padding(UIScale.pt(14))
-        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark))
+        return PageEmptyState(
+            symbolName: prompt == .retry
+                ? "exclamationmark.triangle" : "bolt.horizontal.circle",
+            title: prompt == .retry ? "Edith could not reach \(name)" : "\(name) is not connected",
+            message: prompt == .retry
+                ? MachineStatusStyle.detail(session.state)
+                : "Connect to see its CPU, memory and disk, open a terminal and browse its files.",
+            primary: action,
+            secondary: editConnection.map { PageAction("Edit connection", perform: $0) },
+            footnote: prompt == .retry ? "Check that the machine is on and on your network." : nil,
+            tint: prompt == .retry ? DashSkin.warn : nil
+        )
+        .frame(minHeight: UIScale.pt(360))
+        .widgetBar(
+            cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark))
     }
 
     private var identityCard: some View {
@@ -462,19 +497,22 @@ struct MachineOverviewTab: View {
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(uptimeText)
-                .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .foregroundStyle(DashSkin.ink(dark))
-            Spacer(minLength: 0)
+                .lineLimit(1)
+            Spacer(minLength: UIScale.pt(8))
             if let hello = session.hello {
                 Text("\(hello.os)  ·  \(hello.arch)")
-                    .font(DashSkin.mono(10.5))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, UIScale.pt(14))
-        .padding(.vertical, UIScale.pt(10))
-        .widgetBar(cornerRadius: 12, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
+        .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
+        .padding(.vertical, UIScale.pt(12))
+        .widgetBar(
+            cornerRadius: PageMetrics.cardCornerRadius, fill: DashSkin.paper2(dark),
+            stroke: DashSkin.line(dark))
     }
 
     private var uptimeText: String {

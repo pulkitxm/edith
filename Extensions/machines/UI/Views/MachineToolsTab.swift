@@ -45,6 +45,7 @@ struct MachineToolsTab: View {
                 snippetsCard
                 servicesCard
             }
+            .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
             .pageContent(compact)
         }
         .pageTask(id: session.remotePlatform, active: connectionsEnabled) {

@@ -98,7 +98,7 @@ final class CompanionSettingsModel {
             connectors = try await operations.updateConnectors(update)
             githubToken = ""
             notionToken = ""
-            connectorStatus = "Saved on the companion."
+            connectorStatus = "Saved to Memory."
             connectorStatusIsError = false
         } catch {
             connectorStatus = error.localizedDescription
@@ -360,7 +360,7 @@ struct CompanionSettingsScreen: View {
             PageLoading(
                 state: model.loading.state,
                 message: model.loading.errorMessage
-                    ?? "Companion settings could not be loaded.",
+                    ?? "Settings could not be loaded.",
                 layout: .cards, refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.load() } }
             ) {
@@ -395,7 +395,7 @@ struct CompanionSettingsScreen: View {
 
     @ViewBuilder
     private func unreachableCard(_ error: String) -> some View {
-        PageCard(title: "Settings", note: "companion unreachable") {
+        PageCard(title: "Settings", note: "Memory is unreachable") {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 Text(error)
                     .font(.system(size: UIScale.pt(12)))
@@ -443,7 +443,7 @@ struct CompanionSettingsScreen: View {
                         label: "API key", placeholder: keyPlaceholder, text: $model.apiKey,
                         onSubmit: { Task { await model.save() } })
                     Text(
-                        "Stored on the companion and hot-swapped into the running service. "
+                        "Stored with Memory and applied to the running service. "
                             + "Never written to this Mac's defaults or the iCloud settings backup."
                     )
                     .font(.system(size: UIScale.pt(10.5)))
@@ -490,7 +490,7 @@ struct CompanionSettingsScreen: View {
                 SkeletonGroup {
                     CompanionHealthRowsSkeleton()
                 }
-                .accessibilityLabel("Loading companion health")
+                .accessibilityLabel("Loading Memory health")
             } else if home.checks.isEmpty {
                 Text(home.error ?? "No health checks were returned.")
                     .font(.system(size: UIScale.pt(12)))
@@ -595,7 +595,7 @@ struct CompanionSettingsScreen: View {
                         }
                     }
                     Text(
-                        "Tokens are stored on the companion, never on this Mac, and take "
+                        "Tokens are stored with Memory, never on this Mac, and take "
                             + "effect without a restart. Calendar, music and YouTube have no "
                             + "live API worth using, so they come from an export you re-import."
                     )
@@ -614,7 +614,7 @@ struct CompanionSettingsScreen: View {
     private var connectionCard: some View {
         PageCard(title: "Connection") {
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                CompanionFieldLabel(text: "Companion endpoint")
+                CompanionFieldLabel(text: "Memory endpoint")
                 EdithTextField(
                     placeholder: CompanionClient.defaultEndpointString, text: $endpointDraft,
                     invalid: !endpointDraftIsValid,
@@ -630,7 +630,7 @@ struct CompanionSettingsScreen: View {
                 } else {
                     Text(
                         endpointDraft == endpoint
-                            ? "Where this Mac reaches the companion. A change applies when "
+                            ? "Where this Mac reaches Memory. A change applies when "
                                 + "you press Return or leave the field."
                             : "Applies to \(endpointDraft) on Return, or when you leave the field."
                     )
@@ -783,7 +783,7 @@ struct CompanionSettingsScreen: View {
             }
         case .wipe:
             CompanionConfirmSheet(
-                title: "Wipe the companion?",
+                title: "Wipe Memory?",
                 message:
                     "Every episode, observation, belief and conversation is deleted, along "
                     + "with the files behind them. The stack keeps running and its settings "
@@ -818,7 +818,7 @@ struct CompanionSettingsScreen: View {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.prompt = "Export here"
-        panel.message = "Choose the folder the companion bundle is written into"
+        panel.message = "Choose the folder the Memory bundle is written into"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await model.exportData(into: url) }
     }

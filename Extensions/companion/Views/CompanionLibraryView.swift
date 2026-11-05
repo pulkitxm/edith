@@ -342,6 +342,20 @@ final class AudioPlayback {
     }
 }
 
+@MainActor
+enum CompanionFilePicker {
+    static func ingest(into model: CompanionLibraryModel, home: CompanionHomeModel) async {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.message = "Pick Markdown notes, voice recordings, PDFs, or folders of them"
+        guard panel.runModal() == .OK else { return }
+        await model.ingest(urls: panel.urls)
+        await home.refresh()
+    }
+}
+
 struct CompanionLibraryScreen: View {
     @Bindable var model: CompanionLibraryModel
     let home: CompanionHomeModel
@@ -357,7 +371,7 @@ struct CompanionLibraryScreen: View {
 
     var body: some View {
         PageWorkspace {
-            stats
+            if !isFirstRun { stats.padding(.bottom, UIScale.pt(12)) }
         } content: {
             if compact {
                 if model.selectedId != nil {
@@ -379,6 +393,7 @@ struct CompanionLibraryScreen: View {
                     .foregroundStyle(DashSkin.warn)
             }
         }
+        .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .pageTask(
@@ -393,15 +408,21 @@ struct CompanionLibraryScreen: View {
         }
     }
 
+    private var isFirstRun: Bool {
+        CompanionMemoryState.resolve(status: home.status) == .empty && model.episodes.isEmpty
+            && !model.ingesting && model.ingestSummary == nil
+            && model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var stats: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            statTile(value: "\(home.status?.episodes ?? 0)", label: "episodes")
-            statTile(value: "\(home.status?.chunks ?? 0)", label: "chunks")
+        HStack(spacing: UIScale.pt(12)) {
+            statTile(value: home.status.map { "\($0.episodes)" }, label: "Saved")
+            statTile(value: home.status.map { "\($0.chunks)" }, label: "Passages")
             pendingTile
             VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
                 CompanionButton(
                     title: "Add to memory…", role: .primary, busy: model.ingesting,
-                    busyTitle: "Ingesting…",
+                    busyTitle: "Adding…",
                     help:
                         "Pick Markdown notes, voice recordings, or PDFs; "
                         + "dropping files anywhere works too"
@@ -410,7 +431,7 @@ struct CompanionLibraryScreen: View {
                 }
                 if let summary = model.ingestSummary {
                     Text(summary)
-                        .font(.system(size: UIScale.pt(10)))
+                        .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .lineLimit(1)
                 }
@@ -418,19 +439,13 @@ struct CompanionLibraryScreen: View {
         }
     }
 
-    private func statTile(value: String, label: String) -> some View {
+    private func statTile(value: String?, label: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text(value)
-                .font(DashSkin.heading(17, weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-                .lineLimit(1)
-            Text(label.uppercased())
-                .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                .tracking(0.6)
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            statValue(value, color: DashSkin.ink(dark))
+            PageCapsLabel(label)
         }
         .padding(.horizontal, UIScale.pt(12))
-        .padding(.vertical, UIScale.pt(7))
+        .padding(.vertical, UIScale.pt(8))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .overlay {
@@ -438,17 +453,30 @@ struct CompanionLibraryScreen: View {
         }
     }
 
+    @ViewBuilder
+    private func statValue(_ value: String?, color: Color) -> some View {
+        if let value {
+            Text(value)
+                .font(DashSkin.heading(17, weight: .semibold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .monospacedDigit()
+        } else {
+            SkeletonGroup {
+                SkeletonBlock(width: 28, height: 20, corner: 4)
+            }
+            .accessibilityLabel("Loading")
+        }
+    }
+
     private var pendingTile: some View {
         let pending = home.status?.pendingEpisodes ?? 0
         return VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-            Text("\(pending)")
-                .font(DashSkin.heading(17, weight: .semibold))
-                .foregroundStyle(pending > 0 ? DashSkin.warn : DashSkin.ink(dark))
-            HStack(spacing: UIScale.pt(5)) {
-                Text("PENDING")
-                    .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                    .tracking(0.6)
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+            statValue(
+                home.status.map { "\($0.pendingEpisodes)" },
+                color: pending > 0 ? DashSkin.warn : DashSkin.ink(dark))
+            HStack(spacing: UIScale.pt(4)) {
+                PageCapsLabel("Waiting")
                 if pending > 0 {
                     if model.indexing {
                         SkeletonGroup {
@@ -457,8 +485,8 @@ struct CompanionLibraryScreen: View {
                         .accessibilityLabel("Indexing pending episodes")
                     } else {
                         CompanionLinkButton(
-                            title: "index now",
-                            help: "Embed the pending episodes now"
+                            title: "Index now",
+                            help: "Make the waiting items searchable now"
                         ) {
                             Task { await model.indexNow() }
                         }
@@ -467,7 +495,7 @@ struct CompanionLibraryScreen: View {
             }
         }
         .padding(.horizontal, UIScale.pt(12))
-        .padding(.vertical, UIScale.pt(7))
+        .padding(.vertical, UIScale.pt(8))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
         .overlay {
@@ -477,24 +505,16 @@ struct CompanionLibraryScreen: View {
     }
 
     private func pickAndIngest() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-        panel.message = "Pick Markdown notes, voice recordings, PDFs, or folders of them"
-        guard panel.runModal() == .OK else { return }
-        let urls = panel.urls
-        Task {
-            await model.ingest(urls: urls)
-            await home.refresh()
-        }
+        Task { await CompanionFilePicker.ingest(into: model, home: home) }
     }
 
     private var listColumn: some View {
-        VStack(spacing: UIScale.pt(6)) {
-            SearchField(placeholder: "Search your memory", text: $model.query)
+        VStack(spacing: UIScale.pt(12)) {
+            if !isFirstRun {
+                SearchField(placeholder: "Search your memory", text: $model.query)
+            }
             ScrollView {
-                VStack(spacing: UIScale.pt(6)) {
+                VStack(spacing: UIScale.pt(8)) {
                     if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         PageLoading(
                             state: model.searchLoad.state,
@@ -508,8 +528,10 @@ struct CompanionLibraryScreen: View {
                                 )
                                 .font(.edithText(.callout)).foregroundStyle(.secondary)
                             }
-                            ForEach(model.hits, id: \.chunkId) { hit in
-                                hitRow(hit)
+                            VStack(spacing: UIScale.pt(8)) {
+                                ForEach(model.hits, id: \.chunkId) { hit in
+                                    hitRow(hit)
+                                }
                             }
                         }
                     } else {
@@ -519,8 +541,10 @@ struct CompanionLibraryScreen: View {
                             layout: .list, refreshing: model.loading.isRefreshing,
                             retry: { Task { await model.refresh() } }
                         ) {
-                            ForEach(model.episodes, id: \.id) { episode in
-                                episodeRow(episode)
+                            VStack(spacing: UIScale.pt(8)) {
+                                ForEach(model.episodes, id: \.id) { episode in
+                                    episodeRow(episode)
+                                }
                             }
                             if model.episodes.isEmpty {
                                 PageEmptyState(
@@ -530,8 +554,11 @@ struct CompanionLibraryScreen: View {
                                     primary: PageAction(
                                         "Add to memory", symbolName: "plus",
                                         perform: pickAndIngest),
-                                    footnote: "Files are copied into your memory. The originals stay where they are.")
+                                    footnote:
+                                        "Files are copied into your memory. The originals stay where they are."
+                                )
                                 .frame(minHeight: UIScale.pt(300))
+                                .containerRelativeFrame(.vertical, alignment: .center)
                             }
                         }
                     }
@@ -548,17 +575,17 @@ struct CompanionLibraryScreen: View {
             HStack(spacing: UIScale.pt(9)) {
                 kindChip(episode.kind)
                 Text(episode.title)
-                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .font(.edithText(.body).weight(.medium))
                     .foregroundStyle(DashSkin.ink(dark))
                     .lineLimit(1)
-                Spacer(minLength: 0)
+                Spacer(minLength: UIScale.pt(8))
                 Text(String(episode.occurredAt.prefix(10)))
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.caption))
                     .monospacedDigit()
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
-            .padding(.horizontal, UIScale.pt(11))
-            .padding(.vertical, UIScale.pt(7))
+            .padding(.horizontal, UIScale.pt(12))
+            .padding(.vertical, UIScale.pt(8))
             .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             .overlay {
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
@@ -579,12 +606,12 @@ struct CompanionLibraryScreen: View {
                 HStack(spacing: UIScale.pt(8)) {
                     kindChip(hit.kind)
                     Text(hit.title)
-                        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                        .font(.edithText(.body).weight(.medium))
                         .foregroundStyle(DashSkin.ink(dark))
                         .lineLimit(1)
-                    Spacer(minLength: 0)
+                    Spacer(minLength: UIScale.pt(8))
                     Text(String(hit.occurredAt.prefix(10)))
-                        .font(.system(size: UIScale.pt(11)))
+                        .font(.edithText(.caption))
                         .monospacedDigit()
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
@@ -593,8 +620,8 @@ struct CompanionLibraryScreen: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(2)
             }
-            .padding(.horizontal, UIScale.pt(11))
-            .padding(.vertical, UIScale.pt(7))
+            .padding(.horizontal, UIScale.pt(12))
+            .padding(.vertical, UIScale.pt(8))
             .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
             .overlay {
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
@@ -608,10 +635,7 @@ struct CompanionLibraryScreen: View {
     }
 
     private func kindChip(_ kind: String) -> some View {
-        Text(kind.uppercased())
-            .font(.system(size: UIScale.pt(9), weight: .bold))
-            .tracking(0.8)
-            .foregroundStyle(DashSkin.inkFaint(dark))
+        PageCapsLabel(kind)
             .padding(.horizontal, UIScale.pt(6))
             .padding(.vertical, UIScale.pt(2))
             .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(5)))

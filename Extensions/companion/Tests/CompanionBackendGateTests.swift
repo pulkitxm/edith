@@ -46,4 +46,18 @@ import Testing
         #expect(CompanionMemoryState.resolve(status: used) == .populated)
         #expect(CompanionMemoryState.resolve(status: nil) == .populated)
     }
+
+    @Test func theHeaderSummarySkipsEmptyMemoryAndUsesPlainWords() {
+        let status = { (episodes: Int, observations: Int) in
+            CompanionStatus(
+                sources: 1, episodes: episodes, claims: 0, observations: observations,
+                chunks: episodes * 4, pendingEpisodes: 0, latestIngestedAt: nil)
+        }
+        #expect(CompanionMemoryState.summary(status: nil) == nil)
+        #expect(CompanionMemoryState.summary(status: status(0, 0)) == nil)
+        #expect(CompanionMemoryState.summary(status: status(1, 0)) == "1 item saved")
+        #expect(
+            CompanionMemoryState.summary(status: status(12, 40))
+                == "12 items saved, 40 observations")
+    }
 }

@@ -452,7 +452,7 @@ final class CompanionCaptureModel {
         do {
             try await CompanionBackgroundOperation.requestRefresh()
             error = nil
-            outcome = "Saved recordings will be sent in the background when the companion is ready."
+            outcome = "Saved recordings will be sent in the background when Memory is ready."
         } catch {
             self.error = "Recordings are saved. \(error.localizedDescription)"
         }
@@ -560,8 +560,8 @@ struct CompanionCaptureScreen: View {
                 .foregroundStyle(DashSkin.accent(dark))
             Text(
                 model.waiting.count == 1
-                    ? "1 recording is waiting for the companion"
-                    : "\(model.waiting.count) recordings are waiting for the companion"
+                    ? "1 recording is waiting for Memory"
+                    : "\(model.waiting.count) recordings are waiting for Memory"
             )
             .font(.system(size: UIScale.pt(11.5)))
             .foregroundStyle(DashSkin.inkSoft(dark))

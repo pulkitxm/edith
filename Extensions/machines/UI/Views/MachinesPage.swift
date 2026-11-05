@@ -100,14 +100,13 @@ struct MachinesPage: View {
 
     private var header: some View {
         PageHeader(
-            "Machines",
+            "Machines", divider: connectionsEnabled && mode == .fleet,
             trailing: {
                 Button {
                     addSheetPresented = true
                 } label: {
                     Label("Add machine", systemImage: "plus")
                 }
-                .buttonStyle(.edith(.primary))
                 .help("Connect a computer over SSH")
             },
             accessory: { machineStrip })
@@ -206,7 +205,8 @@ struct MachinesPage: View {
                 session: session, model: model,
                 tab: Binding(
                     get: { tab },
-                    set: { storedTab = $0.rawValue }))
+                    set: { storedTab = $0.rawValue }),
+                editConnection: session.isLocal ? nil : { editingMachine = session.machine })
         } else {
             emptyState
         }

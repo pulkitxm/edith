@@ -72,7 +72,7 @@ public enum CompanionHostList {
     public static func emptyStateMessage(_ hosts: [CompanionHost]) -> String {
         let usable = hosts.filter(\.canHostTheStack)
         if !usable.isEmpty {
-            return "The companion isn't running anywhere yet."
+            return "Memory is not running anywhere yet. Pick a machine below."
         }
         let reachable = hosts.filter(\.reachable)
         if reachable.isEmpty {

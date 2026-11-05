@@ -45,7 +45,7 @@ struct CompanionBackendScreen: View {
         ) { _ in }
         .edithSheet(isPresented: $confirmingDestroy) {
             CompanionConfirmSheet(
-                title: "Destroy the companion stack?",
+                title: "Destroy the Memory service?",
                 message:
                     "The containers stop and every volume is deleted: the database, the vault "
                     + "with your original files, and the downloaded models. This cannot be "
@@ -71,10 +71,6 @@ struct CompanionBackendScreen: View {
                 if model.hosts.isEmpty {
                     if model.probing {
                         CompanionHostRowsSkeleton()
-                    } else {
-                        Text("No machines found yet.")
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 } else {
                     ForEach(model.hosts) { host in
@@ -91,7 +87,7 @@ struct CompanionBackendScreen: View {
                         Task { await model.deploy() }
                     }
                     CompanionButton(
-                        title: "Re-check", busy: model.probing, busyTitle: "Probing…"
+                        title: "Check again", busy: model.probing, busyTitle: "Checking…"
                     ) {
                         Task { await model.probeHosts() }
                     }
@@ -223,7 +219,7 @@ struct CompanionBackendScreen: View {
     }
 
     private var configurationCard: some View {
-        PageCard(title: "Configuration", note: "what the stack is given") {
+        PageCard(title: "Configuration", note: "ports and models") {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 HStack(alignment: .top, spacing: UIScale.pt(12)) {
                     portField("API port", value: $model.config.apiPort)
@@ -248,7 +244,7 @@ struct CompanionBackendScreen: View {
                     text: $model.config.reasonURL,
                     onSubmit: { model.saveConfig() })
                 HStack(spacing: UIScale.pt(8)) {
-                    CompanionButton(title: "Save", role: .primary) { model.saveConfig() }
+                    CompanionButton(title: "Save") { model.saveConfig() }
                     CompanionButton(title: "Export…") { exporting = true }
                     CompanionButton(title: "Import…") { importing = true }
                     if let status = model.configStatus {
@@ -258,7 +254,7 @@ struct CompanionBackendScreen: View {
                     Spacer(minLength: 0)
                 }
                 Text("Exports carry ports, models and the host. Secrets never leave the Keychain.")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -272,7 +268,7 @@ struct CompanionBackendScreen: View {
                 secretField("GitHub token", kind: .githubToken, text: $model.secrets.githubToken)
                 secretField("Notion token", kind: .notionToken, text: $model.secrets.notionToken)
                 HStack(spacing: UIScale.pt(8)) {
-                    CompanionButton(title: "Save keys", role: .primary) { model.saveSecrets() }
+                    CompanionButton(title: "Save keys") { model.saveSecrets() }
                     if let status = model.secretsStatus {
                         CompanionStatusLine(text: status, tone: .ok)
                     }
@@ -283,7 +279,8 @@ struct CompanionBackendScreen: View {
                         + "written into the stack's environment when it starts, so they can be "
                         + "set before it exists."
                 )
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.caption))
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
@@ -327,7 +324,7 @@ struct CompanionBackendScreen: View {
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(16))
+            RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius))
                 .strokeBorder(DashSkin.danger.opacity(0.35), lineWidth: UIScale.pt(1))
         }
     }
@@ -348,8 +345,25 @@ struct CompanionBackendScreen: View {
     private func portField(_ label: String, value: Binding<Int>) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
             CompanionFieldLabel(text: label)
-            EdithNumberField(value: value, width: UIScale.pt(84))
+            CompanionPortInput(value: value)
         }
+    }
+}
+
+private struct CompanionPortInput: View {
+    @Binding var value: Int
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("", value: $value, format: .number.grouping(.never))
+            .textFieldStyle(.plain)
+            .font(.edithText(.callout).monospacedDigit())
+            .multilineTextAlignment(.trailing)
+            .labelsHidden()
+            .focused($focused)
+            .focusEffectDisabled()
+            .frame(width: UIScale.pt(84))
+            .edithFieldSurface(focused: focused, compact: true)
     }
 }
 
@@ -378,7 +392,7 @@ private struct CompanionHostRowsSkeleton: View {
                 }
             }
         }
-        .accessibilityLabel("Probing companion hosts")
+        .accessibilityLabel("Checking machines")
     }
 }
 

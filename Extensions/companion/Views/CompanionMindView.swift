@@ -138,7 +138,7 @@ struct CompanionMindScreen: View {
             PageLoading(
                 state: model.loading.state,
                 message: model.loading.errorMessage
-                    ?? "The companion mind could not be loaded.",
+                    ?? "Mind could not be loaded.",
                 layout: .cards, refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.refresh() } }
             ) {
@@ -384,7 +384,7 @@ struct CompanionMindScreen: View {
     private var nightlyCard: some View {
         PageCard(
             title: "Nightly run",
-            note: "02:00 on the companion"
+            note: "02:00 on the Memory machine"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 CompanionButton(
