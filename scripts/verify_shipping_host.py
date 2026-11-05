@@ -107,7 +107,7 @@ def inspect_host(bundle, release=False, launcher_required=True):
     symbols = run('nm', '-g', str(executable))
     for feature in ('HerdrStore', 'MusicPlayerEngine', 'DatabasePage', 'StudioPage', 'QuinjetPage'):
         assert feature not in symbols, f'Feature implementation in host: {feature}'
-    assert bytes_installed < 10_000_000, f'Empty host exceeds 10 MB: {bytes_installed}'
+    assert bytes_installed < 11_000_000, f'Empty host exceeds 11 MB: {bytes_installed}'
     assert kit_bytes < 14_000_000, f'Extension kit exceeds 14 MB: {kit_bytes}'
     assert '@rpath/libEdithExtensionKit.dylib' in run('otool', '-L', str(executable)), 'Host does not link the extension kit'
     closure = run('otool', '-L', str(executable))

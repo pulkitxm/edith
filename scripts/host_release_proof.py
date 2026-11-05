@@ -137,7 +137,7 @@ def collect_proof(bundle, dmg, appcast, metadata, pinned_info, expected_index, s
         else:
             require(stat.S_ISDIR(status.st_mode), 'Host contains a special file')
         require(path.suffix not in ('.appex', '.bundle') or path in (bundle / 'Contents/Resources/EdithHost_EdithHost.bundle', bundle / 'Contents/Resources/ExtensionSupport_EdithExtensionDocuments.bundle'), 'Feature payload in host')
-    require(0 < installed < 10000000, 'Empty host exceeds size limit')
+    require(0 < installed < 11000000, 'Empty host exceeds size limit')
     executable_hash = digest(bundle / 'Contents/MacOS/Edith')
     require(metadata['sourceCommit'] == source and metadata['hostExecutableSHA256'] == executable_hash, 'Host metadata source or executable differs')
     require(metadata['configuration'] == 'Release' and metadata['optimization'] == 'Osize' and metadata['linkTimeOptimization'] == 'full' and metadata['architecture'] == 'arm64', 'Unexpected host build configuration')

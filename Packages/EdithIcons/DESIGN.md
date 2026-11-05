@@ -469,7 +469,7 @@ These live in `tools/icons-controls.mjs`.
 Every icon in the app comes from this package, including control glyphs such as
 chevrons, close, plus, trash, refresh and check. Nothing uses SF Symbols, so draw
 a missing icon here instead of reaching for a system symbol. See
-`skills/edith-icons/SKILL.md` for the rule, its exceptions and the review process.
+`SKILL.md` for the rule, its exceptions and the review process.
 
 `symbol-map.json` maps each SF Symbol name found in the codebase to its Edith
 icon, for the migration codemod. It holds four lists:

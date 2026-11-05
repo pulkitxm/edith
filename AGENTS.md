@@ -65,7 +65,7 @@ Edith draws its own icons, and every icon in the app comes from
 `Packages/EdithIcons`. Never reuse an icon from anywhere: no SF Symbols, icon
 fonts, open source sets, or assets copied or traced from another product. If an
 icon does not exist, draw it for the package, and follow
-[skills/edith-icons/SKILL.md](skills/edith-icons/SKILL.md), which holds the design
+[Packages/EdithIcons/SKILL.md](Packages/EdithIcons/SKILL.md), which holds the design
 system, the review process and the only exceptions. `make ci-icons` enforces this.
 
 ## Development builds
