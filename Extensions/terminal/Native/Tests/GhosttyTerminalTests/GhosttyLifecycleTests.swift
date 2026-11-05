@@ -165,6 +165,28 @@ import Testing
         #expect(ghostty_surface_size(surface).columns > visibleColumns)
     }
 
+    @Test @MainActor func inactiveRendererStaysInTheViewTreeButRefusesInput() async throws {
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
+        let container = NSView(frame: window.contentLayoutRect)
+        let view = GhosttyTerminalView(externalIO: TestWindowHost.inertIO())
+        view.frame = container.bounds
+        window.contentView = container
+        container.addSubview(view)
+        defer { view.shutdown(); window.contentView = nil }
+        _ = try #require(view.surface)
+        let center = NSPoint(x: container.bounds.midX, y: container.bounds.midY)
+
+        view.setRenderingActive(false)
+        #expect(!view.isHidden)
+        #expect(!view.acceptsFirstResponder)
+        #expect(container.hitTest(center) !== view)
+
+        view.setRenderingActive(true)
+        #expect(!view.isHidden)
+        #expect(view.acceptsFirstResponder)
+        #expect(container.hitTest(center) === view)
+    }
+
     @Test @MainActor func exitedRendererRetainsScreenAndRejectsLateOutput() async throws {
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
         for _ in 0..<8 {
