@@ -10,8 +10,8 @@ struct StudioProjectsView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: UIScale.pt(22)) {
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(32)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     PageSectionHeader(
                         "Video projects",
                         subtitle: "Timeline edits with zooms, text and transitions."
@@ -31,71 +31,19 @@ struct StudioProjectsView: View {
                         )
                     } else {
                         LazyVGrid(
-                            columns: PageMetrics.cardColumns(compact, minimum: 220, spacing: 12),
+                            columns: [
+                                GridItem(
+                                    .adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))
+                            ],
                             alignment: .leading, spacing: UIScale.pt(12)
                         ) {
                             ForEach(model.videoProjects) { project in
-                                VStack(alignment: .trailing, spacing: UIScale.pt(6)) {
-                                    Button {
-                                        model.openVideoProject(project.url)
-                                    } label: {
-                                        HStack(spacing: UIScale.pt(10)) {
-                                            Image(systemName: "film.stack")
-                                                .font(.system(size: UIScale.pt(16)))
-                                                .foregroundStyle(StudioPalette.tint(for: .video))
-                                                .frame(
-                                                    width: UIScale.pt(34), height: UIScale.pt(34)
-                                                )
-                                                .background(
-                                                    StudioPalette.tint(for: .video).opacity(0.12),
-                                                    in: RoundedRectangle(
-                                                        cornerRadius: UIScale.pt(8)))
-                                            VStack(alignment: .leading, spacing: 1) {
-                                                Text(project.title)
-                                                    .font(
-                                                        .system(
-                                                            size: UIScale.pt(12.5),
-                                                            weight: .semibold)
-                                                    )
-                                                    .foregroundStyle(DashSkin.ink(scheme == .dark))
-                                                    .lineLimit(1)
-                                                Text(
-                                                    project.isOpenScreenLibrary
-                                                        ? "OpenScreen" : "Studio"
-                                                )
-                                                .font(.system(size: UIScale.pt(10.5)))
-                                                .foregroundStyle(.secondary)
-                                            }
-                                            Spacer(minLength: 0)
-                                        }
-                                        .padding(UIScale.pt(10))
-                                        .background(
-                                            DashSkin.paper2(scheme == .dark),
-                                            in: RoundedRectangle(cornerRadius: UIScale.pt(10))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: UIScale.pt(10))
-                                                .strokeBorder(DashSkin.line(scheme == .dark))
-                                        )
-                                        .edithButtonTarget(.borderless)
-                                    }
-                                    .buttonStyle(.edith(.borderless))
-                                    Button(role: .destructive) {
-                                        model.trashProject(project)
-                                    } label: {
-                                        Label("Move to Trash", systemImage: "trash")
-                                    }
-                                    .buttonStyle(.edith(.toolbar))
-                                    .padding(.trailing, UIScale.pt(8))
-                                    .help(
-                                        "Moves \(project.title) to the Trash. You can restore it from there."
-                                    )
-                                }
+                                StudioProjectCard(model: model, project: project)
                             }
                         }
                     }
                 }
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     PageSectionHeader("Recent results", subtitle: "Files Studio created for you.")
                     if model.recent.isEmpty {
                         StudioEmptyNote(
@@ -143,12 +91,13 @@ struct StudioRecentRow: View {
                     run.outputs.count == 1
                         ? run.outputs[0].lastPathComponent : "\(run.outputs.count) files"
                 )
-                .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 Text("\(run.title) · \(run.date.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Spacer(minLength: UIScale.pt(8))
             Button("Add to Files") { model.add(run.outputs) }
@@ -167,17 +116,86 @@ struct StudioEmptyNote: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: UIScale.pt(10)) {
+        HStack(spacing: UIScale.pt(12)) {
             Image(systemName: symbol)
+                .font(.edithText(.body))
                 .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
             Text(text)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(UIScale.pt(14))
+        .padding(UIScale.pt(16))
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             DashSkin.paper2(scheme == .dark).opacity(0.6),
             in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+    }
+}
+
+struct StudioProjectCard: View {
+    let model: StudioModel
+    let project: VideoProject.Listing
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Button {
+                model.openVideoProject(project.url)
+            } label: {
+                HStack(spacing: UIScale.pt(12)) {
+                    Image(systemName: "film.stack")
+                        .font(.system(size: UIScale.pt(16)))
+                        .foregroundStyle(StudioPalette.tint(for: .video))
+                        .frame(width: UIScale.pt(36), height: UIScale.pt(36))
+                        .background(
+                            StudioPalette.tint(for: .video).opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(project.title)
+                            .font(.edithText(.callout).weight(.semibold))
+                            .foregroundStyle(DashSkin.ink(scheme == .dark))
+                            .lineLimit(1)
+                        Text(subtitle)
+                            .font(.edithText(.caption))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .help("Open \(project.title)")
+            Button(role: .destructive) {
+                model.trashProject(project)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.edith(.iconOnly))
+            .help("Move \(project.title) to the Trash. You can restore it from there.")
+            .accessibilityLabel("Move \(project.title) to Trash")
+        }
+        .padding(.vertical, UIScale.pt(12))
+        .padding(.leading, UIScale.pt(12))
+        .padding(.trailing, UIScale.pt(8))
+        .background(
+            DashSkin.paper2(scheme == .dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(12))
+                .strokeBorder(DashSkin.line(scheme == .dark))
+        )
+        .contextMenu {
+            Button("Open") { model.openVideoProject(project.url) }
+            Divider()
+            Button("Move to Trash", role: .destructive) { model.trashProject(project) }
+        }
+    }
+
+    private var subtitle: String {
+        let edited = "Edited \(project.modified.formatted(date: .abbreviated, time: .omitted))"
+        return project.isOpenScreenLibrary ? "OpenScreen · \(edited)" : edited
     }
 }

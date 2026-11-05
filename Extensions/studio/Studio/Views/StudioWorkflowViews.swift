@@ -73,12 +73,10 @@ struct StudioWorkflowSection: View {
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Text("WORKFLOWS")
-                .font(DashSkin.mono(10, weight: .semibold))
-                .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            PageCapsLabel("Workflows")
             LazyVGrid(
-                columns: PageMetrics.cardColumns(compact, minimum: 240, spacing: 12),
+                columns: [GridItem(.adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))],
                 alignment: .leading, spacing: UIScale.pt(12)
             ) {
                 ForEach(model.workflows) { workflow in
@@ -91,12 +89,16 @@ struct StudioWorkflowSection: View {
                         Image(systemName: "plus")
                             .font(.system(size: UIScale.pt(20), weight: .light))
                         Text("New workflow")
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                            .font(.edithText(.callout).weight(.semibold))
                         Text("Chain tools and reuse them on any files.")
-                            .font(.system(size: UIScale.pt(11)))
+                            .font(.edithText(.caption))
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
+                    .padding(UIScale.pt(14))
+                    .frame(
+                        maxWidth: .infinity, minHeight: UIScale.pt(StudioCardMetrics.toolCardHeight)
+                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: UIScale.pt(12))
                             .strokeBorder(

@@ -34,14 +34,14 @@ struct StudioOptionField: View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             if showsLabel {
                 Text(option.label)
-                    .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                    .font(.edithText(.callout).weight(.semibold))
                     .foregroundStyle(.secondary)
             }
             field
             if let help = option.help {
                 Text(help)
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(.tertiary)
+                    .font(.edithText(.caption))
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -60,7 +60,7 @@ struct StudioOptionField: View {
             Toggle(option.label, isOn: bool)
                 .toggleStyle(.switch)
                 .controlSize(.small)
-                .font(.system(size: UIScale.pt(12)))
+                .font(.edithText(.callout))
         case let .integer(range, unit):
             StudioIntegerField(value: number, range: range, unit: unit)
         case let .number(range, step, unit):

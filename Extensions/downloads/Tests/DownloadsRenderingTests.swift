@@ -34,12 +34,9 @@ extension DownloadsExtensionTests {
                         .frame(width: width, height: height)
                         .transaction { $0.animation = nil })
                 host.frame = NSRect(x: 0, y: 0, width: width, height: height)
-                let window = NSWindow(
-                    contentRect: host.frame, styleMask: [.borderless], backing: .buffered,
-                    defer: false)
+                let window = TestWindowHost.window(contentRect: host.frame)
                 window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
                 window.contentView = host
-                window.orderBack(nil)
                 window.layoutIfNeeded()
                 host.layoutSubtreeIfNeeded()
                 try await Task.sleep(for: .milliseconds(150))
@@ -49,8 +46,8 @@ extension DownloadsExtensionTests {
                 let png = try #require(bitmap.representation(using: .png, properties: [:]))
                 #expect(png.count > 10_000)
                 #expect(model.items.first?.resolvedTitle == "Synthetic video")
+                #expect(TestWindowHost.exposedWindows.isEmpty)
                 window.contentView = nil
-                window.orderOut(nil)
             }
             await model.shutdown()
             await queue.stop()

@@ -258,10 +258,7 @@ struct StudioHome: View {
                     layout {
                         StudioTabBar(model: model)
                             .frame(maxWidth: UIScale.pt(250))
-                        Text(subtitle)
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        PageSubtitle(subtitle)
                     }
                 })
         } content: {

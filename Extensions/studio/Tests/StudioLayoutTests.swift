@@ -37,7 +37,9 @@ struct StudioLayoutTests {
                     host.frame = NSRect(origin: .zero, size: size)
                     host.layoutSubtreeIfNeeded()
                     let minimum = host.fittingSize
-                    #expect(minimum.width <= size.width)
+                    #expect(
+                        minimum.width <= size.width,
+                        "\(tab) at \(size) zoom \(scale) needs \(minimum.width)")
                     let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
                     host.cacheDisplay(in: host.bounds, to: bitmap)
                     #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)

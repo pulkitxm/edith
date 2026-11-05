@@ -60,19 +60,18 @@ struct StudioInputsPanel: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 StudioEngineBanner(model: model, tool: job.tool)
                 if job.tool.needsFiles {
-                    HStack {
-                        Text(heading)
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
-                        Spacer()
-                        Button {
-                            choose()
-                        } label: {
-                            Label("Add files", systemImage: "plus")
+                    PageSectionHeader(heading) {
+                        if !job.inputs.isEmpty {
+                            Button {
+                                choose()
+                            } label: {
+                                Label("Add files", systemImage: "plus")
+                            }
+                            .buttonStyle(.edith(.secondary))
                         }
-                        .buttonStyle(.edith(.secondary))
                     }
                     if job.inputs.isEmpty {
                         StudioInputsDropZone(tool: job.tool, choose: choose)
@@ -99,7 +98,7 @@ struct StudioInputsPanel: View {
                         }
                         if ordered {
                             Text("Files are used in this order. Use the arrows to change it.")
-                                .font(.system(size: UIScale.pt(11)))
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -137,9 +136,13 @@ enum StudioInputText {
     static func accepted(_ tool: StudioTool) -> String {
         let kinds = StudioKind.allCases.filter { tool.inputs.contains($0) }
         if kinds.count >= 6 { return "files" }
-        let names = kinds.map { $0.pluralTitle.lowercased() }
-        let extras = tool.extraExtensions.sorted().map { $0.uppercased() }
-        return (names + extras).joined(separator: ", ")
+        let names = kinds.map { kind in
+            kind == .pdf ? kind.pluralTitle : kind.pluralTitle.lowercased()
+        }
+        let extras = tool.extraExtensions.sorted().map { "\($0.uppercased()) files" }
+        let all = names + extras
+        guard let last = all.last else { return "files" }
+        return all.count == 1 ? last : all.dropLast().joined(separator: ", ") + " or " + last
     }
 }
 
@@ -149,22 +152,28 @@ struct StudioInputsDropZone: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(spacing: UIScale.pt(10)) {
-            Image(systemName: tool.symbolName)
-                .font(.system(size: UIScale.pt(30), weight: .light))
-                .foregroundStyle(StudioPalette.tint(for: tool))
+        VStack(spacing: UIScale.pt(12)) {
+            StudioToolIcon(tool: tool, size: 48)
             Text("Drop \(StudioInputText.accepted(tool)) here")
-                .font(.system(size: UIScale.pt(14), weight: .semibold))
-            if tool.arity.minimum > 1 {
-                Text("Add at least \(tool.arity.minimum) files.")
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(.secondary)
+                .font(.edithText(.headline))
+                .multilineTextAlignment(.center)
+            Text(
+                tool.arity.minimum > 1
+                    ? "Add at least \(tool.arity.minimum) files, or choose them from your Mac."
+                    : "Or choose them from your Mac."
+            )
+            .font(.edithText(.callout))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            Button(action: choose) {
+                Label("Choose files", systemImage: "plus")
             }
-            Button("Choose files", action: choose)
-                .buttonStyle(.edith(.primary))
+            .buttonStyle(.edith(.primary))
+            .padding(.top, UIScale.pt(4))
         }
+        .padding(.horizontal, UIScale.pt(16))
         .frame(maxWidth: .infinity)
-        .padding(.vertical, UIScale.pt(46))
+        .padding(.vertical, UIScale.pt(40))
         .background(
             DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14))
         )
@@ -420,9 +429,7 @@ struct StudioResultView: View {
                 let next = StudioResultText.continuations(for: outputs, after: job.tool)
                 if !next.isEmpty {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        Text("CONTINUE WITH")
-                            .font(DashSkin.mono(10, weight: .semibold))
-                            .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
+                        PageCapsLabel("Continue with")
                         LazyVGrid(
                             columns: [
                                 GridItem(

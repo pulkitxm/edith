@@ -93,34 +93,20 @@ struct StudioChip: View {
     var count: Int?
     let selected: Bool
     let action: () -> Void
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: UIScale.pt(5)) {
-                Text(title)
+            HStack(spacing: UIScale.pt(6)) {
+                Text(title).lineLimit(1)
                 if let count {
                     Text("\(count)")
-                        .font(DashSkin.mono(10, weight: .medium))
-                        .foregroundStyle(
-                            selected
-                                ? Color.white.opacity(0.85) : DashSkin.inkFaint(scheme == .dark))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
             }
-            .font(.system(size: UIScale.pt(12), weight: .medium))
-            .padding(.horizontal, UIScale.pt(11))
-            .padding(.vertical, UIScale.pt(5))
-            .foregroundStyle(selected ? Color.white : DashSkin.ink(scheme == .dark))
-            .background(
-                selected ? DashSkin.accent(scheme == .dark) : DashSkin.paper2(scheme == .dark),
-                in: Capsule()
-            )
-            .overlay(
-                Capsule().strokeBorder(selected ? Color.clear : DashSkin.line(scheme == .dark))
-            )
-            .edithButtonTarget(.borderless)
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.pageChip(active: selected))
+        .fixedSize()
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

@@ -11,20 +11,20 @@ struct StudioFilesView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var columns: [GridItem] {
-        PageMetrics.cardColumns(compact, minimum: 222, spacing: 14)
+        [GridItem(.adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))]
     }
 
     var body: some View {
         if model.files.isEmpty {
             ScrollView {
                 StudioDropHero(model: model)
-                    .pageContent(compact, width: .readable)
+                    .pageContent(compact)
             }
             .scrollIndicators(.never)
         } else {
             VStack(spacing: 0) {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
                         StudioFileFilters(model: model)
                         if model.visibleFiles.isEmpty {
                             ContentUnavailableView {
@@ -38,7 +38,7 @@ struct StudioFilesView: View {
                             }
                         } else {
                             LazyVGrid(
-                                columns: columns, alignment: .leading, spacing: UIScale.pt(14)
+                                columns: columns, alignment: .leading, spacing: UIScale.pt(12)
                             ) {
                                 ForEach(model.visibleFiles) { item in
                                     StudioFileCard(model: model, item: item)
@@ -88,8 +88,8 @@ struct StudioDropHero: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(22)) {
-            VStack(spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(32)) {
+            VStack(spacing: UIScale.pt(16)) {
                 PageGuideBadge(symbolName: "square.and.arrow.down.on.square")
                 Text("Drop a file here to get started")
                     .font(.edithText(.title2)).fontWeight(.semibold)
@@ -100,7 +100,7 @@ struct StudioDropHero: View {
                 .font(.edithText(.body))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: UIScale.pt(460))
+                .frame(maxWidth: UIScale.pt(compact ? 460 : 540))
                 PageGuideSteps(steps: Self.steps, columns: compact ? 1 : 3)
                     .frame(maxWidth: UIScale.pt(compact ? 460 : 700))
                 let actions =
@@ -123,23 +123,24 @@ struct StudioDropHero: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, UIScale.pt(12))
-            .padding(.vertical, UIScale.pt(40))
+            .padding(.horizontal, UIScale.pt(16))
+            .padding(.vertical, UIScale.pt(32))
             .background(
-                DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(18))
+                DashSkin.paper2(scheme == .dark),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(18))
+                RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius))
                     .strokeBorder(
                         DashSkin.lineStrong(scheme == .dark),
                         style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])))
-            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 PageSectionHeader(
                     "Popular tools",
                     subtitle: "Pick one to start, then add the files it should work on.")
                 LazyVGrid(
-                    columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 10),
-                    spacing: UIScale.pt(10)
+                    columns: PageMetrics.cardColumns(compact, minimum: 240, spacing: 12),
+                    spacing: UIScale.pt(12)
                 ) {
                     ForEach(popular, id: \.self) { id in
                         if let tool = StudioCatalog.tool(id) {
@@ -151,7 +152,6 @@ struct StudioDropHero: View {
                 }
             }
         }
-        .padding(.top, UIScale.pt(6))
     }
 }
 
@@ -160,7 +160,7 @@ struct StudioFileFilters: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(6)) {
+            HStack(spacing: UIScale.pt(8)) {
                 StudioChip(
                     title: "All", count: model.files.count, selected: model.kindFilter == nil
                 ) {
@@ -178,6 +178,7 @@ struct StudioFileFilters: View {
                 Spacer(minLength: UIScale.pt(8))
                 Button("Select all") { model.selectAll() }
                     .buttonStyle(.edith(.toolbar))
+                    .font(.edithText(.callout))
                     .keyboardShortcut("a", modifiers: .command)
                     .foregroundStyle(.secondary)
             }
@@ -234,12 +235,12 @@ struct StudioFileCard: View {
             }
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(item.name)
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .help(privacy?.hides(.ability("studio")) == true ? "File" : item.url.path)
                 Text(StudioFileActions.describe(facts, kind: item.kind))
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -288,7 +289,7 @@ struct StudioQuickButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .lineLimit(1)
                 .fixedSize()
                 .foregroundStyle(primary ? Color.white : DashSkin.ink(scheme == .dark))
@@ -352,21 +353,39 @@ struct StudioSelectionBar: View {
     var body: some View {
         let urls = model.selectedURLs
         let suggestions = StudioCatalog.ranked(StudioToolGrouping.suggestions(for: urls))
-        HStack(spacing: UIScale.pt(10)) {
+        ViewThatFits(in: .horizontal) {
+            bar(urls: urls, suggestions: suggestions, shown: 4, labelled: true)
+            bar(urls: urls, suggestions: suggestions, shown: 2, labelled: true)
+            bar(urls: urls, suggestions: suggestions, shown: 1, labelled: false)
+            bar(urls: urls, suggestions: suggestions, shown: 0, labelled: false)
+        }
+        .padding(.horizontal, UIScale.pt(16))
+        .padding(.vertical, UIScale.pt(10))
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private func bar(
+        urls: [URL], suggestions: [StudioTool], shown: Int, labelled: Bool
+    ) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
             Text("\(urls.count) selected")
-                .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                .font(.edithText(.callout).weight(.semibold))
+                .fixedSize()
             Divider().frame(height: UIScale.pt(18))
-            ForEach(suggestions.prefix(4)) { tool in
+            ForEach(suggestions.prefix(shown)) { tool in
                 Button {
                     model.open(tool, with: urls)
                 } label: {
                     Label(tool.actionTitle, systemImage: tool.symbolName)
-                        .font(.system(size: UIScale.pt(12)))
+                        .lineLimit(1)
                 }
                 .buttonStyle(.edith(.secondary))
+                .fixedSize()
             }
-            if suggestions.count > 4 {
-                Menu("More") {
+            if suggestions.count > shown {
+                Menu(shown == 0 ? "Tools" : "More") {
                     ForEach(StudioToolGrouping.byGroup(suggestions), id: \.group) { entry in
                         Section(entry.group.title) {
                             ForEach(entry.tools) { tool in
@@ -379,11 +398,31 @@ struct StudioSelectionBar: View {
                 .fixedSize()
             }
             Spacer(minLength: UIScale.pt(8))
-            Button("Show in Finder") { StudioFileActions.reveal(urls, facade: model.facade) }
-                .buttonStyle(.edith(.toolbar))
-            Button("Remove") { model.remove(Set(urls)) }
-                .buttonStyle(.edith(.toolbar))
-                .keyboardShortcut(.delete, modifiers: .command)
+            Button {
+                StudioFileActions.reveal(urls, facade: model.facade)
+            } label: {
+                if labelled {
+                    Text("Show in Finder")
+                } else {
+                    Image(systemName: "folder")
+                }
+            }
+            .buttonStyle(.edith(labelled ? .toolbar : .iconOnly))
+            .help("Show in Finder")
+            .fixedSize()
+            Button {
+                model.remove(Set(urls))
+            } label: {
+                if labelled {
+                    Text("Remove")
+                } else {
+                    Image(systemName: "minus.circle")
+                }
+            }
+            .buttonStyle(.edith(labelled ? .toolbar : .iconOnly))
+            .keyboardShortcut(.delete, modifiers: .command)
+            .help("Remove from Studio. Files stay on your Mac.")
+            .fixedSize()
             Button {
                 model.selection.removeAll()
             } label: {
@@ -391,11 +430,9 @@ struct StudioSelectionBar: View {
             }
             .buttonStyle(.edith(.iconOnly))
             .help("Clear selection")
+            .accessibilityLabel("Clear selection")
         }
-        .padding(.horizontal, UIScale.pt(18))
-        .padding(.vertical, UIScale.pt(10))
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
+        .font(.edithText(.callout))
     }
 }
 

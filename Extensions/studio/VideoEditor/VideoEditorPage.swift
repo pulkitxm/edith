@@ -348,15 +348,13 @@ struct VideoEditorPage: View {
                         footnote: "Projects save automatically and appear in Studio under Projects."
                     )
                     if !model.recentProjects.isEmpty {
-                        Text("PROJECTS")
-                            .font(.edithText(.caption).weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        PageCapsLabel("Recent projects")
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, UIScale.pt(22))
+                            .padding(.top, UIScale.pt(8))
                         LazyVGrid(
                             columns: PageMetrics.cardColumns(
-                                compact, minimum: 200, maximum: 280, spacing: 18),
-                            alignment: .leading, spacing: UIScale.pt(20)
+                                compact, minimum: 200, maximum: 280, spacing: 16),
+                            alignment: .leading, spacing: UIScale.pt(16)
                         ) {
                             ForEach(model.recentProjects) { item in
                                 VideoProjectCard(listing: item) {
@@ -367,7 +365,7 @@ struct VideoEditorPage: View {
                     }
                 }
                 .frame(maxWidth: UIScale.pt(960))
-                .padding(UIScale.pt(30))
+                .padding(UIScale.pt(32))
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
         }
