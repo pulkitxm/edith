@@ -22,6 +22,7 @@ struct EdithFieldSurface: ViewModifier {
         content
             .padding(.horizontal, UIScale.pt(compact ? 8 : 10))
             .padding(.vertical, UIScale.pt(compact ? 5 : 7))
+            .frame(minHeight: compact ? UIScale.pt(PageMetrics.chipHeight) : nil)
             .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: radius))
             .overlay(
                 RoundedRectangle(cornerRadius: radius)

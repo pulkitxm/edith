@@ -15,11 +15,17 @@ public struct SettingsRow<Trailing: View>: View {
     }
 
     public var body: some View {
-        LabeledContent {
+        HStack(alignment: .center, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(title)
+                if let subtitle {
+                    Text(subtitle).settingsCaption()
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: UIScale.pt(PageMetrics.controlSpacing))
             trailing()
-        } label: {
-            Text(title)
-            if let subtitle { Text(subtitle) }
         }
     }
 }

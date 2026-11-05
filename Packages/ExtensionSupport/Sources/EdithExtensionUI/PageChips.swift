@@ -174,6 +174,7 @@ public struct PageChip: View {
         .buttonStyle(.pageChip(active: active, tint: tint))
         .fixedSize()
         .accessibilityLabel(title)
+        .accessibilityAddTraits(active ? .isSelected : AccessibilityTraits())
     }
 }
 
