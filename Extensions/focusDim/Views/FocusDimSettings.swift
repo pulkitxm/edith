@@ -21,7 +21,7 @@ struct FocusDimSettings: View {
                     SettingsNoticeRow(
                         "Focus Dim is off",
                         message: "Turn it on to dim background windows and change these settings.",
-                        symbol: "power.circle.fill")
+                        icon: .power)
                 }
             } else if presentation.ready, let error = presentation.error {
                 Section {

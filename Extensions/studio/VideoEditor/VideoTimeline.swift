@@ -24,10 +24,10 @@ struct VideoTimeline: View {
         let canDelete = model.selection != nil
         return VStack(spacing: 0) {
             WrapHStack(spacing: UIScale.pt(12)) {
-                Label("Timeline", systemImage: "rectangle.stack").font(.edithText(.headline))
+                Label("Timeline", edith: .layers).font(.edithText(.headline))
                     .fixedSize().help("Drag to move · edges to trim")
-                Button("Split", systemImage: "scissors", action: model.splitAtPlayhead)
-                Button("Delete", systemImage: "trash", action: model.deleteSelection)
+                Button("Split", edith: .scissors, action: model.splitAtPlayhead)
+                Button("Delete", edith: .trash, action: model.deleteSelection)
                     .disabled(!canDelete)
                 Toggle("Snap", isOn: $snapping).toggleStyle(.button)
                 Button("Fit") { scale = max(8, min(180, 900 / max(1, model.duration))) }

@@ -19,13 +19,13 @@ struct StudioProjectsView: View {
                         Button {
                             model.newVideoProject()
                         } label: {
-                            Label("New video project", systemImage: "plus")
+                            Label("New video project", edith: .plus)
                         }
                         .buttonStyle(.edith(.secondary))
                     }
                     if model.videoProjects.isEmpty {
                         StudioEmptyNote(
-                            symbol: "film.stack",
+                            icon: .film,
                             text:
                                 "No video projects yet. Choose New video project to import a clip and edit it on a timeline. Projects save automatically."
                         )
@@ -43,7 +43,7 @@ struct StudioProjectsView: View {
                     PageSectionHeader("Recent results", subtitle: "Files Studio created for you.")
                     if model.recent.isEmpty {
                         StudioEmptyNote(
-                            symbol: "clock.arrow.circlepath",
+                            icon: .history,
                             text:
                                 "Nothing yet. Open a tool from the Tools tab and run it, and the files it makes will be listed here with Show in Finder."
                         )
@@ -100,13 +100,13 @@ struct StudioRecentRow: View {
 }
 
 struct StudioEmptyNote: View {
-    let symbol: String
+    let icon: EdithIcon
     let text: String
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: UIScale.pt(12)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.edithText(.body))
                 .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
             Text(text)
@@ -133,7 +133,7 @@ struct StudioProjectRow: View {
                 model.openVideoProject(project.url)
             } label: {
                 HStack(spacing: UIScale.pt(10)) {
-                    Image(systemName: "film.stack")
+                    EdithIconView(.film)
                         .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(DashSkin.accent(scheme == .dark))
                         .frame(width: UIScale.pt(40), height: UIScale.pt(40))
@@ -159,7 +159,7 @@ struct StudioProjectRow: View {
             Button(role: .destructive) {
                 model.trashProject(project)
             } label: {
-                Image(systemName: "trash")
+                EdithIconView(.trash)
             }
             .buttonStyle(.edith(.iconOnly))
             .help("Move \(project.title) to the Trash. You can restore it from there.")

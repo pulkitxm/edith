@@ -22,13 +22,13 @@ enum DockerScreen: String, CaseIterable, Identifiable {
         }
     }
 
-    var icon: String {
+    var icon: EdithIcon {
         switch self {
-        case .containers: return "shippingbox"
-        case .images: return "square.stack.3d.up"
-        case .volumes: return "externaldrive"
-        case .networks: return "network"
-        case .system: return "chart.pie"
+        case .containers: return .box
+        case .images: return .layers
+        case .volumes: return .drive
+        case .networks: return .nodes
+        case .system: return .pie
         }
     }
 }
@@ -187,7 +187,7 @@ struct DockerConsoleView: View {
                     selected = nil
                 } label: {
                     HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: item.icon)
+                        EdithIconView(item.icon)
                             .font(.edithText(.subheadline))
                             .frame(width: UIScale.pt(16))
                         Text(item.title)
@@ -272,7 +272,7 @@ struct DockerConsoleView: View {
                 session.refreshDockerNow()
                 Task { await session.refreshImagesAndVolumes() }
             } label: {
-                Image(systemName: "arrow.clockwise")
+                EdithIconView(.refresh)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Refresh")
@@ -282,7 +282,7 @@ struct DockerConsoleView: View {
                 Button("Prune networks…") { pendingPrune = PrunePlan(kind: .networks) }
                 Button("Prune build cache…") { pendingPrune = PrunePlan(kind: .builder) }
             } label: {
-                Image(systemName: "trash")
+                EdithIcon.trash.image()
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -335,7 +335,7 @@ struct DockerConsoleView: View {
                 DockerRow(
                     id: $0.dangling ? $0.id : $0.displayName, title: $0.displayName,
                     subtitle: "\($0.shortID) · \($0.createdSince)",
-                    trailing: ByteFormatter.string($0.sizeBytes), symbol: "square.stack.3d.up",
+                    trailing: ByteFormatter.string($0.sizeBytes), icon: .layers,
                     badge: $0.dangling ? "dangling" : nil)
             }
     }
@@ -347,7 +347,7 @@ struct DockerConsoleView: View {
                 DockerRow(
                     id: $0.name, title: $0.name, subtitle: $0.driver,
                     trailing: $0.sizeBytes.map { ByteFormatter.string($0) } ?? "\u{2014}",
-                    symbol: "externaldrive", badge: $0.inUse ? "in use" : nil)
+                    icon: .drive, badge: $0.inUse ? "in use" : nil)
             }
     }
 
@@ -357,7 +357,7 @@ struct DockerConsoleView: View {
             .map {
                 DockerRow(
                     id: $0.id, title: $0.name, subtitle: $0.driver, trailing: $0.scope,
-                    symbol: "network", badge: nil)
+                    icon: .nodes, badge: nil)
             }
     }
 
@@ -432,7 +432,7 @@ struct DockerRow: Identifiable {
     let title: String
     let subtitle: String
     let trailing: String
-    let symbol: String
+    let icon: EdithIcon
     let badge: String?
 }
 
@@ -445,7 +445,7 @@ struct DockerUnavailableView: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.edithText(.largeTitle))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(title)
@@ -487,11 +487,11 @@ struct DockerUnavailableView: View {
         }
     }
 
-    private var symbol: String {
+    private var icon: EdithIcon {
         switch session.docker.status {
-        case .permissionDenied: return "lock"
-        case .daemonDown: return "exclamationmark.triangle"
-        default: return "shippingbox"
+        case .permissionDenied: return .lock
+        case .daemonDown: return .warning
+        default: return .box
         }
     }
 }

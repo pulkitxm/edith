@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionUI
 import GhosttyTerminal
 import Observation
 
@@ -107,7 +108,8 @@ import Observation
                     bytes: 0)
             }, failure: { [weak self] in self?.fail("The terminal input queue is full.") })
         let view = GhosttyTerminalView(
-            externalIO: io, workingDirectory: session.directory, theme: theme)
+            externalIO: io, workingDirectory: session.directory, theme: theme,
+            overlayIcons: .edith)
         ghosttyView = view
         if let hostWindowState {
             view.setHostWindowState(active: hostWindowState.active, key: hostWindowState.key)
@@ -281,5 +283,14 @@ import Observation
     static func exitMessage(_ exitCode: Int32?) -> String {
         exitCode == nil || exitCode == 0
             ? "Session ended." : "Session ended with status \(exitCode ?? 0)."
+    }
+}
+
+extension TerminalOverlayIcons {
+    static var edith: TerminalOverlayIcons {
+        TerminalOverlayIcons(
+            link: EdithIcon.external.nsImage(size: 12), file: EdithIcon.folder.nsImage(size: 12),
+            previous: EdithIcon.chevronUp.nsImage(), next: EdithIcon.chevronDown.nsImage(),
+            close: EdithIcon.close.nsImage())
     }
 }

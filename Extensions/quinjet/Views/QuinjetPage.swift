@@ -112,7 +112,7 @@ struct QuinjetPage: View {
                         QuinjetSessionRequest(operation: .create))
                 }
             } label: {
-                Image(systemName: "plus")
+                EdithIconView(.plus)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Start another review in a new tab")
@@ -162,16 +162,16 @@ struct QuinjetPage: View {
                     model.preferences.setTerminal(terminal.rawValue)
                 } label: {
                     if terminal == configuration.terminal {
-                        Label(terminal.label, systemImage: "checkmark")
+                        Label(terminal.label, edith: .check)
                     } else {
-                        Label(terminal.label, systemImage: terminal.icon)
+                        Label(terminal.label, edith: terminal.icon)
                     }
                 }
                 .disabled(!terminalAvailable(terminal))
             }
         } label: {
             PageChipLabel(
-                configuration.terminal.label, systemImage: configuration.terminal.icon, menu: true)
+                configuration.terminal.label, icon: configuration.terminal.icon, menu: true)
         }
         .menuStyle(.button)
         .buttonStyle(.pageChip())
@@ -187,7 +187,7 @@ struct QuinjetPage: View {
                 model.preferences.setTheme(QuinjetThemePreference.app)
             } label: {
                 if themeName == QuinjetThemePreference.app {
-                    Label("App theme", systemImage: "checkmark")
+                    Label("App theme", edith: .check)
                 } else {
                     Text("App theme")
                 }
@@ -198,7 +198,7 @@ struct QuinjetPage: View {
                     model.preferences.setTheme(theme.rawValue)
                 } label: {
                     if themeName == theme.rawValue {
-                        Label(theme.label, systemImage: "checkmark")
+                        Label(theme.label, edith: .check)
                     } else {
                         Text(theme.label)
                     }
@@ -207,7 +207,7 @@ struct QuinjetPage: View {
         } label: {
             PageChipLabel(
                 themeName == QuinjetThemePreference.app ? "App theme" : configuration.theme.label,
-                systemImage: "paintpalette", menu: true)
+                icon: .palette, menu: true)
         }
         .menuStyle(.button)
         .buttonStyle(.pageChip())
@@ -244,11 +244,8 @@ private struct QuinjetTabButton: View {
         ZStack(alignment: .trailing) {
             Button(action: select) {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(
-                        systemName: tab.worktree == nil
-                            ? "plus.square" : "arrow.triangle.branch"
-                    )
-                    .font(.edithText(.caption))
+                    EdithIconView(tab.worktree == nil ? .plus : .quinjet)
+                        .font(.edithText(.caption))
                     Text(tab.title)
                         .font(.edithText(.callout).weight(.medium))
                         .lineLimit(1)
@@ -269,7 +266,7 @@ private struct QuinjetTabButton: View {
             .buttonStyle(.edith(.borderless))
             if canClose {
                 Button(action: close) {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(7.5), weight: .bold))
                 }
                 .buttonStyle(.edith(.borderless))
@@ -298,7 +295,7 @@ private struct QuinjetTerminalWorkspace: View {
             workspaceBar
             if let error = tab.errorMessage {
                 HStack(spacing: UIScale.pt(7)) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    EdithIconView(.warning)
                     Text(error)
                     Spacer(minLength: 0)
                 }
@@ -331,7 +328,7 @@ private struct QuinjetTerminalWorkspace: View {
 
     private var workspaceBar: some View {
         HStack(spacing: UIScale.pt(12)) {
-            Image(systemName: tab.launchConfiguration.terminal.icon)
+            EdithIconView(tab.launchConfiguration.terminal.icon)
                 .foregroundStyle(DashSkin.inkFaint(dark))
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(tab.title)
@@ -381,7 +378,7 @@ private struct QuinjetTerminalWorkspace: View {
             QuinjetWorktreePickerSkeleton(dark: dark)
         } else if let error = tab.errorMessage, tab.worktrees.isEmpty {
             ContentStatusView(
-                "Worktrees unavailable", message: error, symbol: "exclamationmark.triangle"
+                "Worktrees unavailable", message: error, icon: .warning
             )
             .padding(UIScale.pt(16))
             .frame(width: UIScale.pt(360), height: UIScale.pt(220))
@@ -412,7 +409,7 @@ private struct QuinjetTerminalWorkspace: View {
         return ZStack {
             Color(nsColor: palette.background)
             VStack(spacing: UIScale.pt(20)) {
-                Image(systemName: "macwindow.on.rectangle")
+                EdithIconView(.windows)
                     .font(.edithText(.largeTitle).weight(.medium))
                     .foregroundStyle(Color(nsColor: palette.caret))
                 VStack(spacing: UIScale.pt(6)) {

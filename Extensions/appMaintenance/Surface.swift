@@ -18,7 +18,7 @@ enum AppMaintenanceSurface {
                 .init(
                     model.checkingUpdates ? "cancel" : "refresh",
                     model.checkingUpdates ? "Cancel check" : "Check updates",
-                    model.checkingUpdates ? "xmark.circle" : "arrow.clockwise")
+                    model.checkingUpdates ? .closeFilled : .refresh)
             ]
         return .init(
             providerID: "appMaintenance", metrics: metrics,
@@ -27,7 +27,7 @@ enum AppMaintenanceSurface {
                     $0.id, sourceID: $0.source.rawValue, title: String($0.name.prefix(1024)),
                     detail: String(($0.currentVersion + " → " + $0.availableVersion).prefix(4096)),
                     value: $0.source.title,
-                    icon: "shippingbox")
+                    icon: .box)
             }, actions: actions,
             sources: AppUpdateSource.allCases.map { .init($0.rawValue, $0.title) },
             message: model.errorMessage

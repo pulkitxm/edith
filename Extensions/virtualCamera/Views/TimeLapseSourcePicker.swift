@@ -89,7 +89,7 @@ struct ScreenCaptureSourcePicker: View {
                 Button {
                     refresh += 1
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    EdithIconView(.refresh)
                 }.buttonStyle(.edith(.iconOnly)).disabled(sources.sourceLoad.isRunning)
                     .help("Refresh sources").accessibilityLabel("Refresh sources")
             }
@@ -110,7 +110,7 @@ struct ScreenCaptureSourcePicker: View {
                 ) {
                     if choices.isEmpty && sources.sourceLoad.errorMessage == nil {
                         PageEmptyState(
-                            symbolName: selection.mode == "displays" ? "display" : "macwindow",
+                            icon: selection.mode == "displays" ? .display : .window,
                             title: search.isEmpty ? "No sources available" : "No matching windows",
                             message: search.isEmpty
                                 ? "Open a window or connect a display, then refresh."
@@ -147,7 +147,7 @@ struct ScreenCaptureSourcePicker: View {
                 HStack {
                     Label(
                         selection.mode == "windows" ? "Selected app audio" : "System audio",
-                        systemImage: "speaker.wave.2")
+                        edith: .speaker)
                     Spacer()
                     Toggle(
                         selection.mode == "windows" ? "Selected app audio" : "System audio",
@@ -209,14 +209,14 @@ struct ScreenCaptureSourcePicker: View {
             return sources.displays.enumerated().map { index, display in
                 .init(
                     id: display.id, title: "Display \(index + 1)",
-                    subtitle: "\(display.width) × \(display.height)", symbol: "display")
+                    subtitle: "\(display.width) × \(display.height)", icon: .display)
             }
         }
         return sources.windows.filter {
             search.isEmpty
                 || "\($0.application) \($0.title)".localizedCaseInsensitiveContains(search)
         }.map {
-            .init(id: $0.id, title: $0.title, subtitle: $0.application, symbol: "macwindow")
+            .init(id: $0.id, title: $0.title, subtitle: $0.application, icon: .window)
         }
     }
 }
@@ -226,7 +226,7 @@ private struct TimeLapseSourceCard: View {
         let id: UInt32
         let title: String
         let subtitle: String
-        let symbol: String
+        let icon: EdithIcon
     }
 
     let choice: Choice
@@ -254,13 +254,13 @@ private struct TimeLapseSourceCard: View {
                             }
                         } else {
                             VStack(spacing: UIScale.pt(6)) {
-                                Image(systemName: choice.symbol).font(.edithText(.title2))
+                                EdithIconView(choice.icon).font(.edithText(.title2))
                                 Text("Preview unavailable").font(.edithText(.caption2))
                             }.foregroundStyle(.secondary)
                         }
                     }
                     .overlay(alignment: .topTrailing) {
-                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        EdithIconView(selected ? .success : .ring)
                             .font(.edithText(.title3)).foregroundStyle(
                                 selected ? Color.themeAccent : .secondary
                             )
@@ -273,7 +273,7 @@ private struct TimeLapseSourceCard: View {
                                 lineWidth: UIScale.pt(selected ? 2 : 1))
                     }
                 Text(choice.title).font(.edithText(.callout)).fontWeight(.medium).lineLimit(1)
-                Label(choice.subtitle, systemImage: choice.symbol)
+                Label(choice.subtitle, edith: choice.icon)
                     .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
             }.contentShape(Rectangle())
         }

@@ -1,7 +1,7 @@
 {
   "id": "systemStats",
   "title": "Menu Bar Stats",
-  "symbolName": "gauge.with.needle",
+  "icon": "gauge",
   "category": "utilities",
   "background": true,
   "commands": [
@@ -19,17 +19,17 @@
     "summary": "Menu Bar Stats puts live CPU and memory percentages in your menu bar so you can tell at a glance when your Mac is working hard. Click it for a quick panel. It updates every couple of seconds and pauses while your Mac sleeps or is locked.",
     "steps": [
       {
-        "symbolName": "menubar.rectangle",
+        "icon": "menuBar",
         "title": "Look at the menu bar",
         "detail": "CPU and memory percentages appear next to your other menu bar items."
       },
       {
-        "symbolName": "cursorarrow.click",
+        "icon": "cursor",
         "title": "Click for details",
         "detail": "A small panel shows CPU and memory bars and a button to open Edith."
       },
       {
-        "symbolName": "paintpalette",
+        "icon": "palette",
         "title": "Match your menu bar",
         "detail": "Choose an automatic or custom color in settings."
       }

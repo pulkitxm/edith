@@ -143,13 +143,10 @@ struct AddMachineSheet: View {
                         select(configHost)
                     } label: {
                         HStack(spacing: UIScale.pt(10)) {
-                            Image(
-                                systemName: selectedAlias == configHost.alias
-                                    ? "largecircle.fill.circle" : "circle"
-                            )
-                            .foregroundStyle(
-                                selectedAlias == configHost.alias
-                                    ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                            EdithIconView(selectedAlias == configHost.alias ? .radioOn : .ring)
+                                .foregroundStyle(
+                                    selectedAlias == configHost.alias
+                                        ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                             VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                                 Text(configHost.alias)
                                     .font(.edithText(.body).weight(.medium))
@@ -220,7 +217,7 @@ struct AddMachineSheet: View {
                 }
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.edithText(.caption).weight(.semibold))
                         .rotationEffect(.degrees(showsMoreOptions ? 90 : 0))
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -325,18 +322,18 @@ struct AddMachineSheet: View {
                 }
                 .accessibilityLabel("Testing connection")
             case let .success(message):
-                statusLine(message, symbol: "checkmark.circle.fill", color: DashSkin.ok)
+                statusLine(message, icon: .success, color: DashSkin.ok)
             case let .failure(message):
-                statusLine(message, symbol: "exclamationmark.triangle.fill", color: DashSkin.danger)
+                statusLine(message, icon: .warning, color: DashSkin.danger)
             default:
                 EmptyView()
             }
         }
     }
 
-    private func statusLine(_ message: String, symbol: String, color: Color) -> some View {
+    private func statusLine(_ message: String, icon: EdithIcon, color: Color) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(7)) {
-            Image(systemName: symbol).foregroundStyle(color)
+            EdithIconView(icon).foregroundStyle(color)
             Text(message)
                 .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))

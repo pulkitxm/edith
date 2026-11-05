@@ -77,7 +77,7 @@ struct MachineDetailView: View {
                         }
                     } label: {
                         HStack(spacing: UIScale.pt(6)) {
-                            Image(systemName: item.icon)
+                            EdithIconView(item.icon)
                                 .font(.edithText(.subheadline).weight(.medium))
                             Text(item.title)
                                 .font(.edithText(.callout).weight(.medium))

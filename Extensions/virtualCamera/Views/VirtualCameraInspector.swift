@@ -17,9 +17,9 @@ struct VirtualCameraInspector: View {
                             model.setInspectorExpanded(section, !expanded)
                         } label: {
                             HStack {
-                                Label(section.title, systemImage: section.symbolName)
+                                Label(section.title, edith: section.icon)
                                 Spacer()
-                                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                                EdithIconView(expanded ? .chevronUp : .chevronDown)
                             }
                             .font(.edithText(.body))
                             .frame(
@@ -115,7 +115,7 @@ struct VirtualCameraSliderRow: View {
                     Button {
                         value = neutral
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        EdithIconView(.undo)
                             .font(.system(size: UIScale.pt(10)))
                             .frame(width: UIScale.pt(16), height: UIScale.pt(16))
                             .contentShape(Rectangle())
@@ -451,7 +451,7 @@ struct VirtualCameraImageRow: View {
                     CameraAssetThumbnail(
                         model: model, url: URL(fileURLWithPath: path), side: 56, corner: 6)
                 } else {
-                    Image(systemName: "photo")
+                    EdithIconView(.photo)
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
@@ -469,7 +469,7 @@ struct VirtualCameraImageRow: View {
                 .buttonStyle(.edith(.secondary))
             if path != nil {
                 Button(action: remove) {
-                    Image(systemName: "trash")
+                    EdithIconView(.trash)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .help("Remove the image")
@@ -653,7 +653,7 @@ struct VirtualCameraOutputPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
                 } else {
                     ForEach(clients, id: \.id) { client in
-                        Label(client.name, systemImage: "video.fill")
+                        Label(client.name, edith: .video)
                             .font(.edithText(.callout))
                     }
                 }

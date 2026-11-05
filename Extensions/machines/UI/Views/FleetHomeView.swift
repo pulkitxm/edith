@@ -44,7 +44,7 @@ struct FleetHomeView: View {
     private var fleetBanner: some View {
         let fleet = model.fleet
         return HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "square.stack.3d.up")
+            EdithIconView(.layers)
                 .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(FleetFirstRun.onlineSummary(fleet))
@@ -140,7 +140,7 @@ struct FleetHomeView: View {
             VStack(alignment: .leading, spacing: UIScale.pt(7)) {
                 ForEach(model.fleet.alerts) { alert in
                     HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: alert.symbol)
+                        EdithIconView(alert.icon)
                             .font(.edithText(.subheadline))
                             .foregroundStyle(
                                 alert.kind == .updates ? DashSkin.gold : DashSkin.warn
@@ -197,7 +197,7 @@ private struct FleetMachineRow: View {
                 if compact {
                     VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                         HStack(spacing: UIScale.pt(12)) {
-                            Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
+                            EdithIconView(snapshot.isLocal ? .laptop : .server)
                                 .font(.edithText(.body))
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -213,7 +213,7 @@ private struct FleetMachineRow: View {
                             }
                             Spacer(minLength: 0)
                             if hostsCompanion {
-                                Image(systemName: "brain.head.profile").foregroundStyle(
+                                EdithIconView(.companion).foregroundStyle(
                                     DashSkin.accent(dark))
                             }
                             if snapshot.online {
@@ -222,7 +222,7 @@ private struct FleetMachineRow: View {
                                 )
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                             }
-                            Image(systemName: "chevron.right").font(.edithText(.caption))
+                            EdithIconView(.chevronRight).font(.edithText(.caption))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                         }
                         if snapshot.online {
@@ -240,7 +240,7 @@ private struct FleetMachineRow: View {
                     }
                 } else {
                     HStack(spacing: UIScale.pt(12)) {
-                        Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
+                        EdithIconView(snapshot.isLocal ? .laptop : .server)
                             .font(.edithText(.body))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                             .frame(width: UIScale.pt(18))
@@ -250,7 +250,7 @@ private struct FleetMachineRow: View {
                                     .font(.edithText(.body).weight(.medium))
                                     .foregroundStyle(DashSkin.ink(dark))
                                 if hostsCompanion {
-                                    Image(systemName: "brain.head.profile")
+                                    EdithIconView(.companion)
                                         .font(.system(size: UIScale.pt(9.5)))
                                         .foregroundStyle(DashSkin.accent(dark))
                                         .help("Runs Memory")
@@ -282,7 +282,7 @@ private struct FleetMachineRow: View {
                                 .help(snapshot.connectionFailure ?? "")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        Image(systemName: "chevron.right")
+                        EdithIconView(.chevronRight)
                             .font(.system(size: UIScale.pt(9)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
@@ -338,14 +338,14 @@ private struct FleetFirstRunCard: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .center, spacing: UIScale.pt(16)) {
-                PageGuideBadge(symbolName: "server.rack", size: 48)
+                PageGuideBadge(icon: .server, size: 48)
                 copy.frame(maxWidth: UIScale.pt(560), alignment: .leading)
                 Spacer(minLength: UIScale.pt(16))
                 addButton
             }
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                    PageGuideBadge(symbolName: "server.rack", size: 40)
+                    PageGuideBadge(icon: .server, size: 40)
                     Text(FleetFirstRunCopy.title)
                         .font(.edithText(.headline)).fontWeight(.semibold)
                         .foregroundStyle(DashSkin.ink(dark))
@@ -387,7 +387,7 @@ private struct FleetFirstRunCard: View {
 
     private var addButton: some View {
         Button(action: onAddMachine) {
-            Label("Add machine", systemImage: "plus")
+            Label("Add machine", edith: .plus)
         }
         .buttonStyle(.edith(.primary))
         .keyboardShortcut(.defaultAction)

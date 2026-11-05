@@ -118,8 +118,7 @@ struct HerdrAgentDetails: View {
                                     ? "Copied"
                                     : (agent.machineIsLocal || agent.isTerminal
                                         ? "Copy command" : "Copy SSH"),
-                                systemImage: store.copiedID == agent.id
-                                    ? "checkmark" : "doc.on.doc")
+                                edith: store.copiedID == agent.id ? .check : .copy)
                         }
                         .buttonStyle(.edith(.toolbar))
                     }
@@ -162,7 +161,7 @@ struct HerdrAgentDetails: View {
                         }
                         .accessibilityLabel("Closing agent")
                     } else {
-                        Image(systemName: "xmark.circle.fill")
+                        EdithIconView(.closeFilled)
                     }
                     Text(closingAgent ? "Closing Agent" : "Close Agent")
                 }
@@ -210,11 +209,8 @@ struct HerdrAgentDetails: View {
                 }
             } else if let last {
                 HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
-                    Image(
-                        systemName: last.phase == .sent
-                            ? "checkmark.circle.fill" : "exclamationmark.circle"
-                    )
-                    .foregroundStyle(last.phase == .sent ? Color.green : Color.orange)
+                    EdithIconView(last.phase == .sent ? .success : .alert)
+                        .foregroundStyle(last.phase == .sent ? Color.green : Color.orange)
                     Text(lastSummary(last))
                         .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkSoft(dark))
@@ -223,7 +219,7 @@ struct HerdrAgentDetails: View {
                     Button {
                         HerdrWorkOwnership.start { await store.messaging.remove(last.id) }
                     } label: {
-                        Image(systemName: "xmark")
+                        EdithIconView(.close)
                             .font(.system(size: UIScale.pt(9), weight: .semibold))
                     }
                     .buttonStyle(.edith(.borderless))
@@ -235,7 +231,7 @@ struct HerdrAgentDetails: View {
                 Button {
                     store.messaging.compose(to: agent, presenterID: presenterID)
                 } label: {
-                    Label("Write a message", systemImage: "paperplane")
+                    Label("Write a message", edith: .send)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Write a message to send now, when it finishes, or at a time")
@@ -246,14 +242,14 @@ struct HerdrAgentDetails: View {
     private func waitingRow(_ hook: HerdrAgentHook) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
-                Label(waitingTitle(hook), systemImage: "paperplane.circle.fill")
+                Label(waitingTitle(hook), edith: .send)
                     .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.accent(dark))
                 Spacer(minLength: 0)
                 Button {
                     HerdrWorkOwnership.start { await store.messaging.remove(hook.id) }
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                 }
                 .buttonStyle(.edith(.borderless))

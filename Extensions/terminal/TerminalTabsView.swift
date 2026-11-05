@@ -30,12 +30,12 @@ struct TerminalTabsView: View {
                 }
                 if model.tabs.isEmpty {
                     PageEmptyState(
-                        symbolName: "terminal",
+                        icon: .terminal,
                         title: "No terminals open",
                         message:
                             "A terminal gives you a real shell inside Edith, starting in your home folder. Closing a tab ends only that shell.",
                         primary: PageAction(
-                            "New Terminal", symbolName: "plus", identifier: "terminal.empty.new"
+                            "New Terminal", icon: .plus, identifier: "terminal.empty.new"
                         ) { model.addTab() },
                         footnote: "Press ⌘T to open a terminal and ⌘W to close the current one."
                     )
@@ -45,7 +45,7 @@ struct TerminalTabsView: View {
             if model.broadcast { broadcastBar }
             if let error = model.error {
                 TerminalStatusBar(
-                    symbolName: "exclamationmark.triangle.fill", message: error,
+                    icon: .warning, message: error,
                     tint: DashSkin.danger)
             }
         }
@@ -93,7 +93,7 @@ struct TerminalTabsView: View {
             Button {
                 model.addTab()
             } label: {
-                Image(systemName: "plus")
+                EdithIconView(.plus)
             }
             .buttonStyle(.edith(.toolbar))
             .help(
@@ -113,7 +113,7 @@ struct TerminalTabsView: View {
             Button {
                 showsSettings.toggle()
             } label: {
-                Image(systemName: "gearshape")
+                EdithIconView(.gear)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Terminal settings")
@@ -131,7 +131,7 @@ struct TerminalTabsView: View {
             model.select(tab.id)
         } label: {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "terminal")
+                EdithIconView(.terminal)
                     .font(.edithText(.caption))
                 Text(tab.displayTitle)
                     .font(.edithText(.callout)).fontWeight(.medium)
@@ -142,7 +142,7 @@ struct TerminalTabsView: View {
                     Button {
                         model.closeTab(tab.id)
                     } label: {
-                        Image(systemName: "xmark")
+                        EdithIconView(.close)
                             .font(.edithText(.caption2)).fontWeight(.bold)
                             .frame(width: UIScale.pt(16), height: UIScale.pt(16))
                             .contentShape(Rectangle())
@@ -167,7 +167,7 @@ struct TerminalTabsView: View {
 
     private var broadcastBar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "dot.radiowaves.left.and.right")
+            EdithIconView(.signal)
                 .foregroundStyle(DashSkin.warn)
                 .accessibilityHidden(true)
             TextField("Type a command to run in every tab", text: $command)

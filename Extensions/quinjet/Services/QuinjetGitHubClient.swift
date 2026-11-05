@@ -146,9 +146,9 @@ struct QuinjetGitHubClient: Sendable {
                     pull.id, sourceID: repository, title: bounded(pull.title, 256),
                     detail: bounded(
                         "\(repository) #\(pull.number) · " + labels.joined(separator: " · "), 256),
-                    value: role, icon: pull.isDraft ? "doc.badge.clock" : "arrow.triangle.pull",
+                    value: role, icon: pull.isDraft ? .doc : .quinjet,
                     actions: url == nil
-                        ? [] : [.init("open/" + pull.id, "Open pull request", "arrow.up.right")]))
+                        ? [] : [.init("open/" + pull.id, "Open pull request", .arrowUpRight)]))
         }
         return QuinjetGitHubSelection(
             metrics: metrics, pulls: rows, repositories: repositories,

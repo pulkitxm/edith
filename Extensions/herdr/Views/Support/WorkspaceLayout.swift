@@ -1,3 +1,4 @@
+import EdithIcons
 import Foundation
 
 public enum PaneScreen: String, Codable, CaseIterable, Sendable {
@@ -258,14 +259,14 @@ extension PaneScreen {
         }
     }
 
-    public var icon: String {
+    public var icon: EdithIcon {
         switch self {
-        case .overview: return "gauge.with.needle"
-        case .processes: return "list.bullet.rectangle"
-        case .docker: return "shippingbox"
-        case .terminal: return "terminal"
-        case .files: return "folder"
-        case .tools: return "wrench.and.screwdriver"
+        case .overview: return .gauge
+        case .processes: return .list
+        case .docker: return .box
+        case .terminal: return .terminal
+        case .files: return .folder
+        case .tools: return .wrench
         }
     }
 

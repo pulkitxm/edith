@@ -192,7 +192,7 @@ struct TerminalTabsView: View {
                             model.selected = tab.id
                         } label: {
                             HStack(spacing: UIScale.pt(6)) {
-                                Image(systemName: "terminal")
+                                EdithIconView(.terminal)
                                     .font(.system(size: UIScale.pt(9.5)))
                                 Text(tab.title)
                                     .font(.edithText(.subheadline).weight(.medium))
@@ -200,7 +200,7 @@ struct TerminalTabsView: View {
                                     Button {
                                         model.closeTab(tab.id)
                                     } label: {
-                                        Image(systemName: "xmark")
+                                        EdithIconView(.close)
                                             .font(.system(size: UIScale.pt(7.5), weight: .bold))
                                     }
                                     .buttonStyle(.edith(.borderless))
@@ -225,7 +225,7 @@ struct TerminalTabsView: View {
             Button {
                 model.addTab(named: "Shell \(model.tabs.count + 1)")
             } label: {
-                Image(systemName: "plus")
+                EdithIconView(.plus)
             }
             .buttonStyle(.edith(.toolbar))
             .help("New terminal (⌘T)")
@@ -238,7 +238,7 @@ struct TerminalTabsView: View {
             Button {
                 TerminalWindow.open(session: session)
             } label: {
-                Image(systemName: "macwindow")
+                EdithIconView(.window)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Open terminals in their own window")
@@ -251,7 +251,7 @@ struct TerminalTabsView: View {
 
     private var broadcastBar: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "dot.radiowaves.left.and.right")
+            EdithIconView(.signal)
                 .foregroundStyle(DashSkin.warn)
             TextField("Send to every tab", text: $command)
                 .textFieldStyle(.roundedBorder)

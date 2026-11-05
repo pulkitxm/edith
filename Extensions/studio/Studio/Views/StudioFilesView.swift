@@ -26,7 +26,7 @@ struct StudioFilesView: View {
                             ContentUnavailableView {
                                 Label(
                                     "No files match this filter",
-                                    systemImage: "line.3.horizontal.decrease.circle")
+                                    edith: .filter)
                             } description: {
                                 Text("Choose another file type or show all files.")
                             } actions: {
@@ -63,13 +63,13 @@ struct StudioDropHero: View {
 
     private static let steps = [
         PageGuideStep(
-            symbolName: "plus.circle", title: "Add files",
+            icon: .addFilled, title: "Add files",
             detail: "Drop them here, choose them, paste, or scan with your iPhone."),
         PageGuideStep(
-            symbolName: "wand.and.stars", title: "Pick a tool",
+            icon: .adjust, title: "Pick a tool",
             detail: "Select files and choose a tool, or start from a popular one below."),
         PageGuideStep(
-            symbolName: "checkmark.circle", title: "Get the result",
+            icon: .success, title: "Get the result",
             detail: "Results are listed under Projects, ready to open or show in Finder."),
     ]
 
@@ -82,7 +82,7 @@ struct StudioDropHero: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(32)) {
             VStack(spacing: UIScale.pt(16)) {
-                PageGuideBadge(symbolName: "square.and.arrow.down.on.square")
+                PageGuideBadge(icon: .saveTo)
                 Text("Drop a file here to get started")
                     .font(.edithText(.title2)).fontWeight(.semibold)
                     .multilineTextAlignment(.center)
@@ -103,13 +103,13 @@ struct StudioDropHero: View {
                     Button {
                         model.chooseFiles()
                     } label: {
-                        Label("Choose files", systemImage: "plus")
+                        Label("Choose files", edith: .plus)
                     }
                     .buttonStyle(.edith(.primary))
                     Button {
                         model.paste()
                     } label: {
-                        Label("Paste", systemImage: "doc.on.clipboard")
+                        Label("Paste", edith: .clipboard)
                     }
                     .buttonStyle(.edith(.secondary))
                 }
@@ -208,7 +208,7 @@ struct StudioFileCard: View {
                     Button {
                         model.toggleSelection(item.url)
                     } label: {
-                        Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        EdithIconView(selected ? .success : .ring)
                             .font(.system(size: UIScale.pt(16)))
                             .foregroundStyle(
                                 selected ? DashSkin.accent(scheme == .dark) : Color.secondary
@@ -307,8 +307,7 @@ struct StudioFileMenu: View {
         Menu {
             StudioFileMenuItems(model: model, item: item)
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
+            EdithIcon.more.image(size: 12, tint: .themeAccent)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -371,7 +370,7 @@ struct StudioSelectionBar: View {
                 Button {
                     model.open(tool, with: urls)
                 } label: {
-                    Label(tool.actionTitle, systemImage: tool.symbolName)
+                    Label(tool.actionTitle, edith: tool.icon)
                         .lineLimit(1)
                 }
                 .buttonStyle(.edith(.secondary))
@@ -397,7 +396,7 @@ struct StudioSelectionBar: View {
                 if labelled {
                     Text("Show in Finder")
                 } else {
-                    Image(systemName: "folder")
+                    EdithIconView(.folder)
                 }
             }
             .buttonStyle(.edith(labelled ? .toolbar : .iconOnly))
@@ -409,7 +408,7 @@ struct StudioSelectionBar: View {
                 if labelled {
                     Text("Remove")
                 } else {
-                    Image(systemName: "minus.circle")
+                    EdithIconView(.removeFilled)
                 }
             }
             .buttonStyle(.edith(labelled ? .toolbar : .iconOnly))
@@ -419,7 +418,7 @@ struct StudioSelectionBar: View {
             Button {
                 model.selection.removeAll()
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
             }
             .buttonStyle(.edith(.iconOnly))
             .help("Clear selection")

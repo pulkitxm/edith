@@ -354,7 +354,7 @@ struct HerdrSpaceView: View {
                     if let agent = tab.agentTab?.agent {
                         HerdrKindMark(kind: agent.kind, size: UIScale.pt(11))
                     } else {
-                        Image(systemName: "terminal")
+                        EdithIconView(.terminal)
                             .font(.edithText(.caption).weight(.semibold))
                     }
                     Text(tab.title)
@@ -372,7 +372,7 @@ struct HerdrSpaceView: View {
             Button {
                 close(tab)
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
                     .font(.system(size: UIScale.pt(8.5), weight: .bold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(20), height: UIScale.pt(20))
@@ -403,8 +403,7 @@ struct HerdrSpaceView: View {
                 }
             }
         } label: {
-            Image(systemName: "plus")
-                .font(.edithText(.subheadline).weight(.bold))
+            EdithIcon.plus.image()
                 .frame(width: UIScale.pt(24), height: UIScale.pt(24))
         }
         .menuStyle(.borderlessButton)
@@ -422,7 +421,7 @@ struct HerdrSpaceView: View {
                     Button {
                         tab?.setAgentView(mode, defaults: store.uiDefaults)
                     } label: {
-                        Label(mode.shortTitle, systemImage: mode.icon)
+                        Label(mode.shortTitle, edith: mode.icon)
                             .font(.edithText(.caption).weight(.semibold))
                             .frame(maxWidth: .infinity, minHeight: UIScale.pt(22))
                     }
@@ -442,20 +441,20 @@ struct HerdrSpaceView: View {
                 stroke: DashSkin.line(dark))
 
             controlButton(
-                "rectangle.split.2x1", help: "Split right (⌘D)", enabled: tab != nil
+                .layoutLeft, help: "Split right (⌘D)", enabled: tab != nil
             ) { model.split(.right) }
             controlButton(
-                "rectangle.split.1x2", help: "Split down (⇧⌘D)", enabled: tab != nil
+                .layoutTop, help: "Split down (⇧⌘D)", enabled: tab != nil
             ) { model.split(.bottom) }
             controlButton(
-                "equal.square", help: "Even out panes", enabled: (tab?.paneCount ?? 0) > 1
+                .calculator, help: "Even out panes", enabled: (tab?.paneCount ?? 0) > 1
             ) { tab?.equalize() }
             controlButton(
-                "rectangle.split.2x1.fill", help: "Close focused pane (⇧⌘W)",
+                .close, help: "Close focused pane (⇧⌘W)",
                 enabled: (tab?.paneCount ?? 0) > 1
             ) { model.closeFocusedPane() }
             controlButton(
-                "sidebar.right",
+                .sidebarRight,
                 help: HerdrAgentDetailCommand.help(open: store.detailOpen, available: agent != nil),
                 enabled: agent != nil, selected: store.detailOpen
             ) { store.detailOpen.toggle() }
@@ -464,11 +463,11 @@ struct HerdrSpaceView: View {
     }
 
     private func controlButton(
-        _ systemImage: String, help: String, enabled: Bool, selected: Bool = false,
+        _ icon: EdithIcon, help: String, enabled: Bool, selected: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
+            EdithIconView(icon)
                 .font(.edithText(.caption).weight(.semibold))
                 .frame(width: UIScale.pt(24), height: UIScale.pt(24))
         }
@@ -481,7 +480,7 @@ struct HerdrSpaceView: View {
     private var content: some View {
         if model.tabs.isEmpty {
             VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "terminal")
+                EdithIconView(.terminal)
                     .font(.edithText(.largeTitle).weight(.light))
                 Text("No terminals open")
                     .font(.edithText(.title3).weight(.semibold))
@@ -663,7 +662,7 @@ private struct HerdrSpaceTerminalView: View {
                     launchEnabled: launchEnabled, onFocus: onFocus)
             } else {
                 VStack(spacing: UIScale.pt(9)) {
-                    Image(systemName: "questionmark.circle")
+                    EdithIconView(.help)
                         .font(.edithText(.title).weight(.light))
                     Text("Machine unavailable")
                         .font(.edithText(.title3).weight(.semibold))

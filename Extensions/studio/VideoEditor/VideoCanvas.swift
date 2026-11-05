@@ -116,7 +116,7 @@ private struct VideoCanvasSelectionControls: View {
             } else {
                 Text(annotation.type.capitalized).font(.edithText(.body))
             }
-            Button("Delete", systemImage: "trash", role: .destructive) {
+            Button("Delete", edith: .trash, role: .destructive) {
                 model.removeCaption(annotation.id)
             }
             .labelStyle(.iconOnly)

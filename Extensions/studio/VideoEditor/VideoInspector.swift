@@ -14,6 +14,11 @@ struct VideoInspector: View {
         case captions = "Captions"
     }
 
+    private static let webcamCorners: [(title: String, icon: EdithIcon, mirrored: Bool)] = [
+        ("Top left", .arrowUpRight, true), ("Top right", .arrowUpRight, false),
+        ("Bottom left", .arrowDownRight, true), ("Bottom right", .arrowDownRight, false),
+    ]
+
     let model: VideoEditorModel
     @State private var tab: Tab = .frame
 
@@ -228,16 +233,12 @@ struct VideoInspector: View {
                 "Size", value: model.project?.webcamSize ?? 25, range: 10...50, step: 1,
                 set: model.setWebcamSize)
             HStack {
-                ForEach(["Top left", "Top right", "Bottom left", "Bottom right"], id: \.self) {
-                    position in
+                ForEach(Self.webcamCorners, id: \.title) { position, icon, mirrored in
                     Button {
                         model.setWebcamPosition("cx", value: position.hasSuffix("left") ? 0 : 1)
                         model.setWebcamPosition("cy", value: position.hasPrefix("Top") ? 0 : 1)
                     } label: {
-                        Image(
-                            systemName:
-                                "\(position.hasPrefix("Top") ? "arrow.up" : "arrow.down").\(position.hasSuffix("left") ? "left" : "right")"
-                        )
+                        EdithIconView(icon).scaleEffect(x: mirrored ? -1 : 1)
                     }.help(position).accessibilityLabel(position)
                 }
             }

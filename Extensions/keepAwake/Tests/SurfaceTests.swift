@@ -12,7 +12,7 @@ struct KeepAwakeExtensionSurfaceTests {
         #expect(off.rows.isEmpty && off.message == nil)
         #expect(off.actions.first?.id == "enable")
         #expect(off.actions.first?.title == "Turn on")
-        #expect(off.actions.first?.icon == "moon.zzz")
+        #expect(off.actions.first?.icon == .moon)
         #expect(on.metrics.first?.value == "On")
         #expect(on.actions.first?.id == "disable")
         #expect(on.actions.first?.title == "Turn off")

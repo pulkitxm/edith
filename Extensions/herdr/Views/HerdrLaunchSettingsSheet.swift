@@ -42,7 +42,7 @@ struct HerdrLaunchSettingsSheet: View {
             Button {
                 dismiss()
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
             }
             .buttonStyle(.edith(.borderless))
             .foregroundStyle(.secondary)
@@ -217,7 +217,7 @@ private struct HerdrLaunchKindRow: View {
                 Button {
                     refreshes += 1
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    EdithIconView(.refresh)
                         .font(.edithText(.caption)).fontWeight(.semibold)
                 }
                 .buttonStyle(.edith(.borderless))

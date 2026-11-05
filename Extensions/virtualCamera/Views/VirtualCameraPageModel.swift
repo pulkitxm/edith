@@ -25,13 +25,13 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbolName: String {
+    var icon: EdithIcon {
         switch self {
-        case .frame: "crop"
-        case .look: "camera.filters"
-        case .background: "person.crop.rectangle"
-        case .overlays: "text.below.photo"
-        case .output: "video.badge.checkmark"
+        case .frame: .crop
+        case .look: .filters
+        case .background: .person
+        case .overlays: .photo
+        case .output: .video
         }
     }
 }

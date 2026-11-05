@@ -1,7 +1,7 @@
 {
   "id": "herdr",
   "title": "Agents",
-  "symbolName": "rectangle.split.3x1.fill",
+  "icon": "columns",
   "category": "agents",
   "background": true,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "herdr",
       "title": "Agents",
-      "symbolName": "rectangle.split.3x1.fill",
+      "icon": "columns",
       "order": 2,
       "logoName": "herdr"
     }
@@ -30,22 +30,22 @@
     "summary": "Agents shows the coding agents running in Herdr on this Mac and your SSH machines, grouped by what they are doing. Open any agent to watch or type to it, start new ones, and get told when one is blocked. Nothing runs until you start it.",
     "steps": [
       {
-        "symbolName": "arrow.clockwise",
+        "icon": "refresh",
         "title": "Find your agents",
         "detail": "Edith looks for the herdr command on this Mac and your SSH machines and lists every live session."
       },
       {
-        "symbolName": "plus",
+        "icon": "plus",
         "title": "Start an agent",
         "detail": "Press New Agent, then choose a coding agent, a machine and a space. It opens in its own pane."
       },
       {
-        "symbolName": "rectangle.split.3x1",
+        "icon": "columns",
         "title": "Watch the board",
         "detail": "Agents are grouped as blocked, working, done or idle so you see who needs you."
       },
       {
-        "symbolName": "text.bubble",
+        "icon": "message",
         "title": "Step in",
         "detail": "Open an agent to read its terminal, answer a question, or send it a message."
       }

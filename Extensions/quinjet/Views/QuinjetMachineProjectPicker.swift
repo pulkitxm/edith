@@ -31,13 +31,13 @@ struct QuinjetProjectPicker: View {
                 let error = tab.folderPicker?.errorMessage ?? tab.errorMessage
             {
                 PageEmptyState(
-                    symbolName: "exclamationmark.triangle",
+                    icon: .warning,
                     title: "\(machine.name) is not reachable",
                     message: "\(error) Nothing was changed on that machine.",
-                    primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                    primary: PageAction("Try again", icon: .refresh) {
                         select(machine)
                     },
-                    secondary: PageAction("Use this Mac", symbolName: "laptopcomputer") {
+                    secondary: PageAction("Use this Mac", icon: .laptop) {
                         select(machines.localMachine)
                     })
             } else {
@@ -136,7 +136,7 @@ private struct QuinjetRemoteProjectPicker: View {
                         Button {
                             QuinjetWorkOwnership.start { await picker.goUp() }
                         } label: {
-                            Image(systemName: "arrow.up")
+                            EdithIconView(.arrowUp)
                         }
                         .disabled(FileListing.parentPath(of: picker.directory) == nil)
                         .help("Parent folder")
@@ -144,7 +144,7 @@ private struct QuinjetRemoteProjectPicker: View {
                     Button {
                         refresh()
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        EdithIconView(.refresh)
                     }
                     .help(mode == .recent ? "Refresh recent projects" : "Refresh folder")
                 }
@@ -174,7 +174,7 @@ private struct QuinjetRemoteProjectPicker: View {
 
     private var pathField: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "folder")
+            EdithIconView(.folder)
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .accessibilityHidden(true)
             TextField(
@@ -224,25 +224,25 @@ private struct QuinjetRemoteProjectPicker: View {
                 .accessibilityLabel("Loading recent projects from \(machine.name)")
         } else if let error = model.projectError(for: remote), projects.isEmpty {
             PageEmptyState(
-                symbolName: "exclamationmark.triangle",
+                icon: .warning,
                 title: "Recent projects could not be loaded",
                 message: "\(error) Nothing was changed on \(machine.name).",
-                primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                primary: PageAction("Try again", icon: .refresh) {
                     QuinjetWorkOwnership.start { await model.refreshProjects(for: remote) }
                 },
-                secondary: PageAction("Browse folders", symbolName: "folder") { mode = .browse })
+                secondary: PageAction("Browse folders", icon: .folder) { mode = .browse })
         } else if projects.isEmpty {
             PageEmptyState(
-                symbolName: "folder",
+                icon: .folder,
                 title: model.query.isEmpty
                     ? "No recent projects on \(machine.name)" : "No project matches that search",
                 message: model.query.isEmpty
                     ? "Browse the folders on \(machine.name) and pick a Git project to review. Opening a project only reads it."
                     : "Search looks at project names, branches and paths. Clear it to see every recent project.",
-                primary: PageAction("Browse folders", symbolName: "folder") { mode = .browse },
+                primary: PageAction("Browse folders", icon: .folder) { mode = .browse },
                 secondary: model.query.isEmpty
                     ? nil
-                    : PageAction("Clear search", symbolName: "xmark.circle") { model.query = "" })
+                    : PageAction("Clear search", icon: .closeFilled) { model.query = "" })
         } else {
             ScrollView {
                 QuinjetProjectList(projects: projects) { project, worktree in
@@ -264,18 +264,18 @@ private struct QuinjetRemoteProjectPicker: View {
                 .accessibilityLabel("Connecting to \(machine.name)")
         } else if let error = picker.errorMessage, picker.entries.isEmpty {
             PageEmptyState(
-                symbolName: "exclamationmark.triangle",
+                icon: .warning,
                 title: "Folders could not be listed",
                 message: "\(error) Nothing was changed on \(machine.name).",
-                primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                primary: PageAction("Try again", icon: .refresh) {
                     QuinjetWorkOwnership.start { await picker.start() }
                 })
         } else if let error = tab.errorMessage {
             PageEmptyState(
-                symbolName: "exclamationmark.triangle",
+                icon: .warning,
                 title: "That folder could not be opened",
                 message: "\(error) Pick a different folder, ideally one that is a Git project.",
-                primary: PageAction("Choose another folder", symbolName: "folder") {
+                primary: PageAction("Choose another folder", icon: .folder) {
                     tab.errorMessage = nil
                 })
         } else {
@@ -293,7 +293,7 @@ private struct QuinjetRemoteProjectPicker: View {
                 if picker.entries.isEmpty, !picker.loading, !picker.canOpenCurrentDirectory {
                     ContentStatusView(
                         "No matching folders", message: "Check the path or keep typing.",
-                        symbol: "folder"
+                        icon: .folder
                     )
                     .allowsHitTesting(false)
                 }
@@ -307,7 +307,7 @@ private struct QuinjetRemoteProjectPicker: View {
             open(picker.directory)
         } label: {
             HStack(spacing: UIScale.pt(11)) {
-                Image(systemName: "arrow.turn.down.right")
+                EdithIconView(.arrowTurn)
                     .foregroundStyle(DashSkin.accent(dark))
                     .frame(width: UIScale.pt(18))
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -340,7 +340,7 @@ private struct QuinjetRemoteProjectPicker: View {
             }
         } label: {
             HStack(spacing: UIScale.pt(11)) {
-                Image(systemName: entry.isDirectory ? "folder.fill" : "doc")
+                EdithIconView(entry.isDirectory ? .folder : .doc)
                     .foregroundStyle(
                         entry.isDirectory ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
                     )
@@ -355,7 +355,7 @@ private struct QuinjetRemoteProjectPicker: View {
                         .font(.edithText(.caption2, design: .monospaced))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 } else if entry.isDirectory || entry.kind == .symlink {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }

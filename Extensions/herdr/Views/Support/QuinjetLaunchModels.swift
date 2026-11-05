@@ -11,10 +11,10 @@ extension QuinjetTerminal {
         }
     }
 
-    var icon: String {
+    var icon: EdithIcon {
         switch self {
-        case .embedded: "rectangle.inset.filled"
-        case .cmux: "macwindow.on.rectangle"
+        case .embedded: .layoutCenter
+        case .cmux: .windows
         }
     }
 

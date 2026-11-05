@@ -47,7 +47,7 @@ struct HerdrSearchPopup: View {
 
     private var field: some View {
         HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "magnifyingglass")
+            EdithIconView(.search)
                 .font(.edithText(.title3).weight(.medium))
                 .foregroundStyle(.secondary)
             TextField("Search open agents by their history…", text: $model.query)
@@ -74,7 +74,7 @@ struct HerdrSearchPopup: View {
             Button {
                 dismiss()
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
             }
             .buttonStyle(.edith(.iconOnly))
             .keyboardShortcut(.cancelAction)
@@ -109,21 +109,21 @@ struct HerdrSearchPopup: View {
         case .hidden:
             EmptyView()
         case .ranking:
-            header(icon: "sparkles", title: "Best matches", status: "Jev is ranking…")
+            header(icon: .jev, title: "Best matches", status: "Jev is ranking…")
             HerdrSkeleton(dark: dark, rows: 2, card: false)
                 .padding(.horizontal, UIScale.pt(8))
         case .ready(let rows):
-            header(icon: "sparkles", title: "Best matches", status: "Picked by Jev")
+            header(icon: .jev, title: "Best matches", status: "Picked by Jev")
             ForEach(rows) { row(for: $0, showsMachine: true) }
         case .noMatch:
-            header(icon: "sparkles", title: "Best matches", status: "Picked by Jev")
+            header(icon: .jev, title: "Best matches", status: "Picked by Jev")
             note("Jev found no session that clearly fits. Keyword matches are below.")
         }
     }
 
     private func sectionHeader(_ section: HerdrSearchSection) -> some View {
         header(
-            icon: section.isLocal ? "laptopcomputer" : "server.rack", title: section.name,
+            icon: section.isLocal ? .laptop : .server, title: section.name,
             status: status(section), failed: isFailed(section))
     }
 
@@ -165,11 +165,11 @@ struct HerdrSearchPopup: View {
         return false
     }
 
-    private func header(icon: String, title: String, status: String, failed: Bool = false)
+    private func header(icon: EdithIcon, title: String, status: String, failed: Bool = false)
         -> some View
     {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: icon)
+            EdithIconView(icon)
                 .font(.edithText(.caption).weight(.semibold))
             Text(title.uppercased())
                 .font(.edithText(.caption).weight(.semibold))

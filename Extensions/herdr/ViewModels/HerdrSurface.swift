@@ -51,18 +51,18 @@ import Foundation
                 let id = action(target)
                 return .init(
                     id, choice == .deny ? "Deny" : "Allow once",
-                    choice == .deny ? "xmark" : "checkmark", field: "approvals")
+                    choice == .deny ? .close : .check, field: "approvals")
             }
             rows.append(
                 .init(
                     request.id.uuidString, sourceID: request.provider.rawValue,
                     title: request.tool, detail: HerdrWorker.bounded(request.detail, 1_024),
                     value: "\(max(0, Int(request.expiresAt.timeIntervalSinceNow)))s",
-                    icon: "hand.raised.fill",
+                    icon: .hand,
                     field: "approvals",
                     actions: [
                         .init(
-                            "connections", "Review full request", "doc.text.magnifyingglass",
+                            "connections", "Review full request", .seoAudit,
                             field: "approvals")
                     ] + controls))
         }
@@ -81,7 +81,7 @@ import Foundation
             }
             let controls: [SurfaceAction] =
                 row.terminal.map { terminal in
-                    [.init(action(.terminal(terminal.id)), "Open", "macwindow", field: "sessions")]
+                    [.init(action(.terminal(terminal.id)), "Open", .window, field: "sessions")]
                 } ?? []
             rows.append(
                 .init(
@@ -89,7 +89,7 @@ import Foundation
                     title: HerdrWorker.bounded(row.title, 512),
                     detail: HerdrWorker.bounded(details.joined(separator: " · "), 1_024),
                     value: row.phase.title,
-                    icon: row.isSubagent ? "arrow.turn.down.right" : "terminal",
+                    icon: row.isSubagent ? .arrowTurn : .terminal,
                     field: "sessions", actions: controls))
         }
         var metrics: [SurfaceMetric] = [
@@ -109,7 +109,7 @@ import Foundation
         }
         return SurfaceSnapshot(
             providerID: "herdr", metrics: metrics, rows: rows,
-            actions: [.init("open", "Open Herdr", "macwindow")],
+            actions: [.init("open", "Open Herdr", .window)],
             facts: [
                 "working": Double(presentation.working), "waiting": Double(presentation.waiting),
                 "stuck": Double(presentation.stuck), "quiet": Double(presentation.quiet),

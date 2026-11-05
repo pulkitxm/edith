@@ -8,13 +8,14 @@ let package = Package(
         .library(name: "EdithStudio", type: .dynamic, targets: ["EdithStudio"])
     ],
     dependencies: [
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")
+        .package(path: "../../../Packages/EdithIcons"),
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19"),
     ],
     targets: [
         .target(
             name: "EdithStudio",
             dependencies: [
-                "CPDFium",
+                "CPDFium", .product(name: "EdithIcons", package: "EdithIcons"),
                 .product(
                     name: "ZIPFoundation", package: "ZIPFoundation",
                     moduleAliases: ["ZIPFoundation": "ZIPFoundation_studio_native"]),

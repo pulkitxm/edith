@@ -277,7 +277,7 @@ struct MachineControlCenterButton: View {
         Button {
             presented.toggle()
         } label: {
-            Image(systemName: "switch.2")
+            EdithIconView(.toolbox)
                 .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(
                     hovering ? DashSkin.ink(dark) : DashSkin.inkSoft(dark)
@@ -317,9 +317,8 @@ struct MachineControlCenterButton: View {
                 Text("\(level)%")
                     .font(.edithText(.subheadline).weight(.medium))
                     .monospacedDigit()
-                Image(systemName: batterySymbol(level: level))
+                EdithIconView(batteryIcon(level: level))
                     .font(.edithText(.title3).weight(.medium))
-                    .symbolRenderingMode(.hierarchical)
             }
             .foregroundStyle(batteryColor(level: level))
             .accessibilityElement(children: .ignore)
@@ -328,14 +327,14 @@ struct MachineControlCenterButton: View {
         }
     }
 
-    private func batterySymbol(level: Int) -> String {
-        if model.snapshot?.batteryPluggedIn == true { return "battery.100percent.bolt" }
+    private func batteryIcon(level: Int) -> EdithIcon {
+        if model.snapshot?.batteryPluggedIn == true { return .batteryCharging }
         switch level {
-        case ..<13: return "battery.0percent"
-        case ..<38: return "battery.25percent"
-        case ..<63: return "battery.50percent"
-        case ..<88: return "battery.75percent"
-        default: return "battery.100percent"
+        case ..<13: return .batteryEmpty
+        case ..<38: return .batteryLow
+        case ..<63: return .batteryHalf
+        case ..<88: return .batteryHigh
+        default: return .batteryFull
         }
     }
 
@@ -449,7 +448,7 @@ struct MachineControlCenterView: View {
 
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: "switch.2")
+            EdithIconView(.toolbox)
                 .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.accent(dark))
             Text(session.machine.name)
@@ -469,7 +468,7 @@ struct MachineControlCenterView: View {
             Button {
                 Task { await model.refresh(reportFailure: true, clearsMessage: true) }
             } label: {
-                Image(systemName: "arrow.clockwise")
+                EdithIconView(.refresh)
                     .font(.edithText(.caption).weight(.semibold))
                     .frame(width: UIScale.pt(24), height: UIScale.pt(24))
                     .contentShape(Rectangle())
@@ -523,9 +522,9 @@ struct MachineControlCenterView: View {
                 model.requiresConnection
                     ? "Connect to discover controls"
                     : model.resultFailed ? "Controls unavailable" : "No controls available",
-                systemImage: model.requiresConnection
-                    ? "bolt.horizontal.circle"
-                    : model.resultFailed ? "exclamationmark.triangle" : "switch.2"
+                edith: model.requiresConnection
+                    ? .bolt
+                    : model.resultFailed ? .warning : .toolbox
             )
             .font(.edithText(.callout).weight(.medium))
             .foregroundStyle(model.resultFailed ? DashSkin.danger : DashSkin.ink(dark))
@@ -569,7 +568,7 @@ struct MachineControlCenterView: View {
     private var availableControls: some View {
         if snapshot?.brightness != nil {
             sliderRow(
-                "Brightness", symbol: "sun.max", value: $model.brightness,
+                "Brightness", icon: .sun, value: $model.brightness,
                 onCommit: {
                     model.perform(
                         .setBrightness(model.brightness), success: "Brightness updated")
@@ -578,7 +577,7 @@ struct MachineControlCenterView: View {
         if snapshot?.volume != nil {
             if hasControl(before: 1) { controlDivider }
             sliderRow(
-                "Volume", symbol: "speaker.wave.2", value: $model.volume,
+                "Volume", icon: .speaker, value: $model.volume,
                 onCommit: {
                     model.perform(.setVolume(model.volume), success: "Volume updated")
                 })
@@ -586,7 +585,7 @@ struct MachineControlCenterView: View {
         if snapshot?.muted != nil {
             if hasControl(before: 2) { controlDivider }
             toggleRow(
-                "Mute", symbol: model.muted ? "speaker.slash.fill" : "speaker.slash",
+                "Mute", icon: .speakerOff,
                 value: model.muted
             ) {
                 model.muted = $0
@@ -595,7 +594,7 @@ struct MachineControlCenterView: View {
         }
         if snapshot?.wifiEnabled != nil {
             if hasControl(before: 3) { controlDivider }
-            toggleRow("Wi-Fi", symbol: "wifi", value: model.wifiEnabled) { next in
+            toggleRow("Wi-Fi", icon: .wifi, value: model.wifiEnabled) { next in
                 if next {
                     model.wifiEnabled = true
                     model.perform(.setWiFiEnabled(true), success: "Wi-Fi turned on")
@@ -606,7 +605,7 @@ struct MachineControlCenterView: View {
         }
         if snapshot?.bluetoothEnabled != nil {
             if hasControl(before: 4) { controlDivider }
-            toggleRow("Bluetooth", symbol: "wave.3.right", value: model.bluetoothEnabled) {
+            toggleRow("Bluetooth", icon: .headphones, value: model.bluetoothEnabled) {
                 model.bluetoothEnabled = $0
                 model.perform(
                     .setBluetoothEnabled($0),
@@ -615,7 +614,7 @@ struct MachineControlCenterView: View {
         }
         if snapshot?.airplaneMode != nil {
             if hasControl(before: 5) { controlDivider }
-            toggleRow("Airplane mode", symbol: "airplane", value: model.airplaneMode) { next in
+            toggleRow("Airplane mode", icon: .airplane, value: model.airplaneMode) { next in
                 if next {
                     confirmation = .enableAirplaneMode
                 } else {
@@ -628,7 +627,7 @@ struct MachineControlCenterView: View {
         if snapshot?.doNotDisturb != nil {
             if hasControl(before: 6) { controlDivider }
             toggleRow(
-                "Do Not Disturb", symbol: "moon.fill", value: model.doNotDisturb
+                "Do Not Disturb", icon: .moon, value: model.doNotDisturb
             ) {
                 model.doNotDisturb = $0
                 model.perform(
@@ -640,7 +639,7 @@ struct MachineControlCenterView: View {
             if hasControl(before: 7) { controlDivider }
             toggleRow(
                 "Caffeinate",
-                symbol: model.caffeinateEnabled ? "cup.and.saucer.fill" : "cup.and.saucer",
+                icon: .coffee,
                 value: model.caffeinateEnabled
             ) {
                 model.caffeinateEnabled = $0
@@ -652,7 +651,7 @@ struct MachineControlCenterView: View {
         if snapshot?.keyboardBacklight != nil {
             if hasControl(before: 8) { controlDivider }
             sliderRow(
-                "Keyboard lighting", symbol: "keyboard", value: $model.keyboardBacklight,
+                "Keyboard lighting", icon: .keyboard, value: $model.keyboardBacklight,
                 onCommit: {
                     model.perform(
                         .setKeyboardBacklight(model.keyboardBacklight),
@@ -672,7 +671,7 @@ struct MachineControlCenterView: View {
     }
 
     private func sliderRow(
-        _ title: String, symbol: String, value: Binding<Int>, onCommit: @escaping () -> Void
+        _ title: String, icon: EdithIcon, value: Binding<Int>, onCommit: @escaping () -> Void
     ) -> some View {
         let doubleValue = Binding<Double>(
             get: { Double(value.wrappedValue) },
@@ -680,7 +679,7 @@ struct MachineControlCenterView: View {
         )
         return VStack(alignment: .leading, spacing: UIScale.pt(7)) {
             HStack(spacing: UIScale.pt(9)) {
-                Image(systemName: symbol)
+                EdithIconView(icon)
                     .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
@@ -711,14 +710,14 @@ struct MachineControlCenterView: View {
     }
 
     private func toggleRow(
-        _ title: String, symbol: String, value: Bool, onChange: @escaping (Bool) -> Void
+        _ title: String, icon: EdithIcon, value: Bool, onChange: @escaping (Bool) -> Void
     ) -> some View {
         Button {
             guard !controlsDisabled else { return }
             onChange(!value)
         } label: {
             HStack(spacing: UIScale.pt(9)) {
-                Image(systemName: symbol)
+                EdithIconView(icon)
                     .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
@@ -754,7 +753,7 @@ struct MachineControlCenterView: View {
             ForEach(Array(fans.enumerated()), id: \.element.id) { index, fan in
                 if index > 0 { controlDivider }
                 HStack(spacing: UIScale.pt(9)) {
-                    Image(systemName: "fan")
+                    EdithIconView(.fan)
                         .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(width: UIScale.pt(18))
@@ -783,7 +782,7 @@ struct MachineControlCenterView: View {
     private func profileControls(_ profile: MachinePlatformProfile) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack(spacing: UIScale.pt(9)) {
-                Image(systemName: "thermometer.medium")
+                EdithIconView(.thermometer)
                     .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
@@ -802,7 +801,7 @@ struct MachineControlCenterView: View {
                 .disabled(controlsDisabled)
             }
             HStack(spacing: UIScale.pt(9)) {
-                Image(systemName: "timer")
+                EdithIconView(.timer)
                     .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18))
@@ -837,11 +836,8 @@ struct MachineControlCenterView: View {
 
     private func resultRow(_ message: String) -> some View {
         HStack(alignment: .top, spacing: UIScale.pt(7)) {
-            Image(
-                systemName: model.resultFailed
-                    ? "exclamationmark.triangle" : "checkmark.circle.fill"
-            )
-            .font(.edithText(.caption).weight(.medium))
+            EdithIconView(model.resultFailed ? .warning : .success)
+                .font(.edithText(.caption).weight(.medium))
             Text(message)
                 .font(.edithText(.caption))
                 .fixedSize(horizontal: false, vertical: true)

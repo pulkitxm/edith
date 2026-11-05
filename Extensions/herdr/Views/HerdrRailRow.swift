@@ -45,7 +45,7 @@ struct HerdrRailRow: View, Equatable {
                 Spacer(minLength: 0)
                 let waiting = store.messaging.armedHooks(for: agent.id)
                 if !waiting.isEmpty {
-                    Image(systemName: "paperplane.circle.fill")
+                    EdithIconView(.send)
                         .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.accent(dark))
                         .padding(.top, UIScale.pt(2))

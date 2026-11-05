@@ -61,7 +61,7 @@ struct HerdrLayoutPopover: View {
                                 selected: template == current, dark: dark)
                             HStack(spacing: UIScale.pt(3)) {
                                 if template.isSaved {
-                                    Image(systemName: "bookmark.fill")
+                                    EdithIconView(.bookmark)
                                         .font(.system(size: UIScale.pt(8)))
                                         .foregroundStyle(DashSkin.accent(dark))
                                 }
@@ -99,22 +99,19 @@ struct HerdrLayoutPopover: View {
                     repeating: GridItem(.flexible(), spacing: UIScale.pt(6)), count: 4),
                 spacing: UIScale.pt(6)
             ) {
-                action("rotate.right", "Rotate") { store.rotate(tab.id) }
-                action("arrow.left.and.right.righttriangle.left.righttriangle.right", "Flip") {
+                action(.rotate, "Rotate") { store.rotate(tab.id) }
+                action(.resizeHorizontal, "Flip") {
                     store.mirror(tab.id, .horizontal)
                 }
-                action("arrow.up.and.down.righttriangle.up.righttriangle.down", "Flip Up") {
+                action(.resizeVertical, "Flip Up") {
                     store.mirror(tab.id, .vertical)
                 }
-                action("equal.square", "Even Out") { store.equalize(tab.id) }
+                action(.calculator, "Even Out") { store.equalize(tab.id) }
                 action(
-                    tab.zoomed == nil
-                        ? "arrow.up.left.and.arrow.down.right"
-                        : "arrow.down.right.and.arrow.up.left",
-                    tab.zoomed == nil ? "Zoom" : "Restore"
+                    tab.zoomed == nil ? .expand : .collapse, tab.zoomed == nil ? "Zoom" : "Restore"
                 ) { store.toggleZoom(tab.focused) }
-                action("rectangle.split.3x1", "Separate") { store.separate(tab.id) }
-                action("bookmark", "Save") {
+                action(.columns, "Separate") { store.separate(tab.id) }
+                action(.bookmark, "Save") {
                     layoutName = ""
                     naming = true
                 }
@@ -158,7 +155,7 @@ struct HerdrLayoutPopover: View {
                         .help("Show every open tab together in this one")
                     }
                     if !candidates.isEmpty {
-                        PageMenuChip("Add Agent", systemImage: "plus") {
+                        PageMenuChip("Add Agent", icon: .plus) {
                             ForEach(candidates) { agent in
                                 Menu(hideAgents ? agent.kind : agent.title) {
                                     Button("Add to This Tab") {
@@ -214,14 +211,14 @@ struct HerdrLayoutPopover: View {
         }
     }
 
-    private func action(_ systemImage: String, _ title: String, run: @escaping () -> Void)
+    private func action(_ icon: EdithIcon, _ title: String, run: @escaping () -> Void)
         -> some View
     {
         Button {
             perform(run)
         } label: {
             VStack(spacing: UIScale.pt(3)) {
-                Image(systemName: systemImage)
+                EdithIconView(icon)
                     .font(.edithText(.callout).weight(.semibold))
                     .frame(height: UIScale.pt(16))
                 Text(title)
@@ -291,7 +288,7 @@ struct HerdrTabSummary: View {
                 .truncationMode(.tail)
                 .presenterTextBlur(hideAgents, fontSize: 11.5)
             Spacer(minLength: 0)
-            Image(systemName: "plus.rectangle.on.rectangle")
+            EdithIconView(.plus)
                 .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }

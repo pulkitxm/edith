@@ -200,11 +200,8 @@ struct HerdrMessageSheet: View {
                 ForEach(initial.recipients) { agent in
                     let outcome = outcomes[agent.id] ?? .failed("no reply")
                     HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
-                        Image(
-                            systemName: outcome.delivered
-                                ? "checkmark.circle.fill" : "exclamationmark.circle"
-                        )
-                        .foregroundStyle(outcome.delivered ? Color.green : Color.orange)
+                        EdithIconView(outcome.delivered ? .success : .alert)
+                            .foregroundStyle(outcome.delivered ? Color.green : Color.orange)
                         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                             Text(agent.title)
                                 .font(.edithText(.callout).weight(.medium))

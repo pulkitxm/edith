@@ -94,7 +94,7 @@ struct MachinesDockerListFixture: View {
                         id: $0.id, title: $0.displayName,
                         subtitle: "\($0.shortID) · \($0.createdSince)",
                         trailing: ByteFormatter.string($0.sizeBytes),
-                        symbol: "square.stack.3d.up", badge: $0.dangling ? "dangling" : nil)
+                        icon: .layers, badge: $0.dangling ? "dangling" : nil)
                 }, dark: true, onDelete: { _ in })
         }
     }

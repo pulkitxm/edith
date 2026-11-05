@@ -91,16 +91,16 @@ struct HerdrAgentTerminalOverlayView: View {
             HerdrAgentTerminalSkeleton(kind: kind, palette: .edith(dark: scheme == .dark))
         case .failure(let message):
             PageEmptyState(
-                symbolName: "exclamationmark.triangle", title: "Could not reach this agent",
+                icon: .warning, title: "Could not reach this agent",
                 message: message,
-                primary: PageAction("Try again", symbolName: "arrow.clockwise", perform: retry),
+                primary: PageAction("Try again", icon: .refresh, perform: retry),
                 style: .compact, tint: DashSkin.warn
             )
             .disabled(!launchEnabled)
         case .ended(let message):
             PageEmptyState(
-                symbolName: "stop.circle", title: "This session ended", message: message,
-                primary: PageAction("Restart", symbolName: "arrow.clockwise", perform: retry),
+                icon: .stop, title: "This session ended", message: message,
+                primary: PageAction("Restart", icon: .refresh, perform: retry),
                 style: .compact
             )
             .disabled(!launchEnabled)

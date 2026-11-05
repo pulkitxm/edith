@@ -71,7 +71,7 @@ struct HerdrNewAgentPopup: View {
             }
             Divider()
             if let errorMessage = model.errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                Label(errorMessage, edith: .warning)
                     .font(.edithText(.callout))
                     .foregroundStyle(DashSkin.danger)
                     .fixedSize(horizontal: false, vertical: true)
@@ -109,7 +109,7 @@ struct HerdrNewAgentPopup: View {
                 Button {
                     _ = model.back()
                 } label: {
-                    Image(systemName: "chevron.left")
+                    EdithIconView(.chevronLeft)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .disabled(model.launching)
@@ -137,7 +137,7 @@ struct HerdrNewAgentPopup: View {
             Button {
                 dismiss()
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
             }
             .buttonStyle(.edith(.iconOnly))
             .disabled(model.launching)
@@ -162,7 +162,7 @@ struct HerdrNewAgentPopup: View {
                     )
                     .lineLimit(1)
                 if step != .space {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.edithText(.caption2)).fontWeight(.semibold)
                         .foregroundStyle(.tertiary)
                 }
@@ -195,12 +195,11 @@ struct HerdrNewAgentPopup: View {
         Menu {
             Picker("Layout", selection: $model.layoutChoice) {
                 ForEach(HerdrNewAgentPopupModel.LayoutChoice.allCases) { choice in
-                    Label(choice.title, systemImage: choice.symbolName).tag(choice)
+                    Label(choice.title, edith: choice.icon).tag(choice)
                 }
             }
         } label: {
-            Image(systemName: model.layoutChoice.symbolName)
-                .font(.edithText(.subheadline).weight(.semibold))
+            model.layoutChoice.icon.image()
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -290,7 +289,7 @@ struct HerdrNewAgentPopup: View {
         ForEach(Array(machines.enumerated()), id: \.element.id) { index, host in
             let available = host.reachable && host.herdrPresent
             row(index: index) {
-                Image(systemName: host.isLocal ? "laptopcomputer" : "server.rack")
+                EdithIconView(host.isLocal ? .laptop : .server)
                     .font(.edithText(.body))
                     .frame(width: UIScale.pt(16))
                     .foregroundStyle(available ? .primary : .secondary)
@@ -326,7 +325,7 @@ struct HerdrNewAgentPopup: View {
         } else {
             ForEach(Array(matches.enumerated()), id: \.element.id) { index, space in
                 row(index: index) {
-                    Image(systemName: "square.split.2x2")
+                    EdithIconView(.grid)
                         .font(.edithText(.body))
                         .frame(width: UIScale.pt(16))
                     Text(space.label).font(.edithText(.body))
@@ -338,7 +337,7 @@ struct HerdrNewAgentPopup: View {
             }
             if showsCreateRow {
                 row(index: matches.count) {
-                    Image(systemName: "plus.square")
+                    EdithIconView(.plus)
                         .font(.edithText(.body))
                         .frame(width: UIScale.pt(16))
                     Text("Create space “\(trimmedQuery)”").font(.edithText(.body))
@@ -371,7 +370,7 @@ struct HerdrNewAgentPopup: View {
         Button {
             HerdrWorkOwnership.start { await store.refresh() }
         } label: {
-            Label("Check machines again", systemImage: "arrow.clockwise")
+            Label("Check machines again", edith: .refresh)
                 .font(.edithText(.body))
         }
         .buttonStyle(.edith(.borderless))

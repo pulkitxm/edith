@@ -149,7 +149,7 @@ struct VideoBeatPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label("Waveform & markers", systemImage: "waveform").font(
+                Label("Waveform & markers", edith: .waveform).font(
                     .edithText(.title2).bold())
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -165,7 +165,7 @@ struct VideoBeatPanel: View {
                             analysis.isAnalyzing
                                 ? "Reading audio samples" : "Analyze an audio source",
                             message: "Measured peaks and detected transients appear here.",
-                            symbol: "waveform"
+                            icon: .waveform
                         )
                         .frame(height: UIScale.pt(130))
                     }
@@ -450,7 +450,7 @@ private struct VideoBeatMarkerRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: marker.kind == .transient ? "waveform" : "bookmark")
+            EdithIconView(marker.kind == .transient ? .waveform : .bookmark)
                 .foregroundStyle(marker.kind == .transient ? .primary : .secondary)
             TextField("Label", text: $label).textFieldStyle(.roundedBorder)
             TextField("Output frame", value: $frame, format: .number.grouping(.never))
@@ -464,7 +464,7 @@ private struct VideoBeatMarkerRow: View {
             .help("Seek to marker output time")
             Button("Save") { save(frame, label) }
                 .disabled(frame == marker.frame && label == marker.label)
-            Button(action: remove) { Image(systemName: "trash") }
+            Button(action: remove) { EdithIconView(.trash) }
                 .accessibilityLabel("Remove \(marker.label)")
         }
         .onAppear { resetDraft() }

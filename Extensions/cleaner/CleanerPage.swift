@@ -70,7 +70,7 @@ struct CleanerPage: View {
             Button {
                 openPicker(.scan)
             } label: {
-                Label("Scan again", systemImage: "arrow.clockwise").font(.edithText(.body))
+                Label("Scan again", edith: .refresh).font(.edithText(.body))
             }
             .buttonStyle(.edith(.secondary))
             .help("Choose where to search, then look for space you can reclaim again.")

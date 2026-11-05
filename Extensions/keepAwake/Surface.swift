@@ -24,7 +24,7 @@ enum KeepAwakeSurface {
             actions: [
                 .init(
                     requested ? "disable" : "enable", requested ? "Turn off" : "Turn on",
-                    "moon.zzz")
+                    .moon)
             ])
     }
 }

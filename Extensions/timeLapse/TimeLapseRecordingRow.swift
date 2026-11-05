@@ -10,7 +10,7 @@ struct TimeLapseRecordingRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(12)) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                EdithIconView(selected ? .success : .ring)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(recording.session.settings.mode.rawValue)
                         .font(.edithText(.callout)).fontWeight(.medium)

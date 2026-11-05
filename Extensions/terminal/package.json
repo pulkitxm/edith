@@ -1,7 +1,7 @@
 {
   "id": "terminal",
   "title": "Terminal",
-  "symbolName": "terminal",
+  "icon": "terminal",
   "category": "agents",
   "background": false,
   "commands": [],
@@ -17,17 +17,17 @@
     "summary": "Terminal opens a real shell in a tab inside Edith. Open as many tabs as you need, send one command to all of them with Broadcast, and adjust the font in settings. Closing a tab ends only that shell.",
     "steps": [
       {
-        "symbolName": "terminal",
+        "icon": "terminal",
         "title": "Start typing",
         "detail": "A shell opens in your home folder as soon as you visit the page."
       },
       {
-        "symbolName": "plus",
+        "icon": "plus",
         "title": "Add tabs",
         "detail": "Press plus or Command T to open another shell, and Command W to close the current one."
       },
       {
-        "symbolName": "dot.radiowaves.left.and.right",
+        "icon": "signal",
         "title": "Broadcast a command",
         "detail": "Turn on Broadcast to run one command in every open tab at once."
       }

@@ -166,7 +166,7 @@ struct HerdrTitlebarViewPicker: View {
                     store.detailOpen.toggle()
                 }
             } label: {
-                Image(systemName: "sidebar.right")
+                EdithIconView(.sidebarRight)
                     .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(DashSkin.ink(dark).opacity(0.72))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -204,7 +204,7 @@ private struct HerdrTitlebarViewButton: View {
 
     var body: some View {
         Button(action: select) {
-            Label(mode.shortTitle, systemImage: mode.icon)
+            Label(mode.shortTitle, edith: mode.icon)
                 .font(.edithText(.caption).weight(selected ? .semibold : .medium))
                 .foregroundStyle(foreground)
                 .padding(.horizontal, UIScale.pt(7))

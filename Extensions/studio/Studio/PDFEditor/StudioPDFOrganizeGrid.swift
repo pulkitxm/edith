@@ -92,7 +92,7 @@ struct StudioPDFPageTile: View {
                         editor.pageSelection.insert(index)
                     }
                 } label: {
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    EdithIconView(selected ? .success : .ring)
                         .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(
                             selected ? DashSkin.accent(scheme == .dark) : Color.secondary
@@ -105,15 +105,17 @@ struct StudioPDFPageTile: View {
                 .accessibilityLabel("Select page \(index + 1)")
                 if hovering {
                     HStack(spacing: UIScale.pt(2)) {
-                        tileButton("rotate.left", "Rotate left") { editor.rotate([index], by: -90) }
-                        tileButton("rotate.right", "Rotate right") {
+                        tileButton(.rotate, "Rotate left", mirrored: true) {
+                            editor.rotate([index], by: -90)
+                        }
+                        tileButton(.rotate, "Rotate right") {
                             editor.rotate([index], by: 90)
                         }
-                        tileButton("plus.square.on.square", "Duplicate") { editor.duplicate(index) }
-                        tileButton("doc.badge.plus", "Insert blank page after") {
+                        tileButton(.plus, "Duplicate") { editor.duplicate(index) }
+                        tileButton(.docAdd, "Insert blank page after") {
                             editor.insertBlank(after: index)
                         }
-                        tileButton("trash", "Delete") { editor.delete([index]) }
+                        tileButton(.trash, "Delete") { editor.delete([index]) }
                             .disabled(editor.pageCount <= 1)
                     }
                     .padding(UIScale.pt(4))
@@ -133,11 +135,13 @@ struct StudioPDFPageTile: View {
         }
     }
 
-    private func tileButton(_ symbol: String, _ help: String, action: @escaping () -> Void)
-        -> some View
-    {
+    private func tileButton(
+        _ icon: EdithIcon, _ help: String, mirrored: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
+                .scaleEffect(x: mirrored ? -1 : 1)
                 .font(.system(size: UIScale.pt(11.5)))
                 .frame(width: UIScale.pt(24), height: UIScale.pt(22))
         }

@@ -29,7 +29,7 @@ struct StudioPDFEditorView: View {
             StudioBackBar(
                 title: editor.url.lastPathComponent,
                 subtitle: editor.pageCount > 0 ? "\(editor.pageCount) pages" : nil,
-                symbol: "doc.richtext", back: leave
+                icon: .docText, back: leave
             ) {
                 trailing
             }
@@ -125,7 +125,7 @@ struct StudioPDFEditorView: View {
     @ViewBuilder private var trailing: some View {
         HStack(spacing: UIScale.pt(6)) {
             if compact {
-                Button("Inspector", systemImage: "sidebar.right") { showsInspector.toggle() }
+                Button("Inspector", edith: .sidebarRight) { showsInspector.toggle() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.edith(.iconOnly))
                     .popover(isPresented: $showsInspector) {
@@ -138,7 +138,7 @@ struct StudioPDFEditorView: View {
             Button {
                 editor.undo()
             } label: {
-                Image(systemName: "arrow.uturn.backward")
+                EdithIconView(.undo)
             }
             .buttonStyle(.edith(.iconOnly))
             .keyboardShortcut("z", modifiers: .command)
@@ -147,7 +147,7 @@ struct StudioPDFEditorView: View {
             Button {
                 editor.redo()
             } label: {
-                Image(systemName: "arrow.uturn.forward")
+                EdithIconView(.redo)
             }
             .buttonStyle(.edith(.iconOnly))
             .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -158,28 +158,31 @@ struct StudioPDFEditorView: View {
                 Button {
                     editor.zoom(0.8)
                 } label: {
-                    Image(systemName: "minus.magnifyingglass")
+                    EdithIconView(.zoomOut)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut("-", modifiers: .command)
+                .accessibilityLabel("Zoom out")
                 Button {
                     editor.zoomToFit()
                 } label: {
-                    Image(systemName: "arrow.up.left.and.down.right.magnifyingglass")
+                    EdithIconView(.zoomIn)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut("0", modifiers: .command)
+                .accessibilityLabel("Zoom to fit")
                 Button {
                     editor.zoom(1.25)
                 } label: {
-                    Image(systemName: "plus.magnifyingglass")
+                    EdithIconView(.zoomIn)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .keyboardShortcut("=", modifiers: .command)
+                .accessibilityLabel("Zoom in")
                 Button {
                     showsThumbnails.toggle()
                 } label: {
-                    Image(systemName: "sidebar.left")
+                    EdithIconView(.sidebarLeft)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .help("Show or hide page thumbnails")
@@ -192,7 +195,7 @@ struct StudioPDFEditorView: View {
             } label: {
                 Label(
                     editor.mode == .redact ? "Apply & save" : "Save",
-                    systemImage: "square.and.arrow.down")
+                    edith: .saveTo)
             }
             .buttonStyle(.edith(.primary))
             .keyboardShortcut("s", modifiers: .command)
@@ -207,7 +210,7 @@ struct StudioPDFPasswordPrompt: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
-            Image(systemName: "lock.doc")
+            EdithIconView(.doc)
                 .font(.system(size: UIScale.pt(34), weight: .light))
             Text("This PDF is protected").font(.system(size: UIScale.pt(15), weight: .semibold))
             SecureField(
@@ -299,7 +302,7 @@ struct StudioPDFModeBar: View {
                 Button {
                     editor.tool = tool
                 } label: {
-                    Image(systemName: tool.symbol)
+                    EdithIconView(tool.icon)
                         .font(.system(size: UIScale.pt(13)))
                         .frame(width: UIScale.pt(30), height: UIScale.pt(26))
                         .background(
@@ -379,7 +382,7 @@ struct StudioPDFInspector: View {
             Button {
                 showsSignaturePad = true
             } label: {
-                Label("New signature", systemImage: "plus")
+                Label("New signature", edith: .plus)
             }
             .buttonStyle(.edith(.primary))
             if editor.signatures.isEmpty {
@@ -414,7 +417,7 @@ struct StudioPDFInspector: View {
                     Button {
                         editor.deleteSignature(signature)
                     } label: {
-                        Image(systemName: "trash")
+                        EdithIconView(.trash)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .help("Delete this signature")

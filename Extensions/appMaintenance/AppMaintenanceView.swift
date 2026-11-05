@@ -164,7 +164,7 @@ struct AppMaintenanceView: View {
             } label: {
                 Label(
                     model.checkingUpdates ? "Checking…" : "Check for updates",
-                    systemImage: "arrow.clockwise")
+                    edith: .refresh)
             }
             .disabled(model.phase != .ready || model.checkingUpdates)
             .buttonStyle(.edith(.secondary))
@@ -175,7 +175,7 @@ struct AppMaintenanceView: View {
             Button {
                 showingDiskImagePicker = true
             } label: {
-                Label("Install from disk image…", systemImage: "externaldrive.badge.plus")
+                Label("Install from disk image…", edith: .drive)
             }
             .buttonStyle(.edith(.secondary))
             .disabled(model.phase != .ready)
@@ -198,9 +198,8 @@ struct AppMaintenanceView: View {
                 }
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
-                    Label("Install to: \(installDestination.title)", systemImage: "folder")
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                    Label("Install to: \(installDestination.title)", edith: .folder)
+                    EdithIcon.chevronUpDown.image(size: UIScale.pt(12))
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                 }
@@ -212,7 +211,7 @@ struct AppMaintenanceView: View {
             Button {
                 showingUpdateSettings.toggle()
             } label: {
-                Label("Update settings", systemImage: "gearshape")
+                Label("Update settings", edith: .gear)
             }
             .buttonStyle(.edith(.secondary))
             .popover(isPresented: $showingUpdateSettings) {
@@ -286,49 +285,49 @@ struct AppMaintenanceView: View {
             .pageContent(compact)
         case .failed:
             PageEmptyState(
-                symbolName: "exclamationmark.triangle",
+                icon: .warning,
                 title: "Updates could not be checked",
                 message: model.errorMessage ?? "Something went wrong while looking for updates.",
                 primary: PageAction(
-                    "Try again", symbolName: "arrow.clockwise", identifier: "updates.retry"
+                    "Try again", icon: .refresh, identifier: "updates.retry"
                 ) {
                     model.refresh(interval: updateRefreshInterval)
                 })
         case .neverChecked:
             PageEmptyState(
-                symbolName: "arrow.down.app",
+                icon: .appDownload,
                 title: "Find out which apps are out of date",
                 message:
                     "Edith looks at the apps on this Mac and your Homebrew packages, and lists the ones with a newer version. Checking never installs anything.",
                 steps: [
                     PageGuideStep(
-                        symbolName: "arrow.clockwise", title: "Check",
+                        icon: .refresh, title: "Check",
                         detail: "Reads your apps and asks each source for the latest version."),
                     PageGuideStep(
-                        symbolName: "checklist", title: "Review",
+                        icon: .stepTools, title: "Review",
                         detail: "See release notes and the exact command before you run anything."),
                     PageGuideStep(
-                        symbolName: "arrow.up.circle", title: "Update",
+                        icon: .arrowUp, title: "Update",
                         detail: "Tick the ones you want and run them together."),
                 ],
                 primary: PageAction(
-                    "Check for updates", symbolName: "arrow.clockwise", identifier: "updates.check"
+                    "Check for updates", icon: .refresh, identifier: "updates.check"
                 ) {
                     model.refresh(interval: updateRefreshInterval)
                 })
         case .upToDate:
             PageEmptyState(
-                symbolName: "checkmark.seal",
+                icon: .success,
                 title: "Everything is up to date",
                 message:
                     "No newer versions were found. Updates you ignored or snoozed stay hidden; you can bring them back in Update settings.",
                 primary: PageAction(
-                    "Check again", symbolName: "arrow.clockwise", identifier: "updates.check"
+                    "Check again", icon: .refresh, identifier: "updates.check"
                 ) {
                     model.refresh(interval: updateRefreshInterval)
                 },
                 secondary: PageAction(
-                    "Update settings", symbolName: "gearshape", identifier: "updates.settings"
+                    "Update settings", icon: .gear, identifier: "updates.settings"
                 ) {
                     showingUpdateSettings = true
                 },
@@ -337,7 +336,7 @@ struct AppMaintenanceView: View {
                 })
         case .noMatches:
             PageEmptyState(
-                symbolName: "magnifyingglass",
+                icon: .search,
                 title: "No updates match your search",
                 message: "Clear the search to see all \(model.updates.count) available updates.",
                 primary: PageAction("Clear search", identifier: "updates.clear") { query = "" })
@@ -367,7 +366,7 @@ struct AppMaintenanceView: View {
                     message: model.applications.isEmpty
                         ? "Edith could not find any installed apps. Check again in a moment."
                         : "No installed app matches \"\(query)\". Try part of its name.",
-                    symbol: "app.dashed",
+                    icon: .selection,
                     actionTitle: model.applications.isEmpty ? "Check again" : "Clear search",
                     action: {
                         if model.applications.isEmpty {
@@ -410,7 +409,7 @@ struct AppMaintenanceView: View {
             if filteredUpdates.isEmpty {
                 ContentStatusView(
                     "No updates", message: "Everything visible is current, ignored, or snoozed.",
-                    symbol: "checkmark.circle")
+                    icon: .success)
             } else {
                 VirtualList(
                     updateRows,
@@ -442,7 +441,7 @@ struct AppMaintenanceView: View {
         Group {
             if model.updateHistory.isEmpty {
                 PageEmptyState(
-                    symbolName: "clock.arrow.circlepath",
+                    icon: .history,
                     title: "No updates have been run yet",
                     message:
                         "Each time you run updates, the result is saved here, including anything that failed, so you can see what changed and when.",
@@ -468,13 +467,10 @@ struct AppMaintenanceView: View {
 
     private func historyRow(_ result: AppUpdateResult) -> some View {
         HStack(alignment: .center, spacing: UIScale.pt(12)) {
-            Image(
-                systemName: result.status == .succeeded
-                    ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
-            )
-            .font(.system(size: UIScale.pt(16)))
-            .foregroundStyle(result.status == .succeeded ? DashSkin.sage : DashSkin.warn)
-            .accessibilityLabel(result.status == .succeeded ? "Updated" : "Needs attention")
+            EdithIconView(result.status == .succeeded ? .success : .alert)
+                .font(.system(size: UIScale.pt(16)))
+                .foregroundStyle(result.status == .succeeded ? DashSkin.sage : DashSkin.warn)
+                .accessibilityLabel(result.status == .succeeded ? "Updated" : "Needs attention")
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(result.name).font(.edithText(.body)).fontWeight(.medium).lineLimit(1)
                 Text(
@@ -542,19 +538,19 @@ struct AppMaintenanceView: View {
         } else {
             VStack(spacing: UIScale.pt(0)) {
                 PageEmptyState(
-                    symbolName: "trash",
+                    icon: .trash,
                     title: "Choose an app to remove",
                     message:
                         "Pick an app on the left. Edith lists the app and the files it left behind, matched exactly, so nothing unrelated is touched.",
                     steps: [
                         PageGuideStep(
-                            symbolName: "app.dashed", title: "Pick an app",
+                            icon: .selection, title: "Pick an app",
                             detail: "Search or scroll the list."),
                         PageGuideStep(
-                            symbolName: "checklist", title: "Review the files",
+                            icon: .stepTools, title: "Review the files",
                             detail: "Untick anything you want to keep."),
                         PageGuideStep(
-                            symbolName: "trash", title: "Move to the Trash",
+                            icon: .trash, title: "Move to the Trash",
                             detail: "You can restore it until you empty the Trash."),
                     ])
                 statusMessage.padding(.bottom, UIScale.pt(16))
@@ -675,7 +671,7 @@ struct AppMaintenanceView: View {
                 "Select an update",
                 message:
                     "Click an update on the left to read its release notes and see exactly what will run.",
-                symbol: "arrow.down.app")
+                icon: .appDownload)
         }
     }
 
@@ -700,7 +696,7 @@ struct AppMaintenanceView: View {
                     if let update = application.update {
                         Label(
                             "\(update.latestVersion) available through \(update.source)",
-                            systemImage: "arrow.down.circle.fill"
+                            edith: .arrowDown
                         )
                         .font(.edithText(.caption))
                         .foregroundStyle(theme)
@@ -710,7 +706,7 @@ struct AppMaintenanceView: View {
                 Button {
                     model.reveal(application.url)
                 } label: {
-                    Label("Reveal", systemImage: "folder")
+                    Label("Reveal", edith: .folder)
                 }
                 .buttonStyle(.edith(.secondary))
             }
@@ -775,11 +771,11 @@ struct AppMaintenanceView: View {
     @ViewBuilder
     private var statusMessage: some View {
         if let message = model.errorMessage {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
+            Label(message, edith: .warning)
                 .font(.edithText(.caption))
                 .foregroundStyle(.red)
         } else if let message = model.resultMessage {
-            Label(message, systemImage: "checkmark.circle.fill")
+            Label(message, edith: .success)
                 .font(.edithText(.caption))
                 .foregroundStyle(.green)
         }
@@ -874,7 +870,7 @@ private struct AppMaintenanceApplicationRow: View {
                 }
                 Spacer(minLength: 0)
                 if entry.application.update != nil {
-                    Image(systemName: "arrow.down.circle.fill")
+                    EdithIconView(.arrowDown)
                         .foregroundStyle(tint)
                 }
             }
@@ -911,7 +907,7 @@ private struct AppMaintenanceUpdateRow: View {
                             .resizable()
                             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                     } else {
-                        Image(systemName: "shippingbox")
+                        EdithIconView(.box)
                             .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -973,7 +969,7 @@ private struct AppMaintenanceItemRow: View {
             Button {
                 model.reveal(item.url)
             } label: {
-                Image(systemName: "folder")
+                EdithIconView(.folder)
             }
             .buttonStyle(.edith(.borderless))
             .help("Reveal in Finder")
@@ -1005,7 +1001,7 @@ private struct AppMaintenanceInstallReview: View {
                     .settingsCaption()
                 }
                 Spacer()
-                Label("Verified", systemImage: "checkmark.seal.fill")
+                Label("Verified", edith: .success)
                     .foregroundStyle(.green)
             }
             .padding(UIScale.pt(20))

@@ -226,7 +226,7 @@ struct HomebrewMaintenanceView: View {
                 Button {
                     model.updatesOnly.toggle()
                 } label: {
-                    Label("Updates only", systemImage: "arrow.up.circle")
+                    Label("Updates only", edith: .arrowUp)
                         .font(.edithText(.body))
                 }
                 .buttonStyle(.edith(.secondary, selected: model.updatesOnly))
@@ -235,7 +235,7 @@ struct HomebrewMaintenanceView: View {
                 Button {
                     model.loadInstalled(kind: kind)
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    EdithIconView(.refresh)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .accessibilityLabel("Refresh installed packages")
@@ -250,25 +250,24 @@ struct HomebrewMaintenanceView: View {
 
     private var unavailableCard: some View {
         PageEmptyState(
-            symbolName: "shippingbox",
+            icon: .box,
             title: "Homebrew is not installed",
             message:
                 "Homebrew is a free package manager that installs command line tools and Mac apps. Edith manages it for you once it is on this Mac.",
             steps: [
                 PageGuideStep(
-                    symbolName: "safari", title: "Get Homebrew",
+                    icon: .external, title: "Get Homebrew",
                     detail: "Follow the install instructions on brew.sh."),
                 PageGuideStep(
-                    symbolName: "arrow.clockwise", title: "Check again",
+                    icon: .refresh, title: "Check again",
                     detail: "Come back here and Edith finds it automatically."),
             ],
             primary: PageAction(
-                "Check again", symbolName: "arrow.clockwise", identifier: "homebrew.check"
+                "Check again", icon: .refresh, identifier: "homebrew.check"
             ) {
                 model.activate(kind: kind)
             },
-            secondary: PageAction("Open brew.sh", symbolName: "safari", identifier: "homebrew.site")
-            {
+            secondary: PageAction("Open brew.sh", icon: .external, identifier: "homebrew.site") {
                 NSWorkspace.shared.open(URL(string: "https://brew.sh")!)
             },
             footnote: "Edith never downloads or runs an installer on your behalf.")
@@ -280,21 +279,20 @@ struct HomebrewMaintenanceView: View {
                 model.mode == .installed
                     ? "\(model.packages.count) installed \(model.packages.count == 1 ? kind.title.lowercased() : kind.pluralTitle.lowercased())"
                     : "\(model.packages.count) \(model.packages.count == 1 ? "result" : "results")",
-                systemImage: kind == .formula ? "terminal" : "app.dashed")
+                edith: kind == .formula ? .terminal : .selection)
             if model.mode == .installed {
                 Label(
                     model.updateCount == 0
                         ? "Everything up to date"
                         : "\(model.updateCount) \(model.updateCount == 1 ? "update" : "updates") available",
-                    systemImage: model.updateCount == 0
-                        ? "checkmark.circle" : "arrow.up.circle.fill"
+                    edith: model.updateCount == 0 ? .success : .arrowUp
                 )
                 .foregroundStyle(
                     model.updateCount == 0
                         ? AnyShapeStyle(.secondary) : AnyShapeStyle(DashSkin.warn))
             }
             if let version = model.status?.version {
-                Label(version, systemImage: "shippingbox")
+                Label(version, edith: .box)
             }
         }
         .font(.edithText(.caption))
@@ -313,11 +311,8 @@ struct HomebrewMaintenanceView: View {
                     if model.isBusy {
                         ProgressView().controlSize(.small)
                     } else {
-                        Image(
-                            systemName: model.errorMessage == nil
-                                ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-                        )
-                        .foregroundStyle(model.errorMessage == nil ? DashSkin.sage : .red)
+                        EdithIconView(model.errorMessage == nil ? .success : .warning)
+                            .foregroundStyle(model.errorMessage == nil ? DashSkin.sage : .red)
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                         Text(
@@ -391,33 +386,33 @@ struct HomebrewMaintenanceView: View {
         switch listingState {
         case .discoverPrompt:
             PageEmptyState(
-                symbolName: "magnifyingglass",
+                icon: .search,
                 title: "Find software to install",
                 message:
                     "Type a name or keyword above, like ripgrep or firefox, then press Search. You can look at a package before installing it.",
                 footnote: "Switch Package to Casks to find Mac apps instead of command line tools.")
         case .noSearchResults:
             PageEmptyState(
-                symbolName: "questionmark.circle",
+                icon: .help,
                 title: "No \(kind.pluralTitle.lowercased()) found",
                 message:
                     "Nothing matched \"\(model.query.trimmingCharacters(in: .whitespacesAndNewlines))\". Check the spelling, try a shorter keyword, or switch between Formulae and Casks."
             )
         case .nothingInstalled:
             PageEmptyState(
-                symbolName: "shippingbox",
+                icon: .box,
                 title: "No \(kind.pluralTitle.lowercased()) installed yet",
                 message:
                     "Packages you install with Homebrew show up here, along with any updates. Browse what is available to install your first one.",
                 primary: PageAction(
-                    "Discover packages", symbolName: "magnifyingglass",
+                    "Discover packages", icon: .search,
                     identifier: "homebrew.discover"
                 ) {
                     model.mode = .search
                 })
         case .noMatchingFilters:
             PageEmptyState(
-                symbolName: "line.3.horizontal.decrease.circle",
+                icon: .filter,
                 title: "No packages match these filters",
                 message: "Clear the search or the Updates filter to see everything installed.",
                 primary: PageAction("Clear filters", identifier: "homebrew.clear") {
@@ -491,7 +486,7 @@ struct HomebrewPackageTable: View {
                     Menu {
                         packageActions(package)
                     } label: {
-                        Image(systemName: "ellipsis")
+                        EdithIcon.more.image()
                     }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden)
                     .accessibilityLabel("Actions for \(package.displayName)")

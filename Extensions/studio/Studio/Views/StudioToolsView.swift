@@ -73,11 +73,11 @@ struct StudioToolsView: View {
                 }
                 if groups.isEmpty {
                     PageEmptyState(
-                        symbolName: "magnifyingglass",
+                        icon: .search,
                         title: "No tools match your search",
                         message:
                             "Nothing matches \"\(model.toolQuery)\". Try a shorter word such as pdf, compress or convert, or browse every tool.",
-                        primary: PageAction("Show all tools", symbolName: "square.grid.2x2") {
+                        primary: PageAction("Show all tools", icon: .grid) {
                             model.toolQuery = ""
                             model.toolFilter = .all
                         }

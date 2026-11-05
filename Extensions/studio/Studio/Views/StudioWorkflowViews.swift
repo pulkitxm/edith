@@ -102,7 +102,7 @@ struct StudioWorkflowSection: View {
             model.editWorkflow(nil)
         } label: {
             VStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "plus")
+                EdithIconView(.plus)
                     .font(.system(size: UIScale.pt(20), weight: .light))
                 Text("New workflow")
                     .font(.edithText(.callout).weight(.semibold))
@@ -154,7 +154,7 @@ struct StudioWorkflowCard: View {
                 Button {
                     model.deleteWorkflow(workflow)
                 } label: {
-                    Image(systemName: "trash")
+                    EdithIconView(.trash)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .help("Delete workflow")
@@ -174,7 +174,7 @@ struct StudioWorkflowCard: View {
         HStack(spacing: UIScale.pt(4)) {
             ForEach(Array(workflow.tools.enumerated()), id: \.offset) { index, tool in
                 if index > 0 {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(9), weight: .bold))
                         .foregroundStyle(.tertiary)
                 }
@@ -222,17 +222,19 @@ struct StudioWorkflowEditor: View {
                                 Button {
                                     draft.move(index, by: -1)
                                 } label: {
-                                    Image(systemName: "arrow.up")
+                                    EdithIconView(.arrowUp)
                                 }
                                 .buttonStyle(.edith(.iconOnly))
                                 .disabled(index == 0)
+                                .accessibilityLabel("Move step up")
                                 Button {
                                     draft.remove(at: index)
                                     expanded = nil
                                 } label: {
-                                    Image(systemName: "trash")
+                                    EdithIconView(.trash)
                                 }
                                 .buttonStyle(.edith(.iconOnly))
+                                .accessibilityLabel("Remove step")
                             }
                             if expanded == index {
                                 StudioOptionsForm(job: step)
@@ -261,7 +263,7 @@ struct StudioWorkflowEditor: View {
                     } label: {
                         Label(
                             draft.steps.isEmpty ? "Choose the first tool" : "Add a step",
-                            systemImage: "plus")
+                            edith: .plus)
                     }
                     .buttonStyle(.edith(.secondary))
                     .fixedSize()

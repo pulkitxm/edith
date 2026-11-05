@@ -128,7 +128,7 @@ public final class GhosttyTerminalView: NSView {
     public init(
         externalIO: GhosttyExternalIO, workingDirectory: String? = nil,
         allowsLocalFileLinks: Bool = true, resetTerminalAfterInterrupt: Bool = false,
-        theme: GhosttyTheme? = nil
+        theme: GhosttyTheme? = nil, overlayIcons: TerminalOverlayIcons? = nil
     ) {
         self.externalIO = externalIO
         self.theme = theme
@@ -136,6 +136,8 @@ public final class GhosttyTerminalView: NSView {
         self.allowsLocalFileLinks = allowsLocalFileLinks
         shouldResetTerminalAfterInterrupt = resetTerminalAfterInterrupt
         super.init(frame: .zero)
+        linkHoverView.icons = overlayIcons
+        searchBar.icons = overlayIcons
         registerForDraggedTypes(Array(Self.dropTypes))
         addSubview(linkHoverView)
         searchBar.translatesAutoresizingMaskIntoConstraints = false

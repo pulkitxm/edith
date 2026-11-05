@@ -286,20 +286,20 @@ struct HerdrPage: View {
         HStack(spacing: UIScale.pt(2)) {
             if activity != nil {
                 headerIcon(
-                    "link", "Agent connections",
+                    .link, "Agent connections",
                     "Configure provider activity and permission requests"
                 ) { connectionsPresented = true }
             }
             HerdrMessageMenu(store: store)
             headerIcon(
-                "magnifyingglass", "Search", "Search agent sessions on every machine (⌘K)"
+                .search, "Search", "Search agent sessions on every machine (⌘K)"
             ) {
                 store.searchPresented = true
             }
-            headerIcon("plus", "New Agent", "New agent (⌘N)") {
+            headerIcon(.plus, "New Agent", "New agent (⌘N)") {
                 newAgentPopupPresented = true
             }
-            headerIcon("arrow.clockwise", "Refresh", "Refresh sessions") {
+            headerIcon(.refresh, "Refresh", "Refresh sessions") {
                 HerdrWorkOwnership.start { await store.refresh() }
             }
             .disabled(store.refreshing)
@@ -307,10 +307,10 @@ struct HerdrPage: View {
     }
 
     private func headerIcon(
-        _ symbol: String, _ label: String, _ help: String, action: @escaping () -> Void
+        _ icon: EdithIcon, _ label: String, _ help: String, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.edithText(.headline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
@@ -353,7 +353,7 @@ struct HerdrPage: View {
                 }
             }
         } label: {
-            Image(systemName: "sidebar.left")
+            EdithIconView(.sidebarLeft)
                 .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -420,7 +420,7 @@ struct HerdrPage: View {
                 boardColumns
             } else if store.agents.isEmpty, let failure = store.inventoryFailureMessage {
                 PageEmptyState(
-                    symbolName: "exclamationmark.triangle",
+                    icon: .warning,
                     title: "Edith could not read your agents",
                     message: failure,
                     primary: refreshAction(title: "Try Again"),
@@ -431,7 +431,7 @@ struct HerdrPage: View {
                 .pageContent(compact)
             } else if store.hosts.isEmpty {
                 PageEmptyState(
-                    symbolName: "desktopcomputer",
+                    icon: .display,
                     title: "No machines found yet",
                     message:
                         "Edith looks for Herdr on this Mac and on every machine you add in Machines. Check again once one is set up.",
@@ -440,23 +440,23 @@ struct HerdrPage: View {
                 .pageContent(compact)
             } else if !herdrAvailable {
                 PageEmptyState(
-                    symbolName: "shippingbox",
+                    icon: .box,
                     title: "Install Herdr to start agents",
                     message:
                         "Herdr keeps coding agents like Claude Code and Codex running in terminal panes you can leave and come back to. Edith shows them here once the herdr command is installed.",
                     steps: [
                         PageGuideStep(
-                            symbolName: "arrow.down.circle", title: "Install herdr",
+                            icon: .arrowDown, title: "Install herdr",
                             detail:
                                 "On this Mac or on a machine you reach over SSH. Edith checks your PATH, ~/.local/bin and Homebrew."
                         ),
                         PageGuideStep(
-                            symbolName: "arrow.clockwise", title: "Check again",
+                            icon: .refresh, title: "Check again",
                             detail:
                                 "Edith finds the herdr command and lists every machine that has it."
                         ),
                         PageGuideStep(
-                            symbolName: "plus", title: "Start an agent",
+                            icon: .plus, title: "Start an agent",
                             detail:
                                 "Pick a coding agent and a project, and it opens in its own pane."
                         ),
@@ -467,25 +467,25 @@ struct HerdrPage: View {
                 .pageContent(compact)
             } else if store.agents.isEmpty {
                 PageEmptyState(
-                    symbolName: "rectangle.split.3x1",
+                    icon: .columns,
                     title: "No agents running",
                     message:
                         "Start a coding agent and it shows up here, sorted by whether it needs you, is working or is done.",
                     steps: [
                         PageGuideStep(
-                            symbolName: "sparkles", title: "Choose an agent",
+                            icon: .herdr, title: "Choose an agent",
                             detail: "Claude Code, Codex or any other agent Herdr knows."),
                         PageGuideStep(
-                            symbolName: "desktopcomputer", title: "Pick a machine",
+                            icon: .display, title: "Pick a machine",
                             detail: "This Mac or any SSH machine that has herdr installed."),
                         PageGuideStep(
-                            symbolName: "square.split.2x2", title: "Name a space",
+                            icon: .grid, title: "Name a space",
                             detail:
                                 "A space groups the panes for one project. Reuse one or type a new name."
                         ),
                     ],
                     primary: PageAction(
-                        "New Agent", symbolName: "plus", identifier: "herdr.empty.new-agent"
+                        "New Agent", icon: .plus, identifier: "herdr.empty.new-agent"
                     ) { newAgentPopupPresented = true },
                     footnote:
                         "Agents keep running when you leave this page. Blocked agents move to the front so you can answer them."
@@ -779,8 +779,7 @@ struct HerdrPage: View {
             HerdrBroadcastMenuItems(
                 agents: space.agents, store: store, scopeTitle: space.title, redactScope: true)
         } label: {
-            Image(systemName: "paperplane")
-                .font(.edithText(.caption).weight(.semibold))
+            EdithIcon.send.image(size: 12)
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
         }
@@ -802,7 +801,7 @@ struct HerdrPage: View {
                 }
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(8), weight: .bold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .rotationEffect(.degrees(collapsed ? 0 : 90))
@@ -841,7 +840,7 @@ struct HerdrPage: View {
             Button {
                 newAgentSpace = space
             } label: {
-                Image(systemName: "plus")
+                EdithIconView(.plus)
                     .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -857,7 +856,7 @@ struct HerdrPage: View {
             Button {
                 openSpace(space)
             } label: {
-                Image(systemName: "macwindow")
+                EdithIconView(.window)
                     .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -888,7 +887,7 @@ struct HerdrPage: View {
             withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) { toggle() }
         } label: {
             HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: "chevron.right")
+                EdithIconView(.chevronRight)
                     .font(.system(size: UIScale.pt(9), weight: .bold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .rotationEffect(.degrees(collapsed ? 0 : 90))
@@ -961,7 +960,7 @@ struct HerdrPage: View {
     }
 
     private func refreshAction(title: String) -> PageAction {
-        PageAction(title, symbolName: "arrow.clockwise", identifier: "herdr.empty.refresh") {
+        PageAction(title, icon: .refresh, identifier: "herdr.empty.refresh") {
             guard !store.refreshing else { return }
             HerdrWorkOwnership.start { await store.refresh() }
         }

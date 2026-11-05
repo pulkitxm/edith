@@ -89,8 +89,7 @@ struct HerdrMessageMenu: View {
                 }
             }
         } label: {
-            Image(systemName: "paperplane")
-                .font(.edithText(.headline))
+            EdithIcon.send.image()
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(28), height: UIScale.pt(28))
         }

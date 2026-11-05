@@ -47,7 +47,7 @@ final class HomebrewSurface {
                     $0.id, sourceID: $0.kind.rawValue, title: String($0.displayName.prefix(1024)),
                     detail: String($0.versionSummary.prefix(4096)),
                     value: $0.outdated ? "Update available" : $0.kind.title,
-                    icon: "cube.box")
+                    icon: .box)
             }, actions: [],
             sources: HomebrewPackageKind.allCases.map { .init($0.rawValue, $0.pluralTitle) },
             updatedAt: updatedAt)

@@ -24,7 +24,7 @@ struct AgentApprovalCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             HStack {
-                Label(request.tool, systemImage: "hand.raised.fill").font(.edithText(.callout))
+                Label(request.tool, edith: .hand).font(.edithText(.callout))
                 Spacer(minLength: 0)
                 Text("\(max(0, Int(request.expiresAt.timeIntervalSince(monitor.now))))s").font(
                     .edithText(.caption)

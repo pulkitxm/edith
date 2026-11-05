@@ -41,8 +41,7 @@ struct HerdrTabButton: View, Equatable {
                     .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
             } else {
                 AppGlyph(
-                    systemName: "rectangle.3.group", logoName: "herdr", size: UIScale.pt(13),
-                    weight: .semibold)
+                    icon: .window, logoName: "herdr", size: UIScale.pt(13))
             }
             Text(title)
                 .font(.edithText(.callout).weight(.semibold))
@@ -74,13 +73,11 @@ struct HerdrTabButton: View, Equatable {
                 Button {
                     store.copyAttachCommand(for: agent)
                 } label: {
-                    Image(
-                        systemName: store.copiedID == agent.id ? "checkmark" : "terminal"
-                    )
-                    .font(.edithText(.caption))
-                    .foregroundStyle(
-                        store.copiedID == agent.id
-                            ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                    EdithIconView(store.copiedID == agent.id ? .check : .terminal)
+                        .font(.edithText(.caption))
+                        .foregroundStyle(
+                            store.copiedID == agent.id
+                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
                 }
                 .buttonStyle(.edith(.borderless))
                 .help(store.copiedID == agent.id ? "Copied" : "Copy attach command")
@@ -94,7 +91,7 @@ struct HerdrTabButton: View, Equatable {
                 Button {
                     store.closeTab(id)
                 } label: {
-                    Image(systemName: "xmark")
+                    EdithIconView(.close)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
@@ -226,7 +223,7 @@ struct HerdrTabBarActions: View {
         return Button {
             layoutPopoverOpen.toggle()
         } label: {
-            Image(systemName: tab.isSplit ? "square.grid.2x2" : "plus.rectangle.on.rectangle")
+            EdithIconView(tab.isSplit ? .grid : .plus)
                 .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -254,7 +251,7 @@ struct HerdrTabBarActions: View {
                 Button {
                     store.setView(mode, for: tab.id)
                 } label: {
-                    Image(systemName: mode.icon)
+                    EdithIconView(mode.icon)
                         .font(.edithText(.subheadline).weight(selected ? .semibold : .medium))
                         .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                         .frame(width: UIScale.pt(26), height: UIScale.pt(22))
@@ -278,7 +275,7 @@ struct HerdrTabBarActions: View {
                 store.perform(.toggle)
             }
         } label: {
-            Image(systemName: "apple.terminal")
+            EdithIconView(.terminal)
                 .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(open ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -304,7 +301,7 @@ struct HerdrTabBarActions: View {
                 }
             }
         } label: {
-            Image(systemName: "sidebar.right")
+            EdithIconView(.sidebarRight)
                 .font(.edithText(.callout).weight(.semibold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(22), height: UIScale.pt(22))

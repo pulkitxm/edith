@@ -63,12 +63,12 @@ struct TerminalSessionView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     if let actionError = holder.actionError {
                         TerminalStatusBar(
-                            symbolName: "exclamationmark.triangle.fill", message: actionError,
+                            icon: .warning, message: actionError,
                             tint: DashSkin.danger)
                     }
                     if let exitMessage = holder.exitMessage {
                         TerminalStatusBar(
-                            symbolName: "stop.circle", message: exitMessage,
+                            icon: .stop, message: exitMessage,
                             tint: DashSkin.inkSoft(dark), actionTitle: "Restart", action: restart)
                     }
                 }
@@ -96,13 +96,13 @@ struct TerminalSessionUnavailableView: View {
 
     var body: some View {
         PageEmptyState(
-            symbolName: "terminal",
+            icon: .terminal,
             title: presentation.title,
             message: [presentation.detail, "Starting again opens a fresh shell in the same tab."]
                 .compactMap { $0 }.joined(separator: " "),
             primary: presentation.action.map { action in
                 PageAction(
-                    action.title, symbolName: "arrow.clockwise",
+                    action.title, icon: .refresh,
                     identifier: "terminal.session.start"
                 ) { perform(action) }
             }
@@ -111,7 +111,7 @@ struct TerminalSessionUnavailableView: View {
 }
 
 struct TerminalStatusBar: View {
-    let symbolName: String
+    let icon: EdithIcon
     let message: String
     let tint: Color
     var actionTitle: String?
@@ -120,7 +120,7 @@ struct TerminalStatusBar: View {
 
     var body: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: symbolName)
+            EdithIconView(icon)
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
             Text(message)

@@ -27,24 +27,24 @@ struct VideoEditorTransport: View {
             Button {
                 model.seek(to: model.playhead - frameDuration)
             } label: {
-                Image(systemName: "backward.frame")
+                EdithIconView(.frameBack)
             }
             .accessibilityLabel("Previous frame").help("Previous frame")
             Button(action: model.togglePlayback) {
-                Image(systemName: model.playbackRate == 0 ? "play.fill" : "pause.fill")
+                EdithIconView(model.playbackRate == 0 ? .play : .pause)
                     .frame(width: UIScale.pt(30))
             }
             .accessibilityLabel("Play or pause").help("Play or pause (Space)")
             Button {
                 model.seek(to: model.playhead + frameDuration)
             } label: {
-                Image(systemName: "forward.frame")
+                EdithIconView(.frameForward)
             }
             .accessibilityLabel("Next frame").help("Next frame")
             Button {
                 model.loopPlayback.toggle()
             } label: {
-                Image(systemName: model.loopPlayback ? "repeat.circle.fill" : "repeat")
+                EdithIconView(.repeatAll, tone: model.loopPlayback ? .duotone : .muted)
             }
             .disabled(model.previewMetadata == nil)
             .accessibilityLabel("Loop playback").help("Loop playback")

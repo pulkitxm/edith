@@ -70,7 +70,7 @@ struct SystemPage: View {
                     Label(
                         model.quitAllTargetCount > 0
                             ? "Quit all apps (\(model.quitAllTargetCount))" : "Quit all apps",
-                        systemImage: "xmark.circle")
+                        edith: .closeFilled)
                 }
                 .buttonStyle(EdithButtonStyle(.destructive))
                 .disabled(model.quitAllTargetCount == 0)
@@ -106,7 +106,7 @@ struct SystemPage: View {
     private func actionStatus(_ status: RunningAppActionStatus) -> some View {
         let presentation = actionStatusPresentation(status)
         return HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(9)) {
-            Image(systemName: presentation.symbol)
+            EdithIconView(presentation.icon)
             Text(status.message)
                 .font(.edithText(.callout)).fontWeight(.medium)
                 .presenterBlur(hidesRunningApps)
@@ -116,7 +116,7 @@ struct SystemPage: View {
             Button {
                 model.clearActionStatus()
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
             }
             .buttonStyle(EdithButtonStyle(.iconOnly, tint: presentation.color))
             .accessibilityLabel("Dismiss status")
@@ -134,14 +134,14 @@ struct SystemPage: View {
 
     private func actionStatusPresentation(
         _ status: RunningAppActionStatus
-    ) -> (symbol: String, color: Color) {
+    ) -> (icon: EdithIcon, color: Color) {
         switch status {
         case .accepted:
-            ("checkmark.circle.fill", .green)
+            (.success, .green)
         case .partial:
-            ("exclamationmark.triangle.fill", .orange)
+            (.warning, .orange)
         case .planRejected, .planningFailed, .rejected:
-            ("xmark.octagon.fill", .red)
+            (.error, .red)
         }
     }
 
@@ -154,10 +154,10 @@ struct SystemPage: View {
         ) {
             PageMetric(
                 title: "Running apps", value: "\(model.apps.count)",
-                symbol: "macwindow.on.rectangle")
+                icon: .windows)
             PageMetric(
                 title: "Memory used by apps",
-                value: String(format: "%.1f GB", model.totalMemoryMB / 1024), symbol: "memorychip")
+                value: String(format: "%.1f GB", model.totalMemoryMB / 1024), icon: .memory)
         }
     }
 
@@ -188,7 +188,7 @@ struct SystemPage: View {
                     .font(.system(size: UIScale.pt(10), weight: .semibold)).tracking(
                         UIScale.pt(1.4))
                 if model.sortKey == key {
-                    Image(systemName: model.ascending ? "chevron.up" : "chevron.down")
+                    EdithIconView(model.ascending ? .chevronUp : .chevronDown)
                         .font(.system(size: UIScale.pt(7), weight: .bold))
                 }
                 if alignment == .leading { Spacer(minLength: 0) }
@@ -217,14 +217,14 @@ struct SystemPage: View {
             case .apps: EmptyView()
             case .noneRunning:
                 PageEmptyState(
-                    symbolName: "app.dashed",
+                    icon: .selection,
                     title: "No apps are running",
                     message:
                         "Only regular apps with a Dock icon are listed. When you open one, it appears here with its processor and memory use."
                 )
             case .noMatches:
                 PageEmptyState(
-                    symbolName: "magnifyingglass",
+                    icon: .search,
                     title: "No apps match your search",
                     message:
                         "Nothing running matches \"\(model.query.trimmingCharacters(in: .whitespacesAndNewlines))\". Try part of the name, or clear the search.",
@@ -316,7 +316,7 @@ struct SystemAppRow: View {
                     Image(nsImage: icon).resizable().frame(
                         width: UIScale.pt(22), height: UIScale.pt(22))
                 } else {
-                    Image(systemName: "app.dashed")
+                    EdithIconView(.selection, tone: .muted)
                         .font(.system(size: UIScale.pt(16)))
                         .foregroundStyle(.secondary)
                         .frame(width: UIScale.pt(22), height: UIScale.pt(22))
@@ -340,7 +340,7 @@ struct SystemAppRow: View {
             Button {
                 onQuit()
             } label: {
-                Image(systemName: "xmark.circle.fill")
+                EdithIconView(.closeFilled)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(EdithButtonStyle(.iconOnly, tint: DashSkin.accent(dark)))

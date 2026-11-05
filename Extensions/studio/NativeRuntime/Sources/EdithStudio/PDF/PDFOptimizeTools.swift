@@ -14,7 +14,7 @@ enum PDFOptimizeTools {
     static let compress = StudioTool(
         id: "pdf.compress", title: "Compress PDF",
         summary: "Reduce file size while keeping the PDF sharp enough to read and print.",
-        symbol: "arrow.down.right.and.arrow.up.left", group: .optimize, inputs: [.pdf],
+        icon: .collapse, group: .optimize, inputs: [.pdf],
         options: [
             .choice(
                 "level", "Compression",
@@ -65,7 +65,7 @@ enum PDFOptimizeTools {
     static let grayscale = StudioTool(
         id: "pdf.grayscale", title: "Grayscale PDF",
         summary: "Convert every page to shades of gray for cheaper printing. Text stays sharp.",
-        symbol: "circle.lefthalf.filled", group: .optimize, inputs: [.pdf],
+        icon: .contrast, group: .optimize, inputs: [.pdf],
         options: [PDFOrganizeTools.passwordOption],
         keywords: ["black and white", "monochrome", "gray", "print"], actionTitle: "Convert"
     ) { run in
@@ -78,7 +78,7 @@ enum PDFOptimizeTools {
     static let ocr = StudioTool(
         id: "pdf.ocr", title: "OCR PDF",
         summary: "Make scanned PDFs searchable and selectable with on-device text recognition.",
-        symbol: "text.viewfinder", group: .optimize, inputs: [.pdf, .image],
+        icon: .scan, group: .optimize, inputs: [.pdf, .image],
         produces: .kind(.pdf),
         options: [
             .choice("language", "Language", StudioVision.languageChoices, default: "auto"),
@@ -159,7 +159,7 @@ enum PDFOptimizeTools {
     static let repair = StudioTool(
         id: "pdf.repair", title: "Repair PDF",
         summary: "Rebuild a damaged PDF and recover as much of it as possible.",
-        symbol: "bandage", group: .optimize, inputs: [.pdf],
+        icon: .bandage, group: .optimize, inputs: [.pdf],
         options: [PDFOrganizeTools.passwordOption],
         keywords: ["fix", "corrupt", "broken", "recover", "damaged"], actionTitle: "Repair"
     ) { run in
@@ -201,7 +201,7 @@ enum PDFOptimizeTools {
     static let flatten = StudioTool(
         id: "pdf.flatten", title: "Flatten PDF",
         summary: "Burn comments, drawings and form fields into the page so they cannot be edited.",
-        symbol: "square.3.layers.3d.down.right", group: .security, inputs: [.pdf],
+        icon: .layers, group: .security, inputs: [.pdf],
         options: [PDFOrganizeTools.passwordOption],
         keywords: ["annotations", "forms", "burn", "lock", "fields"], actionTitle: "Flatten"
     ) { run in
@@ -215,7 +215,7 @@ enum PDFOptimizeTools {
     static let decompress = StudioTool(
         id: "pdf.decompress", title: "Decompress PDF",
         summary: "Expand compressed streams so the PDF can be inspected or edited by hand.",
-        symbol: "arrow.up.left.and.arrow.down.right", group: .optimize, inputs: [.pdf],
+        icon: .expand, group: .optimize, inputs: [.pdf],
         options: [PDFOrganizeTools.passwordOption], requirements: [.engine(.qpdf)],
         keywords: ["uncompress", "inflate", "qdf", "streams", "debug"], actionTitle: "Decompress"
     ) { run in
@@ -238,7 +238,7 @@ enum PDFOptimizeTools {
     static let linearize = StudioTool(
         id: "pdf.linearize", title: "Optimize for web",
         summary: "Linearize a PDF so browsers show the first page before the rest downloads.",
-        symbol: "bolt.horizontal", group: .optimize, inputs: [.pdf],
+        icon: .bolt, group: .optimize, inputs: [.pdf],
         options: [PDFOrganizeTools.passwordOption], requirements: [.engine(.qpdf)],
         keywords: ["linearize", "fast web view", "streaming"], actionTitle: "Optimize"
     ) { run in

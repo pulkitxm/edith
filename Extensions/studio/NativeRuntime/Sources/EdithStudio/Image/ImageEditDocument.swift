@@ -1,3 +1,4 @@
+import EdithIcons
 import CoreGraphics
 import Foundation
 
@@ -74,20 +75,20 @@ public struct ImageAdjustments: Codable, Equatable, Sendable {
             }
         }
 
-        public var symbolName: String {
+        public var icon: EdithIcon {
             switch self {
-            case .exposure: "plusminus.circle"
-            case .brightness: "sun.max"
-            case .contrast: "circle.lefthalf.filled"
-            case .saturation: "drop"
-            case .vibrance: "sparkles"
-            case .warmth: "thermometer.medium"
-            case .tint: "paintpalette"
-            case .highlights: "sun.max.circle"
-            case .shadows: "moon"
-            case .sharpness: "triangle"
-            case .vignette: "circle.dashed"
-            case .grain: "circle.grid.3x3"
+            case .exposure: .calculator
+            case .brightness: .sun
+            case .contrast: .contrast
+            case .saturation: .drop
+            case .vibrance: .drop
+            case .warmth: .thermometer
+            case .tint: .palette
+            case .highlights: .sun
+            case .shadows: .moon
+            case .sharpness: .triangle
+            case .vignette: .scan
+            case .grain: .gridDense
             }
         }
     }

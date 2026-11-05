@@ -285,7 +285,7 @@ struct NetworkMetricCard: View {
                     SkeletonBlock(width: 13, height: 13, corner: 4)
                 } else {
                     Button(action: refresh) {
-                        Image(systemName: "arrow.clockwise")
+                        EdithIconView(.refresh)
                     }
                     .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkFaint(dark))
@@ -300,10 +300,10 @@ struct NetworkMetricCard: View {
                 HStack(spacing: UIScale.pt(12)) {
                     speed(
                         "Download", value: measurement?.downloadBitsPerSecond,
-                        systemImage: "arrow.down", color: Color.themeAccent)
+                        icon: .arrowDown, color: Color.themeAccent)
                     speed(
                         "Upload", value: measurement?.uploadBitsPerSecond,
-                        systemImage: "arrow.up", color: DashSkin.networkUpload)
+                        icon: .arrowUp, color: DashSkin.networkUpload)
                 }
                 NetworkSparkline(
                     downloadValues: downloadHistory, uploadValues: uploadHistory
@@ -315,10 +315,10 @@ struct NetworkMetricCard: View {
     }
 
     private func speed(
-        _ title: String, value: Double?, systemImage: String, color: Color
+        _ title: String, value: Double?, icon: EdithIcon, color: Color
     ) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Label(title, systemImage: systemImage)
+            Label(title, edith: icon)
                 .font(.edithText(.caption).weight(.medium))
                 .foregroundStyle(color)
             Text(value.map(InternetSpeedFormatter.string) ?? "–")
@@ -442,7 +442,11 @@ struct MachineOverviewTab: View {
             .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
             .pageContent(compact)
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+        } action: {
+            viewportHeight = $0
+        }
         .machineActivity(session, kind: .internetSpeed)
     }
 
@@ -479,11 +483,10 @@ struct MachineOverviewTab: View {
                 model.performConnection(.connect, for: session)
             }
         case .retry:
-            action = PageAction("Try again", symbolName: "arrow.clockwise") { session.retry() }
+            action = PageAction("Try again", icon: .refresh) { session.retry() }
         }
         return PageEmptyState(
-            symbolName: prompt == .retry
-                ? "exclamationmark.triangle" : "bolt.horizontal.circle",
+            icon: prompt == .retry ? .warning : .bolt,
             title: prompt == .retry ? "Edith could not reach \(name)" : "\(name) is not connected",
             message: prompt == .retry
                 ? MachineStatusStyle.detail(session.state)
@@ -501,7 +504,7 @@ struct MachineOverviewTab: View {
 
     private var identityCard: some View {
         HStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "clock.arrow.circlepath")
+            EdithIconView(.history)
                 .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Text(uptimeText)
@@ -606,10 +609,10 @@ struct MachineOverviewTab: View {
                         .font(.edithText(.callout))
                         .foregroundStyle(DashSkin.ink(dark))
                     Spacer()
-                    Label(ByteFormatter.rate(iface.rxBps), systemImage: "arrow.down")
+                    Label(ByteFormatter.rate(iface.rxBps), edith: .arrowDown)
                         .font(DashSkin.mono(10.5))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                    Label(ByteFormatter.rate(iface.txBps), systemImage: "arrow.up")
+                    Label(ByteFormatter.rate(iface.txBps), edith: .arrowUp)
                         .font(DashSkin.mono(10.5))
                         .foregroundStyle(DashSkin.inkFaint(dark))
                 }
@@ -671,13 +674,13 @@ struct MachineOverviewTab: View {
             if let updates = session.facts.updatesAvailable, updates > 0 {
                 Label(
                     "\(updates) package update\(updates == 1 ? "" : "s") available",
-                    systemImage: "shippingbox.and.arrow.backward"
+                    edith: .appMaintenance
                 )
                 .font(.edithText(.callout))
                 .foregroundStyle(DashSkin.inkSoft(dark))
             }
             ForEach(session.facts.who, id: \.self) { line in
-                Label(line, systemImage: "person")
+                Label(line, edith: .person)
                     .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }

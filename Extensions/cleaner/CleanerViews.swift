@@ -55,27 +55,27 @@ struct CleanerCard: View {
 
     private var firstRun: some View {
         PageEmptyState(
-            symbolName: "sparkles.rectangle.stack",
+            icon: .broom,
             title: "Get back disk space",
             message:
                 "Cleaner looks through your projects and caches for build output, downloaded packages, old Xcode data and unused git worktrees. You decide what goes.",
             steps: [
                 PageGuideStep(
-                    symbolName: "magnifyingglass", title: "1. Scan",
+                    icon: .search, title: "1. Scan",
                     detail: "Takes about a minute. It only reads folders and changes nothing."),
                 PageGuideStep(
-                    symbolName: "checklist", title: "2. Review",
+                    icon: .stepTools, title: "2. Review",
                     detail:
                         "See what each item is and how much space it frees. Untick anything to keep."
                 ),
                 PageGuideStep(
-                    symbolName: "trash", title: "3. Clean",
+                    icon: .trash, title: "3. Clean",
                     detail:
                         "Selected items move to the Trash, so you can restore them until you empty it."
                 ),
             ],
             primary: PageAction(
-                "Scan my Mac", symbolName: "magnifyingglass", identifier: "cleaner.scan"
+                "Scan my Mac", icon: .search, identifier: "cleaner.scan"
             ) { pickDrives(.scan) },
             secondary: PageAction("Choose where to search…", identifier: "cleaner.choose") {
                 pickDrives(.choose)
@@ -88,12 +88,12 @@ struct CleanerCard: View {
 
     private var nothingToClean: some View {
         PageEmptyState(
-            symbolName: "checkmark.seal",
+            icon: .success,
             title: "Nothing to clean",
             message:
                 "The scan found no caches or leftovers worth removing in the places it searched. If your projects live somewhere else, add that folder and scan again.",
             primary: PageAction(
-                "Scan again", symbolName: "arrow.clockwise", identifier: "cleaner.scan"
+                "Scan again", icon: .refresh, identifier: "cleaner.scan"
             ) {
                 pickDrives(.scan)
             },
@@ -130,7 +130,7 @@ struct CleanerCard: View {
     private var scanStatus: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                PageGuideBadge(symbolName: "magnifyingglass", size: 40)
+                PageGuideBadge(icon: .search, size: 40)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(
                         model.lastReclaimed > 0
@@ -234,7 +234,7 @@ struct CleanerCard: View {
                 } label: {
                     Label(
                         model.logsExpanded ? "Hide scan log" : "Show scan log",
-                        systemImage: "terminal"
+                        edith: .terminal
                     )
                     .font(.edithText(.caption))
                 }
@@ -245,7 +245,7 @@ struct CleanerCard: View {
             if model.lastReclaimed > 0 {
                 Label(
                     "Moved \(JunkScanner.format(model.lastReclaimed)) to the Trash last time.",
-                    systemImage: "checkmark.circle.fill"
+                    edith: .success
                 )
                 .font(.edithText(.caption)).foregroundStyle(DashSkin.sage)
             }
@@ -292,15 +292,14 @@ struct CleanerCard: View {
                 WrapHStack(spacing: UIScale.pt(8), lineSpacing: UIScale.pt(8)) {
                     ForEach(model.drives) { drive in
                         CleanerLocationChip(
-                            symbolName: drive.isExternal
-                                ? "externaldrive.fill" : "internaldrive.fill",
+                            icon: .drive,
                             title: drive.name,
                             detail: JunkScanner.format(drive.totalBytes), dark: dark)
                     }
                     ForEach(model.customFolders.filter { model.isDriveSelected($0) }, id: \.self) {
                         folder in
                         CleanerLocationChip(
-                            symbolName: "folder.fill",
+                            icon: .folder,
                             title: (folder as NSString).lastPathComponent, detail: nil, dark: dark
                         )
                         .help((folder as NSString).abbreviatingWithTildeInPath)
@@ -344,7 +343,7 @@ struct CleanerCard: View {
     }
 
     private var noMatches: some View {
-        Label("No items match these filters", systemImage: "magnifyingglass")
+        Label("No items match these filters", edith: .search)
             .font(.edithText(.callout))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
@@ -391,7 +390,7 @@ struct CleanerCard: View {
             Button {
                 pendingClean = .all
             } label: {
-                Label("Move to Trash", systemImage: "trash")
+                Label("Move to Trash", edith: .trash)
                     .font(.edithText(.body)).fontWeight(.medium)
             }
             .buttonStyle(.edith(.primary))
@@ -424,7 +423,7 @@ private struct CleanerCheckbox: View {
     let dark: Bool
 
     var body: some View {
-        Image(systemName: CleanerRowView.checkbox(selection))
+        EdithIconView(CleanerRowView.checkbox(selection))
             .font(.system(size: UIScale.pt(14)))
             .foregroundStyle(
                 selection == .none
@@ -437,14 +436,14 @@ private struct CleanerCheckbox: View {
 }
 
 private struct CleanerLocationChip: View {
-    let symbolName: String
+    let icon: EdithIcon
     let title: String
     let detail: String?
     let dark: Bool
 
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: symbolName)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(10)))
                 .foregroundStyle(.secondary)
             Text(title).font(.edithText(.caption)).fontWeight(.medium).lineLimit(1)
@@ -470,11 +469,11 @@ private struct CleanerRowView: View, Equatable {
         lhs.row == rhs.row && lhs.dark == rhs.dark
     }
 
-    static func checkbox(_ selection: JunkSelection) -> String {
+    static func checkbox(_ selection: JunkSelection) -> EdithIcon {
         switch selection {
-        case .all: "checkmark.square.fill"
-        case .some: "minus.square.fill"
-        case .none: "square"
+        case .all: .checkboxOn
+        case .some: .minus
+        case .none: .checkbox
         }
     }
 
@@ -527,7 +526,7 @@ private struct CleanerCategoryHeader: View {
                 }
             } label: {
                 HStack(spacing: UIScale.pt(CleanerRowMetrics.spacing)) {
-                    Image(systemName: "chevron.right")
+                    EdithIconView(.chevronRight)
                         .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(category.expanded ? 90 : 0))
@@ -634,7 +633,7 @@ private struct CleanerItemLine: View {
 
     private func worktreeLine(_ branch: String) -> some View {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: "arrow.triangle.branch")
+            EdithIconView(.quinjet)
                 .font(.system(size: UIScale.pt(9)))
             Text(branch)
                 .font(.edithText(.caption, design: .monospaced))
@@ -694,8 +693,7 @@ struct DrivePickerSheet: View {
                         } label: {
                             locationRow(
                                 selected: model.isDriveSelected(drive.id),
-                                symbolName: drive.isExternal
-                                    ? "externaldrive.fill" : "internaldrive.fill",
+                                icon: .drive,
                                 title: drive.name,
                                 detail: "\(JunkScanner.format(drive.totalBytes)) capacity",
                                 trailingSpace: false)
@@ -712,7 +710,7 @@ struct DrivePickerSheet: View {
                     Button {
                         chooseFolder()
                     } label: {
-                        Label("Add folder…", systemImage: "plus")
+                        Label("Add folder…", edith: .plus)
                             .font(.edithText(.callout))
                     }
                     .buttonStyle(.edith(.secondary))
@@ -746,11 +744,11 @@ struct DrivePickerSheet: View {
     }
 
     private func locationRow(
-        selected: Bool, symbolName: String, title: String, detail: String, trailingSpace: Bool
+        selected: Bool, icon: EdithIcon, title: String, detail: String, trailingSpace: Bool
     ) -> some View {
         HStack(spacing: UIScale.pt(12)) {
             CleanerCheckbox(selection: selected ? .all : .none, dark: dark)
-            Image(systemName: symbolName)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(13)))
                 .foregroundStyle(.secondary)
                 .frame(width: UIScale.pt(18))
@@ -778,7 +776,7 @@ struct DrivePickerSheet: View {
                 model.toggleDrive(folder)
             } label: {
                 locationRow(
-                    selected: model.isDriveSelected(folder), symbolName: "folder.fill",
+                    selected: model.isDriveSelected(folder), icon: .folder,
                     title: (folder as NSString).lastPathComponent,
                     detail: (folder as NSString).abbreviatingWithTildeInPath,
                     trailingSpace: true)
@@ -789,7 +787,7 @@ struct DrivePickerSheet: View {
             Button {
                 model.removeCustomFolder(folder)
             } label: {
-                Image(systemName: "minus.circle")
+                EdithIconView(.removeFilled)
             }
             .buttonStyle(.edith(.iconOnly))
             .padding(.trailing, UIScale.pt(10))

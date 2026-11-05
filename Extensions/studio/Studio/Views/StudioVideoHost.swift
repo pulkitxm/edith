@@ -14,7 +14,7 @@ struct StudioVideoHost: View {
     var body: some View {
         VStack(spacing: 0) {
             StudioBackBar(
-                title: "Video editor", subtitle: subtitle, symbol: "film.stack",
+                title: "Video editor", subtitle: subtitle, icon: .film,
                 back: {
                     model.refreshProjects()
                     model.goHome()

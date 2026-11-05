@@ -18,7 +18,7 @@ struct CameraAssetThumbnail: View {
                 Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
                     .padding(UIScale.pt(6)).shadow(color: .black.opacity(0.12), radius: 2, y: 1)
             } else {
-                Image(systemName: "photo").font(
+                EdithIconView(.photo).font(
                     .system(size: UIScale.pt(side * 0.22), weight: .light)
                 )
                 .foregroundStyle(.secondary)

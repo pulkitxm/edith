@@ -19,7 +19,7 @@ struct HerdrFilterButton: View {
 
     var body: some View {
         Button(action: onPress) {
-            Image(systemName: "line.3.horizontal.decrease")
+            EdithIconView(.filter)
                 .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(active ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
                 .frame(minWidth: UIScale.pt(22), minHeight: UIScale.pt(22))
@@ -166,7 +166,7 @@ struct HerdrFilterMenu: View {
 
     private var search: some View {
         HStack(spacing: UIScale.pt(6)) {
-            Image(systemName: "magnifyingglass")
+            EdithIconView(.search)
                 .font(.edithText(.subheadline).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
             TextField("Filter", text: $query)
@@ -246,7 +246,7 @@ struct HerdrFilterMenu: View {
             activate(row)
         } label: {
             HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: symbol(for: row))
+                EdithIconView(icon(for: row))
                     .font(.edithText(.subheadline).weight(.semibold))
                     .foregroundStyle(markColor(row))
                     .frame(width: UIScale.pt(14), height: UIScale.pt(14))
@@ -279,20 +279,20 @@ struct HerdrFilterMenu: View {
         }
     }
 
-    private func symbol(for row: HerdrSessionFilterRow) -> String {
+    private func icon(for row: HerdrSessionFilterRow) -> EdithIcon {
         switch row.action {
         case .machine, .agent("all"):
-            row.selected ? "checkmark.circle.fill" : "circle"
+            row.selected ? .success : .ring
         case .agent:
-            row.selected ? "checkmark.square.fill" : "square"
+            row.selected ? .checkboxOn : .checkbox
         case .grouping:
-            row.selected ? "checkmark.square.fill" : "square"
+            row.selected ? .checkboxOn : .checkbox
         case .space:
-            "macwindow"
+            .window
         case .launch:
-            "pencil"
+            .edit
         case .clear:
-            "xmark"
+            .close
         }
     }
 

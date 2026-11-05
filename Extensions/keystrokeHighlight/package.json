@@ -1,7 +1,7 @@
 {
   "id": "keystrokeHighlight",
   "title": "Keystroke Highlight",
-  "symbolName": "keyboard.badge.ellipsis",
+  "icon": "keystrokeHighlight",
   "category": "desk",
   "background": true,
   "commands": [],
@@ -28,22 +28,22 @@
     "summary": "Displays each shortcut and key press as a keycap overlay so viewers can follow along. It only shows keys while turned on, ignores secure password fields, and needs Input Monitoring permission.",
     "steps": [
       {
-        "symbolName": "lock.shield",
+        "icon": "shield",
         "title": "Allow Input Monitoring",
         "detail": "macOS asks once. Edith only reads key presses to draw the keycaps."
       },
       {
-        "symbolName": "keyboard",
+        "icon": "keyboard",
         "title": "Press Control+Option+Command+K",
         "detail": "Starts or pauses the overlay from any app."
       },
       {
-        "symbolName": "rectangle.on.rectangle",
+        "icon": "windows",
         "title": "Type as normal",
         "detail": "Keycaps appear at the edge of the screen and fade away."
       },
       {
-        "symbolName": "slider.horizontal.3",
+        "icon": "adjust",
         "title": "Adjust it",
         "detail": "Choose the position and how long keys stay visible."
       }

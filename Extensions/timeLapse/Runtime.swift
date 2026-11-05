@@ -141,10 +141,11 @@ final class TimeLapseService: ExtensionService {
         guard #available(macOS 15.0, *), let recorder = uiRecorder as? TimeLapseRecorder else {
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    ContentUnavailableView(
-                        "Screen Recorder needs macOS 15", systemImage: "record.circle",
-                        description: Text(
-                            "Update macOS to record displays, windows and optional audio."))
+                    ContentUnavailableView {
+                        Label("Screen Recorder needs macOS 15", edith: .record)
+                    } description: {
+                        Text("Update macOS to record displays, windows and optional audio.")
+                    }
                 })
         }
         return NSHostingController(

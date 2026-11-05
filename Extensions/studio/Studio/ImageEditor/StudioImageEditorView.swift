@@ -24,12 +24,12 @@ struct StudioImageEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             StudioBackBar(
-                title: editor.url.lastPathComponent, subtitle: sizeText, symbol: "photo",
+                title: editor.url.lastPathComponent, subtitle: sizeText, icon: .photo,
                 back: leave
             ) {
                 HStack(spacing: UIScale.pt(6)) {
                     if compact {
-                        Button("Inspector", systemImage: "sidebar.right") {
+                        Button("Inspector", edith: .sidebarRight) {
                             showsInspector.toggle()
                         }
                         .labelStyle(.iconOnly)
@@ -42,7 +42,7 @@ struct StudioImageEditorView: View {
                     Button {
                         editor.undo()
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        EdithIconView(.undo)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .keyboardShortcut("z", modifiers: .command)
@@ -51,7 +51,7 @@ struct StudioImageEditorView: View {
                     Button {
                         editor.redo()
                     } label: {
-                        Image(systemName: "arrow.uturn.forward")
+                        EdithIconView(.redo)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -66,7 +66,7 @@ struct StudioImageEditorView: View {
                     Button {
                         editor.save(studio: model)
                     } label: {
-                        Label("Save", systemImage: "square.and.arrow.down")
+                        Label("Save", edith: .saveTo)
                     }
                     .buttonStyle(.edith(.primary))
                     .keyboardShortcut("s", modifiers: .command)
@@ -170,7 +170,7 @@ struct StudioImageToolRail: View {
                         editor.switchPanel(panel)
                     } label: {
                         VStack(spacing: UIScale.pt(3)) {
-                            Image(systemName: panel.symbol)
+                            EdithIconView(panel.icon)
                                 .font(.system(size: UIScale.pt(15)))
                             Text(panel.title.components(separatedBy: " ").first ?? panel.title)
                                 .font(.edithText(.caption).weight(.medium))

@@ -128,7 +128,7 @@ struct StudioPreviewPanel: View {
                     }
                     HStack(spacing: UIScale.pt(12)) {
                         pane("Before", preview.before)
-                        Image(systemName: "arrow.right")
+                        EdithIconView(.arrowRight)
                             .foregroundStyle(.secondary)
                         pane("After", preview.after)
                     }

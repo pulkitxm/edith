@@ -67,7 +67,7 @@ struct VideoExportSheet: View {
 
     private var options: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("Export", systemImage: "square.and.arrow.up")
+            Label("Export", edith: .share)
                 .font(.edithText(.title2).weight(.semibold))
             EdithSegmentedPicker(
                 "Format", selection: $format, options: ["mp4", "audio", "gif"],
@@ -272,7 +272,7 @@ struct VideoExportSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             switch job.phase {
             case .exporting:
-                Label("Exporting", systemImage: "square.and.arrow.up")
+                Label("Exporting", edith: .share)
                     .font(.edithText(.title2).weight(.semibold))
                 destination(job)
                 LoadingProgress(value: job.progress)
@@ -299,7 +299,7 @@ struct VideoExportSheet: View {
                         .keyboardShortcut(.defaultAction)
                 }
             case .finished:
-                Label("Export finished", systemImage: "checkmark.circle.fill")
+                Label("Export finished", edith: .success)
                     .font(.edithText(.title2).weight(.semibold))
                     .foregroundStyle(.green, .primary)
                 destination(job)
@@ -333,7 +333,7 @@ struct VideoExportSheet: View {
                         .keyboardShortcut(.defaultAction)
                 }
             case .failed(let message):
-                Label("Export failed", systemImage: "exclamationmark.triangle.fill")
+                Label("Export failed", edith: .warning)
                     .font(.edithText(.title2).weight(.semibold))
                 destination(job)
                 Text(message)

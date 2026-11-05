@@ -216,8 +216,7 @@ struct WorkspacePaneView: View {
                 Text(machine?.name ?? "Machine")
                     .font(.edithText(.subheadline).weight(.semibold))
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: UIScale.pt(7), weight: .bold))
+                EdithIcon.chevronDown.image(size: UIScale.pt(12))
             }
             .foregroundStyle(DashSkin.ink(dark))
         }
@@ -287,7 +286,7 @@ struct WorkspacePaneView: View {
                     }
                 }
             } label: {
-                Image(systemName: "plus")
+                EdithIcon.plus.image()
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -305,7 +304,7 @@ struct WorkspacePaneView: View {
                 }
                 .disabled(model.layout.paneCount < 2)
             } label: {
-                Image(systemName: "square.split.2x1")
+                EdithIcon.layoutLeft.image()
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -334,7 +333,7 @@ struct WorkspacePaneView: View {
                 }
             } label: {
                 HStack(spacing: UIScale.pt(5)) {
-                    Image(systemName: tab.target.screen.icon)
+                    EdithIconView(tab.target.screen.icon)
                         .font(.system(size: UIScale.pt(9.5)))
                     Text(
                         foreign
@@ -358,7 +357,7 @@ struct WorkspacePaneView: View {
             Button {
                 closeTab(tab)
             } label: {
-                Image(systemName: "xmark")
+                EdithIconView(.close)
                     .font(.system(size: UIScale.pt(7.5), weight: .bold))
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }

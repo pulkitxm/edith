@@ -85,10 +85,10 @@ import Testing
                     VStack(spacing: 0) {
                         Spacer()
                         TerminalStatusBar(
-                            symbolName: "exclamationmark.triangle.fill", message: failure,
+                            icon: .warning, message: failure,
                             tint: DashSkin.danger)
                         TerminalStatusBar(
-                            symbolName: "stop.circle", message: exit,
+                            icon: .stop, message: exit,
                             tint: DashSkin.inkSoft(variant.dark), actionTitle: "Restart")
                     }
                     .background(

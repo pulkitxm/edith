@@ -169,7 +169,7 @@ struct StudioCompareView: View {
                 title: "Compare PDF",
                 subtitle:
                     "\(compare.originalURL.lastPathComponent) → \(compare.revisedURL.lastPathComponent)",
-                symbol: "rectangle.split.2x1", back: model.goHome
+                icon: .layoutLeft, back: model.goHome
             ) {
                 Toggle("Visual difference", isOn: $compare.showsVisual)
                     .toggleStyle(.edithSwitch)
@@ -256,12 +256,9 @@ struct StudioCompareView: View {
                             compare.focused = change
                         } label: {
                             HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                                Image(
-                                    systemName: change.side == .original
-                                        ? "minus.circle.fill" : "plus.circle.fill"
-                                )
-                                .foregroundStyle(
-                                    change.side == .original ? DashSkin.danger : DashSkin.ok)
+                                EdithIconView(change.side == .original ? .removeFilled : .addFilled)
+                                    .foregroundStyle(
+                                        change.side == .original ? DashSkin.danger : DashSkin.ok)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(change.text)
                                         .font(.edithText(.subheadline))

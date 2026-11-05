@@ -1,3 +1,4 @@
+import EdithIcons
 import EdithExtensionSupport
 import Foundation
 
@@ -88,14 +89,14 @@ public struct FleetAlert: Identifiable, Equatable, Sendable {
         self.detail = detail
     }
 
-    public var symbol: String {
+    public var icon: EdithIcon {
         switch kind {
-        case .offline: return "bolt.horizontal.circle"
-        case .diskFull: return "externaldrive.badge.exclamationmark"
-        case .memoryPressure: return "memorychip"
-        case .highLoad: return "gauge.with.dots.needle.100percent"
-        case .updates: return "shippingbox.and.arrow.backward"
-        case .hot: return "thermometer.high"
+        case .offline: return .bolt
+        case .diskFull: return .drive
+        case .memoryPressure: return .memory
+        case .highLoad: return .gauge
+        case .updates: return .appMaintenance
+        case .hot: return .thermometer
         }
     }
 }

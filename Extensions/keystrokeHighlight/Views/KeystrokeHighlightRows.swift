@@ -25,7 +25,7 @@ struct KeystrokeHighlightRows: View {
                     SettingsNoticeRow(
                         "Keystroke Highlight is off",
                         message: "Turn it on to show your key presses and change these settings.",
-                        symbol: "power.circle.fill")
+                        icon: .power)
                 }
             } else if presentation.ready, let error = presentation.error {
                 Section {
@@ -92,7 +92,7 @@ struct KeystrokeHighlightRows: View {
             ) {
                 Label(
                     runtimeActive ? "Active" : "Starting",
-                    systemImage: runtimeActive ? "checkmark.circle.fill" : "clock"
+                    edith: runtimeActive ? .success : .clock
                 )
                 .foregroundStyle(runtimeActive ? Color.green : Color.secondary)
             }
@@ -101,7 +101,7 @@ struct KeystrokeHighlightRows: View {
                 Button("Allow Access") { presentation.perform("inputMonitoring") }
                     .buttonStyle(.edith(.secondary))
             } label: {
-                Text(Image(systemName: "exclamationmark.triangle.fill")).foregroundColor(.orange)
+                Text(edith: .warning).foregroundColor(.orange)
                     + Text(" Input Monitoring is needed")
                 Text(
                     "macOS asks before Edith can see key presses. Choose Allow Access, then switch on Edith in System Settings."

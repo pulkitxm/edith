@@ -243,7 +243,7 @@ struct MachineToolsTab: View {
                         Button {
                             pendingForwardRemoval = forward
                         } label: {
-                            Image(systemName: "trash")
+                            EdithIconView(.trash)
                         }
                         .buttonStyle(.edith(.toolbar))
                         .help("Remove")
@@ -258,7 +258,7 @@ struct MachineToolsTab: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: compact ? .infinity : UIScale.pt(90))
                     if !compact {
-                        Image(systemName: "arrow.right")
+                        EdithIconView(.arrowRight)
                             .font(.edithText(.caption))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
@@ -296,7 +296,7 @@ struct MachineToolsTab: View {
                         Button {
                             pendingSnippetRemoval = snippet
                         } label: {
-                            Image(systemName: "trash")
+                            EdithIconView(.trash)
                         }
                         .buttonStyle(.edith(.toolbar))
                         .help("Remove")

@@ -490,7 +490,7 @@ struct DockerContainerDetail: View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(10)) {
                 Button(action: onBack) {
-                    Image(systemName: "chevron.left")
+                    EdithIconView(.chevronLeft)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Back to the list")
@@ -547,13 +547,12 @@ struct DockerContainerDetail: View {
                         } label: {
                             Label(
                                 sibling.composeService ?? sibling.displayName,
-                                systemImage: symbol(for: sibling))
+                                edith: icon(for: sibling))
                         }
                     }
                 }
             } label: {
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.edithText(.caption).weight(.semibold))
+                EdithIcon.chevronUpDown.image(size: UIScale.pt(12))
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .padding(.horizontal, UIScale.pt(7))
                     .padding(.vertical, UIScale.pt(5))
@@ -567,9 +566,9 @@ struct DockerContainerDetail: View {
         }
     }
 
-    private func symbol(for sibling: DockerContainer) -> String {
-        guard sibling.id != live.id else { return "checkmark" }
-        return sibling.state.isRunning ? "circle.fill" : "circle"
+    private func icon(for sibling: DockerContainer) -> EdithIcon {
+        guard sibling.id != live.id else { return .check }
+        return sibling.state.isRunning ? .dot : .ring
     }
 
     private var statusPill: some View {
@@ -625,14 +624,14 @@ struct DockerContainerDetail: View {
                 Button {
                     model.logFontSize = max(9, model.logFontSize - 1)
                 } label: {
-                    Image(systemName: "textformat.size.smaller")
+                    EdithIconView(.textSmaller)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Smaller log text")
                 Button {
                     model.logFontSize = min(18, model.logFontSize + 1)
                 } label: {
-                    Image(systemName: "textformat.size.larger")
+                    EdithIconView(.textLarger)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Larger log text")
@@ -640,14 +639,14 @@ struct DockerContainerDetail: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(model.logPlainText, forType: .string)
                 } label: {
-                    Image(systemName: "doc.on.doc")
+                    EdithIconView(.copy)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Copy all visible log lines")
                 Button {
                     model.logs = []
                 } label: {
-                    Image(systemName: "clear")
+                    EdithIconView(.closeFilled)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help("Clear the log view")
@@ -732,7 +731,7 @@ struct DockerContainerDetail: View {
                         "Labels", inspect.labels.sorted { $0.key < $1.key }.map { "\($0)=\($1)" })
                 } else if model.inspectFailed {
                     HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: "exclamationmark.triangle")
+                        EdithIconView(.warning)
                             .foregroundStyle(DashSkin.warn)
                         Text("Could not read this container's configuration.")
                             .font(.edithText(.callout))
@@ -765,7 +764,7 @@ struct DockerContainerDetail: View {
                         NSPasteboard.general.setString(
                             shown.joined(separator: "\n"), forType: .string)
                     } label: {
-                        Image(systemName: "doc.on.doc")
+                        EdithIconView(.copy)
                             .font(.system(size: UIScale.pt(9)))
                     }
                     .buttonStyle(.edith(.borderless))
@@ -870,7 +869,7 @@ struct DockerContainerDetail: View {
                 DockerProcessRowsSkeleton()
             } else if model.processesFailed, !model.processesLoad.hasContent {
                 HStack(spacing: UIScale.pt(8)) {
-                    Image(systemName: "exclamationmark.triangle")
+                    EdithIconView(.warning)
                         .foregroundStyle(DashSkin.warn)
                     Text("Could not read this container's processes.")
                         .font(.edithText(.callout))
@@ -926,7 +925,7 @@ struct DockerContainerDetail: View {
                     let parent = FileListing.parentPath(of: model.filePath) ?? "/"
                     requestedFilePath = parent
                 } label: {
-                    Image(systemName: "chevron.up")
+                    EdithIconView(.chevronUp)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .disabled(model.filePath == "/")
@@ -955,7 +954,7 @@ struct DockerContainerDetail: View {
                         DockerFileRowsSkeleton()
                     } else if model.filesFailed {
                         HStack(spacing: UIScale.pt(8)) {
-                            Image(systemName: "exclamationmark.triangle")
+                            EdithIconView(.warning)
                                 .foregroundStyle(DashSkin.warn)
                             Text("Could not read this folder.")
                                 .font(.edithText(.callout))
@@ -974,7 +973,7 @@ struct DockerContainerDetail: View {
                     }
                     ForEach(model.files) { entry in
                         HStack(spacing: UIScale.pt(10)) {
-                            Image(systemName: entry.isDirectory ? "folder" : "doc")
+                            EdithIconView(entry.isDirectory ? .folder : .doc)
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .frame(width: UIScale.pt(15))
                             Text(entry.name)

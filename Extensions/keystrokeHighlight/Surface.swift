@@ -9,7 +9,7 @@ enum KeystrokeHighlightSurface {
             actions: [
                 .init(
                     active ? "disable" : "enable", active ? "Turn off" : "Turn on",
-                    "keyboard.badge.ellipsis")
+                    .keystrokeHighlight)
             ], updatedAt: Date())
     }
 }

@@ -61,7 +61,7 @@ struct MachineProcessesTab: View {
                         Button {
                             pendingKill = process
                         } label: {
-                            Image(systemName: "xmark.circle")
+                            EdithIconView(.closeFilled)
                         }
                         .buttonStyle(.edith(.iconOnly))
                         .help("End \(process.name), PID \(process.pid)")

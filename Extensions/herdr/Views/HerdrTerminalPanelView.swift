@@ -172,20 +172,19 @@ private struct HerdrTerminalList: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
             Spacer(minLength: 0)
             newTerminalButton
-            iconButton("gearshape", label: "Terminal settings") {
+            iconButton(.gear, label: "Terminal settings") {
                 settingsOpen.toggle()
             }
             .popover(isPresented: $settingsOpen, arrowEdge: .top) {
                 HerdrTerminalSettingsView(store: store)
             }
             iconButton(
-                panels.maximized
-                    ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                panels.maximized ? .collapse : .expand,
                 label: panels.maximized ? "Restore the terminal height" : "Fill the tab"
             ) {
                 panels.maximized.toggle()
             }
-            iconButton("chevron.down", label: "Hide terminals") {
+            iconButton(.chevronDown, label: "Hide terminals") {
                 panels.hide(owner)
             }
         }
@@ -209,8 +208,7 @@ private struct HerdrTerminalList: View {
                     }
                 }
             } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                EdithIcon.plus.image(size: 12)
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .frame(width: UIScale.pt(18), height: UIScale.pt(18))
             }
@@ -219,7 +217,7 @@ private struct HerdrTerminalList: View {
             .fixedSize()
             .accessibilityLabel("New terminal")
         } else if let origin = origins.first {
-            iconButton("plus", label: "New terminal") {
+            iconButton(.plus, label: "New terminal") {
                 store.openTerminal(in: owner, from: origin)
             }
         }
@@ -233,7 +231,7 @@ private struct HerdrTerminalList: View {
                 panels.select(terminal.id, in: owner)
             } label: {
                 HStack(spacing: UIScale.pt(6)) {
-                    Image(systemName: "terminal")
+                    EdithIconView(.terminal)
                         .font(.edithText(.caption).weight(.semibold))
                         .foregroundStyle(
                             terminal.running
@@ -273,7 +271,7 @@ private struct HerdrTerminalList: View {
                 .frame(width: UIScale.pt(18), height: UIScale.pt(18))
                 .accessibilityLabel("Closing \(terminal.title)")
             } else {
-                iconButton("xmark", label: "Close \(terminal.title)") {
+                iconButton(.close, label: "Close \(terminal.title)") {
                     panels.requestClose(terminal.id)
                 }
             }
@@ -287,11 +285,11 @@ private struct HerdrTerminalList: View {
                 .fill(selected ? DashSkin.accent(dark).opacity(0.16) : Color.clear))
     }
 
-    private func iconButton(_ systemImage: String, label: String, action: @escaping () -> Void)
+    private func iconButton(_ icon: EdithIcon, label: String, action: @escaping () -> Void)
         -> some View
     {
         Button(action: action) {
-            Image(systemName: systemImage)
+            EdithIconView(icon)
                 .font(.system(size: UIScale.pt(9.5), weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .frame(width: UIScale.pt(18), height: UIScale.pt(18))

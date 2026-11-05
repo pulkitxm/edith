@@ -18,13 +18,13 @@ struct QuinjetLocalProjectPicker: View {
 
     static let firstRunSteps = [
         PageGuideStep(
-            symbolName: "folder", title: "Pick a Git project",
+            icon: .folder, title: "Pick a Git project",
             detail: "Choose a folder or one of your recent projects."),
         PageGuideStep(
-            symbolName: "arrow.triangle.branch", title: "Choose a worktree",
+            icon: .quinjet, title: "Choose a worktree",
             detail: "Each branch checkout gets its own review session."),
         PageGuideStep(
-            symbolName: "terminal", title: "Review in the terminal",
+            icon: .terminal, title: "Review in the terminal",
             detail: "Quinjet starts in the folder and you review from there."),
     ]
 
@@ -39,12 +39,12 @@ struct QuinjetLocalProjectPicker: View {
                 HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                     if !model.projects.isEmpty {
                         Button(action: chooseFolder) {
-                            Label("Choose folder", systemImage: "folder.badge.plus")
+                            Label("Choose folder", edith: .folderAdd)
                         }
                     }
                     PageToolbarButton(
                         action: { QuinjetWorkOwnership.start { await model.refreshProjects() } },
-                        systemImage: "arrow.clockwise", helperText: "Refresh recent projects")
+                        icon: .refresh, helperText: "Refresh recent projects")
                 }
             } accessory: {
                 VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
@@ -69,53 +69,53 @@ struct QuinjetLocalProjectPicker: View {
             model.projects.isEmpty
         {
             PageEmptyState(
-                symbolName: "arrow.down.circle",
+                icon: .arrowDown,
                 title: "Install the Quinjet tool first",
                 message:
                     "This page drives the quinjet command line tool, which is not on this Mac yet. Installing it adds one command and does not touch your projects.",
                 steps: [
                     PageGuideStep(
-                        symbolName: "terminal", title: "Run one command",
+                        icon: .terminal, title: "Run one command",
                         detail: "Run ed tools install quinjet in a terminal."),
                     PageGuideStep(
-                        symbolName: "arrow.clockwise", title: "Check again",
+                        icon: .refresh, title: "Check again",
                         detail: "Come back here and press Check again."),
                 ],
-                primary: PageAction("Check again", symbolName: "arrow.clockwise") {
+                primary: PageAction("Check again", icon: .refresh) {
                     QuinjetWorkOwnership.start { await model.refreshProjects() }
                 },
                 footnote: "Prefer Homebrew? Run brew install pulkitxm/tap/quinjet.")
         } else if let error = model.projectError, model.projects.isEmpty {
             PageEmptyState(
-                symbolName: "exclamationmark.triangle",
+                icon: .warning,
                 title: "Recent projects could not be loaded",
                 message:
                     "\(error) Your projects were not changed. You can retry, or pick a folder yourself.",
-                primary: PageAction("Try again", symbolName: "arrow.clockwise") {
+                primary: PageAction("Try again", icon: .refresh) {
                     QuinjetWorkOwnership.start { await model.refreshProjects() }
                 },
                 secondary: PageAction(
-                    "Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder))
+                    "Choose folder", icon: .folderAdd, perform: chooseFolder))
         } else if model.filteredProjects.isEmpty, !model.query.isEmpty {
             PageEmptyState(
-                symbolName: "magnifyingglass",
+                icon: .search,
                 title: "No project matches \u{201C}\(model.query)\u{201D}",
                 message:
                     "Search looks at project names, branches and paths. Clear the search to see every recent project.",
-                primary: PageAction("Clear search", symbolName: "xmark.circle") {
+                primary: PageAction("Clear search", icon: .closeFilled) {
                     model.query = ""
                 },
                 secondary: PageAction(
-                    "Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder))
+                    "Choose folder", icon: .folderAdd, perform: chooseFolder))
         } else if model.filteredProjects.isEmpty {
             PageEmptyState(
-                symbolName: "arrow.triangle.branch",
+                icon: .quinjet,
                 title: "Review code with an AI agent, side by side",
                 message:
                     "Quinjet opens a Git project in a terminal built for reviewing pull requests and changes. Pick a project to begin.",
                 steps: Self.firstRunSteps,
                 primary: PageAction(
-                    "Choose folder", symbolName: "folder.badge.plus", perform: chooseFolder),
+                    "Choose folder", icon: .folderAdd, perform: chooseFolder),
                 footnote:
                     "Opening a project only reads it. Nothing is changed until you act in the terminal."
             )
@@ -186,7 +186,7 @@ struct QuinjetProjectRow: View {
                 if let worktree = project.defaultWorktree { open(worktree) }
             } label: {
                 HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                    Image(systemName: "folder.fill")
+                    EdithIconView(.folder)
                         .font(.edithText(.title2).weight(.medium))
                         .foregroundStyle(DashSkin.accent(dark))
                         .accessibilityHidden(true)
@@ -284,16 +284,13 @@ struct QuinjetWorktreePicker: View {
                     select(worktree)
                 } label: {
                     HStack(spacing: UIScale.pt(9)) {
-                        Image(
-                            systemName: selectedPath == worktree.path
-                                ? "checkmark.circle.fill" : "arrow.triangle.branch"
-                        )
-                        .font(.edithText(.subheadline).weight(.medium))
-                        .foregroundStyle(
-                            selectedPath == worktree.path
-                                ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
-                        )
-                        .frame(width: UIScale.pt(16))
+                        EdithIconView(selectedPath == worktree.path ? .success : .quinjet)
+                            .font(.edithText(.subheadline).weight(.medium))
+                            .foregroundStyle(
+                                selectedPath == worktree.path
+                                    ? DashSkin.accent(dark) : DashSkin.inkFaint(dark)
+                            )
+                            .frame(width: UIScale.pt(16))
                         VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                             Text(worktree.displayName)
                                 .font(.edithText(.callout).weight(.semibold))

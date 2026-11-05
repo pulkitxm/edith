@@ -13,7 +13,7 @@ struct StudioScanButton: View {
         Button {
             control.host?.showMenu()
         } label: {
-            Image(systemName: "iphone.gen3")
+            EdithIconView(.phone)
                 .font(.system(size: UIScale.pt(14), weight: .medium))
                 .frame(width: UIScale.pt(16), height: UIScale.pt(16))
         }

@@ -23,7 +23,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var lockObservers: [NSObjectProtocol] = []
     private var cachedTintKey: String?
     private var displayedTitle: (cpu: Int, memory: Int, tint: String?)?
-    private var cachedGlyphs: [String: NSAttributedString] = [:]
+    private var cachedGlyphs: [EdithIcon: NSAttributedString] = [:]
     private var numberAttributes: [NSAttributedString.Key: Any] = [:]
     private var percentAttributes: [NSAttributedString.Key: Any] = [:]
 
@@ -151,9 +151,9 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 
     private func title(cpu: Double, memory: Double) -> NSAttributedString {
         let title = NSMutableAttributedString()
-        appendStat(symbol: "cpu", value: cpu, into: title)
+        appendStat(icon: .cpu, value: cpu, into: title)
         title.append(NSAttributedString(string: " "))
-        appendStat(symbol: "memorychip", value: memory, into: title)
+        appendStat(icon: .memory, value: memory, into: title)
         return title
     }
 
@@ -163,14 +163,9 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         guard cachedTintKey != preference.cacheKey || cachedGlyphs.isEmpty else { return }
         cachedTintKey = preference.cacheKey
         let color = preference.tint
-        let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
-        var glyphs: [String: NSAttributedString] = [:]
-        for symbol in ["cpu", "memorychip"] {
-            guard
-                let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                    .withSymbolConfiguration(config)
-            else { continue }
-            image.isTemplate = true
+        var glyphs: [EdithIcon: NSAttributedString] = [:]
+        for icon in [EdithIcon.cpu, .memory] {
+            let image = icon.nsImage(size: 12, tone: .monochrome)
             let attachment = NSTextAttachment()
             attachment.image = image
             attachment.bounds = CGRect(
@@ -180,7 +175,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
                 .foregroundColor, value: color,
                 range: NSRange(location: 0, length: glyph.length))
             glyph.append(NSAttributedString(string: " "))
-            glyphs[symbol] = glyph
+            glyphs[icon] = glyph
         }
         cachedGlyphs = glyphs
         numberAttributes = [
@@ -193,8 +188,8 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         ]
     }
 
-    private func appendStat(symbol: String, value: Double, into out: NSMutableAttributedString) {
-        if let glyph = cachedGlyphs[symbol] {
+    private func appendStat(icon: EdithIcon, value: Double, into out: NSMutableAttributedString) {
+        if let glyph = cachedGlyphs[icon] {
             out.append(glyph)
         }
         out.append(

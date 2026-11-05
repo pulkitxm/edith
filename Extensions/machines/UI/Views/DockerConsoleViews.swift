@@ -84,7 +84,7 @@ struct DockerContainerList: View {
                         }
                     } header: {
                         HStack(spacing: UIScale.pt(6)) {
-                            Image(systemName: DockerProjectOrder.symbol(group.project))
+                            EdithIconView(DockerProjectOrder.icon(group.project))
                                 .font(.edithText(.caption))
                             Text(DockerProjectOrder.title(group.project))
                                 .font(.edithText(.subheadline).weight(.semibold))
@@ -133,7 +133,7 @@ struct DockerContainerList: View {
                     Button {
                         onGroupAction(key, plan.startable, "start")
                     } label: {
-                        Image(systemName: "play.fill")
+                        EdithIconView(.play)
                             .font(.system(size: UIScale.pt(9.5)))
                     }
                     .buttonStyle(.edith(.toolbar))
@@ -143,7 +143,7 @@ struct DockerContainerList: View {
                     Button {
                         onGroupAction(key, plan.stoppable, "stop")
                     } label: {
-                        Image(systemName: "stop.fill")
+                        EdithIconView(.stop)
                             .font(.system(size: UIScale.pt(9.5)))
                     }
                     .buttonStyle(.edith(.toolbar))
@@ -302,13 +302,13 @@ private struct DockerContainerRow: View {
                 Button {
                     onAction(container.state.isRunning ? "stop" : "start")
                 } label: {
-                    Image(systemName: container.state.isRunning ? "stop.fill" : "play.fill")
+                    EdithIconView(container.state.isRunning ? .stop : .play)
                 }
                 .buttonStyle(.edith(.toolbar))
                 .help(container.state.isRunning ? "Stop" : "Start")
             }
             Button(action: onOpen) {
-                Image(systemName: "chevron.right")
+                EdithIconView(.chevronRight)
             }
             .buttonStyle(.edith(.toolbar))
             .help("Open details")
@@ -333,7 +333,7 @@ struct DockerSimpleList: View {
                 }
                 ForEach(rows) { row in
                     HStack(spacing: UIScale.pt(12)) {
-                        Image(systemName: row.symbol)
+                        EdithIconView(row.icon)
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(width: UIScale.pt(16))
                         VStack(alignment: .leading, spacing: UIScale.pt(1)) {
@@ -362,7 +362,7 @@ struct DockerSimpleList: View {
                             Button {
                                 onDelete(row.id)
                             } label: {
-                                Image(systemName: "trash")
+                                EdithIconView(.trash)
                             }
                             .buttonStyle(.edith(.toolbar))
                             .help("Remove")

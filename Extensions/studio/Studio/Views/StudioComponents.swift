@@ -20,6 +20,11 @@ enum StudioPalette {
     }
 }
 
+private func studioGlyphSize(near target: CGFloat) -> CGFloat {
+    let sizes: [CGFloat] = [12, 16, 20, 24, 32, 40, 60, 80]
+    return sizes.min { abs($0 - target) < abs($1 - target) } ?? target
+}
+
 struct StudioThumbnail: View {
     let url: URL
     var side: CGFloat = 160
@@ -38,8 +43,7 @@ struct StudioThumbnail: View {
                     .padding(UIScale.pt(6))
                     .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
             } else {
-                Image(systemName: url.studioKind.symbolName)
-                    .font(.system(size: UIScale.pt(side * 0.22), weight: .light))
+                PageIcon(icon: url.studioKind.icon, size: studioGlyphSize(near: side * 0.22))
                     .foregroundStyle(DashSkin.accent(scheme == .dark).opacity(0.7))
             }
         }
@@ -76,8 +80,7 @@ struct StudioToolIcon: View {
 
     var body: some View {
         let tint = DashSkin.accent(scheme == .dark)
-        Image(systemName: tool.symbolName)
-            .font(.system(size: UIScale.pt(size * 0.46), weight: .semibold))
+        PageIcon(icon: tool.icon, size: studioGlyphSize(near: size * 0.46))
             .foregroundStyle(tint)
             .frame(width: UIScale.pt(size), height: UIScale.pt(size))
             .background(
@@ -105,7 +108,7 @@ struct StudioCard<Content: View>: View {
 struct StudioBackBar<Trailing: View>: View {
     let title: String
     var subtitle: String?
-    var symbol: String?
+    var icon: EdithIcon?
     let back: () -> Void
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.colorScheme) private var scheme
@@ -135,13 +138,13 @@ struct StudioBackBar<Trailing: View>: View {
     private var heading: some View {
         HStack(spacing: UIScale.pt(10)) {
             Button(action: back) {
-                Label("Studio", systemImage: "chevron.left")
+                Label("Studio", edith: .chevronLeft)
                     .font(.edithText(.body))
             }
             .buttonStyle(.edith(.secondary))
             .help("Back to Studio")
-            if let symbol {
-                Image(systemName: symbol)
+            if let icon {
+                EdithIconView(icon)
                     .foregroundStyle(DashSkin.accent(scheme == .dark))
             }
             VStack(alignment: .leading, spacing: 1) {
@@ -164,7 +167,7 @@ struct StudioEngineBanner: View {
         let missing = model.environment.missing(for: tool)
         if !missing.isEmpty {
             HStack(alignment: .top, spacing: UIScale.pt(10)) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                EdithIconView(.warning)
                     .foregroundStyle(DashSkin.warn)
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(StudioEngineText.title(missing))

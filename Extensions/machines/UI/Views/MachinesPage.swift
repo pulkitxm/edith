@@ -105,7 +105,7 @@ struct MachinesPage: View {
                 Button {
                     addSheetPresented = true
                 } label: {
-                    Label("Add machine", systemImage: "plus")
+                    Label("Add machine", edith: .plus)
                 }
                 .help("Connect a computer over SSH")
             },
@@ -115,12 +115,12 @@ struct MachinesPage: View {
     private var machineStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
-                PageChip("All machines", systemImage: "square.grid.2x2", active: mode == .fleet) {
+                PageChip("All machines", icon: .grid, active: mode == .fleet) {
                     modeRaw = MachinesMode.fleet.rawValue
                 }
                 .help("A summary of every machine")
                 PageChip(
-                    "Workspace", systemImage: "rectangle.split.2x1", active: mode == .workspace
+                    "Workspace", icon: .layoutLeft, active: mode == .workspace
                 ) {
                     modeRaw = MachinesMode.workspace.rawValue
                 }
@@ -216,10 +216,10 @@ struct MachinesPage: View {
 
     private var emptyState: some View {
         PageEmptyState(
-            symbolName: "server.rack", title: "No machine selected",
+            icon: .server, title: "No machine selected",
             message:
                 "Pick a machine from the strip above, or add a computer you can reach over SSH to watch its resources, browse its files and run its containers.",
-            primary: PageAction("Add machine", symbolName: "plus") { addSheetPresented = true },
+            primary: PageAction("Add machine", icon: .plus) { addSheetPresented = true },
             secondary: PageAction("Show all machines") {
                 modeRaw = MachinesMode.fleet.rawValue
             })
@@ -256,7 +256,7 @@ private struct MachineChip: View {
                 PageChipLabel(
                     machine.name, dot: MachineStatusStyle.color(session.state, dark: dark))
                 if machine.sshClipboardEnabled {
-                    Image(systemName: sshClipboardState.symbol)
+                    EdithIconView(sshClipboardState.icon)
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(sshClipboardColor)
                         .help(sshClipboardState.label)

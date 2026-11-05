@@ -77,17 +77,14 @@ struct StudioImageCropPanel: View {
         }
         StudioInspectorGroup("Rotate and flip") {
             HStack {
-                iconButton("rotate.left", "Rotate left") {
+                iconButton(.rotate, "Rotate left", mirrored: true) {
                     editor.edit { $0.rotateCounterclockwise() }
                 }
-                iconButton("rotate.right", "Rotate right") { editor.edit { $0.rotateClockwise() } }
-                iconButton(
-                    "arrow.left.and.right.righttriangle.left.righttriangle.right", "Flip horizontal"
-                ) {
+                iconButton(.rotate, "Rotate right") { editor.edit { $0.rotateClockwise() } }
+                iconButton(.resizeHorizontal, "Flip horizontal") {
                     editor.edit { $0.flipHorizontally() }
                 }
-                iconButton("arrow.up.and.down.righttriangle.up.righttriangle.down", "Flip vertical")
-                {
+                iconButton(.resizeVertical, "Flip vertical") {
                     editor.edit { $0.flipVertically() }
                 }
             }
@@ -116,11 +113,14 @@ struct StudioImageCropPanel: View {
         editor.edit { $0.crop = ImageEditGeometry.aspectCrop(target, in: size) }
     }
 
-    private func iconButton(_ symbol: String, _ help: String, action: @escaping () -> Void)
-        -> some View
-    {
+    private func iconButton(
+        _ icon: EdithIcon, _ help: String, mirrored: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).frame(width: UIScale.pt(30), height: UIScale.pt(24))
+            EdithIconView(icon)
+                .scaleEffect(x: mirrored ? -1 : 1)
+                .frame(width: UIScale.pt(30), height: UIScale.pt(24))
         }
         .buttonStyle(.edith(.secondary))
         .help(help)
@@ -165,7 +165,7 @@ struct StudioImageAdjustPanel: View {
         ForEach(ImageAdjustments.Key.allCases, id: \.self) { key in
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 HStack {
-                    Label(key.title, systemImage: key.symbolName)
+                    Label(key.title, edith: key.icon)
                         .font(.edithText(.subheadline))
                     Spacer()
                     if abs(editor.document.adjustments[key]) > 0.0001 {
@@ -253,7 +253,7 @@ struct StudioImageTextPanel: View {
             Button {
                 editor.addText()
             } label: {
-                Label("Add text", systemImage: "plus")
+                Label("Add text", edith: .plus)
             }
             .buttonStyle(.edith(.primary))
             Button("Meme") { editor.addMeme() }
@@ -413,7 +413,7 @@ struct StudioImageStickerPanel: View {
         Button {
             editor.addImageLayer()
         } label: {
-            Label("Add an image or logo…", systemImage: "photo.badge.plus")
+            Label("Add an image or logo…", edith: .photo)
         }
         .buttonStyle(.edith(.secondary))
     }
@@ -442,7 +442,7 @@ struct StudioImageBlurPanel: View {
         Button {
             editor.blurFaces()
         } label: {
-            Label("Blur faces automatically", systemImage: "face.dashed")
+            Label("Blur faces automatically", edith: .person)
         }
         .buttonStyle(.edith(.secondary))
     }
@@ -572,14 +572,14 @@ struct StudioImageLayerList: View {
                     Button {
                         editor.edit { $0.updateLayer(layer.id) { $0.isHidden.toggle() } }
                     } label: {
-                        Image(systemName: layer.isHidden ? "eye.slash" : "eye")
+                        EdithIconView(layer.isHidden ? .eyeOff : .eye)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .help(layer.isHidden ? "Show" : "Hide")
                     Button {
                         editor.edit { $0.moveLayer(layer.id, by: 1) }
                     } label: {
-                        Image(systemName: "arrow.up")
+                        EdithIconView(.arrowUp)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .help("Bring forward")
@@ -587,7 +587,7 @@ struct StudioImageLayerList: View {
                         editor.selectedLayer = layer.id
                         editor.deleteSelected()
                     } label: {
-                        Image(systemName: "trash")
+                        EdithIconView(.trash)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .help("Delete layer")

@@ -9,7 +9,7 @@ struct QuinjetSettingsPage: View {
             Section("Launch") {
                 Picker("Terminal", selection: terminal) {
                     ForEach(QuinjetTerminal.allCases) { option in
-                        Label(option.label, systemImage: option.icon).tag(option.rawValue)
+                        Label(option.label, edith: option.icon).tag(option.rawValue)
                             .disabled(option == .cmux && model.state?.cmuxAvailable != true)
                     }
                 }

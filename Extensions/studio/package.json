@@ -1,7 +1,7 @@
 {
   "id": "studio",
   "title": "Studio",
-  "symbolName": "wand.and.stars",
+  "icon": "studio",
   "category": "media",
   "background": false,
   "commands": [
@@ -11,7 +11,7 @@
     {
       "id": "studio",
       "title": "Studio",
-      "symbolName": "wand.and.stars",
+      "icon": "studio",
       "order": 1
     }
   ],
@@ -29,22 +29,22 @@
     "summary": "Studio bundles dozens of tools in one place: merge or sign PDFs, remove image backgrounds, compress video, convert audio and edit video on a timeline. Everything runs on this Mac and nothing is uploaded.",
     "steps": [
       {
-        "symbolName": "plus.circle",
+        "icon": "addFilled",
         "title": "Add your files",
         "detail": "Drop them in, choose them, paste, or scan with an iPhone."
       },
       {
-        "symbolName": "wand.and.stars",
+        "icon": "studio",
         "title": "Pick a tool",
         "detail": "Browse Tools or search, then open the one you need."
       },
       {
-        "symbolName": "slider.horizontal.3",
+        "icon": "adjust",
         "title": "Adjust and run",
         "detail": "Set options on the right and run it."
       },
       {
-        "symbolName": "folder",
+        "icon": "folder",
         "title": "Find the result",
         "detail": "Results are listed under Projects with Show in Finder."
       }

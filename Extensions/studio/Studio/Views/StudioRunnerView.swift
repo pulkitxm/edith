@@ -13,7 +13,7 @@ struct StudioRunnerView: View {
     var body: some View {
         VStack(spacing: 0) {
             StudioBackBar(
-                title: job.tool.title, subtitle: job.tool.summary, symbol: job.tool.symbolName,
+                title: job.tool.title, subtitle: job.tool.summary, icon: job.tool.icon,
                 back: model.goHome
             ) {
                 if case .finished = job.phase {
@@ -70,7 +70,7 @@ struct StudioInputsPanel: View {
                             Button {
                                 choose()
                             } label: {
-                                Label("Add files", systemImage: "plus")
+                                Label("Add files", edith: .plus)
                             }
                             .buttonStyle(.edith(.secondary))
                         }
@@ -98,7 +98,7 @@ struct StudioInputsPanel: View {
                     }
                 } else {
                     StudioEmptyNote(
-                        symbol: job.tool.symbolName,
+                        icon: job.tool.icon,
                         text: "This tool does not need files. Fill in the settings and run it.")
                 }
             }
@@ -173,7 +173,7 @@ struct StudioInputsDropZone: View {
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             Button(action: choose) {
-                Label("Choose files", systemImage: "plus")
+                Label("Choose files", edith: .plus)
             }
             .buttonStyle(.edith(.primary))
             .padding(.top, UIScale.pt(4))
@@ -208,7 +208,7 @@ struct StudioInputTile: View {
                 Button {
                     job.remove(url)
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
+                    EdithIconView(.closeFilled)
                         .font(.system(size: UIScale.pt(15)))
                         .foregroundStyle(.secondary)
                         .background(Circle().fill(DashSkin.paper2(scheme == .dark)).padding(2))
@@ -241,7 +241,7 @@ struct StudioInputTile: View {
                     Button {
                         job.move(url, by: -1)
                     } label: {
-                        Image(systemName: "arrow.left")
+                        EdithIconView(.arrowLeft)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .disabled(index == 0 || job.isRunning)
@@ -249,7 +249,7 @@ struct StudioInputTile: View {
                     Button {
                         job.move(url, by: 1)
                     } label: {
-                        Image(systemName: "arrow.right")
+                        EdithIconView(.arrowRight)
                     }
                     .buttonStyle(.edith(.iconOnly))
                     .disabled(index == job.inputs.count - 1 || job.isRunning)
@@ -290,7 +290,7 @@ struct StudioOptionsPanel: View {
             Divider()
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if case let .failed(message) = job.phase {
-                    Label(message, systemImage: "exclamationmark.octagon.fill")
+                    Label(message, edith: .error)
                         .font(.edithText(.subheadline))
                         .foregroundStyle(DashSkin.danger)
                         .fixedSize(horizontal: false, vertical: true)
@@ -378,7 +378,7 @@ struct StudioResultView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                    Image(systemName: "checkmark.circle.fill")
+                    EdithIconView(.success)
                         .font(.system(size: UIScale.pt(30)))
                         .foregroundStyle(DashSkin.ok)
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -392,19 +392,19 @@ struct StudioResultView: View {
                     Button {
                         StudioFileActions.reveal(outputs, facade: model.facade)
                     } label: {
-                        Label("Show in Finder", systemImage: "folder")
+                        Label("Show in Finder", edith: .folder)
                     }
                     .buttonStyle(.edith(.primary))
                 }
                 ForEach(result.notes, id: \.self) { note in
-                    Label(note, systemImage: "info.circle")
+                    Label(note, edith: .info)
                         .font(.edithText(.subheadline))
                         .foregroundStyle(.secondary)
                 }
                 ForEach(result.failures, id: \.self) { failure in
                     Label(
                         "\(failure.file): \(failure.message)",
-                        systemImage: "exclamationmark.triangle"
+                        edith: .warning
                     )
                     .font(.edithText(.subheadline))
                     .foregroundStyle(DashSkin.warn)
@@ -477,7 +477,7 @@ struct StudioOutputRow: View {
             Button {
                 StudioFileActions.reveal([output.url], facade: model.facade)
             } label: {
-                Image(systemName: "magnifyingglass")
+                EdithIconView(.search)
             }
             .buttonStyle(.edith(.iconOnly))
             .help("Show in Finder")

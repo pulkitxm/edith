@@ -104,13 +104,13 @@ struct StudioImageCanvas: View {
                     .font(.edithText(.body))
                     .frame(maxWidth: UIScale.pt(240))
                 }
-                Button("Duplicate", systemImage: "plus.square.on.square") {
+                Button("Duplicate", edith: .plus) {
                     editor.duplicateSelected()
                 }
                 .labelStyle(.iconOnly)
                 .help("Duplicate layer (⌘D)")
                 .accessibilityLabel("Duplicate selected layer")
-                Button("Delete", systemImage: "trash", role: .destructive) {
+                Button("Delete", edith: .trash, role: .destructive) {
                     editor.deleteSelected()
                 }
                 .labelStyle(.iconOnly)

@@ -17,7 +17,7 @@ struct HerdrValueDial: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(2)) {
-            stepButton("chevron.up", step)
+            stepButton(.chevronUp, step)
             Text(display(value))
                 .font(.edithText(.largeTitle, design: .rounded).weight(.semibold))
                 .monospacedDigit()
@@ -29,7 +29,7 @@ struct HerdrValueDial: View {
                 .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .textCase(.uppercase)
-            stepButton("chevron.down", -step)
+            stepButton(.chevronDown, -step)
         }
         .padding(.vertical, UIScale.pt(4))
         .frame(maxWidth: .infinity)
@@ -52,11 +52,11 @@ struct HerdrValueDial: View {
             .onEnded { _ in dragBase = nil }
     }
 
-    private func stepButton(_ symbol: String, _ delta: Int) -> some View {
+    private func stepButton(_ icon: EdithIcon, _ delta: Int) -> some View {
         Button {
             nudge(delta)
         } label: {
-            Image(systemName: symbol)
+            EdithIconView(icon)
                 .font(.edithText(.subheadline).weight(.bold))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .frame(width: UIScale.pt(36), height: UIScale.pt(22))

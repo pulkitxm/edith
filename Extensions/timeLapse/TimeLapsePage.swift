@@ -102,26 +102,26 @@ struct TimeLapseControls: View {
                     recordingStatus
                 } else if permissionNeeded {
                     PageEmptyState(
-                        symbolName: "lock.display",
+                        icon: .lock,
                         title: "Allow Screen Recording to get started",
                         message:
                             "macOS asks you to approve screen capture once. Without it Edith cannot see your displays or windows, so there is nothing to record yet.",
                         steps: [
                             PageGuideStep(
-                                symbolName: "gearshape", title: "Open System Settings",
+                                icon: .gear, title: "Open System Settings",
                                 detail: "Go to Privacy & Security, then Screen Recording."),
                             PageGuideStep(
-                                symbolName: "switch.2", title: "Turn Edith on",
+                                icon: .toolbox, title: "Turn Edith on",
                                 detail: "You may need to reopen Edith after changing it."),
                             PageGuideStep(
-                                symbolName: "arrow.clockwise", title: "Come back and try again",
+                                icon: .refresh, title: "Come back and try again",
                                 detail: "Your displays and windows will appear here."),
                         ],
                         primary: PageAction(
-                            "Open System Settings", symbolName: "gearshape",
+                            "Open System Settings", icon: .gear,
                             identifier: "timelapse.open-settings"
                         ) { TimeLapseScreenRecordingAccess.request() },
-                        secondary: PageAction("Try Again", symbolName: "arrow.clockwise") {
+                        secondary: PageAction("Try Again", icon: .refresh) {
                             sourcesRefresh += 1
                         },
                         footnote: "Recordings stay on this Mac. Edith never uploads them."
@@ -281,10 +281,10 @@ struct TimeLapseControls: View {
                         HStack(spacing: UIScale.pt(8)) {
                             Label(
                                 sourceSummary,
-                                systemImage: recorder.sourceMode == "displays"
-                                    ? "display" : "macwindow")
+                                edith: recorder.sourceMode == "displays"
+                                    ? .display : .window)
                             Spacer(minLength: UIScale.pt(8))
-                            Image(systemName: "chevron.down").font(.edithText(.caption))
+                            EdithIconView(.chevronDown).font(.edithText(.caption))
                         }
                         .font(.edithText(.body))
                         .frame(maxWidth: .infinity)
@@ -366,7 +366,7 @@ struct TimeLapseControls: View {
                     )
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
                     if let startHint {
-                        Label(startHint, systemImage: "info.circle")
+                        Label(startHint, edith: .info)
                             .font(.edithText(.caption)).foregroundStyle(.secondary)
                     }
                 }
@@ -374,7 +374,7 @@ struct TimeLapseControls: View {
                 Button {
                     Task { await recorder.start() }
                 } label: {
-                    Label(recorder.busy ? "Starting…" : "Record", systemImage: "record.circle")
+                    Label(recorder.busy ? "Starting…" : "Record", edith: .record)
                         .font(.edithText(.body)).fontWeight(.medium)
                         .frame(maxWidth: narrow ? .infinity : nil)
                 }
@@ -482,7 +482,7 @@ struct TimeLapseControls: View {
             Button {
                 Task { await recorder.stop() }
             } label: {
-                Label(recorder.busy ? "Finishing…" : "Stop recording", systemImage: "stop.fill")
+                Label(recorder.busy ? "Finishing…" : "Stop recording", edith: .stop)
                     .font(.edithText(.body)).fontWeight(.medium)
                     .frame(maxWidth: narrow ? .infinity : nil)
             }
@@ -511,7 +511,7 @@ struct TimeLapseControls: View {
                 Button {
                     libraryRefresh += 1
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    EdithIconView(.refresh)
                 }
                 .buttonStyle(.edith(.iconOnly))
                 .padding(.trailing, -UIScale.pt(6))
@@ -532,13 +532,13 @@ struct TimeLapseControls: View {
                         PageGuideSteps(
                             steps: [
                                 PageGuideStep(
-                                    symbolName: "display", title: "Pick a source",
+                                    icon: .display, title: "Pick a source",
                                     detail: "A whole display, or only the windows you choose."),
                                 PageGuideStep(
-                                    symbolName: "record.circle", title: "Press Record",
+                                    icon: .record, title: "Press Record",
                                     detail: "Recording keeps going if you leave this page."),
                                 PageGuideStep(
-                                    symbolName: "square.and.arrow.up", title: "Export a video",
+                                    icon: .share, title: "Export a video",
                                     detail: "Stop, choose a quality and save the file."),
                             ], columns: compact ? 1 : 3)
                     } else {
@@ -575,7 +575,7 @@ struct TimeLapseControls: View {
                         .buttonStyle(.edith(.secondary))
                 }
             } else if let message = libraryModel.message {
-                Label(message, systemImage: "checkmark.circle")
+                Label(message, edith: .success)
                     .font(.edithText(.callout)).foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -622,7 +622,7 @@ struct TimeLapseControls: View {
                 } label: {
                     Label(
                         exporting ? "Exporting…" : "Export video…",
-                        systemImage: "square.and.arrow.up"
+                        edith: .share
                     )
                     .font(.edithText(.body))
                     .frame(maxWidth: narrow ? .infinity : nil)
@@ -635,7 +635,7 @@ struct TimeLapseControls: View {
                         : "Save the selected recording as a video file")
             }
             if let failure = recording.session.failure {
-                Label(failure, systemImage: "exclamationmark.triangle")
+                Label(failure, edith: .warning)
                     .font(.edithText(.callout)).foregroundStyle(.orange)
             }
         }

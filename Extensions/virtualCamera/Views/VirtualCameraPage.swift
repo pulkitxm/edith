@@ -70,7 +70,7 @@ struct VirtualCameraPage: View {
                         } label: {
                             Label(
                                 showingInspector ? "Hide controls" : "Show controls",
-                                systemImage: "slider.horizontal.3")
+                                edith: .adjust)
                         }
                         .buttonStyle(.edith(.secondary))
                         .help("Frame, look, background, overlays and output settings")
@@ -203,7 +203,7 @@ struct VirtualCameraStage: View {
             }
             if model.state.privacy == .stopped {
                 VStack(spacing: UIScale.pt(12)) {
-                    Image(systemName: "video.slash")
+                    EdithIconView(.videoOff)
                         .font(.system(size: UIScale.pt(32)))
                     Text("Camera stopped")
                         .font(.edithText(.title2).weight(.semibold))
@@ -215,7 +215,7 @@ struct VirtualCameraStage: View {
                 .padding(.horizontal, UIScale.pt(16))
             } else if model.hasNoCameraSource {
                 VStack(spacing: UIScale.pt(12)) {
-                    Image(systemName: "video.slash")
+                    EdithIconView(.videoOff)
                         .font(.system(size: UIScale.pt(32)))
                     Text("No camera connected")
                         .font(.edithText(.title2).weight(.semibold))
@@ -235,7 +235,7 @@ struct VirtualCameraStage: View {
                 .padding(.horizontal, UIScale.pt(16))
             } else if let failure = model.previewFailure {
                 VStack(spacing: UIScale.pt(12)) {
-                    Image(systemName: "exclamationmark.triangle")
+                    EdithIconView(.warning)
                         .font(.system(size: UIScale.pt(28)))
                     Text("Camera preview unavailable")
                         .font(.edithText(.title2).weight(.semibold))
@@ -263,7 +263,7 @@ struct VirtualCameraStage: View {
             if CameraPrivacy.shared.hides(.camera), model.state.privacy != .stopped {
                 Color.black
                     .overlay {
-                        Label("Hidden in Presenter Mode", systemImage: "lock.fill")
+                        Label("Hidden in Presenter Mode", edith: .lock)
                             .foregroundStyle(.white.opacity(0.7))
                     }
                     .allowsHitTesting(false)
@@ -347,7 +347,7 @@ struct VirtualCameraAccessPrompt: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
-            Image(systemName: "web.camera")
+            EdithIconView(.virtualCamera)
                 .font(.system(size: UIScale.pt(30)))
                 .foregroundStyle(.white.opacity(0.8))
             Text(
@@ -406,7 +406,7 @@ struct VirtualCameraSceneStrip: View {
                     newName = model.suggestedSceneName()
                     naming = true
                 } label: {
-                    Label("Save scene", systemImage: "plus")
+                    Label("Save scene", edith: .plus)
                 }
                 .buttonStyle(.edith(.secondary))
                 .popover(isPresented: $naming, arrowEdge: .bottom) {
