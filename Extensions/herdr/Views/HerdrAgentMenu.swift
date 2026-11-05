@@ -1,3 +1,4 @@
+import EdithExtensionAccounts
 import EdithExtensionSupport
 import EdithExtensionUI
 import AppKit
@@ -8,9 +9,11 @@ import SwiftUI
 @Observable
 final class HerdrAgentActions {
     var agentToDelete: HerdrAgent?
+    var pendingRestart: HerdrAgentRestartChoice?
     var failure: String?
     private(set) var deleting: Set<String> = []
     private(set) var openingTerminal: Set<String> = []
+    private(set) var restarting: Set<String> = []
 
     func open(_ agent: HerdrAgent, store: HerdrStore) {
         if store.raiseSpace(containingAgent: agent.id) { return }
@@ -51,6 +54,20 @@ final class HerdrAgentActions {
         }
     }
 
+    func restart(_ choice: HerdrAgentRestartChoice, store: HerdrStore) async {
+        let agent = choice.agent
+        guard restarting.insert(agent.id).inserted else { return }
+        defer { restarting.remove(agent.id) }
+        do {
+            try await store.restartAgent(agent, kind: choice.kind, accountID: choice.accountID)
+            HerdrSpaceWindow.removeAgent(agent.id)
+            HerdrAgentWindow.close(agent.id)
+            store.reattach(agent.id)
+        } catch {
+            failure = error.localizedDescription
+        }
+    }
+
     func delete(_ agent: HerdrAgent, store: HerdrStore) async {
         guard deleting.insert(agent.id).inserted else { return }
         defer { deleting.remove(agent.id) }
@@ -62,6 +79,61 @@ final class HerdrAgentActions {
         } catch {
             failure = error.localizedDescription
         }
+    }
+}
+
+struct HerdrAgentRestartChoice: Identifiable {
+    let agent: HerdrAgent
+    var kind: String?
+    var accountID: String?
+    var title: String
+
+    var id: String { agent.id }
+}
+
+struct HerdrAgentRestartMenuItems: View {
+    let agent: HerdrAgent
+    let store: HerdrStore
+    let actions: HerdrAgentActions
+
+    private var accounts: [ClaudeAccount] {
+        store.claudeAccounts.launchAccounts.filter {
+            agent.machineIsLocal
+                ? $0.remoteMachineID == nil
+                : $0.remoteMachineID == nil || $0.remoteMachineID == agent.machineID
+        }
+    }
+
+    var body: some View {
+        Button("Restart Agent…") {
+            actions.pendingRestart = HerdrAgentRestartChoice(
+                agent: agent, title: "resume in \(HerdrKind.displayName(for: agent.kind))")
+        }
+        if HerdrKind.displayName(for: agent.kind) == "Claude Code" {
+            Menu("Restart in Account") {
+                Button("Existing CLI Login") { choose(accountID: "cli", name: "the CLI login") }
+                ForEach(accounts) { account in
+                    Button(account.name) {
+                        choose(accountID: account.id.uuidString, name: account.name)
+                    }
+                    .disabled(store.accountSessions[agent.id] == account.id.uuidString)
+                }
+            }
+            .task { await store.claudeAccounts.read() }
+        }
+        Menu("Continue in Agent") {
+            ForEach(AgentResume.handoffTargets(from: agent.kind), id: \.self) { kind in
+                Button(kind) {
+                    actions.pendingRestart = HerdrAgentRestartChoice(
+                        agent: agent, kind: kind, title: "continue in \(kind)")
+                }
+            }
+        }
+    }
+
+    private func choose(accountID: String, name: String) {
+        actions.pendingRestart = HerdrAgentRestartChoice(
+            agent: agent, accountID: accountID, title: "resume in \(name)")
     }
 }
 
@@ -144,6 +216,11 @@ struct HerdrAgentMenu: View {
                 if !detached { store.revealWorkspaceWindow() }
             }
             cancelWaiting
+            if AgentResume.profile(for: agent.kind) != nil {
+                Divider()
+                HerdrAgentRestartMenuItems(agent: agent, store: store, actions: actions)
+                    .disabled(actions.restarting.contains(agent.id))
+            }
             Divider()
             Button("Delete Agent…", role: .destructive) { actions.agentToDelete = agent }
                 .disabled(actions.deleting.contains(agent.id))
@@ -209,6 +286,20 @@ struct HerdrAgentActionDialogs: ViewModifier {
                 Button("Cancel", role: .cancel) { actions.agentToDelete = nil }
             } message: { agent in
                 Text("\(agent.title) will exit and its Herdr pane will close.")
+            }
+            .confirmationDialog(
+                "Restart this agent?",
+                isPresented: Binding(
+                    get: { actions.pendingRestart != nil },
+                    set: { if !$0 { actions.pendingRestart = nil } }),
+                titleVisibility: .visible, presenting: actions.pendingRestart
+            ) { choice in
+                Button("Restart") {
+                    HerdrWorkOwnership.start { await actions.restart(choice, store: store) }
+                }
+                Button("Cancel", role: .cancel) { actions.pendingRestart = nil }
+            } message: { choice in
+                Text("\(choice.agent.title) will quit and \(choice.title). Any running turn stops.")
             }
             .alert(
                 "Could not complete agent action",

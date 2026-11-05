@@ -227,6 +227,7 @@ public enum HerdrLaunchOperations {
 
     public static func launchAgent(
         kind: String, name: String, pane: String, options: AgentLaunchOptions,
+        leadingArguments: [String] = [],
         session: String = HerdrTerminalSpace.defaultSession, on machine: Machine?
     ) async throws {
         var catalog: AgentLaunchCatalog?
@@ -234,8 +235,8 @@ public enum HerdrLaunchOperations {
             catalog = await HerdrLaunchCatalogContext.current.cached(for: launchKind, on: machine)
         }
         let launch = agentLaunch(
-            kind: kind, name: name, pane: pane, options: options, catalog: catalog, session: session
-        )
+            kind: kind, name: name, pane: pane, options: options, leadingArguments: leadingArguments,
+            catalog: catalog, session: session)
         if launch.waitsForAvailableShell {
             _ = await HerdrPaneOperations.waitForAvailableShell(
                 timeout: shellReadyTimeout,
@@ -251,11 +252,14 @@ public enum HerdrLaunchOperations {
 
     public static func agentLaunch(
         kind: String, name: String, pane: String, options: AgentLaunchOptions,
-        catalog: AgentLaunchCatalog? = nil, session: String = HerdrTerminalSpace.defaultSession,
+        leadingArguments: [String] = [], catalog: AgentLaunchCatalog? = nil,
+        session: String = HerdrTerminalSpace.defaultSession,
         defaults: UserDefaults = SharedDefaults.store
     ) -> HerdrAgentLaunch {
-        let agentArguments = HerdrLaunchSettings.launchArguments(
-            kind: kind, options: options, catalog: catalog, in: defaults)
+        let agentArguments =
+            leadingArguments
+            + HerdrLaunchSettings.launchArguments(
+                kind: kind, options: options, catalog: catalog, in: defaults)
         if HerdrLaunchSettings.usesHerdrAgentStart(for: kind, in: defaults),
             let slug = HerdrLaunchSettings.defaultHerdrSlug(for: kind)
         {
