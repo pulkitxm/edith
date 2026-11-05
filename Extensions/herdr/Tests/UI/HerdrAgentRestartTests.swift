@@ -76,7 +76,9 @@ private actor HerdrRestartRecorder {
         }
     }
 
-    private func accountModel(_ accounts: [ClaudeAccount]) async throws -> (ClaudeAccountsModel, URL) {
+    private func accountModel(_ accounts: [ClaudeAccount]) async throws -> (
+        ClaudeAccountsModel, URL
+    ) {
         var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
         try #require(realpath(NSTemporaryDirectory(), &buffer) != nil)
         let root = URL(fileURLWithPath: String(cString: buffer), isDirectory: true)
@@ -207,7 +209,26 @@ private actor HerdrRestartRecorder {
         #expect(script.contains("cp -f"))
     }
 
-    @Test func aRestartThatCannotFindTheTranscriptStopsBeforeCreatingAPane() async throws {
+    @Test func anAccountMoveThatCannotFindTheTranscriptStopsBeforeCreatingAPane() async throws {
+        let account = ClaudeAccount(name: "Synthetic", credential: "synthetic-token")
+        let (model, root) = try await accountModel([account])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recorder = HerdrRestartRecorder()
+        let store = HerdrStore(
+            defaults: defaults(), claudeAccounts: model,
+            agentRestartSteps: steps(recorder, transcript: nil))
+        let target = agent()
+        store.hosts = [.local(herdrPresent: true, agents: [target])]
+        store.open(target)
+
+        await #expect(throws: HerdrAgentRestartError.transcriptMissing("session-one")) {
+            try await store.restartAgent(target, accountID: account.id.uuidString)
+        }
+        #expect(await recorder.events == ["quit"])
+        #expect(store.session(target.id) != nil)
+    }
+
+    @Test func aPlainRestartNeverNeedsTheTranscriptLookup() async throws {
         let recorder = HerdrRestartRecorder()
         let store = HerdrStore(
             defaults: defaults(), agentRestartSteps: steps(recorder, transcript: nil))
@@ -215,11 +236,11 @@ private actor HerdrRestartRecorder {
         store.hosts = [.local(herdrPresent: true, agents: [target])]
         store.open(target)
 
-        await #expect(throws: HerdrAgentRestartError.transcriptMissing("session-one")) {
-            try await store.restartAgent(target)
-        }
-        #expect(await recorder.events == ["quit"])
-        #expect(store.session(target.id) != nil)
+        try await store.restartAgent(target)
+        try await settle(recorder, count: 4)
+
+        #expect(await recorder.scripts.isEmpty)
+        #expect(await recorder.started.first?.leading == ["--resume", "session-one"])
     }
 
     @Test func aFailedQuitLeavesTheAgentAlone() async throws {

@@ -2449,6 +2449,7 @@ final class HerdrStore {
         else { throw HerdrAgentRestartError.sessionUnknown(source) }
         let leading = try await restartArguments(
             source: source, sessionID: sessionID, target: kind, account: plan.account,
+            keepsAccount: plan.account?.id.uuidString == accountSessions[agent.id],
             machine: machine)
         let launch = try await prepareAgentLaunch(
             kind: kind, accountID: selection, machine: machine, leadingArguments: leading)
@@ -2471,15 +2472,15 @@ final class HerdrStore {
 
     private func restartArguments(
         source: String, sessionID: String, target: String, account: ClaudeAccount?,
-        machine: Machine?
+        keepsAccount: Bool, machine: Machine?
     ) async throws -> [String] {
-        guard source == "Claude Code" else {
-            return source == target
-                ? AgentResume.resumeArguments(kind: source, sessionID: sessionID)
-                : AgentResume.handoffArguments(
-                    from: source, sessionID: sessionID, to: target)
-        }
         let isSameAgent = target == source
+        if isSameAgent, source != "Claude Code" || keepsAccount {
+            return AgentResume.resumeArguments(kind: source, sessionID: sessionID)
+        }
+        guard source == "Claude Code" else {
+            return AgentResume.handoffArguments(from: source, sessionID: sessionID, to: target)
+        }
         let script = ClaudeTranscriptCommand.script(
             sessionID: sessionID, roots: try await claudeConfigurationRoots(on: machine),
             destination: isSameAgent
