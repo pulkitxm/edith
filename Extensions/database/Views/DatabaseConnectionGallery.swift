@@ -12,6 +12,89 @@ enum DatabaseConnectionCardAction: Hashable {
     case delete
 }
 
+enum DatabaseConnectionRowMetrics {
+    static let icon = 32.0
+    static let horizontalPadding = 14.0
+    static let verticalPadding = 10.0
+    static let spacing = 12.0
+    static let sessionWidth = 150.0
+    static let menuSize = 28.0
+    static var dividerInset: Double { horizontalPadding + icon + spacing }
+}
+
+struct DatabaseConnectionListSurface<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        LazyVStack(spacing: 0) { content() }
+            .frame(maxWidth: .infinity)
+            .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
+    }
+}
+
+struct DatabaseConnectionRowDivider: View {
+    var body: some View {
+        Divider().padding(.leading, UIScale.pt(DatabaseConnectionRowMetrics.dividerInset))
+    }
+}
+
+struct DatabaseConnectionRowSkeleton: View {
+    let index: Int
+    let accent: Color
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(DatabaseConnectionRowMetrics.spacing)) {
+            ZStack {
+                RoundedRectangle(cornerRadius: UIScale.pt(8)).fill(accent.opacity(0.11))
+                Image(systemName: "cylinder")
+                    .font(.edithText(.callout).weight(.semibold))
+                    .foregroundStyle(accent)
+            }
+            .frame(
+                width: UIScale.pt(DatabaseConnectionRowMetrics.icon),
+                height: UIScale.pt(DatabaseConnectionRowMetrics.icon))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
+                    .font(.edithText(.body).weight(.semibold))
+                    .lineLimit(1)
+                Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
+                    .font(.edithText(.caption))
+                    .lineLimit(1)
+                if compact { namespace }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !compact {
+                namespace.frame(maxWidth: .infinity, alignment: .leading)
+                Text("Ready to connect")
+                    .font(.edithText(.caption))
+                    .frame(
+                        width: UIScale.pt(DatabaseConnectionRowMetrics.sessionWidth),
+                        alignment: .trailing)
+            }
+            Image(systemName: "ellipsis.circle")
+                .font(.edithText(.body).weight(.semibold))
+                .frame(
+                    width: UIScale.pt(DatabaseConnectionRowMetrics.menuSize),
+                    height: UIScale.pt(DatabaseConnectionRowMetrics.menuSize))
+        }
+        .padding(.horizontal, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
+        .padding(.vertical, UIScale.pt(DatabaseConnectionRowMetrics.verticalPadding))
+    }
+
+    private var namespace: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Image(systemName: "cylinder").font(.edithText(.caption).weight(.medium))
+                .frame(width: UIScale.pt(16))
+            Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
+                .font(.edithText(.caption)).lineLimit(1)
+        }
+    }
+}
+
 struct DatabaseConnectionGallery: View {
     @Bindable var model: DatabaseConnectionWorkspaceModel
     let createConnection: () -> Void
@@ -23,6 +106,7 @@ struct DatabaseConnectionGallery: View {
     var performConnectionAction:
         ((DatabaseConnectionCardAction, DatabaseConnectionSummary) -> Void)? = nil
     @State private var hoveredConnectionID: DatabaseConnectionID?
+    @State private var scrollHeight: CGFloat = 0
     @FocusState private var focusedConnectionID: DatabaseConnectionID?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
@@ -31,10 +115,6 @@ struct DatabaseConnectionGallery: View {
     private var dark: Bool { scheme == .dark }
     private var palette: DatabaseThemePalette {
         DatabaseThemePalette(dark: dark, theme: appTheme)
-    }
-    private var columns: [GridItem] {
-        PageMetrics.cardColumns(
-            compact, minimum: 270, spacing: PageMetrics.cardSpacing, alignment: .top)
     }
 
     var body: some View {
@@ -46,6 +126,7 @@ struct DatabaseConnectionGallery: View {
                     .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
                     .pageContent(compact)
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { scrollHeight = $0 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.canvas)
@@ -93,7 +174,6 @@ struct DatabaseConnectionGallery: View {
                         clearable: true,
                         onSubmit: reload
                     )
-                    .frame(maxWidth: UIScale.pt(560))
                     .accessibilityLabel("Search saved database connections")
                 }
             })
@@ -153,9 +233,9 @@ struct DatabaseConnectionGallery: View {
     private var content: some View {
         switch model.listState {
         case .idle:
-            loadingConnectionCards([])
+            loadingConnectionRows([])
         case .loading(let connections):
-            loadingConnectionCards(connections)
+            loadingConnectionRows(connections)
         case .empty:
             emptyState(
                 symbol: "cylinder.split.1x2",
@@ -187,7 +267,7 @@ struct DatabaseConnectionGallery: View {
                 actionTitle: hasStructuredFilters ? "Clear filters" : "Clear search",
                 action: clearFilters)
         case .loaded(let connections):
-            connectionCards(connections)
+            connectionRows(connections)
         case .partial(let connections):
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 stateNotice(
@@ -195,7 +275,7 @@ struct DatabaseConnectionGallery: View {
                     title: "Partial connection list",
                     detail: "Some saved connections could not be loaded.",
                     tint: DashSkin.warn)
-                connectionCards(connections)
+                connectionRows(connections)
             }
         case .stale(let connections):
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -204,7 +284,7 @@ struct DatabaseConnectionGallery: View {
                     title: "Stale connection list",
                     detail: "The saved connection information may be out of date.",
                     tint: DashSkin.warn)
-                connectionCards(connections)
+                connectionRows(connections)
             }
         case .failed(let connections, let message):
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
@@ -214,74 +294,30 @@ struct DatabaseConnectionGallery: View {
                     detail: message,
                     tint: DashSkin.danger,
                     retry: true)
-                connectionCards(connections)
+                connectionRows(connections)
             }
         }
     }
 
-    private func loadingConnectionCards(_ connections: [DatabaseConnectionSummary]) -> some View {
+    private func loadingConnectionRows(_ connections: [DatabaseConnectionSummary]) -> some View {
         SkeletonReplica("Loading saved database connections") {
             Group {
                 if connections.isEmpty {
-                    LazyVGrid(
-                        columns: columns, alignment: .leading,
-                        spacing: UIScale.pt(PageMetrics.cardSpacing)
-                    ) {
+                    DatabaseConnectionListSurface {
                         ForEach(0..<6, id: \.self) { index in
-                            loadingConnectionCard(index)
+                            if index > 0 { DatabaseConnectionRowDivider() }
+                            DatabaseConnectionRowSkeleton(index: index, accent: palette.accent)
                         }
                     }
                 } else {
-                    connectionCards(connections)
+                    connectionRows(connections)
                 }
             }
         }
-    }
-
-    private func loadingConnectionCard(_ index: Int) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(alignment: .top, spacing: UIScale.pt(11)) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: UIScale.pt(9))
-                        .fill(palette.accent.opacity(0.11))
-                    Image(systemName: "cylinder")
-                        .font(.edithText(.title3).weight(.semibold))
-                        .foregroundStyle(palette.accent)
-                }
-                .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
-                        .font(.edithText(.title3).weight(.semibold))
-                        .lineLimit(2)
-                    Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
-                        .font(.edithText(.caption).weight(.medium))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "ellipsis.circle")
-                    .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-            }
-            Spacer(minLength: 0)
-            HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "cylinder")
-                    .font(.edithText(.caption).weight(.medium))
-                Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
-                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.edithText(.caption).weight(.semibold))
-                Text("Connected")
-                    .font(.edithText(.caption).weight(.semibold))
-            }
-        }
-        .padding(UIScale.pt(PageMetrics.cardPadding))
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
-        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
     }
 
     @ViewBuilder
-    private func connectionCards(_ connections: [DatabaseConnectionSummary]) -> some View {
+    private func connectionRows(_ connections: [DatabaseConnectionSummary]) -> some View {
         if connections.isEmpty {
             Text("No connection entries are available in this result.")
                 .font(.edithText(.callout))
@@ -289,90 +325,83 @@ struct DatabaseConnectionGallery: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel("No connection entries are available in this result")
         } else {
-            LazyVGrid(
-                columns: columns, alignment: .leading,
-                spacing: UIScale.pt(PageMetrics.cardSpacing)
-            ) {
-                ForEach(connections) { connection in
-                    connectionCard(connection)
+            DatabaseConnectionListSurface {
+                ForEach(Array(connections.enumerated()), id: \.element.id) { index, connection in
+                    if index > 0 { DatabaseConnectionRowDivider() }
+                    connectionRow(connection)
                 }
             }
         }
     }
 
-    private func connectionCard(_ connection: DatabaseConnectionSummary) -> some View {
+    private func connectionRow(_ connection: DatabaseConnectionSummary) -> some View {
         let session = model.sessionState(for: connection.id)
         let hovered = hoveredConnectionID == connection.id
         let focused = focusedConnectionID == connection.id
         let highlighted = hovered || focused
         let accent = connectionAccent(connection)
-        return ZStack(alignment: .topTrailing) {
+        return ZStack(alignment: .trailing) {
             Button {
                 openConnection(connection)
             } label: {
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    HStack(alignment: .top, spacing: UIScale.pt(11)) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: UIScale.pt(9))
-                                .fill(accent.opacity(highlighted ? 0.15 : 0.11))
-                            Image(systemName: connection.product.gallerySymbolName)
-                                .font(.edithText(.title3).weight(.semibold))
-                                .foregroundStyle(accent)
-                        }
-                        .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-                        .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            HStack(spacing: UIScale.pt(6)) {
-                                Text(connection.name)
-                                    .font(.edithText(.headline))
-                                    .foregroundStyle(palette.ink)
-                                    .lineLimit(2)
-                                if connection.isFavorite {
-                                    Image(systemName: "star.fill")
-                                        .font(.edithText(.caption))
-                                        .foregroundStyle(DashSkin.gold)
-                                        .accessibilityHidden(true)
-                                }
-                            }
-                            Text(connectionSubtitle(connection))
-                                .font(.edithText(.callout))
-                                .foregroundStyle(palette.inkSoft)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        Color.clear
-                            .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-                            .accessibilityHidden(true)
+                HStack(spacing: UIScale.pt(DatabaseConnectionRowMetrics.spacing)) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: UIScale.pt(8))
+                            .fill(accent.opacity(highlighted ? 0.15 : 0.11))
+                        Image(systemName: connection.product.gallerySymbolName)
+                            .font(.edithText(.callout).weight(.semibold))
+                            .foregroundStyle(accent)
                     }
-                    Spacer(minLength: 0)
-                    HStack(spacing: UIScale.pt(8)) {
-                        Image(systemName: namespaceSymbol(connection))
-                            .font(.edithText(.caption).weight(.medium))
-                            .foregroundStyle(palette.inkFaint)
-                            .accessibilityHidden(true)
-                        Text(namespaceTitle(connection))
+                    .frame(
+                        width: UIScale.pt(DatabaseConnectionRowMetrics.icon),
+                        height: UIScale.pt(DatabaseConnectionRowMetrics.icon)
+                    )
+                    .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Text(connection.name)
+                                .font(.edithText(.body).weight(.semibold))
+                                .foregroundStyle(palette.ink)
+                                .lineLimit(1)
+                            if connection.isFavorite {
+                                Image(systemName: "star.fill")
+                                    .font(.edithText(.caption))
+                                    .foregroundStyle(DashSkin.gold)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        Text(connectionSubtitle(connection))
                             .font(.edithText(.caption))
                             .foregroundStyle(palette.inkSoft)
                             .lineLimit(1)
-                        Spacer(minLength: 0)
-                        connectionSessionSlot(session)
+                        if compact {
+                            HStack(spacing: UIScale.pt(DatabaseConnectionRowMetrics.spacing)) {
+                                namespaceLabel(connection)
+                                HStack(spacing: UIScale.pt(6)) { connectionSessionSlot(session) }
+                            }
+                        }
                     }
-                }
-                .padding(UIScale.pt(PageMetrics.cardPadding))
-                .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
-                .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
-                .overlay {
-                    if highlighted {
-                        RoundedRectangle(
-                            cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius),
-                            style: .continuous
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if !compact {
+                        namespaceLabel(connection)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: UIScale.pt(6)) { connectionSessionSlot(session) }
+                            .frame(
+                                width: UIScale.pt(DatabaseConnectionRowMetrics.sessionWidth),
+                                alignment: .trailing)
+                    }
+                    Color.clear
+                        .frame(
+                            width: UIScale.pt(DatabaseConnectionRowMetrics.menuSize),
+                            height: UIScale.pt(DatabaseConnectionRowMetrics.menuSize)
                         )
-                        .fill(accent.opacity(dark ? 0.045 : 0.035))
-                        .allowsHitTesting(false)
-                    }
+                        .accessibilityHidden(true)
                 }
-                .contentShape(
-                    RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius)))
+                .padding(.horizontal, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
+                .padding(.vertical, UIScale.pt(DatabaseConnectionRowMetrics.verticalPadding))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(highlighted ? accent.opacity(dark ? 0.045 : 0.035) : .clear)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
             .focused($focusedConnectionID, equals: connection.id)
@@ -416,6 +445,20 @@ struct DatabaseConnectionGallery: View {
         }
     }
 
+    private func namespaceLabel(_ connection: DatabaseConnectionSummary) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Image(systemName: namespaceSymbol(connection))
+                .font(.edithText(.caption).weight(.medium))
+                .foregroundStyle(palette.inkFaint)
+                .frame(width: UIScale.pt(16))
+                .accessibilityHidden(true)
+            Text(namespaceTitle(connection))
+                .font(.edithText(.caption))
+                .foregroundStyle(palette.inkSoft)
+                .lineLimit(1)
+        }
+    }
+
     @ViewBuilder
     private func connectionSessionSlot(_ session: DatabaseConnectionSessionState) -> some View {
         switch session {
@@ -451,7 +494,7 @@ struct DatabaseConnectionGallery: View {
                 .background(palette.panel.opacity(0.94), in: Circle())
                 .overlay(Circle().stroke(palette.line, lineWidth: 1))
         }
-        .padding(UIScale.pt(10))
+        .padding(.trailing, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
     }
 
     private func connectionActionMenu(_ connection: DatabaseConnectionSummary) -> some View {
@@ -468,7 +511,7 @@ struct DatabaseConnectionGallery: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .padding(UIScale.pt(10))
+        .padding(.trailing, UIScale.pt(DatabaseConnectionRowMetrics.horizontalPadding))
         .disabled(busyConnectionID != nil)
         .help("Manage \(connection.name)")
         .accessibilityLabel("Actions for \(connection.name)")
@@ -563,7 +606,13 @@ struct DatabaseConnectionGallery: View {
                 actionTitle, symbolName: steps.isEmpty ? nil : "plus", perform: action),
             footnote: footnote
         )
-        .frame(minHeight: UIScale.pt(320))
+        .frame(minHeight: emptyStateHeight)
+    }
+
+    private var emptyStateHeight: CGFloat {
+        max(
+            UIScale.pt(320),
+            scrollHeight - UIScale.pt(PageMetrics.pinnedContentTop + PageMetrics.bottom))
     }
 
     private func reload() {

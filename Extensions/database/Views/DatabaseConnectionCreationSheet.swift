@@ -36,9 +36,9 @@ struct DatabaseConnectionCreationSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().opacity(0.35)
+            Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(22)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.top)) {
                     EdithSegmentedPicker(
                         "Connection setup", selection: $entryMode,
                         options: DatabaseConnectionEntryMode.allCases, label: { $0.title }
@@ -56,18 +56,18 @@ struct DatabaseConnectionCreationSheet: View {
 
                     DisclosureGroup("Advanced options", isExpanded: $showsAdvanced) {
                         advancedSetup
-                            .padding(.top, UIScale.pt(14))
+                            .padding(.top, UIScale.pt(PageMetrics.cardSpacing))
                     }
-                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .foregroundStyle(palette.inkSoft)
                 }
-                .padding(UIScale.pt(24))
+                .padding(UIScale.pt(PageMetrics.gutter))
             }
-            Divider().opacity(0.35)
+            Divider()
             footer
         }
         .frame(
-            minWidth: UIScale.pt(420), idealWidth: UIScale.pt(560),
+            minWidth: UIScale.pt(520), idealWidth: UIScale.pt(560),
             minHeight: UIScale.pt(480), idealHeight: UIScale.pt(640)
         )
         .background(palette.canvas)
@@ -81,27 +81,20 @@ struct DatabaseConnectionCreationSheet: View {
     }
 
     private var header: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            Image(systemName: "plus.circle.fill")
-                .font(.system(size: UIScale.pt(24), weight: .semibold))
-                .foregroundStyle(palette.accent)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+        HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            DatabaseSheetBadge(symbol: "plus", tint: palette.accent)
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                 Text("Add connection")
-                    .font(.system(size: UIScale.pt(17), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                     .foregroundStyle(palette.ink)
                 Text("Use a URL or individual fields to start.")
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(palette.inkFaint)
             }
             Spacer(minLength: 0)
-            Button("Cancel", action: cancelSubmissionAndDismiss)
-                .buttonStyle(.edith(.borderless))
-                .keyboardShortcut(.cancelAction)
-                .disabled(isWorking)
         }
-        .padding(.horizontal, UIScale.pt(22))
-        .padding(.vertical, UIScale.pt(16))
+        .padding(.horizontal, UIScale.pt(PageMetrics.gutter))
+        .padding(.vertical, UIScale.pt(PageMetrics.headerBottom))
         .background(palette.panel.opacity(0.68))
     }
 
@@ -125,23 +118,16 @@ struct DatabaseConnectionCreationSheet: View {
             }
 
             field("Connection URL", required: true) {
-                HStack(spacing: UIScale.pt(8)) {
-                    Group {
-                        if revealsConnectionURL {
-                            TextField(
-                                "postgresql://user:password@host/database",
-                                text: connectionURLBinding)
-                        } else {
-                            SecureField(
-                                "postgresql://user:password@host/database",
-                                text: connectionURLBinding)
-                        }
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                    if revealsConnectionURL {
+                        EdithTextField(
+                            placeholder: "postgresql://user:password@host/database",
+                            text: connectionURLBinding, onSubmit: model.applyConnectionURL)
+                    } else {
+                        EdithSecureField(
+                            placeholder: "postgresql://user:password@host/database",
+                            text: connectionURLBinding, onSubmit: model.applyConnectionURL)
                     }
-                    .textFieldStyle(.plain)
-                    .font(.system(size: UIScale.pt(12), design: .monospaced))
-                    .foregroundStyle(palette.ink)
-                    .edithFieldSurface(focused: false)
-                    .onSubmit(model.applyConnectionURL)
 
                     Button {
                         revealsConnectionURL.toggle()
@@ -201,19 +187,21 @@ struct DatabaseConnectionCreationSheet: View {
                     "Production data changes are disabled until you explicitly change the policy.",
                     systemImage: "lock.shield.fill"
                 )
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.warn)
             } else {
                 Label(
                     "Every data change opens a review before it runs.",
                     systemImage: "checkmark.shield.fill"
                 )
+                .font(.edithText(.subheadline))
                 .foregroundStyle(palette.inkSoft)
             }
         }
     }
 
     private var advancedSetup: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             if entryMode == .url, model.urlImportPhase == .applied {
                 formSection(
                     "Parsed details",
@@ -277,7 +265,7 @@ struct DatabaseConnectionCreationSheet: View {
             }
         } else {
             field("SQLite file", required: true) {
-                HStack(spacing: UIScale.pt(8)) {
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                     EdithTextField(
                         placeholder: "/path/to/database.sqlite",
                         text: textBinding(\.path))
@@ -289,7 +277,7 @@ struct DatabaseConnectionCreationSheet: View {
     }
 
     private var accessFields: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             responsivePair {
                 field("Username", required: model.usernameRequired) {
                     EdithTextField(
@@ -299,11 +287,8 @@ struct DatabaseConnectionCreationSheet: View {
                 }
             } second: {
                 field("Password") {
-                    SecureField("Optional password", text: textBinding(\.password))
-                        .textFieldStyle(.plain)
-                        .font(.system(size: UIScale.pt(12.5)))
-                        .foregroundStyle(palette.ink)
-                        .edithFieldSurface(focused: false)
+                    EdithSecureField(
+                        placeholder: "Optional password", text: textBinding(\.password))
                 }
             }
 
@@ -328,7 +313,7 @@ struct DatabaseConnectionCreationSheet: View {
                     isOn: boolBinding(\.tlsEnabled)
                 )
                 .toggleStyle(.switch)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
             }
         }
     }
@@ -337,21 +322,28 @@ struct DatabaseConnectionCreationSheet: View {
     private var urlImportStatus: some View {
         switch model.urlImportPhase {
         case .editing:
-            Text("The database type resolves URLs whose scheme is shared by several products.")
+            Text("Some URLs work with several products. Database type picks which one you mean.")
+                .font(.edithText(.subheadline))
                 .foregroundStyle(palette.inkFaint)
         case .applied:
             Label(safeEndpointSummary, systemImage: "checkmark.circle.fill")
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.ok)
         case .failed(let detail):
             Label(detail, systemImage: "exclamationmark.triangle.fill")
+                .font(.edithText(.subheadline))
                 .foregroundStyle(DashSkin.danger)
         }
     }
 
     private var footer: some View {
-        HStack(spacing: UIScale.pt(12)) {
+        HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             phaseStatus
-            Spacer(minLength: UIScale.pt(12))
+            Spacer(minLength: UIScale.pt(PageMetrics.cardSpacing))
+            Button("Cancel", action: cancelSubmissionAndDismiss)
+                .buttonStyle(.edith(.secondary))
+                .keyboardShortcut(.cancelAction)
+                .disabled(isWorking)
             Button(action: submit) {
                 if isWorking {
                     SkeletonReplica(
@@ -367,8 +359,8 @@ struct DatabaseConnectionCreationSheet: View {
             .keyboardShortcut(.defaultAction)
             .disabled(isWorking)
         }
-        .padding(.horizontal, UIScale.pt(22))
-        .padding(.vertical, UIScale.pt(14))
+        .padding(.horizontal, UIScale.pt(PageMetrics.gutter))
+        .padding(.vertical, UIScale.pt(PageMetrics.headerBottom))
         .background(palette.panel.opacity(0.68))
     }
 
@@ -400,7 +392,7 @@ struct DatabaseConnectionCreationSheet: View {
 
     private func status(_ text: String, symbol: String, color: Color) -> some View {
         Label(text, systemImage: symbol)
-            .font(.system(size: UIScale.pt(10.5), weight: .medium))
+            .font(.edithText(.subheadline).weight(.medium))
             .foregroundStyle(color)
             .lineLimit(2)
     }
@@ -410,13 +402,13 @@ struct DatabaseConnectionCreationSheet: View {
         detail: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                 Text(title)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    .font(.edithText(.headline))
                     .foregroundStyle(palette.ink)
                 Text(detail)
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(palette.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -430,9 +422,9 @@ struct DatabaseConnectionCreationSheet: View {
         required: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
             Text(required ? "\(label) *" : label)
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(palette.inkFaint)
             content()
         }
@@ -448,6 +440,7 @@ struct DatabaseConnectionCreationSheet: View {
             Picker(label, selection: selection, content: content)
                 .labelsHidden()
                 .pickerStyle(.menu)
+                .controlSize(.large)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -457,11 +450,11 @@ struct DatabaseConnectionCreationSheet: View {
         @ViewBuilder second: () -> Second
     ) -> some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                 first()
                 second()
             }
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                 first()
                 second()
             }

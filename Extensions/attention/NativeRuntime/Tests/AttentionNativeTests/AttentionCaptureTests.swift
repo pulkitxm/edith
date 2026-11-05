@@ -61,13 +61,51 @@ struct AttentionCaptureTests {
             let variants =
                 section == .overview
                 ? AttentionRenderCapture.variants
-                : [AttentionRenderCapture.variants[0], AttentionRenderCapture.variants[3]]
+                : [
+                    AttentionRenderCapture.variants[0], AttentionRenderCapture.variants[3],
+                    AttentionRenderCapture.variants[5],
+                ]
             for variant in variants {
                 let bitmap = try await AttentionRenderCapture.render(
                     "attention-\(section.rawValue)", variant: variant
                 ) { AttentionPage(model: model) }
                 #expect(AttentionRenderCapture.distinctColors(bitmap) > 3)
             }
+        }
+        await model.shutdown()
+    }
+
+    @Test func categoryAndAgentChipsRenderInTheFullOverview() async throws {
+        let (repository, root) = try repository()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try populated(repository)
+        let now = Date()
+        for (index, kind) in ["Fixture Coder", "Fixture Reviewer"].enumerated() {
+            try repository.append(
+                AttentionEvent(
+                    id: "agent:fixture-\(index)",
+                    startedAt: now.addingTimeInterval(TimeInterval(-3_600 + index * 600)),
+                    duration: 1_800, source: .agent, windowTitle: "Task \(index)",
+                    tags: [
+                        "machine": "fixture-mac", "agent": kind, "session": "s\(index)",
+                        "status": "working", "project": "sample",
+                    ]))
+        }
+        let model = AttentionPageModel(repository: repository)
+        model.reload()
+        await model.waitForReload()
+        #expect(!model.summary.agents.isEmpty)
+        #expect(!model.triage.isEmpty)
+        for variant in [
+            AttentionRenderCapture.Variant(
+                name: "full-light", width: 1100, height: 3200, zoom: 1, scheme: .light),
+            AttentionRenderCapture.Variant(
+                name: "full-compact-dark", width: 640, height: 4200, zoom: 1, scheme: .dark),
+        ] {
+            let bitmap = try await AttentionRenderCapture.render(
+                "attention-overview", variant: variant, settle: .milliseconds(600)
+            ) { AttentionPage(model: model) }
+            #expect(AttentionRenderCapture.distinctColors(bitmap) > 3)
         }
         await model.shutdown()
     }

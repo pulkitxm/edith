@@ -26,84 +26,47 @@ struct CodeStatsKPIGrid: View {
     let report: CodeStatsReport
     let dark: Bool
 
-    private var spacing: CGFloat { UIScale.pt(PageMetrics.cardSpacing) }
-
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: spacing) {
-                commits
-                lines
-                activeDays
-                streak
-                repositories
-            }
-            Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
-                GridRow {
-                    commits.gridCellColumns(2)
-                    lines.gridCellColumns(2)
-                    activeDays.gridCellColumns(2)
-                }
-                GridRow {
-                    streak.gridCellColumns(3)
-                    repositories.gridCellColumns(3)
-                }
-            }
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), spacing: spacing)],
-                spacing: spacing
-            ) {
-                commits
-                lines
-                activeDays
-                streak
-                repositories
-            }
+        PageMetricGrid {
+            tile(
+                "Commits", CodeStatsNumberFormat.compact(report.totals.commits),
+                symbol: "point.3.connected.trianglepath.dotted",
+                change: report.momentum?.commitChange, detail: commitsPerDay(report.totals))
+            tile(
+                "Lines authored", CodeStatsNumberFormat.compact(report.totals.authored),
+                symbol: "text.line.first.and.arrowtriangle.forward",
+                change: report.momentum?.lineChange,
+                detail:
+                    "+\(CodeStatsNumberFormat.grouped(report.totals.added)) / -\(CodeStatsNumberFormat.grouped(report.totals.deleted))"
+            )
+            tile(
+                "Active days", CodeStatsNumberFormat.grouped(report.totals.activeDays),
+                symbol: "calendar",
+                detail:
+                    "\(CodeStatsNumberFormat.decimal(report.totals.averagePerActiveDay)) lines per active day"
+            )
+            tile(
+                "Streak", CodeStatsNumberFormat.grouped(report.totals.currentStreak) + "d",
+                symbol: "flame",
+                detail: "Longest " + Self.days(report.totals.longestStreak))
+            tile(
+                "Repositories", CodeStatsNumberFormat.grouped(report.totals.repositories),
+                symbol: "shippingbox",
+                detail: "Net " + CodeStatsNumberFormat.grouped(report.totals.net) + " lines")
         }
     }
 
-    private var commits: some View {
-        CodeStatsTile(
-            label: "Commits", value: CodeStatsNumberFormat.compact(report.totals.commits),
-            symbol: "point.3.connected.trianglepath.dotted",
-            change: report.momentum?.commitChange,
-            detail: commitsPerDay(report.totals), dark: dark)
+    static func days(_ count: Int) -> String {
+        CodeStatsNumberFormat.grouped(count) + (count == 1 ? " day" : " days")
     }
 
-    private var lines: some View {
-        CodeStatsTile(
-            label: "Lines authored", value: CodeStatsNumberFormat.compact(report.totals.authored),
-            symbol: "text.line.first.and.arrowtriangle.forward",
-            change: report.momentum?.lineChange,
-            detail:
-                "+\(CodeStatsNumberFormat.grouped(report.totals.added)) / -\(CodeStatsNumberFormat.grouped(report.totals.deleted))",
-            dark: dark)
-    }
-
-    private var activeDays: some View {
-        CodeStatsTile(
-            label: "Active days", value: CodeStatsNumberFormat.grouped(report.totals.activeDays),
-            symbol: "calendar",
-            detail:
-                "\(CodeStatsNumberFormat.decimal(report.totals.averagePerActiveDay)) lines per active day",
-            dark: dark)
-    }
-
-    private var streak: some View {
-        CodeStatsTile(
-            label: "Streak",
-            value: CodeStatsNumberFormat.grouped(report.totals.currentStreak) + "d",
-            symbol: "flame",
-            detail: "Longest " + CodeStatsNumberFormat.grouped(report.totals.longestStreak)
-                + " days",
-            dark: dark)
-    }
-
-    private var repositories: some View {
-        CodeStatsTile(
-            label: "Repositories", value: CodeStatsNumberFormat.grouped(report.totals.repositories),
-            symbol: "shippingbox",
-            detail: "Net " + CodeStatsNumberFormat.grouped(report.totals.net) + " lines",
-            dark: dark)
+    private func tile(
+        _ title: String, _ value: String, symbol: String, change: Double? = nil, detail: String
+    ) -> some View {
+        PageMetric(
+            title: title, value: value, detail: detail, symbol: symbol,
+            tint: DashSkin.accent(dark), trend: change.map { CodeStatsNumberFormat.percent($0) },
+            trendPositive: (change ?? 0) >= 0)
     }
 }
 
@@ -112,48 +75,15 @@ private func commitsPerDay(_ totals: CodeStatsTotals) -> String {
     return CodeStatsNumberFormat.decimal(perDay) + " per active day"
 }
 
-struct CodeStatsTile: View {
-    let label: String
-    let value: String
-    let symbol: String
-    var change: Double?
-    var detail: String?
-    let dark: Bool
-
-    var body: some View {
-        PageMetric(
-            title: label, value: value,
-            detail: detail ?? (change == nil ? " " : "vs previous period"), symbol: symbol,
-            tint: DashSkin.accent(dark), trend: change.map { CodeStatsNumberFormat.percent($0) },
-            trendPositive: (change ?? 0) >= 0
-        )
-        .frame(minWidth: UIScale.pt(170))
-    }
-}
-
 struct CodeStatsHeatmapCard: View {
     let weeks: [CodeStatsHeatWeek]
     let dark: Bool
-    @State private var width = 0.0
-    @Environment(\.compactLayout) private var compact
-
-    private var cellSize: CGFloat {
-        guard !weeks.isEmpty, width > 0 else { return 14 }
-        let fitted = (width / UIScale.current - 16) / CGFloat(weeks.count) - 3
-        return min(compact ? 20 : 28, max(14, fitted.rounded(.down)))
-    }
 
     var body: some View {
         PageCard(
             title: "Contributions", note: "Commits per day, hover a day for details", fill: true
         ) {
-            CodeStatsHeatGrid(weeks: weeks, dark: dark, cellSize: cellSize)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .onGeometryChange(for: Double.self) {
-                    $0.size.width
-                } action: {
-                    width = $0
-                }
+            CodeStatsHeatGrid(weeks: weeks, dark: dark, fillsWidth: true)
         }
     }
 }
@@ -191,6 +121,7 @@ struct CodeStatsHeatGrid: View {
     let weeks: [CodeStatsHeatWeek]
     let dark: Bool
     var cellSize: CGFloat = 14
+    var fillsWidth = false
     @Environment(\.codeStatsActions) private var actions
     var body: some View {
         let cells = Dictionary(uniqueKeysWithValues: weeks.flatMap(\.cells).map { ($0.id, $0) })
@@ -202,7 +133,9 @@ struct CodeStatsHeatGrid: View {
                         id: $0.id, date: $0.date, value: Double($0.commits), level: $0.level)
                 })
         }
-        ActivityCalendarGrid(weeks: calendarWeeks, dark: dark, cellSize: cellSize) { day in
+        ActivityCalendarGrid(
+            weeks: calendarWeeks, dark: dark, cellSize: cellSize, fillsWidth: fillsWidth
+        ) { day in
             if let cell = cells[day.id] {
                 CodeStatsDayPopover(cell: cell, detail: actions.dayDetails[cell.id], dark: dark)
             }

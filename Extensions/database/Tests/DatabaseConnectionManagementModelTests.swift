@@ -1,4 +1,6 @@
+import EdithExtensionUI
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import DatabaseExtension
@@ -7,6 +9,57 @@ import Testing
 @MainActor
 @Suite("Database connection management")
 struct DatabaseConnectionManagementModelTests {
+    @Test("Edit, rename and duplicate sheets render with synthetic connections")
+    func sheetsRender() async throws {
+        let connection = try Self.connection(name: "Orders")
+        let summary = DatabaseConnectionSummary(definition: connection)
+        let schemes: [(name: String, width: CGFloat, zoom: Double, scheme: ColorScheme)] = [
+            ("sheet-light", 620, 1, .light), ("sheet-dark", 620, 1, .dark),
+            ("sheet-narrow", 520, 1, .light), ("sheet-zoomed", 992, 1.6, .dark),
+        ]
+        for setting in schemes {
+            for presentation in [
+                DatabaseConnectionManagementPresentation.edit, .rename, .duplicate,
+            ] {
+                let height = (presentation == .edit ? 680 : 360) * setting.zoom
+                let width = presentation == .edit ? setting.width : 440 * setting.zoom
+                let variant = DatabaseRenderCapture.Variant(
+                    name: setting.name, width: width, height: height, zoom: setting.zoom,
+                    scheme: setting.scheme)
+                let sender = DatabaseConnectionManagementSender([
+                    .response(Self.getResponse(connection))
+                ])
+                let model = DatabaseConnectionManagementModel(sender: sender)
+                let bitmap = try await DatabaseRenderCapture.render(
+                    "database-connection-\(presentation.rawValue)", variant: variant,
+                    settle: .milliseconds(500)
+                ) {
+                    DatabaseConnectionManagementSheet(
+                        connection: summary, model: model, presentation: presentation,
+                        edited: { _ in }, renamed: { _ in }, duplicated: { _ in },
+                        uncertain: { _ in }, cancel: {}
+                    )
+                    .environment(\.automaticViewActionsEnabled, true)
+                }
+                #expect(DatabaseRenderCapture.distinctColors(bitmap) > 3)
+                #expect(model.failure == nil)
+                #expect(model.operation == nil)
+            }
+            let loading = DatabaseConnectionManagementModel(
+                sender: DatabaseConnectionManagementSender([]))
+            try await DatabaseRenderCapture.render(
+                "database-connection-loading",
+                variant: DatabaseRenderCapture.Variant(
+                    name: setting.name, width: setting.width, height: 680 * setting.zoom,
+                    zoom: setting.zoom, scheme: setting.scheme)
+            ) {
+                DatabaseConnectionManagementSheet(
+                    connection: summary, model: loading, presentation: .edit, edited: { _ in },
+                    renamed: { _ in }, duplicated: { _ in }, uncertain: { _ in }, cancel: {})
+            }
+        }
+    }
+
     @Test("Loading an edit draft uses the saved connection")
     func loadEditDraft() async throws {
         let connection = try Self.connection(

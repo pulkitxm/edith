@@ -9,7 +9,7 @@ struct AttentionOverview: View {
     private var summary: AttentionSummary { model.summary }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             Text(
                 "App breakdowns and productivity show active use. Idle and locked time are kept separately."
             )
@@ -45,22 +45,23 @@ struct AttentionOverview: View {
         @ViewBuilder _ leading: () -> Leading, @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         if compact {
-            VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 leading()
                 trailing()
             }
         } else {
-            HStack(alignment: .top, spacing: UIScale.pt(14)) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 leading().frame(maxWidth: .infinity, alignment: .top)
                 trailing().frame(maxWidth: .infinity, alignment: .top)
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .environment(\.attentionPanelFills, true)
         }
     }
 }
 
 struct AttentionHeadline: View {
     let model: AttentionPageModel
-    @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -75,55 +76,53 @@ struct AttentionHeadline: View {
         let hours = max(active / 3_600, 1 / 60)
         let perHour = Double(summary.contextSwitches) / hours
         let longestBlock = summary.focusBlocks.map(\.duration).max() ?? 0
-        LazyVGrid(
-            columns: AttentionTileGrid.columns(compact),
-            spacing: UIScale.pt(PageMetrics.cardSpacing)
-        ) {
-            AttentionTile(
-                label: "Screen time",
+        PageMetricGrid(maximumColumns: 4) {
+            PageMetric(
+                title: "Screen time",
                 value: AttentionFormat.duration(
                     summary.screenTime(excludingIdle: model.excludeIdleTime)),
-                detail:
-                    model.excludeIdleTime
+                detail: model.excludeIdleTime
                     ? "idle and locked time excluded" : "includes idle and locked time",
-                tint: quiet, symbol: "clock")
-            AttentionTile(
-                label: "Idle / locked", value: AttentionFormat.duration(summary.idleDuration),
+                symbol: "clock", tint: quiet)
+            PageMetric(
+                title: "Idle / locked", value: AttentionFormat.duration(summary.idleDuration),
                 detail: "idle after \(Int(model.settings.idleThreshold / 60))m without input",
-                tint: quiet, symbol: "moon.zzz")
-            AttentionTile(
-                label: "Active", value: AttentionFormat.duration(active),
+                symbol: "moon.zzz", tint: quiet)
+            PageMetric(
+                title: "Active", value: AttentionFormat.duration(active),
                 detail:
                     "\(AttentionFormat.duration(summary.duration(AttentionSphere.work))) work · \(AttentionFormat.duration(summary.duration(AttentionSphere.personal))) personal",
-                tint: quiet, symbol: "cursorarrow")
-            AttentionTile(
-                label: "Productive", value: AttentionFormat.duration(productive),
-                detail:
-                    "\(AttentionFormat.percent(productive, of: active)) · \(AttentionFormat.delta(productive, previous?.productive) ?? "of active time")",
-                tint: accent, symbol: "scope")
-            AttentionTile(
-                label: "Distracting", value: AttentionFormat.duration(distracting),
-                detail:
-                    "\(AttentionFormat.percent(distracting, of: active)) · \(AttentionFormat.delta(distracting, previous?.distracting) ?? "of active time")",
-                tint: AttentionPalette.level(.veryDistracting, dark: dark),
-                symbol: "arrow.down.right")
-            AttentionTile(
-                label: "Deep work", value: AttentionFormat.duration(summary.deepWorkDuration),
+                symbol: "cursorarrow", tint: quiet)
+            PageMetric(
+                title: "Productive", value: AttentionFormat.duration(productive),
+                detail: AttentionFormat.share(
+                    productive, of: active, previous: previous?.productive), symbol: "scope",
+                tint: accent)
+            PageMetric(
+                title: "Distracting", value: AttentionFormat.duration(distracting),
+                detail: AttentionFormat.share(
+                    distracting, of: active, previous: previous?.distracting),
+                symbol: "arrow.down.right",
+                tint: AttentionPalette.level(.veryDistracting, dark: dark))
+            PageMetric(
+                title: "Deep work", value: AttentionFormat.duration(summary.deepWorkDuration),
                 detail: summary.focusBlocks.isEmpty
                     ? "no block of \(Int(model.settings.focusBlockMinimum / 60))m yet"
                     : "\(summary.focusBlocks.count) blocks, longest \(AttentionFormat.duration(longestBlock))",
-                tint: quiet, symbol: "brain.head.profile")
-            AttentionTile(
-                label: "Switches", value: String(format: "%.0f/h", perHour),
+                symbol: "brain.head.profile", tint: quiet)
+            PageMetric(
+                title: "Switches", value: String(format: "%.0f/h", perHour),
                 detail:
                     "\(summary.contextSwitches) total · \(AttentionFormat.duration(summary.medianStretch)) median stretch",
-                tint: quiet, symbol: "arrow.triangle.2.circlepath")
-            AttentionTile(
-                label: "Agent work", value: AttentionFormat.duration(summary.agents.working),
+                symbol: "arrow.triangle.2.circlepath", tint: quiet)
+            PageMetric(
+                title: "Agent work", value: AttentionFormat.duration(summary.agents.working),
                 detail: summary.agents.isEmpty
                     ? "no agent activity recorded"
-                    : "peak \(summary.agents.peakConcurrent) at once · \(AttentionFormat.delta(summary.agents.working, previous?.agentWorking) ?? "")",
-                tint: quiet, symbol: "sparkles")
+                    : AttentionFormat.joined(
+                        "peak \(summary.agents.peakConcurrent) at once",
+                        AttentionFormat.delta(summary.agents.working, previous?.agentWorking)),
+                symbol: "sparkles", tint: quiet)
         }
     }
 }
@@ -327,27 +326,22 @@ struct AttentionTriagePanel: View {
                         }
                         WrapHStack(spacing: UIScale.pt(6)) {
                             if entity.categorySource == .jev {
-                                Button {
+                                let color = AttentionPalette.category(entity.category, dark: dark)
+                                PageChip(
+                                    "Keep \(entity.category.name)", dot: color, active: true,
+                                    tint: color
+                                ) {
                                     model.assign(entity: entity, to: entity.category.id)
-                                } label: {
-                                    AttentionChip(
-                                        title: "Keep \(entity.category.name)",
-                                        color: AttentionPalette.category(
-                                            entity.category, dark: dark),
-                                        active: true)
                                 }
-                                .buttonStyle(.edith(.borderless))
                             }
                             ForEach(quick.filter { $0.id != entity.category.id }.prefix(4)) {
                                 category in
-                                Button {
+                                PageChip(
+                                    category.name,
+                                    dot: AttentionPalette.category(category, dark: dark)
+                                ) {
                                     model.assign(entity: entity, to: category.id)
-                                } label: {
-                                    AttentionChip(
-                                        title: category.name,
-                                        color: AttentionPalette.category(category, dark: dark))
                                 }
-                                .buttonStyle(.edith(.borderless))
                             }
                         }
                     }
@@ -538,11 +532,17 @@ struct AttentionAgentsSummaryPanel: View {
                             detail: $0.sessions == 1 ? "1 session" : "\($0.sessions) sessions",
                             color: AttentionPalette.accent(dark))
                     })
-                HStack(spacing: UIScale.pt(6)) {
+                WrapHStack(
+                    spacing: UIScale.pt(PageMetrics.controlSpacing),
+                    lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
+                ) {
                     ForEach(agents.kinds.prefix(4)) { kind in
-                        AttentionChip(
-                            title: "\(kind.key) \(AttentionFormat.duration(kind.working))",
-                            color: AttentionPalette.accent(dark))
+                        PageChipLabel(
+                            "\(kind.key) \(AttentionFormat.duration(kind.working))",
+                            dot: AttentionPalette.accent(dark)
+                        )
+                        .pageChipChrome()
+                        .fixedSize()
                     }
                 }
             }

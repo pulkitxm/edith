@@ -23,8 +23,8 @@ struct SEOAuditPageAccordion: View {
         VStack(spacing: 0) {
             HStack(spacing: UIScale.pt(10)) {
                 Toggle("Select \(page.url)", isOn: $selected)
-                    .labelsHidden()
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.edithCheckboxMark)
+                    .accessibilityLabel("Select \(page.url)")
                     .padding(.leading, UIScale.pt(14))
                 Button {
                     expanded.toggle()
@@ -387,10 +387,7 @@ struct SEOAuditPageAccordion: View {
             .overlay(
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(120)), alignment: .leading)],
-                alignment: .leading, spacing: UIScale.pt(10)
-            ) {
+            PageMetricGrid(minimumWidth: 120) {
                 fact("Status", page.statusCode.map(String.init) ?? "Failed")
                 fact("Response", page.responseMilliseconds.map { "\($0) ms" } ?? "-")
                 fact(
@@ -410,10 +407,7 @@ struct SEOAuditPageAccordion: View {
     private var metadataPanel: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(9)) {
             sectionLabel("Search and social", count: metadataValues.count)
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), alignment: .leading)],
-                alignment: .leading, spacing: UIScale.pt(9)
-            ) {
+            PageMetricGrid(minimumWidth: 170) {
                 ForEach(metadataValues, id: \.0) { label, value in
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         PageCapsLabel(label)
@@ -424,6 +418,7 @@ struct SEOAuditPageAccordion: View {
                             )
                             .lineLimit(2)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -459,6 +454,7 @@ struct SEOAuditPageAccordion: View {
             PageCapsLabel(label)
             Text(value).font(.edithText(.caption).weight(.medium)).lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var issues: some View {

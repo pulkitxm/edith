@@ -19,6 +19,33 @@ import Testing
         return (model, agent)
     }
 
+    @Test func fileTypesChipNamesTheSelectedCategories() {
+        #expect(CodeStatsFilterBar.fileTypesTitle([]) == "No file types")
+        #expect(CodeStatsFilterBar.fileTypesTitle([.docs]) == "Docs")
+        #expect(CodeStatsFilterBar.fileTypesTitle(CodeStatsCategory.counted) == "3 file types")
+        #expect(
+            CodeStatsFilterBar.fileTypesTitle(Set(CodeStatsCategory.filterable))
+                == "All file types")
+        #expect(CodeStatsFilterBar.fileTypesTitle([.generated]) == "No file types")
+    }
+
+    @Test func streakDaysAgreeWithTheirCount() {
+        #expect(CodeStatsKPIGrid.days(1) == "1 day")
+        #expect(CodeStatsKPIGrid.days(4) == "4 days")
+    }
+
+    @Test func notCountedNoteListsOnlyExcludedChangeKinds() {
+        #expect(
+            CodeStatsFilterBar.notCountedNote(.default)
+                == "Not counted: bulk imports, formatting")
+        var everything = CodeStatsFilter.default
+        everything.includeBulk = true
+        everything.includeFormatting = true
+        #expect(CodeStatsFilterBar.notCountedNote(everything) == nil)
+        everything.includeCoAuthored = false
+        #expect(CodeStatsFilterBar.notCountedNote(everything) == "Not counted: co-authored")
+    }
+
     @Test func folderAndRefreshFailuresReachTheCallerInsteadOfTheModelAlert() async throws {
         let (model, _) = await model()
         let missing = FileManager.default.temporaryDirectory

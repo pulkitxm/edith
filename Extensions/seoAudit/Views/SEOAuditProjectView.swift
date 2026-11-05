@@ -95,13 +95,7 @@ struct SEOAuditProjectView: View {
     }
 
     private var summary: some View {
-        LazyVGrid(
-            columns: Array(
-                repeating: GridItem(
-                    .flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top),
-                count: compact ? 2 : 4),
-            spacing: UIScale.pt(PageMetrics.cardSpacing)
-        ) {
+        PageMetricGrid(maximumColumns: 4) {
             metric(
                 "Pages", model.selectedRun.map { String($0.pages.count) } ?? "0", "in this run",
                 "doc.on.doc")
@@ -109,7 +103,7 @@ struct SEOAuditProjectView: View {
                 "Issues", model.selectedRun.map { String($0.issueCount) } ?? "0",
                 "across all pages", "exclamationmark.triangle")
             metric(
-                "Average", model.selectedRun?.averageScore.map(String.init) ?? "-",
+                "Average", model.selectedRun?.averageScore.map(String.init) ?? "n/a",
                 "Lighthouse score", "gauge.with.needle")
             metric(
                 "Runs", String(project.runs.count), "saved on this Mac",
@@ -228,8 +222,8 @@ struct SEOAuditProjectView: View {
                 ? "scores for speed, accessibility, SEO" : "titles, descriptions and links only"
         ) {
             Toggle("Include", isOn: $model.lighthouseEnabled)
-                .toggleStyle(.checkbox)
-                .font(.edithText(.caption).weight(.medium))
+                .toggleStyle(.edithCheckbox)
+                .font(.edithText(.subheadline).weight(.medium))
                 .disabled(!model.lighthouseAvailable || model.isRunning)
                 .help(
                     model.lighthouseAvailable
@@ -287,7 +281,7 @@ struct SEOAuditProjectView: View {
     private var runPicker: some View {
         HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             PageCapsLabel("Run history")
-            runStepButton("chevron.left", label: "Older run") {
+            PageIconChip(systemImage: "chevron.left", label: "Older run") {
                 selectRun(at: selectedRunIndex + 1)
             }
             .disabled(selectedRunIndex >= project.runs.count - 1)
@@ -304,24 +298,11 @@ struct SEOAuditProjectView: View {
                     }
                 }
             }
-            runStepButton("chevron.right", label: "Newer run") {
+            PageIconChip(systemImage: "chevron.right", label: "Newer run") {
                 selectRun(at: selectedRunIndex - 1)
             }
             .disabled(selectedRunIndex <= 0)
         }
-    }
-
-    private func runStepButton(
-        _ symbol: String, label: String, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: UIScale.pt(10), weight: .semibold))
-                .frame(width: UIScale.pt(10))
-        }
-        .buttonStyle(.pageChip())
-        .help(label)
-        .accessibilityLabel(label)
     }
 
     private var selectedRunTitle: String {
@@ -402,7 +383,7 @@ struct SEOAuditProjectView: View {
                         "Find pages", symbolName: "magnifyingglass", identifier: "seo.discover",
                         perform: model.discoverPages)
                 )
-                .frame(minHeight: UIScale.pt(300))
+                .pageFillViewport()
             } else {
                 PageEmptyState(
                     symbolName: "play.circle",
@@ -521,70 +502,90 @@ private struct SEOAuditProgressRail: View {
     }
 }
 
-private struct SEOAuditPageSelectionSheet: View {
+struct SEOAuditPageSelectionSheet: View {
     @Bindable var model: SEOAuditModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
+    private var padding: CGFloat { UIScale.pt(PageMetrics.sectionSpacing) }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: UIScale.pt(12)) {
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    Text("Choose pages").font(.edithText(.title2)).fontWeight(.semibold)
-                    Text("\(model.selectedPageCount) of \(model.discoveredPageURLs.count) selected")
-                        .font(.edithText(.callout))
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
+                Text("Choose pages").font(.edithText(.title3)).fontWeight(.semibold)
+                Text("Only the pages you select are checked when you run an audit.")
+                    .font(.edithText(.subheadline))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(padding)
+            Divider()
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                SearchField(placeholder: "Filter pages", text: $model.pageSelectionQuery)
                 Button("Select all", action: model.selectAllPages)
                 Button("Clear", action: model.deselectAllPages)
+            }
+            .padding(padding)
+            pages
+            Divider()
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                Text("\(model.selectedPageCount) of \(model.discoveredPageURLs.count) selected")
+                    .font(.edithText(.subheadline))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Spacer()
                 Button("Done", action: dismiss.callAsFunction)
                     .buttonStyle(.edith(.primary))
+                    .keyboardShortcut(.defaultAction)
             }
-            .padding(UIScale.pt(16))
-            Divider()
-            SearchField(placeholder: "Filter discovered URLs", text: $model.pageSelectionQuery)
-                .padding(UIScale.pt(16))
-            ScrollView {
-                LazyVStack(spacing: UIScale.pt(6)) {
-                    ForEach(model.visibleDiscoveredPageURLs, id: \.self) { url in
-                        Button {
-                            model.togglePage(url)
-                        } label: {
-                            HStack(spacing: UIScale.pt(10)) {
-                                Image(
-                                    systemName: model.selectedPageURLs.contains(url)
-                                        ? "checkmark.square.fill" : "square"
-                                )
-                                .foregroundStyle(
-                                    model.selectedPageURLs.contains(url)
-                                        ? DashSkin.accent(dark) : .secondary)
-                                Text(url)
-                                    .font(.edithText(.callout))
-                                    .foregroundStyle(DashSkin.ink(dark))
-                                    .lineLimit(1)
-                                Spacer()
-                            }
-                            .padding(.horizontal, UIScale.pt(12))
-                            .frame(minHeight: UIScale.pt(36))
-                            .background(
-                                model.selectedPageURLs.contains(url)
-                                    ? DashSkin.accent(dark).opacity(0.08) : DashSkin.paper2(dark),
-                                in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-                        }
-                        .buttonStyle(.edith(.borderless))
-                    }
-                }
-                .padding(.horizontal, UIScale.pt(16))
-                .padding(.bottom, UIScale.pt(16))
-            }
+            .padding(padding)
         }
+        .buttonStyle(.edith(.secondary))
         .frame(width: PresentationMetrics.width(620), height: PresentationMetrics.height(520))
         .background(DashSkin.paper(dark))
         .presenterCover(SEOAuditPrivacyState.shared.hidden)
         .onDisappear { model.pageSelectionQuery = "" }
+    }
+
+    @ViewBuilder private var pages: some View {
+        if model.visibleDiscoveredPageURLs.isEmpty {
+            PageEmptyState(
+                symbolName: "line.3.horizontal.decrease.circle", title: "No pages match",
+                message: "Nothing found in your sitemap fits this filter.",
+                secondary: PageAction("Clear filter") { model.pageSelectionQuery = "" },
+                style: .compact
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: UIScale.pt(4)) {
+                    ForEach(model.visibleDiscoveredPageURLs, id: \.self) { url in
+                        row(url)
+                    }
+                }
+                .padding(.horizontal, padding)
+                .padding(.bottom, padding)
+            }
+        }
+    }
+
+    private func row(_ url: String) -> some View {
+        let selected = model.selectedPageURLs.contains(url)
+        return Toggle(
+            isOn: Binding(get: { selected }, set: { _ in model.togglePage(url) })
+        ) {
+            Text(url)
+                .font(.edithText(.subheadline))
+                .foregroundStyle(DashSkin.ink(dark))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(32), alignment: .leading)
+        }
+        .toggleStyle(.edithCheckbox)
+        .padding(.horizontal, UIScale.pt(PageMetrics.cardSpacing))
+        .background(
+            selected ? DashSkin.accent(dark).opacity(0.08) : DashSkin.paper2(dark),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius)))
     }
 }

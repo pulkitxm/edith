@@ -116,7 +116,7 @@ struct CodeStatsBannerView: View {
             }
         } actions: {
             if banner.choosesFolder {
-                Button("Choose folder...", action: choose)
+                Button("Choose folder…", action: choose)
             }
             if banner.retriesReport {
                 Button("Retry", action: retry)

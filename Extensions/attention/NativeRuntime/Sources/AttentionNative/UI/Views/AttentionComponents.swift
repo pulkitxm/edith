@@ -46,6 +46,18 @@ enum AttentionFormat {
         return "\(change > 0 ? "+" : "-")\(duration(abs(change))) vs before"
     }
 
+    static func joined(_ parts: String?...) -> String {
+        parts.compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func share(_ value: TimeInterval, of total: TimeInterval, previous: TimeInterval?)
+        -> String
+    {
+        joined(
+            "\(percent(value, of: total)) of active",
+            delta(value, previous))
+    }
+
     static func count(_ value: Int) -> String {
         value.formatted(.number.notation(.compactName))
     }
@@ -61,6 +73,7 @@ struct AttentionPanel<Content: View, Trailing: View>: View {
     let trailing: Trailing
     let content: Content
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.attentionPanelFills) private var fills
 
     init(
         _ title: String, subtitle: String? = nil,
@@ -74,7 +87,7 @@ struct AttentionPanel<Content: View, Trailing: View>: View {
     }
 
     var body: some View {
-        PagePanel {
+        PagePanel(fill: fills) {
             PageSectionHeader(title, subtitle: subtitle) { trailing }
         } content: {
             content
@@ -82,50 +95,14 @@ struct AttentionPanel<Content: View, Trailing: View>: View {
     }
 }
 
-enum AttentionTileGrid {
-    static func columns(_ compact: Bool, regular: Int = 4) -> [GridItem] {
-        Array(
-            repeating: GridItem(
-                .flexible(), spacing: UIScale.pt(PageMetrics.cardSpacing), alignment: .top),
-            count: compact ? 2 : regular)
-    }
+private struct AttentionPanelFillsKey: EnvironmentKey {
+    static let defaultValue = false
 }
 
-struct AttentionTile: View {
-    let label: String
-    let value: String
-    let detail: String?
-    let tint: Color
-    let symbol: String
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        PageMetric(title: label, value: value, detail: detail ?? " ", symbol: symbol, tint: tint)
-    }
-}
-
-struct AttentionChip: View {
-    let title: String
-    let color: Color
-    var active = false
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        let dark = scheme == .dark
-        HStack(spacing: UIScale.pt(5)) {
-            Circle().fill(color).frame(width: UIScale.pt(7), height: UIScale.pt(7))
-            Text(title)
-                .font(.system(size: UIScale.pt(11), weight: active ? .semibold : .medium))
-                .foregroundStyle(DashSkin.ink(dark))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, UIScale.pt(9))
-        .padding(.vertical, UIScale.pt(4))
-        .widgetBar(
-            cornerRadius: 8,
-            fill: active
-                ? AnyShapeStyle(color.opacity(0.18)) : AnyShapeStyle(DashSkin.paper2(dark)),
-            stroke: active ? color.opacity(0.6) : DashSkin.lineStrong(dark))
+extension EnvironmentValues {
+    var attentionPanelFills: Bool {
+        get { self[AttentionPanelFillsKey.self] }
+        set { self[AttentionPanelFillsKey.self] = newValue }
     }
 }
 
@@ -244,8 +221,8 @@ struct AttentionEmpty: View {
                 .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
                 .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity)
         .padding(.vertical, UIScale.pt(22))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

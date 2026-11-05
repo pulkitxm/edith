@@ -74,7 +74,7 @@ import Testing
         }
         for variant in [LaTeXRenderCapture.variants[0], LaTeXRenderCapture.variants[3]] {
             let sheet = LaTeXRenderCapture.Variant(
-                name: variant.name, width: 520, height: 510, zoom: 1, scheme: variant.scheme)
+                name: variant.name, width: 520, height: 580, zoom: 1, scheme: variant.scheme)
             try await LaTeXRenderCapture.render("latex-add", variant: sheet) {
                 LaTeXAddProject(model: model, onAdded: {})
             }

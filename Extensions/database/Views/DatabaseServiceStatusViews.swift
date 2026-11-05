@@ -58,27 +58,15 @@ struct DatabaseServiceProgressView: View {
                         compact: true,
                         clearable: true
                     )
-                    .frame(maxWidth: UIScale.pt(560))
                 }
                 .pageGutter(compact)
                 .padding(.vertical, UIScale.pt(16))
                 PageHeaderDivider()
                 ScrollView {
-                    LazyVGrid(
-                        columns: [
-                            GridItem(
-                                .adaptive(
-                                    minimum: UIScale.pt(compact ? 220 : 270),
-                                    maximum: UIScale.pt(360)),
-                                spacing: UIScale.pt(PageMetrics.cardSpacing),
-                                alignment: .top)
-                        ],
-                        alignment: .leading,
-                        spacing: UIScale.pt(PageMetrics.cardSpacing)
-                    ) {
+                    DatabaseConnectionListSurface {
                         ForEach(0..<6, id: \.self) { index in
-                            DatabaseServiceConnectionCard(
-                                index: index, palette: palette, theme: theme)
+                            if index > 0 { DatabaseConnectionRowDivider() }
+                            DatabaseConnectionRowSkeleton(index: index, accent: theme)
                         }
                     }
                     .pageGutter(compact)
@@ -98,8 +86,12 @@ struct DatabaseServiceRecoveryView: View {
     let repair: () -> Void
 
     var body: some View {
-        ScrollView {
-            recoveryContent
+        GeometryReader { proxy in
+            ScrollView {
+                recoveryContent
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
         }
         .accessibilityElement(children: .contain)
     }
@@ -130,53 +122,5 @@ struct DatabaseServiceRecoveryView: View {
         .frame(maxWidth: UIScale.pt(720))
         .padding(UIScale.pt(24))
         .frame(maxWidth: .infinity)
-    }
-}
-
-private struct DatabaseServiceConnectionCard: View {
-    let index: Int
-    let palette: DatabaseThemePalette
-    let theme: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(alignment: .top, spacing: UIScale.pt(11)) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: UIScale.pt(9))
-                        .fill(theme.opacity(0.11))
-                    Image(systemName: "cylinder")
-                        .font(.edithText(.title3).weight(.semibold))
-                        .foregroundStyle(theme)
-                }
-                .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text(index.isMultiple(of: 2) ? "Analytics warehouse" : "Primary database")
-                        .font(.edithText(.title3).weight(.semibold))
-                        .lineLimit(2)
-                    Text(index.isMultiple(of: 2) ? "PostgreSQL · Production" : "MySQL")
-                        .font(.edithText(.caption).weight(.medium))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "ellipsis.circle")
-                    .frame(width: UIScale.pt(26), height: UIScale.pt(26))
-            }
-            Spacer(minLength: 0)
-            HStack(spacing: UIScale.pt(8)) {
-                Image(systemName: "cylinder")
-                    .font(.edithText(.caption).weight(.medium))
-                Text(index.isMultiple(of: 2) ? "analytics" : "default_namespace")
-                    .font(.system(size: UIScale.pt(10.5), design: .monospaced))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.edithText(.caption).weight(.semibold))
-                Text("Connected")
-                    .font(.edithText(.caption).weight(.semibold))
-            }
-        }
-        .padding(UIScale.pt(PageMetrics.cardPadding))
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
-        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
     }
 }

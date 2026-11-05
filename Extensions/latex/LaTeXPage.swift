@@ -4,6 +4,92 @@ import EdithExtensionUI
 import PDFKit
 import SwiftUI
 
+private struct LaTeXProjectRow: View {
+    static let icon = 32.0
+    static let horizontalPadding = 14.0
+    static let spacing = 12.0
+    static var dividerInset: Double { horizontalPadding + icon + spacing }
+
+    let project: LaTeXProject
+    let disabled: Bool
+    let open: () -> Void
+    @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: UIScale.pt(Self.spacing)) {
+                PageGuideBadge(
+                    symbolName: project.location == .disk
+                        ? "doc.richtext" : "arrow.triangle.branch",
+                    size: Self.icon)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(project.name).font(.edithText(.body).weight(.semibold))
+                        .foregroundStyle(.primary).lineLimit(1)
+                    Text(source)
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                    if compact { summary }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if compact {
+                    VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
+                        location
+                        openEditor
+                    }
+                } else {
+                    summary.frame(maxWidth: .infinity, alignment: .leading)
+                    location.frame(width: UIScale.pt(150), alignment: .leading)
+                    openEditor
+                }
+            }
+            .padding(.horizontal, UIScale.pt(Self.horizontalPadding))
+            .padding(.vertical, UIScale.pt(10))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(hovering && !disabled ? Color.primary.opacity(0.04) : .clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .disabled(disabled)
+        .onHover { hovering = $0 }
+    }
+
+    private var source: String {
+        project.location == .disk
+            ? URL(fileURLWithPath: project.sourcePath).lastPathComponent : project.repository
+    }
+
+    private var summary: some View {
+        Text(
+            project.location == .disk
+                ? "Compiles and saves its PDF on this Mac."
+                : "\(project.sourcePath) · \(project.baseBranch)"
+        )
+        .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+    }
+
+    @ViewBuilder private var location: some View {
+        if let number = project.pullRequest {
+            Label("Pull request #\(number)", systemImage: "arrow.triangle.pull")
+                .font(.edithText(.caption)).foregroundStyle(.green).lineLimit(1)
+        } else {
+            Text(project.location.title)
+                .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    private var openEditor: some View {
+        HStack(spacing: UIScale.pt(4)) {
+            Text("Open editor")
+            Image(systemName: "arrow.right")
+        }
+        .font(.edithText(.callout).weight(.medium))
+        .foregroundStyle(DashSkin.accent(scheme == .dark))
+        .fixedSize()
+    }
+}
+
 struct LaTeXPage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
@@ -77,15 +163,10 @@ struct LaTeXPage: View {
                     title: "Could not load your projects",
                     message: model.load.errorMessage
                         ?? "Your LaTeX library could not be read. Try again.",
-                    layout: .cards, retry: { model.launch { await model.start() } }
+                    layout: .list, showsSkeletonControls: false,
+                    retry: { model.launch { await model.start() } }
                 ) {
-                    LazyVGrid(
-                        columns: PageMetrics.cardColumns(
-                            compact, minimum: 300, spacing: PageMetrics.cardSpacing),
-                        spacing: UIScale.pt(PageMetrics.cardSpacing)
-                    ) {
-                        ForEach(model.projects) { project in projectCard(project) }
-                    }
+                    projectList
                 }
             }
         }
@@ -123,6 +204,7 @@ struct LaTeXPage: View {
             ) { beginAdding(.github) },
             footnote: "Nothing is installed or uploaded until you add a project and compile it."
         )
+        .pageFillViewport()
     }
 
     private func beginAdding(_ location: LaTeXLocation) {
@@ -130,67 +212,24 @@ struct LaTeXPage: View {
         adding = true
     }
 
-    private func projectCard(_ project: LaTeXProject) -> some View {
-        Button {
-            model.launch {
-                editing = true
-                await model.select(project.id)
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                    PageGuideBadge(
-                        symbolName: project.location == .disk
-                            ? "doc.richtext" : "arrow.triangle.branch",
-                        size: 40)
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(project.name).font(.edithText(.headline))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Text(
-                            project.location == .disk
-                                ? URL(fileURLWithPath: project.sourcePath).lastPathComponent
-                                : project.repository
-                        )
-                        .font(.edithText(.callout)).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
-                    }
-                    Spacer(minLength: 0)
+    private var projectList: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(model.projects.enumerated()), id: \.element.id) { index, project in
+                if index > 0 {
+                    Divider().padding(.leading, UIScale.pt(LaTeXProjectRow.dividerInset))
                 }
-                Text(
-                    project.location == .disk
-                        ? "Compiles and saves its PDF on this Mac."
-                        : "\(project.sourcePath) · \(project.baseBranch)"
-                )
-                .font(.edithText(.callout)).foregroundStyle(.secondary).lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Divider()
-                HStack {
-                    if let number = project.pullRequest {
-                        Label("Pull request #\(number)", systemImage: "arrow.triangle.pull")
-                            .font(.edithText(.callout)).foregroundStyle(.green)
-                    } else {
-                        Text(project.location.title)
-                            .font(.edithText(.callout)).foregroundStyle(.secondary)
+                LaTeXProjectRow(project: project, disabled: model.busy || model.load.isRunning) {
+                    model.launch {
+                        editing = true
+                        await model.select(project.id)
                     }
-                    Spacer()
-                    HStack(spacing: UIScale.pt(4)) {
-                        Text("Open editor")
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(.edithText(.callout).weight(.medium))
-                    .foregroundStyle(DashSkin.accent(scheme == .dark))
                 }
             }
-            .padding(UIScale.pt(PageMetrics.cardPadding))
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
-            .contentShape(
-                RoundedRectangle(
-                    cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
         }
-        .buttonStyle(.edith(.borderless))
-        .disabled(model.busy || model.load.isRunning)
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
     }
 
     private func workspace(_ project: LaTeXProject) -> some View {

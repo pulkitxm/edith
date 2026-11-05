@@ -63,9 +63,57 @@ import Testing
         await service.shutdown()
     }
 
+    @Test func newProjectAndPageSelectionSheetsRenderEveryVariant() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (model, service) = try model(projects: [], root: root)
+        await model.refreshProjects()
+        #expect(model.lighthouseResolved)
+        let variants = [
+            SEOAuditRenderCapture.Variant(
+                name: "sheet-light", width: 620, height: 520, zoom: 1, scheme: .light),
+            SEOAuditRenderCapture.Variant(
+                name: "sheet-dark", width: 620, height: 520, zoom: 1, scheme: .dark),
+            SEOAuditRenderCapture.Variant(
+                name: "sheet-zoomed", width: 992, height: 832, zoom: 1.6, scheme: .dark),
+        ]
+        model.discoveredPageURLs = (0..<14).map {
+            "https://synthetic.example.invalid/docs/section-\($0)/getting-started"
+        }
+        model.selectedPageURLs = Set(model.discoveredPageURLs.prefix(5))
+        for variant in variants {
+            let chooser = try await SEOAuditRenderCapture.render(
+                "seo-page-selection", variant: variant
+            ) { SEOAuditPageSelectionSheet(model: model) }
+            #expect(SEOAuditRenderCapture.distinctColors(chooser) > 3)
+            model.pageSelectionQuery = "no such page"
+            #expect(model.visibleDiscoveredPageURLs.isEmpty)
+            try await SEOAuditRenderCapture.render(
+                "seo-page-selection-no-match", variant: variant
+            ) { SEOAuditPageSelectionSheet(model: model) }
+            model.pageSelectionQuery = ""
+            model.input = ""
+            let empty = try await SEOAuditRenderCapture.render(
+                "seo-new-project-empty", variant: variant
+            ) { SEOAuditNewProjectSheet(model: model).sheetCanvas(variant.scheme) }
+            #expect(SEOAuditRenderCapture.distinctColors(empty) > 3)
+            model.input = "synthetic.example.invalid"
+            model.projectName = "Synthetic site"
+            try await SEOAuditRenderCapture.render("seo-new-project", variant: variant) {
+                SEOAuditNewProjectSheet(model: model).sheetCanvas(variant.scheme)
+            }
+        }
+        model.shutdown()
+        await service.shutdown()
+    }
+
     @Test func expandedPageRowRenders() async throws {
         let page = try #require(Self.pages.first)
-        for variant in [SEOAuditRenderCapture.variants[0], SEOAuditRenderCapture.variants[3]] {
+        let variants = [
+            SEOAuditRenderCapture.variants[0], SEOAuditRenderCapture.variants[3],
+            SEOAuditRenderCapture.variants[5],
+        ]
+        for variant in variants {
             try await SEOAuditRenderCapture.render("seo-page-expanded", variant: variant) {
                 ScrollView {
                     SEOAuditPageAccordion(
@@ -110,5 +158,12 @@ import Testing
             failing.shutdown()
             await failingService.shutdown()
         }
+    }
+}
+
+extension View {
+    fileprivate func sheetCanvas(_ scheme: ColorScheme) -> some View {
+        frame(maxHeight: .infinity, alignment: .top)
+            .background(DashSkin.paper(scheme == .dark))
     }
 }

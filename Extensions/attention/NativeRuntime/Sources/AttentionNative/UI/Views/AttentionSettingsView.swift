@@ -2,6 +2,41 @@ internal import EdithExtensionSupport_attention_native
 internal import EdithExtensionUI
 import SwiftUI
 
+private struct AttentionSettingRow<Control: View>: View {
+    let title: String
+    @ViewBuilder let control: () -> Control
+
+    init(_ title: String, @ViewBuilder control: @escaping () -> Control) {
+        self.title = title
+        self.control = control
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: UIScale.pt(16)) {
+            Text(title).font(.edithText(.body))
+            Spacer(minLength: 0)
+            control().labelsHidden().fixedSize()
+        }
+        .frame(minHeight: UIScale.pt(PageMetrics.controlHeight))
+    }
+}
+
+private struct AttentionToggleRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    init(_ title: String, isOn: Binding<Bool>) {
+        self.title = title
+        _isOn = isOn
+    }
+
+    var body: some View {
+        AttentionSettingRow(title) {
+            Toggle(title, isOn: $isOn).toggleStyle(.switch)
+        }
+    }
+}
+
 struct AttentionSettingsView: View {
     @Bindable var model: AttentionPageModel
     @State private var ruleSearch = ""
@@ -31,26 +66,26 @@ struct AttentionSettingsView: View {
             PageCard {
                 SettingsTitle(
                     "Sources", subtitle: "Everything stays on this Mac unless iCloud backup is on.")
-                Toggle("Track foreground applications", isOn: $model.settings.trackingEnabled)
-                Toggle("Run the local browser server", isOn: $model.settings.browserTrackingEnabled)
-                Toggle(
+                AttentionToggleRow(
+                    "Track foreground applications", isOn: $model.settings.trackingEnabled)
+                AttentionToggleRow(
+                    "Run the local browser server", isOn: $model.settings.browserTrackingEnabled)
+                AttentionToggleRow(
                     "Record agent activity on every machine",
                     isOn: $model.settings.agentTrackingEnabled)
-                Toggle(
+                AttentionToggleRow(
                     "Record music from Edith, Spotify and Apple Music",
                     isOn: $model.settings.mediaTrackingEnabled)
-                Picker("Detail level", selection: $model.settings.privacyLevel) {
-                    Text("Applications only").tag(AttentionPrivacyLevel.applications)
-                    Text("Domains").tag(AttentionPrivacyLevel.domains)
-                    Text("Detailed").tag(AttentionPrivacyLevel.detailed)
+                AttentionSettingRow("Detail level") {
+                    Picker("Detail level", selection: $model.settings.privacyLevel) {
+                        Text("Applications only").tag(AttentionPrivacyLevel.applications)
+                        Text("Domains").tag(AttentionPrivacyLevel.domains)
+                        Text("Detailed").tag(AttentionPrivacyLevel.detailed)
+                    }
                 }
-                Toggle("Store window and page titles", isOn: $model.settings.windowTitlesEnabled)
-                Text(
-                    "Changes to the idle threshold apply to future activity."
-                )
-                .font(.edithText(.caption))
-                .foregroundStyle(.secondary)
-                HStack {
+                AttentionToggleRow(
+                    "Store window and page titles", isOn: $model.settings.windowTitlesEnabled)
+                AttentionSettingRow("Idle after") {
                     Picker("Idle after", selection: $model.settings.idleThreshold) {
                         Text("1 minute").tag(TimeInterval(60))
                         Text("3 minutes").tag(TimeInterval(180))
@@ -58,6 +93,13 @@ struct AttentionSettingsView: View {
                         Text("10 minutes").tag(TimeInterval(600))
                         Text("15 minutes").tag(TimeInterval(900))
                     }
+                }
+                Text(
+                    "Changes to the idle threshold apply to future activity."
+                )
+                .font(.edithText(.caption))
+                .foregroundStyle(.secondary)
+                AttentionSettingRow("Deep work after") {
                     Picker("Deep work after", selection: $model.settings.focusBlockMinimum) {
                         Text("15 minutes").tag(TimeInterval(900))
                         Text("25 minutes").tag(TimeInterval(1_500))
@@ -80,7 +122,7 @@ struct AttentionSettingsView: View {
                     subtitle:
                         "When a Jev key is configured, Edith asks Jev which category fits apps and sites you have not categorized, and individual titles on mixed sites such as YouTube and X. Your own rules always win."
                 )
-                Toggle(
+                AttentionToggleRow(
                     "Categorize automatically every half hour",
                     isOn: $model.settings.jevCategorizationEnabled)
                 VStack(alignment: .leading, spacing: 4) {
@@ -151,7 +193,7 @@ struct AttentionSettingsView: View {
                 SettingsTitle(
                     "iCloud backup",
                     subtitle: "Snapshots stay in your own iCloud Drive under Edith/Attention.")
-                Toggle(
+                AttentionToggleRow(
                     "Back up attention data every 15 minutes",
                     isOn: $model.settings.iCloudBackupEnabled)
                 HStack {
@@ -288,24 +330,25 @@ private struct AttentionRuleEditor: View {
                 Button(role: .destructive, action: remove) { Image(systemName: "trash") }
                     .buttonStyle(.edith(.iconOnly))
             }
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(8)) {
                 Picker("Productivity", selection: $rule.productivity) {
                     Text("Category default").tag(AttentionProductivity?.none)
                     ForEach(AttentionProductivity.ranked, id: \.self) { level in
                         Text(level.title).tag(AttentionProductivity?.some(level))
                     }
                 }
-                .frame(maxWidth: UIScale.pt(360))
+                .frame(maxWidth: .infinity)
                 Picker("Part of", selection: $rule.sphere) {
                     Text("Category default").tag(AttentionSphere?.none)
                     ForEach(AttentionSphere.allCases, id: \.self) { sphere in
                         Text(sphere.title).tag(AttentionSphere?.some(sphere))
                     }
                 }
-                .frame(maxWidth: UIScale.pt(360))
+                .frame(maxWidth: .infinity)
             }
             .font(.edithText(.subheadline))
-            Toggle("Report matches separately using this rule’s name", isOn: $rule.reportSeparately)
+            AttentionToggleRow(
+                "Report matches separately using this rule’s name", isOn: $rule.reportSeparately)
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
                 GridRow {
                     field("Apps", \.bundleIDs, "com.apple.dt.Xcode, com.jetbrains.*")

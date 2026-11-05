@@ -32,17 +32,19 @@ import Testing
         return commits
     }
 
-    static func populatedModel() async throws -> CodeStatsModel {
+    static func populatedModel(identity: CodeStatsIdentity = CodeStatsIdentity()) async throws
+        -> CodeStatsModel
+    {
         let suite = "test.edith.code-stats.capture.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         let commits = richCommits
         let report = CodeStatsReportBuilder.build(
             commits: commits, range: .days(90), today: CodeStatsPageFixture.date("2026-10-05"),
             calendar: CodeStatsPageFixture.calendar)
-        let service = CodeStatsFakeAgent(
-            status: CodeStatsPageFixture.status(
-                reportedAt: CodeStatsPageFixture.date("2026-10-05")),
-            reports: [.days(90): report])
+        var status = CodeStatsPageFixture.status(
+            reportedAt: CodeStatsPageFixture.date("2026-10-05"))
+        status.settings.identity = identity
+        let service = CodeStatsFakeAgent(status: status, reports: [.days(90): report])
         service.facts = CodeStatsFactBuilder.build(commits: commits)
         let model = CodeStatsModel(
             service: service.service, defaults: defaults, calendar: CodeStatsPageFixture.calendar,
@@ -109,6 +111,46 @@ import Testing
         }
     }
 
+    @Test func filteredHeaderKeepsTwoRowsPlusTheActiveSelection() async throws {
+        for variant in CodeStatsRenderCapture.variants {
+            let model = try await Self.populatedModel()
+            await model.toggleRepository("octo/app")
+            await model.toggleCategory(.data)
+            await model.updateFilter { $0.includeFormatting = true }
+            #expect(model.filter.repositories == ["octo/app"])
+            let bitmap = try await CodeStatsRenderCapture.render(
+                "code-stats-filtered", variant: variant
+            ) { CodeStatsPage(model: model) }
+            #expect(CodeStatsRenderCapture.distinctColors(bitmap) > 12)
+            model.cancelLoading()
+        }
+    }
+
+    @Test func settingsSheetRendersEveryVariant() async throws {
+        let variants = [
+            CodeStatsRenderCapture.Variant(
+                name: "sheet-light", width: 640, height: 680, zoom: 1, scheme: .light),
+            CodeStatsRenderCapture.Variant(
+                name: "sheet-dark", width: 640, height: 680, zoom: 1, scheme: .dark),
+            CodeStatsRenderCapture.Variant(
+                name: "sheet-zoomed", width: 1024, height: 1088, zoom: 1.6, scheme: .light),
+        ]
+        for variant in variants {
+            let model = try await Self.populatedModel(
+                identity: CodeStatsIdentity(
+                    substrings: ["octocat"], emails: ["octo@example.com", "octo@acme.example"]))
+            #expect(!model.identity.isEmpty)
+            let bitmap = try await CodeStatsRenderCapture.render(
+                "code-stats-settings", variant: variant, settle: .milliseconds(600)
+            ) {
+                CodeStatsSettingsSheet(model: model)
+                    .background(DashSkin.paper(variant.scheme == .dark))
+            }
+            #expect(CodeStatsRenderCapture.distinctColors(bitmap) > 4)
+            model.cancelLoading()
+        }
+    }
+
     @Test func setupPageRendersEveryVariant() async throws {
         for variant in CodeStatsRenderCapture.variants {
             let model = try await Self.setupModel()
@@ -121,7 +163,10 @@ import Testing
     }
 
     @Test func firstSyncLoadingAndErrorStatesRender() async throws {
-        let variants = [CodeStatsRenderCapture.variants[0], CodeStatsRenderCapture.variants[3]]
+        let variants = [
+            CodeStatsRenderCapture.variants[0], CodeStatsRenderCapture.variants[3],
+            CodeStatsRenderCapture.variants[5],
+        ]
         for variant in variants {
             let running = try await Self.setupModel(running: true)
             #expect(running.phase == .firstRun)

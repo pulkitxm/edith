@@ -114,7 +114,8 @@ struct AttentionPage: View {
 
     private var scaffold: some View {
         PageScaffold(
-            pinnedHeader: true, scrollIdentity: model.section.rawValue, activity: model.activity
+            width: model.needsSetup ? .readable : .fluid, pinnedHeader: true,
+            scrollIdentity: model.section.rawValue, activity: model.activity
         ) {
             pageHeader
         } content: {
@@ -123,6 +124,7 @@ struct AttentionPage: View {
             PageLoading(
                 state: model.loading.state,
                 title: "No attention activity",
+                errorTitle: "Attention could not load",
                 message: model.loading.errorMessage
                     ?? "Enable a tracking source to begin collecting activity.",
                 layout: .analytics, activity: model.activity,
@@ -255,33 +257,19 @@ private struct AttentionPeriodControl: View {
 
     private var stepper: some View {
         HStack(spacing: UIScale.pt(4)) {
-            Button {
+            PageIconChip(systemImage: "chevron.left", label: "Previous period") {
                 model.step(-1)
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    .frame(width: UIScale.pt(10))
             }
-            .buttonStyle(.pageChip())
             .disabled(!model.canStepBackward)
-            .help("Previous period")
-            .accessibilityLabel("Previous period")
             Text(model.period.title())
                 .font(PageMetrics.chipFont)
                 .monospacedDigit()
                 .lineLimit(1)
                 .frame(minWidth: UIScale.pt(88))
-            Button {
+            PageIconChip(systemImage: "chevron.right", label: "Next period") {
                 model.step(1)
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    .frame(width: UIScale.pt(10))
             }
-            .buttonStyle(.pageChip())
             .disabled(!model.canStepForward)
-            .help("Next period")
-            .accessibilityLabel("Next period")
         }
         .fixedSize()
     }
@@ -562,7 +550,7 @@ private struct AttentionNoMatchView: View {
                 model.clearFilters()
             }
         )
-        .frame(minHeight: UIScale.pt(300))
+        .pageFillViewport()
     }
 }
 
@@ -608,6 +596,8 @@ private struct AttentionCollectingView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .pageFillViewport()
     }
 }
 

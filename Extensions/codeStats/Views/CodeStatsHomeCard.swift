@@ -28,6 +28,7 @@ struct CodeStatsHomeCard: View {
         PageCard(title: "Code Stats", note: "Last 30 days") {
             LoadingContainer(
                 state: loading.state, title: "No code stats yet",
+                errorTitle: "Code Stats could not load",
                 message: loading.errorMessage
                     ?? "Set up Code Stats to start counting your commits.",
                 retry: { retry += 1 }, refreshing: loading.isRefreshing

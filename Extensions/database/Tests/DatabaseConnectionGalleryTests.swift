@@ -44,11 +44,10 @@ struct DatabaseConnectionGalleryTests {
             openConnection: openConnection)
 
         withGalleryHost(view, width: 1_024, height: 700) { host in
-            let cardRegions = galleryKeyRegions(of: host) { frame in
-                frame.width > 250 && frame.width < 400 && frame.height > 110
-                    && frame.height < 180
+            let rowRegions = galleryKeyRegions(of: host) { frame in
+                frame.width > 800 && frame.height > 44 && frame.height < 100
             }
-            #expect(cardRegions.count == fixture.connections.count)
+            #expect(rowRegions.count == fixture.connections.count)
         }
         let reporting = try #require(fixture.model.visibleConnections.last)
         openConnection(reporting)
@@ -72,11 +71,10 @@ struct DatabaseConnectionGalleryTests {
             restoreFocusConnectionID: restored.id)
 
         await withGalleryHostAsync(view, width: 1_024, height: 700) { host in
-            let cardRegions = galleryKeyRegions(of: host) { frame in
-                frame.width > 250 && frame.width < 400 && frame.height > 110
-                    && frame.height < 180
+            let rowRegions = galleryKeyRegions(of: host) { frame in
+                frame.width > 800 && frame.height > 44 && frame.height < 100
             }
-            let restoredRegion = cardRegions.max { $0.x < $1.x }
+            let restoredRegion = rowRegions.max { $0.y < $1.y }
             #expect(galleryResponderRegion(of: host) == restoredRegion)
 
             let searchField = galleryDescendantViews(of: host).first { view in

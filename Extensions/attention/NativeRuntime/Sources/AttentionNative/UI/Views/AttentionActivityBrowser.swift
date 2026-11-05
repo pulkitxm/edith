@@ -235,7 +235,7 @@ struct AttentionActivityInspector: View {
 
     var body: some View {
         let dark = scheme == .dark
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(entity.name).font(DashSkin.heading(19)).lineLimit(2)
@@ -318,9 +318,7 @@ struct AttentionActivityInspector: View {
                 }
             }
         }
-        .padding(UIScale.pt(16))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: 12))
         .onChange(of: entity.id) {
             search = ""; limit = 20
         }

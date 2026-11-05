@@ -15,7 +15,10 @@ struct CodeStatsPage: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        PageScaffold(pinnedHeader: true, activity: model.activity) {
+        PageScaffold(
+            width: model.phase == .setup ? .readable : .fluid, pinnedHeader: true,
+            activity: model.activity
+        ) {
             VStack(spacing: 0) {
                 CodeStatsHeader(model: model)
                 if model.table != nil {
@@ -94,7 +97,7 @@ struct CodeStatsPage: View {
                     Task { await model.start() }
                 }
             )
-            .frame(minHeight: UIScale.pt(240))
+            .pageFillViewport()
         case .content:
             if model.table == nil {
                 WrapHStack(
@@ -107,25 +110,32 @@ struct CodeStatsPage: View {
                 }
             }
             if model.reportIsEmpty {
-                PageEmptyState(
-                    symbolName: "text.magnifyingglass", title: "No commits in this range",
-                    message: model.hasActiveFilter
-                        ? "Nothing matches your current filters. Clear them or pick a longer range."
-                        : "No commits by you were found here. Try a longer range, or check that your name or email is listed under Settings.",
-                    primary: model.hasActiveFilter
-                        ? PageAction("Clear filters", symbolName: "line.3.horizontal.decrease") {
-                            Task { await model.updateFilter { $0 = .default } }
-                        }
-                        : PageAction("Show all time", symbolName: "calendar") {
-                            Task { await model.select(.all) }
-                        }
-                )
-                .frame(minHeight: UIScale.pt(220))
+                if model.table == nil {
+                    noCommits.frame(minHeight: UIScale.pt(220))
+                } else {
+                    noCommits.pageFillViewport()
+                }
             } else if let report = model.report {
                 sections(report)
                     .environment(\.codeStatsActions, actions)
             }
         }
+    }
+
+    private var noCommits: some View {
+        PageEmptyState(
+            symbolName: "text.magnifyingglass", title: "No commits in this range",
+            message: model.hasActiveFilter
+                ? "Nothing matches your current filters. Clear them or pick a longer range."
+                : "No commits by you were found here. Try a longer range, or check that your name or email is listed under Settings.",
+            primary: model.hasActiveFilter
+                ? PageAction("Clear filters", symbolName: "line.3.horizontal.decrease") {
+                    Task { await model.updateFilter { $0 = .default } }
+                }
+                : PageAction("Show all time", symbolName: "calendar") {
+                    Task { await model.select(.all) }
+                }
+        )
     }
 
     private var actions: CodeStatsActions {

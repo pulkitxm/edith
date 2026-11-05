@@ -68,13 +68,13 @@ struct DatabaseConnectionManagementSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().opacity(0.35)
+            Divider()
             presentationContent
-            Divider().opacity(0.35)
+            Divider()
             footer
         }
         .frame(
-            minWidth: UIScale.pt(360),
+            minWidth: UIScale.pt(presentation == .edit ? 520 : 400),
             idealWidth: UIScale.pt(presentation == .edit ? 620 : 440),
             minHeight: UIScale.pt(presentation == .edit ? 540 : 300),
             idealHeight: UIScale.pt(presentation == .edit ? 680 : 360)
@@ -91,32 +91,21 @@ struct DatabaseConnectionManagementSheet: View {
     }
 
     private var header: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            ZStack {
-                RoundedRectangle(cornerRadius: UIScale.pt(10))
-                    .fill(headerTint.opacity(0.13))
-                Image(systemName: headerSymbol)
-                    .font(.system(size: UIScale.pt(17), weight: .semibold))
-                    .foregroundStyle(headerTint)
-            }
-            .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+        HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            DatabaseSheetBadge(symbol: headerSymbol, tint: headerTint)
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                 Text(headerTitle)
-                    .font(.system(size: UIScale.pt(16), weight: .semibold))
+                    .font(.edithText(.title3).weight(.semibold))
                     .foregroundStyle(palette.ink)
                 Text(headerDetail)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(palette.inkFaint)
                     .lineLimit(2)
             }
             Spacer(minLength: 0)
-            Button("Cancel", action: cancel)
-                .buttonStyle(.edith(.borderless))
-                .keyboardShortcut(.cancelAction)
-                .disabled(preventsDismissal)
         }
-        .padding(.horizontal, UIScale.pt(22))
-        .padding(.vertical, UIScale.pt(16))
+        .padding(.horizontal, UIScale.pt(PageMetrics.gutter))
+        .padding(.vertical, UIScale.pt(PageMetrics.headerBottom))
         .background(palette.panel.opacity(0.55))
     }
 
@@ -131,7 +120,7 @@ struct DatabaseConnectionManagementSheet: View {
             }
         case .duplicate:
             compactContent {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     nameField(label: "Name for the copy", placeholder: "Connection copy")
                     notice(
                         "This copy reuses saved credential references. Secret values are not copied.",
@@ -144,7 +133,7 @@ struct DatabaseConnectionManagementSheet: View {
 
     private var editContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 connectionContext
                 if let draft {
                     editSections(draft)
@@ -155,31 +144,31 @@ struct DatabaseConnectionManagementSheet: View {
                 }
                 failureNotice
             }
-            .padding(UIScale.pt(22))
+            .padding(UIScale.pt(PageMetrics.gutter))
         }
     }
 
     private func compactContent<Content: View>(
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             connectionContext
             content()
             failureNotice
             Spacer(minLength: 0)
         }
-        .padding(UIScale.pt(22))
+        .padding(UIScale.pt(PageMetrics.gutter))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var connectionContext: some View {
         section("Connection", symbol: connection.product.managementSymbolName) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: UIScale.pt(18)) {
+                HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                     contextFact("Product", connection.product.displayName)
                     contextFact("Endpoint", endpointText)
                 }
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                     contextFact("Product", connection.product.displayName)
                     contextFact("Endpoint", endpointText)
                 }
@@ -188,9 +177,9 @@ struct DatabaseConnectionManagementSheet: View {
     }
 
     private func editSections(_ draft: DatabaseConnectionEditDraft) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             section("Identity", symbol: "tag") {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     responsivePair {
                         field("Connection name", required: true) {
                             EdithTextField(
@@ -212,7 +201,7 @@ struct DatabaseConnectionManagementSheet: View {
                         isOn: draftBinding(\.isFavorite, fallback: draft.isFavorite)
                     )
                     .toggleStyle(.switch)
-                    .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                    .font(.edithText(.callout).weight(.medium))
                 }
             }
             section("Appearance", symbol: "paintpalette") {
@@ -239,7 +228,7 @@ struct DatabaseConnectionManagementSheet: View {
                 }
             }
             section("Environment", symbol: "building.2") {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                     responsivePair {
                         pickerField(
                             "Environment",
@@ -300,19 +289,20 @@ struct DatabaseConnectionManagementSheet: View {
 
     private var loadingEdit: some View {
         SkeletonReplica("Loading connection settings") {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 section("Identity", symbol: "tag") {
-                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                         responsivePair {
                             loadingField("Connection name *", placeholder: "Connection name")
                         } right: {
                             loadingField("Group", placeholder: "Optional group")
                         }
                         field("Tags") {
-                            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                                HStack(spacing: UIScale.pt(8)) {
-                                    EdithTextField(
-                                        placeholder: "Tag", text: .constant("production"))
+                            VStack(
+                                alignment: .leading, spacing: UIScale.pt(PageMetrics.controlSpacing)
+                            ) {
+                                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                                    EdithTextField(placeholder: "production", text: .constant(""))
                                     Button {
                                     } label: {
                                         Image(systemName: "minus.circle")
@@ -328,14 +318,14 @@ struct DatabaseConnectionManagementSheet: View {
                         }
                         Toggle("Show this connection in favorites", isOn: .constant(false))
                             .toggleStyle(.switch)
-                            .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                            .font(.edithText(.callout).weight(.medium))
                     }
                 }
                 section("Appearance", symbol: "paintpalette") {
                     loadingPicker("Card color", value: "Automatic")
                 }
                 section("Environment", symbol: "building.2") {
-                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                         responsivePair {
                             loadingPicker("Environment", value: "Development")
                         } right: {
@@ -368,6 +358,7 @@ struct DatabaseConnectionManagementSheet: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
+            .controlSize(.large)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -375,7 +366,7 @@ struct DatabaseConnectionManagementSheet: View {
     @ViewBuilder
     private var failureNotice: some View {
         if let failure = model.failure {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 notice(
                     failure,
                     symbol: "exclamationmark.triangle.fill",
@@ -399,21 +390,21 @@ struct DatabaseConnectionManagementSheet: View {
 
     private var footer: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: UIScale.pt(16)) {
+            HStack(spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 operationStatus
-                Spacer(minLength: UIScale.pt(16))
+                Spacer(minLength: UIScale.pt(PageMetrics.sectionSpacing))
                 footerActions
             }
-            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 operationStatus
-                HStack {
+                HStack(spacing: 0) {
                     Spacer(minLength: 0)
                     footerActions
                 }
             }
         }
-        .padding(.horizontal, UIScale.pt(22))
-        .padding(.vertical, UIScale.pt(14))
+        .padding(.horizontal, UIScale.pt(PageMetrics.gutter))
+        .padding(.vertical, UIScale.pt(PageMetrics.headerBottom))
         .background(palette.panel.opacity(0.55))
     }
 
@@ -422,21 +413,22 @@ struct DatabaseConnectionManagementSheet: View {
         if isBusy {
             SkeletonReplica(operationTitle) {
                 Text(footerDetail)
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.subheadline))
                     .lineLimit(2)
             }
         } else {
             Text(footerDetail)
-                .font(.system(size: UIScale.pt(10.5)))
+                .font(.edithText(.subheadline))
                 .foregroundStyle(palette.inkFaint)
                 .lineLimit(2)
         }
     }
 
     private var footerActions: some View {
-        HStack(spacing: UIScale.pt(10)) {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             Button("Cancel", action: cancel)
                 .buttonStyle(.edith(.secondary))
+                .keyboardShortcut(.cancelAction)
                 .disabled(preventsDismissal)
             Button(action: save) {
                 if isBusy {
@@ -525,14 +517,14 @@ struct DatabaseConnectionManagementSheet: View {
     }
 
     private func tagEditor(_ draft: DatabaseConnectionEditDraft) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
             if draft.tags.isEmpty {
                 Text("No tags")
-                    .font(.system(size: UIScale.pt(10.5)))
+                    .font(.edithText(.subheadline))
                     .foregroundStyle(palette.inkFaint)
             }
             ForEach(Array(draft.tags.enumerated()), id: \.offset) { index, tag in
-                HStack(spacing: UIScale.pt(8)) {
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                     EdithTextField(
                         placeholder: "Tag",
                         text: tagBinding(at: index, fallback: tag))
@@ -586,21 +578,14 @@ struct DatabaseConnectionManagementSheet: View {
         symbol: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             Label(title, systemImage: symbol)
-                .font(.system(size: UIScale.pt(12), weight: .semibold))
-                .foregroundStyle(palette.inkSoft)
-                .textCase(.uppercase)
-                .tracking(0.4)
+                .pageCapsStyle()
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(UIScale.pt(14))
-        .background(palette.panel, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-        .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(12))
-                .stroke(palette.line, lineWidth: 1)
-        }
+        .padding(UIScale.pt(PageMetrics.cardPadding))
+        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
     }
 
     private func responsivePair<Left: View, Right: View>(
@@ -608,11 +593,11 @@ struct DatabaseConnectionManagementSheet: View {
         @ViewBuilder right: () -> Right
     ) -> some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                 left()
                 right()
             }
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                 left()
                 right()
             }
@@ -624,9 +609,9 @@ struct DatabaseConnectionManagementSheet: View {
         required: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
             Text(required ? "\(label) *" : label)
-                .font(.system(size: UIScale.pt(10.5), weight: .medium))
+                .font(.edithText(.subheadline).weight(.medium))
                 .foregroundStyle(palette.inkFaint)
             content()
         }
@@ -642,6 +627,7 @@ struct DatabaseConnectionManagementSheet: View {
             Picker(label, selection: selection, content: content)
                 .labelsHidden()
                 .pickerStyle(.menu)
+                .controlSize(.large)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -657,14 +643,15 @@ struct DatabaseConnectionManagementSheet: View {
     }
 
     private func contextFact(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
             Text(label)
-                .font(.system(size: UIScale.pt(10), weight: .medium))
+                .font(.edithText(.caption).weight(.medium))
                 .foregroundStyle(palette.inkFaint)
             Text(value)
-                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .font(.edithText(.callout).weight(.medium))
                 .foregroundStyle(palette.ink)
                 .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -678,13 +665,16 @@ struct DatabaseConnectionManagementSheet: View {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
         }
-        .font(.system(size: UIScale.pt(11)))
+        .font(.edithText(.subheadline))
         .foregroundStyle(palette.inkSoft)
-        .padding(UIScale.pt(12))
+        .padding(UIScale.pt(PageMetrics.cardSpacing))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+        .background(
+            tint.opacity(0.09),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius))
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: UIScale.pt(10))
+            RoundedRectangle(cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius))
                 .stroke(tint.opacity(0.24), lineWidth: 1)
         }
     }
@@ -760,6 +750,24 @@ struct DatabaseConnectionManagementSheet: View {
         case .deleting: "Deleting connection"
         case nil: "Working"
         }
+    }
+}
+
+struct DatabaseSheetBadge: View {
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.edithText(.title3).weight(.semibold))
+            .foregroundStyle(tint)
+            .frame(width: UIScale.pt(40), height: UIScale.pt(40))
+            .background(
+                tint.opacity(0.13),
+                in: RoundedRectangle(
+                    cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius), style: .continuous)
+            )
+            .accessibilityHidden(true)
     }
 }
 

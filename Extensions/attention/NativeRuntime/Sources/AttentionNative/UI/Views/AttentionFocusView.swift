@@ -11,7 +11,7 @@ struct AttentionFocusView: View {
     var body: some View {
         let dark = scheme == .dark
         let blocks = model.summary.focusBlocks.reversed()
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             if model.hasFilters {
                 PageNotice(
                     "Detected deep work follows the filters. Focus sessions you started are always listed in full.",

@@ -4,7 +4,6 @@ import SwiftUI
 
 struct AttentionAgentsView: View {
     @Bindable var model: AttentionPageModel
-    @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -12,7 +11,7 @@ struct AttentionAgentsView: View {
         let dark = scheme == .dark
         let violet = AttentionPalette.accent(dark)
         let interval = model.period.interval()
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
             if model.spanFilter.classifies {
                 PageNotice(
                     "Agent sessions have no productivity, context or category, so those filters hide them. Search still applies to agents, projects and machines.",
@@ -21,34 +20,28 @@ struct AttentionAgentsView: View {
                         Button("Clear filters") { model.clearFilters() }
                     })
             }
-            LazyVGrid(
-                columns: AttentionTileGrid.columns(compact, regular: 5),
-                spacing: UIScale.pt(PageMetrics.cardSpacing)
-            ) {
-                AttentionTile(
-                    label: "Agent work", value: AttentionFormat.duration(agents.working),
+            PageMetricGrid {
+                PageMetric(
+                    title: "Agent work", value: AttentionFormat.duration(agents.working),
                     detail: AttentionFormat.delta(
-                        agents.working, model.summary.previous?.agentWorking),
-                    tint: violet, symbol: "sparkles")
-                AttentionTile(
-                    label: "Waiting on you", value: AttentionFormat.duration(agents.blocked),
-                    detail: "blocked for input or approval",
-                    tint: DashSkin.inkSoft(dark),
-                    symbol: "hand.raised")
-                AttentionTile(
-                    label: "Peak at once", value: "\(agents.peakConcurrent)",
-                    detail: "agents working together", tint: violet,
-                    symbol: "square.stack.3d.up")
-                AttentionTile(
-                    label: "Sessions", value: "\(agents.sessions.count)",
+                        agents.working, model.summary.previous?.agentWorking), symbol: "sparkles",
+                    tint: violet)
+                PageMetric(
+                    title: "Waiting on you", value: AttentionFormat.duration(agents.blocked),
+                    detail: "blocked for input or approval", symbol: "hand.raised",
+                    tint: DashSkin.inkSoft(dark))
+                PageMetric(
+                    title: "Peak at once", value: "\(agents.peakConcurrent)",
+                    detail: "agents working together", symbol: "square.stack.3d.up", tint: violet)
+                PageMetric(
+                    title: "Sessions", value: "\(agents.sessions.count)",
                     detail: "\(agents.machines.count) machines · \(agents.kinds.count) kinds",
-                    tint: violet, symbol: "terminal")
-                AttentionTile(
-                    label: "Leverage",
+                    symbol: "terminal", tint: violet)
+                PageMetric(
+                    title: "Leverage",
                     value: agents.attended > 0
                         ? String(format: "%.1f×", agents.working / agents.attended) : "n/a",
-                    detail: "agent time per minute watched",
-                    tint: violet, symbol: "arrow.up.right")
+                    detail: "agent time per minute watched", symbol: "arrow.up.right", tint: violet)
             }
             if agents.isEmpty {
                 AttentionPanel("Agents") {

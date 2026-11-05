@@ -40,7 +40,7 @@ struct LaTeXAddProject: View {
                 compiler = location == .github ? .pdfLatex : .tectonic
             }
             Text(location.summary).font(.edithText(.subheadline)).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
                 Text("Compiler").font(.edithText(.headline))
                 EdithSegmentedPicker(
                     "Compiler", selection: $compiler, options: LaTeXCompiler.allCases,
@@ -48,7 +48,7 @@ struct LaTeXAddProject: View {
                 ).disabled(busy)
                 Text(compiler.summary).font(.edithText(.caption)).foregroundStyle(.secondary)
             }
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 field("Project name", placeholder: "Research paper", text: $name)
                 if location == .github {
                     field("Repository", placeholder: "owner/repository", text: $repository)
@@ -59,7 +59,7 @@ struct LaTeXAddProject: View {
                     )
                     .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                 } else {
-                    HStack(alignment: .bottom) {
+                    HStack(alignment: .bottom, spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                         field("Source file", placeholder: "/path/to/main.tex", text: $sourcePath)
                         Button("Choose file…") { chooseFile() }
                             .buttonStyle(.edith(.secondary))
@@ -116,11 +116,9 @@ struct LaTeXAddProject: View {
     }
 
     private func field(_ title: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.subtitleSpacing)) {
             Text(title).font(.edithText(.headline))
-            TextField(placeholder, text: text)
-                .textFieldStyle(.roundedBorder)
-                .font(.edithText(.body))
+            EdithTextField(placeholder: placeholder, text: text)
                 .accessibilityLabel(title)
         }
     }

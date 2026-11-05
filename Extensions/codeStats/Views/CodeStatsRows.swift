@@ -44,7 +44,7 @@ struct CodeStatsRows: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .foregroundStyle(.secondary)
-                        Button("Choose folder...") { chooseFolder() }
+                        Button("Choose folder…") { chooseFolder() }
                     }
                 }
                 Text(
@@ -182,7 +182,7 @@ struct CodeStatsRows: View {
     }
 
     private func refresh() {
-        message = "Starting a refresh..."
+        message = "Starting a refresh…"
         refreshTask?.cancel()
         refreshTask = Task {
             do {

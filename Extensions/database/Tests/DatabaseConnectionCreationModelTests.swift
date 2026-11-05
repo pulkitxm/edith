@@ -1,4 +1,6 @@
+import EdithExtensionUI
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import DatabaseExtension
@@ -7,6 +9,49 @@ import Testing
 @MainActor
 @Suite("Database connection creation")
 struct DatabaseConnectionCreationModelTests {
+    @Test("The add connection sheet renders every entry state")
+    func sheetRenders() async throws {
+        let variants = [
+            DatabaseRenderCapture.Variant(
+                name: "sheet-light", width: 560, height: 640, zoom: 1, scheme: .light),
+            DatabaseRenderCapture.Variant(
+                name: "sheet-dark", width: 560, height: 640, zoom: 1, scheme: .dark),
+            DatabaseRenderCapture.Variant(
+                name: "sheet-narrow", width: 520, height: 640, zoom: 1, scheme: .light),
+            DatabaseRenderCapture.Variant(
+                name: "sheet-zoomed", width: 896, height: 1024, zoom: 1.6, scheme: .dark),
+        ]
+        for variant in variants {
+            let empty = DatabaseConnectionCreationModel(
+                sender: DatabaseConnectionCreationSender(testSucceeds: true),
+                secretStore: try InMemoryDatabaseSecretStore())
+            let emptyBitmap = try await DatabaseRenderCapture.render(
+                "database-add", variant: variant
+            ) { DatabaseConnectionCreationSheet(model: empty, saved: { _ in }, cancel: {}) }
+            #expect(DatabaseRenderCapture.distinctColors(emptyBitmap) > 3)
+
+            let parsed = DatabaseConnectionCreationModel(
+                sender: DatabaseConnectionCreationSender(testSucceeds: true),
+                secretStore: try InMemoryDatabaseSecretStore())
+            parsed.updateConnectionURL("postgresql://owner:sample@db.example.com:6432/app")
+            parsed.applyConnectionURL()
+            #expect(parsed.urlImportPhase == .applied)
+            try await DatabaseRenderCapture.render("database-add-parsed", variant: variant) {
+                DatabaseConnectionCreationSheet(model: parsed, saved: { _ in }, cancel: {})
+            }
+
+            let failed = DatabaseConnectionCreationModel(
+                sender: DatabaseConnectionCreationSender(testSucceeds: true),
+                secretStore: try InMemoryDatabaseSecretStore())
+            failed.updateConnectionURL("not a database url")
+            failed.applyConnectionURL()
+            #expect(failed.urlImportPhase != .applied)
+            try await DatabaseRenderCapture.render("database-add-invalid", variant: variant) {
+                DatabaseConnectionCreationSheet(model: failed, saved: { _ in }, cancel: {})
+            }
+        }
+    }
+
     @Test("A full connection URL fills the advanced fields")
     func connectionURL() throws {
         let model = DatabaseConnectionCreationModel(

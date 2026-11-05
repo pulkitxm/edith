@@ -37,62 +37,61 @@ struct CodeStatsFilterBar: View {
     let dark: Bool
     @State private var open: CodeStatsFacetKind?
 
-    private static let flags:
-        [(CodeStatsCommitFlags, String, WritableKeyPath<CodeStatsFilter, Bool>)] = [
-            (.bulk, "Bulk imports", \.includeBulk),
-            (.formatting, "Formatting", \.includeFormatting),
-            (.agentAssisted, "Agent-assisted", \.includeAgentAssisted),
-            (.coAuthored, "Co-authored", \.includeCoAuthored),
-        ]
+    static let flags: [(CodeStatsCommitFlags, String, WritableKeyPath<CodeStatsFilter, Bool>)] = [
+        (.bulk, "Bulk imports", \.includeBulk),
+        (.formatting, "Formatting", \.includeFormatting),
+        (.agentAssisted, "Agent-assisted", \.includeAgentAssisted),
+        (.coAuthored, "Co-authored", \.includeCoAuthored),
+    ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.filterRowSpacing)) {
-            PageFilterBar {
-                PageFilterRow("Range") {
-                    CodeStatsRangeChips(range: model.range) { range in
-                        Task { await model.select(range) }
-                    }
-                }
-                PageFilterRow("Filter") {
-                    facetButton(.repositories, selected: model.filter.repositories.count)
-                    facetButton(.owners, selected: model.filter.owners.count)
-                    facetButton(.languages, selected: model.filter.languages.count)
-                    countedChangesMenu
-                    if model.hasActiveFilter {
-                        Button("Reset filters") { Task { await model.resetFilter() } }
-                            .buttonStyle(.edith(.borderless))
-                            .font(PageMetrics.chipFont)
-                            .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
-                            .fixedSize()
-                    }
-                }
-                PageFilterRow("Include") {
-                    ForEach(CodeStatsCategory.filterable, id: \.self) { category in
-                        PageChip(
-                            category.title,
-                            systemImage: model.filter.categories.contains(category)
-                                ? "checkmark" : nil,
-                            active: model.filter.categories.contains(category)
-                        ) {
-                            Task { await model.toggleCategory(category) }
-                        }
-                    }
-                }
-                if hasSelection {
-                    PageFilterRow("Showing") { selectedTokens }
+        PageFilterBar {
+            PageFilterRow("Range") {
+                CodeStatsRangeChips(range: model.range) { range in
+                    Task { await model.select(range) }
                 }
             }
-            if !excludedFlags.isEmpty {
-                Text("Not counted in totals: " + excludedFlags.joined(separator: ", ") + ".")
-                    .font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            PageFilterRow("Filter") {
+                facetButton(.repositories, selected: model.filter.repositories.count)
+                facetButton(.owners, selected: model.filter.owners.count)
+                facetButton(.languages, selected: model.filter.languages.count)
+                fileTypesMenu
+                countedChangesMenu
+                if let note = Self.notCountedNote(model.filter) {
+                    Text(note)
+                        .font(.edithText(.caption))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                        .fixedSize()
+                }
+                if model.hasActiveFilter {
+                    Button("Reset filters") { Task { await model.resetFilter() } }
+                        .buttonStyle(.edith(.borderless))
+                        .font(PageMetrics.chipFont)
+                        .frame(minHeight: UIScale.pt(PageMetrics.chipHeight))
+                        .fixedSize()
+                }
+            }
+            if hasSelection {
+                PageFilterRow("Showing") { selectedTokens }
             }
         }
     }
 
-    private var excludedFlags: [String] {
-        Self.flags.filter { !model.filter[keyPath: $0.2] }.map { $0.1.lowercased() }
+    static func notCountedNote(_ filter: CodeStatsFilter) -> String? {
+        let excluded = flags.filter { !filter[keyPath: $0.2] }.map { $0.1.lowercased() }
+        return excluded.isEmpty ? nil : "Not counted: " + excluded.joined(separator: ", ")
+    }
+
+    static func fileTypesTitle(_ categories: Set<CodeStatsCategory>) -> String {
+        let selected = CodeStatsCategory.filterable.filter(categories.contains)
+        switch selected.count {
+        case 0: return "No file types"
+        case 1: return selected[0].title
+        case CodeStatsCategory.filterable.count: return "All file types"
+        default: return "\(selected.count) file types"
+        }
     }
 
     private var countedChangesCustomized: Bool {
@@ -108,19 +107,36 @@ struct CodeStatsFilterBar: View {
             || model.isCustomRange
     }
 
-    private var countedChangesMenu: some View {
+    private var fileTypesMenu: some View {
         PageMenuChip(
-            "Counted changes", systemImage: "line.3.horizontal.decrease",
-            active: countedChangesCustomized
+            Self.fileTypesTitle(model.filter.categories),
+            active: model.filter.categories != CodeStatsFilter.default.categories
         ) {
-            ForEach(Self.flags, id: \.1) { flag in
-                Toggle(
-                    flag.1,
-                    isOn: Binding(
-                        get: { model.filter[keyPath: flag.2] },
-                        set: { value in
-                            Task { await model.updateFilter { $0[keyPath: flag.2] = value } }
-                        }))
+            Section("Count lines in") {
+                ForEach(CodeStatsCategory.filterable, id: \.self) { category in
+                    Toggle(
+                        category.title,
+                        isOn: Binding(
+                            get: { model.filter.categories.contains(category) },
+                            set: { _ in Task { await model.toggleCategory(category) } }))
+                }
+            }
+        }
+        .help("Choose which kinds of files count toward your lines")
+    }
+
+    private var countedChangesMenu: some View {
+        PageMenuChip("Counted changes", active: countedChangesCustomized) {
+            Section("Count toward totals") {
+                ForEach(Self.flags, id: \.1) { flag in
+                    Toggle(
+                        flag.1,
+                        isOn: Binding(
+                            get: { model.filter[keyPath: flag.2] },
+                            set: { value in
+                                Task { await model.updateFilter { $0[keyPath: flag.2] = value } }
+                            }))
+                }
             }
         }
         .help("Choose which kinds of commits count toward your totals")
@@ -165,11 +181,21 @@ struct CodeStatsFilterBar: View {
     }
 
     private func token(_ name: String, remove: @escaping () async -> Void) -> some View {
-        Button {
+        CodeStatsTokenChip(title: name, active: true) {
             Task { await remove() }
-        } label: {
+        }
+    }
+}
+
+struct CodeStatsTokenChip: View {
+    let title: String
+    var active = false
+    let remove: () -> Void
+
+    var body: some View {
+        Button(action: remove) {
             HStack(spacing: UIScale.pt(6)) {
-                Text(name).lineLimit(1).truncationMode(.middle)
+                Text(title).lineLimit(1).truncationMode(.middle)
                 Image(systemName: "xmark")
                     .font(.system(size: UIScale.pt(8), weight: .bold))
                     .foregroundStyle(.secondary)
@@ -177,9 +203,9 @@ struct CodeStatsFilterBar: View {
             }
             .frame(maxWidth: UIScale.pt(260))
         }
-        .buttonStyle(.pageChip(active: true))
+        .buttonStyle(.pageChip(active: active))
         .fixedSize()
-        .accessibilityLabel("Remove filter \(name)")
+        .accessibilityLabel("Remove \(title)")
     }
 }
 
@@ -213,8 +239,7 @@ private struct CodeStatsFacetPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            TextField("Search " + kind.rawValue.lowercased(), text: $query)
-                .textFieldStyle(.roundedBorder)
+            SearchField(placeholder: "Search " + kind.rawValue.lowercased(), text: $query)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     ForEach(matchingFacets) { facet in

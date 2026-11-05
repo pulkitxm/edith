@@ -24,7 +24,7 @@ struct CodeStatsProgressCard: View {
                     HStack {
                         Text(
                             CodeStatsProgressMath.repositories(progress)
-                                ?? progress.phase.stepTitle + "...")
+                                ?? progress.phase.stepTitle + "…")
                         Spacer()
                         Text(
                             progress.overallFraction, format: .percent.precision(.fractionLength(0))
