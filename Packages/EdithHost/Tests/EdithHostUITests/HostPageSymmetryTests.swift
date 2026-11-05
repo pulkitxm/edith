@@ -91,8 +91,9 @@ import Testing
         let permissions = fixture.permissions()
         await permissions.refresh()
         for variant in Variant.all {
-            for page in ["home", "desk", "agents", "system", "media", "data", "about", "extensions"]
-            {
+            for page in [
+                "home", "desk", "agents", "system", "media", "data", "about", "extensions",
+            ] {
                 try await render(variant, name: "page-\(page)") {
                     detail(fixture, permissions: permissions, page: page, scheme: variant.scheme)
                 }
