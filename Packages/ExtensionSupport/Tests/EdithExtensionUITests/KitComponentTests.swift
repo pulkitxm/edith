@@ -140,6 +140,27 @@ struct KitComponentTests {
         #expect(layout.rowCounts(count: 0, width: 900).isEmpty)
         let capped = PageMetricLayout(spacing: 12, minimumWidth: 148, maximumColumns: 2)
         #expect(capped.rowCounts(count: 4, width: 1052) == [2, 2])
+        #expect(layout.rowCounts(count: 5, width: .infinity) == [5])
+        #expect(capped.rowCounts(count: 5, width: .infinity) == [2, 2, 1])
+        #expect(layout.rowCounts(count: 3, width: .nan) == [3])
+    }
+
+    @Test func metricGridMeasuresInsideLazyStacksThatProposeAnInfiniteWidth() {
+        let host = NSHostingView(
+            rootView: ScrollView(.horizontal) {
+                LazyHStack {
+                    LazyVStack {
+                        PageMetricGrid {
+                            PageMetric(title: "A", value: "1")
+                            PageMetric(title: "B", value: "2")
+                        }
+                    }
+                }
+            }
+            .frame(width: 600, height: 300))
+        host.frame = CGRect(x: 0, y: 0, width: 600, height: 300)
+        host.layoutSubtreeIfNeeded()
+        #expect(host.fittingSize.width > 0)
     }
 
     @Test func metricGridGivesTilesTheHeightOfTheTallestInTheirRow() {
@@ -428,6 +449,18 @@ struct KitComponentTests {
             PageLoading(state: .error, title: "No music", errorTitle: "Music failed") {
                 EmptyView()
             }.errorHeading == "Music failed")
+    }
+
+    @Test func formSkeletonMatchesTheGroupedFormColumn() async throws {
+        let rendered = try await render(PageSkeleton(layout: .form).pageSurface(), width: 1100)
+        let bitmap = rendered.bitmap
+        let scale = bitmap.pixelsWide / 1100
+        let y = 12 * scale
+        let cards = (0..<bitmap.pixelsWide).filter { luminance(bitmap, x: $0, y: y) > 0.985 }
+        let first = try #require(cards.first) / scale
+        let last = try #require(cards.last) / scale
+        #expect(abs(first - 198) <= 2)
+        #expect(abs(last - 902) <= 2)
     }
 
     @Test func placeholderIsFainterThanTypedText() async throws {
