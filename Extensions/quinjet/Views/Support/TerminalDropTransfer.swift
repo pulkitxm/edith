@@ -40,11 +40,9 @@ enum TerminalDropTransfer {
                 let batch = "put " + (try quote(url.path)) + " " + (try quote(sftpPath)) + "\n"
                 let request = CLICommandRequest(
                     executableURL: URL(fileURLWithPath: "/usr/bin/sftp"),
-                    arguments: [
-                        "-b", "-", "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o",
-                        "ControlPath=" + connection.controlSocketPath, "-o", "ProxyCommand=false",
-                        connection.machine.sshTarget,
-                    ], environment: CLIToolEnvironment.sanitized(), timeout: 900,
+                    arguments: try sftpArguments(
+                        controlPath: connection.controlSocketPath,
+                        target: connection.machine.sshTarget), environment: CLIToolEnvironment.sanitized(), timeout: 900,
                     maximumOutputBytes: 65_536, standardInputData: Data(batch.utf8),
                     terminatesProcessGroup: true)
                 let uploaded = try await CLICommandRunner.run(request, onLine: { _ in })
@@ -81,6 +79,12 @@ enum TerminalDropTransfer {
             await cleanupTask.value
             throw error
         }
+    }
+    static func sftpArguments(controlPath: String, target: String) throws -> [String] {
+        [
+            "-b", "-", "-o", "BatchMode=yes", "-o", "ControlMaster=no", "-o",
+            "ControlPath=" + (try quote(controlPath)), "-o", "ProxyCommand=false", target,
+        ]
     }
     static func quote(_ value: String) throws -> String {
         guard !value.isEmpty, value.utf8.count <= 8_192,
