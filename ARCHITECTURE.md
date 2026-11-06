@@ -61,6 +61,20 @@ that needs per-extension state takes the caller's image through an
 `ExtensionScope.resolve`; it never caches a scope in a static. Packaging fails
 if a role embeds kit code.
 
+Every other library a role bundles in its own `Contents/Frameworks` (a native
+product such as `libGhosttyTerminal.dylib`, a vendored framework, a Cargo
+library) is private to that build. dyld reuses a loaded image whose install
+name matches, so packaging gives each one a unique install name, such as
+`libGhosttyTerminal.herdr-<digest>.dylib`, where the digest covers the
+extension id, role, version and the library bytes. Libraries the Runtime links
+are renamed to match; libraries an extension opens by path keep their file name. The Runtime records that
+name when it links, so two extensions, or two versions of one extension, that
+bundle the same engine never bind each other's copy. Packaging fails if a role
+links any `@rpath` library other than the shared kit and its own private ones.
+A bundled engine must therefore tolerate other copies of itself in the process:
+the Ghostty patch names its runtime `CALayer` subclass after the loading image,
+because a second copy cannot register a class name that is already taken.
+
 ## Marketplace
 
 Each extension is released as its own ZIP with JSON metadata and a detached

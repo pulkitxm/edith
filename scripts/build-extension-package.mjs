@@ -8,6 +8,7 @@ import {
   readdir,
   readFile,
   realpath,
+  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -149,40 +150,155 @@ export async function copyNativeResources(
   }
 }
 
+const sharedRuntimeImages = new Set(["@rpath/libEdithExtensionKit.dylib"]);
+
+export function privateImageToken({ id, role, version }, bytes) {
+  if (
+    !/^[A-Za-z][A-Za-z0-9_-]*$/.test(id ?? "") ||
+    typeof role !== "string" ||
+    !role ||
+    typeof version !== "string" ||
+    !version
+  )
+    throw new Error("Invalid private native image scope");
+  const digest = createHash("sha256")
+    .update(JSON.stringify([id, role, version]))
+    .update(bytes)
+    .digest("hex");
+  return `${id}-${digest.slice(0, 16)}`;
+}
+
+export function privateImageName(name, token) {
+  const match = /^([A-Za-z0-9_+-]+)\.(dylib|framework)$/.exec(name);
+  if (!match || !/^[A-Za-z][A-Za-z0-9_-]*-[0-9a-f]{16}$/.test(token))
+    throw new Error("Invalid private native image name");
+  return `${match[1]}.${token}.${match[2]}`;
+}
+
+export async function bundleNativeLibrary({
+  source,
+  frameworks,
+  scope,
+  name = basename(source),
+  keepFileName = false,
+  run,
+}) {
+  const image = privateImageName(
+    name,
+    privateImageToken(scope, await readFile(source)),
+  );
+  const library = resolve(frameworks, keepFileName ? name : image);
+  await mkdir(frameworks, { recursive: true });
+  await copyFile(source, library);
+  run("install_name_tool", ["-id", `@rpath/${image}`, library]);
+  return { library, image, installName: `@rpath/${image}` };
+}
+
+export function verifyPrivateImageLinkage({ id }, images) {
+  const tag = new RegExp(
+    `^@rpath/[A-Za-z0-9_+-]+\\.${id}-[0-9a-f]{16}\\.(?:dylib$|framework/)`,
+  );
+  const bundled = new Map();
+  for (const image of images) {
+    if (!image.path.startsWith("Frameworks/")) continue;
+    if (!tag.test(image.installName) || bundled.has(image.installName))
+      throw new Error("A bundled native image lacks a private install name");
+    bundled.set(image.installName, image.path);
+  }
+  for (const image of images)
+    for (const dependency of image.dependencies) {
+      if (
+        !dependency.startsWith("@") ||
+        dependency === image.installName ||
+        sharedRuntimeImages.has(dependency) ||
+        dependency.startsWith("@rpath/libswift")
+      )
+        continue;
+      if (bundled.get(dependency) !== `Frameworks/${dependency.slice(7)}`)
+        throw new Error(
+          "A native image links a library outside its own package",
+        );
+    }
+}
+
+export async function inspectPrivateImages(contents, run) {
+  const images = [];
+  const inspect = (path) => {
+    const lines = (file, flag) =>
+      run("otool", [flag, file], { encoding: "utf8" })
+        .split("\n")
+        .slice(1)
+        .map((line) => line.trim().split(" ")[0])
+        .filter(Boolean);
+    const [installName = ""] = lines(resolve(contents, path), "-D");
+    images.push({
+      path,
+      installName,
+      dependencies: lines(resolve(contents, path), "-L"),
+    });
+  };
+  inspect("MacOS/Runtime");
+  let entries = [];
+  try {
+    entries = await readdir(resolve(contents, "Frameworks"));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  for (const entry of entries.sort()) {
+    if (entry.endsWith(".dylib")) inspect(`Frameworks/${entry}`);
+    else if (entry.endsWith(".framework"))
+      inspect(`Frameworks/${entry}/${entry.split(".")[0]}`);
+  }
+  return images;
+}
+
 export async function copyNativeFrameworks(
   root,
   definition,
   contents,
+  scope,
   environment = process.env,
 ) {
   const directory = resolve(contents, "Frameworks");
-  const names = new Set();
-  const binaries = [];
-  for (const source of definition.nativeFrameworks ?? []) {
-    const name = basename(source);
-    const packageRoot = resolve(root, definition.nativePackage);
-    const origin = resolve(packageRoot, source);
-    if (
-      !name.endsWith(".framework") ||
-      names.has(name) ||
-      !origin.startsWith(`${packageRoot}/`)
+  const packageRoot = resolve(root, definition.nativePackage ?? "");
+  const sources = (definition.nativeFrameworks ?? []).map((source) => ({
+    name: basename(source),
+    origin: resolve(packageRoot, source),
+  }));
+  const names = new Set(sources.map(({ name }) => name));
+  if (
+    names.size !== sources.length ||
+    sources.some(
+      ({ name, origin }) =>
+        !/^[A-Za-z0-9_+-]+\.framework$/.test(name) ||
+        !origin.startsWith(`${packageRoot}/`),
     )
-      throw new Error("Duplicate or invalid native framework");
-    names.add(name);
+  )
+    throw new Error("Duplicate or invalid native framework");
+  const binaries = [];
+  for (const { name, origin } of sources) {
     await mkdir(directory, { recursive: true });
-    const destination = resolve(directory, name);
-    execFileSync("/bin/cp", ["-RL", origin, destination], { env: environment });
-    await rm(resolve(destination, "Versions"), {
+    const executable = name.slice(0, -10);
+    const staged = resolve(directory, name);
+    execFileSync("/bin/cp", ["-RL", origin, staged], { env: environment });
+    await rm(resolve(staged, "Versions"), {
       recursive: true,
       force: true,
     });
-    const binary = await realpath(resolve(destination, name.slice(0, -10)));
-    if (!binary.startsWith(`${await realpath(destination)}/`))
+    const stagedBinary = await realpath(resolve(staged, executable));
+    if (stagedBinary !== resolve(await realpath(staged), executable))
       throw new Error("Native framework executable escapes its bundle");
+    const image = privateImageName(
+      name,
+      privateImageToken(scope, await readFile(stagedBinary)),
+    );
+    const destination = resolve(directory, image);
+    await rename(staged, destination);
     binaries.push({
-      binary,
+      name,
+      binary: await realpath(resolve(destination, executable)),
       framework: destination,
-      installName: `@rpath/${name}/${name.slice(0, -10)}`,
+      installName: `@rpath/${image}/${executable}`,
     });
   }
   return binaries;
@@ -293,8 +409,13 @@ export function nativeRolePolicy(definition) {
   };
 }
 
-export function nativePackageLinkFlags(root, definition, contents) {
+export function nativePackageLinkFlags(root, definition, contents, library) {
   if (definition.nativeLink === false) return [];
+  if (
+    !library?.startsWith(`lib${definition.nativeProduct}.`) ||
+    !library.endsWith(".dylib")
+  )
+    throw new Error("A linked native product requires its private library");
   const frameworks = resolve(contents, "Frameworks");
   return [
     ...nativeClangModuleFlags(root, definition),
@@ -304,7 +425,7 @@ export function nativePackageLinkFlags(root, definition, contents) {
     resolve(root, definition.nativePackage, ".build/release/Modules"),
     "-L",
     frameworks,
-    `-l${definition.nativeProduct}`,
+    `-l${library.slice(3, -6)}`,
     "-Xlinker",
     "-rpath",
     "-Xlinker",
@@ -531,17 +652,17 @@ export async function buildExtensionPackage({
       }
     }
     const nativeFlags = [];
+    const imageScope = { id, role, version: releaseVersion };
     if (cargoLibrary && nativePolicy.roles.includes(role)) {
-      const frameworks = resolve(contents, "Frameworks");
-      await mkdir(frameworks, { recursive: true });
-      const library = resolve(frameworks, definition.nativeCargo.library);
-      await copyFile(cargoLibrary, library);
+      const { library } = await bundleNativeLibrary({
+        source: cargoLibrary,
+        frameworks: resolve(contents, "Frameworks"),
+        scope: imageScope,
+        name: definition.nativeCargo.library,
+        keepFileName: true,
+        run,
+      });
       run("strip", ["-x", library]);
-      run("install_name_tool", [
-        "-id",
-        `@rpath/${definition.nativeCargo.library}`,
-        library,
-      ]);
       run(
         "codesign",
         [
@@ -563,6 +684,7 @@ export async function buildExtensionPackage({
         root,
         definition,
         contents,
+        imageScope,
         environment,
       );
       for (const { binary, framework, installName } of frameworkBinaries) {
@@ -593,11 +715,18 @@ export async function buildExtensionPackage({
           { stdio: "inherit" },
         );
       }
-      const library = resolve(frameworks, libraryName);
-      await copyFile(
-        resolve(root, definition.nativePackage, ".build/release", libraryName),
-        library,
-      );
+      const { library, image } = await bundleNativeLibrary({
+        source: resolve(
+          root,
+          definition.nativePackage,
+          ".build/release",
+          libraryName,
+        ),
+        frameworks,
+        scope: imageScope,
+        keepFileName: !nativePolicy.link,
+        run,
+      });
       if (
         nativePolicy.presentations.includes(role) &&
         !run("otool", ["-L", library], { encoding: "utf8" }).includes(
@@ -607,17 +736,16 @@ export async function buildExtensionPackage({
         throw new Error(
           "A native presentation role does not link the shared kit",
         );
-      run("install_name_tool", ["-id", `@rpath/${libraryName}`, library]);
       const dependencies = run("otool", ["-L", library], {
         encoding: "utf8",
       })
         .split("\n")
         .slice(1)
         .map((line) => line.trim().split(" ")[0]);
-      for (const { framework, installName } of frameworkBinaries) {
+      for (const { name, installName } of frameworkBinaries) {
         for (const dependency of dependencies) {
           if (
-            dependency.startsWith(`@rpath/${basename(framework)}/`) &&
+            dependency.startsWith(`@rpath/${name}/`) &&
             dependency !== installName
           )
             run("install_name_tool", [
@@ -647,7 +775,9 @@ export async function buildExtensionPackage({
         ],
         { stdio: "inherit" },
       );
-      nativeFlags.push(...nativePackageLinkFlags(root, definition, contents));
+      nativeFlags.push(
+        ...nativePackageLinkFlags(root, definition, contents, image),
+      );
     }
     await copySupportLicenses(
       root,
@@ -785,6 +915,10 @@ export async function buildExtensionPackage({
     });
     if (!symbols.includes(" T _edith_extension_create"))
       throw new Error("Extension entry point was not exported");
+    verifyPrivateImageLinkage(
+      imageScope,
+      await inspectPrivateImages(contents, run),
+    );
     const flags = development ? [] : ["--options", "runtime", "--timestamp"];
     run(
       "codesign",

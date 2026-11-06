@@ -3,6 +3,7 @@ import {
   access,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -33,7 +34,14 @@ let package = Package(name: "FixtureNative", platforms: [.macOS(.v14)], products
   );
   await put(
     "Extensions/mock/Native/Sources/FixtureNative/Runtime.swift",
-    '@_cdecl("fixture_native_value") public func fixtureNativeValue() -> Int32 { 7 }',
+    `import Darwin
+@_cdecl("fixture_native_value") public func fixtureNativeValue() -> Int32 { 7 }
+public func fixtureNativeImagePath() -> String {
+    var info = Dl_info()
+    guard dladdr(#dsohandle, &info) != 0, let name = info.dli_fname else { return "" }
+    return String(cString: name)
+}
+`,
   );
   const source = `import Darwin
 import Foundation
@@ -51,6 +59,18 @@ import Foundation
 @_cdecl("edith_extension_create") public func createFixtureExtension() -> UnsafeMutableRawPointer? { Unmanaged.passRetained(NativePolicyFixtureRuntime()).toOpaque() }
 `;
   await put("Extensions/mock/Runtime.swift", source);
+  await put(
+    "Extensions/linked/Runtime.swift",
+    `import Foundation
+import FixtureNative
+final class LinkedNativeFixtureRuntime: NSObject {
+    @objc func execute(_ input: NSDictionary) -> NSObject {
+        ["image": fixtureNativeImagePath()] as NSDictionary
+    }
+}
+@_cdecl("edith_extension_create") public func createLinkedFixtureExtension() -> UnsafeMutableRawPointer? { Unmanaged.passRetained(LinkedNativeFixtureRuntime()).toOpaque() }
+`,
+  );
   const definition = {
     id: "mock",
     version: "1.0.0",
@@ -69,16 +89,67 @@ import Foundation
     sharedInputs: [],
     dependencies: [],
   };
-  await put("Extensions/manifest.json", JSON.stringify([definition]));
-  await buildExtensionPackage({
-    root,
-    id: "mock",
-    output: join(root, "output"),
-    development: true,
-    developmentHostRoot: process.cwd(),
-  });
+  const linked = ["alpha", "beta"].map((id) => ({
+    ...definition,
+    id,
+    roles: { app: ["Extensions/linked/Runtime.swift"] },
+    nativeRoles: undefined,
+    nativeLink: undefined,
+    inputs: ["Extensions/linked"],
+  }));
+  await put(
+    "Extensions/manifest.json",
+    JSON.stringify([definition, ...linked]),
+  );
   const payload = join(root, "unpacked");
-  execFileSync("ditto", ["-xk", join(root, "output/mock.zip"), payload]);
+  for (const { id } of [definition, ...linked]) {
+    await buildExtensionPackage({
+      root,
+      id,
+      output: join(root, "output"),
+      development: true,
+      developmentHostRoot: process.cwd(),
+    });
+    execFileSync("ditto", ["-xk", join(root, `output/${id}.zip`), payload]);
+  }
+  const installName = (path) =>
+    execFileSync("otool", ["-D", path], { encoding: "utf8" })
+      .split("\n")[1]
+      .trim();
+  const linkedLibraries = [];
+  for (const { id } of linked) {
+    const bundle = join(payload, id, "app.bundle");
+    const frameworks = join(bundle, "Contents/Frameworks");
+    const [library, ...others] = await readdir(frameworks);
+    if (
+      others.length ||
+      !/^libFixtureNative\.[a-z]+-[0-9a-f]{16}\.dylib$/.test(library) ||
+      !library.includes(`.${id}-`)
+    )
+      throw new Error("A linked native product kept a shared file name");
+    const name = installName(join(frameworks, library));
+    if (name !== `@rpath/${library}`)
+      throw new Error("A linked native product kept a shared install name");
+    const linkage = execFileSync(
+      "otool",
+      ["-L", join(bundle, "Contents/MacOS/Runtime")],
+      { encoding: "utf8" },
+    );
+    if (
+      !linkage.includes(name) ||
+      linkage.includes("@rpath/libFixtureNative.dylib")
+    )
+      throw new Error("A runtime does not link its own native product");
+    execFileSync("codesign", ["--verify", "--strict", "--deep", bundle]);
+    linkedLibraries.push(name);
+  }
+  if (new Set(linkedLibraries).size !== linked.length)
+    throw new Error("Two packages share a native install name");
+  const lazyName = installName(
+    join(payload, "mock/app.bundle/Contents/Frameworks/libFixtureNative.dylib"),
+  );
+  if (!/^@rpath\/libFixtureNative\.mock-[0-9a-f]{16}\.dylib$/.test(lazyName))
+    throw new Error("A lazy native product kept a shared install name");
   const roles = join(payload, "mock");
   const app = join(roles, "app.bundle");
   const helper = join(roles, "helper.bundle");
@@ -122,6 +193,31 @@ guard let result = object.perform(NSSelectorFromString("execute:"), with: ["oper
     join(root, "probe"),
   ]);
   execFileSync(join(root, "probe"), [app]);
+  await put(
+    "linked-probe.swift",
+    `import Darwin
+import Foundation
+for path in CommandLine.arguments.dropFirst() {
+    guard let handle = dlopen(path + "/Contents/MacOS/Runtime", RTLD_NOW | RTLD_LOCAL), let symbol = dlsym(handle, "edith_extension_create") else { exit(1) }
+    typealias Factory = @convention(c) () -> UnsafeMutableRawPointer?
+    guard let pointer = unsafeBitCast(symbol, to: Factory.self)() else { exit(2) }
+    let object = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
+    guard let result = object.perform(NSSelectorFromString("execute:"), with: [:] as NSDictionary)?.takeUnretainedValue() as? NSDictionary, let image = result["image"] as? String else { exit(3) }
+    let bundle = URL(fileURLWithPath: path).resolvingSymlinksInPath().path + "/Contents/Frameworks/"
+    guard URL(fileURLWithPath: image).resolvingSymlinksInPath().path.hasPrefix(bundle) else { exit(4) }
+}
+`,
+  );
+  execFileSync("xcrun", [
+    "swiftc",
+    join(root, "linked-probe.swift"),
+    "-o",
+    join(root, "linked-probe"),
+  ]);
+  execFileSync(
+    join(root, "linked-probe"),
+    linked.map(({ id }) => join(payload, id, "app.bundle")),
+  );
   const manifest = JSON.parse(
     await readFile(join(payload, "mock/package.json"), "utf8"),
   );
@@ -134,7 +230,7 @@ guard let result = object.perform(NSSelectorFromString("execute:"), with: ["oper
     if (manifest[key] !== containedManifest[key])
       throw new Error("Contained role package identity changed");
   process.stdout.write(
-    `${JSON.stringify({ selectedRoleNativePayloadValidated: true, unselectedRolePayloadAbsent: true, eagerNativeLinkageAbsent: true, relocatedLazyNativeInferenceLoaded: true, strictSignedRolesValidated: true })}\n`,
+    `${JSON.stringify({ selectedRoleNativePayloadValidated: true, unselectedRolePayloadAbsent: true, eagerNativeLinkageAbsent: true, relocatedLazyNativeInferenceLoaded: true, strictSignedRolesValidated: true, privateNativeImagesIsolated: true })}\n`,
   );
 } finally {
   await rm(root, { recursive: true, force: true });
