@@ -2,7 +2,7 @@
 
 [CLI reference](../README.md) | [MCP](./README.md)
 
-Show which agent clients have Edith's MCP server registered. Settings > Agents
+Show which agent clients have Edith's MCP server registered. Settings > Connect agents
 shows the same report as Connected, Points at another Edith, Not connected or
 Needs manual setup.
 

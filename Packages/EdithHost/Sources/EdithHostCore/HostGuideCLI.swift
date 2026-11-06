@@ -727,7 +727,7 @@ public enum HostGuideCLI {
         ed mcp uninstall --client all   remove it again
         ```
 
-        Settings > Agents in the Edith window does the same with a Connect button per
+        Settings > Connect agents in the Edith window does the same with a Connect button per
         client.
 
         ## Completions
@@ -778,7 +778,7 @@ public enum HostGuideCLI {
         ed mcp uninstall --client all               remove it from every client
         ```
 
-        A person can do the same from Settings > Agents in the Edith window.
+        A person can do the same from Settings > Connect agents in the Edith window.
 
         Each client gets a stdio server named `edith` that runs this app's `ed mcp`.
         Claude Code is registered with its own `claude mcp add --scope user`, and Codex

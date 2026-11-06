@@ -32,7 +32,8 @@ struct HostAgentsSettingsPage: View {
 
     var body: some View {
         PageLoading(
-            state: model.load.state, title: "Agents", errorTitle: "Could not read agent settings",
+            state: model.load.state, title: "Connect agents",
+            errorTitle: "Could not read agent settings",
             layout: .form, retry: { Task { await model.refresh() } }
         ) {
             Form {
@@ -42,7 +43,7 @@ struct HostAgentsSettingsPage: View {
             }
             .edithForm()
         }
-        .navigationTitle("Agents")
+        .navigationTitle("Connect agents")
         .pageTask(cancel: model.cancel) { await model.refresh() }
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
