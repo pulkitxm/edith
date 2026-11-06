@@ -40,21 +40,6 @@ import Testing
                 == parent)
     }
 
-    @Test func helperRefusalsKeepTheirMessageAcrossTheConnection() throws {
-        func received(_ error: any Error) throws -> String {
-            let data = try NSKeyedArchiver.archivedData(
-                withRootObject: HostPrivilegedSession.wire(error), requiringSecureCoding: true)
-            return try #require(
-                try NSKeyedUnarchiver.unarchivedObject(ofClass: NSError.self, from: data)
-            ).localizedDescription
-        }
-        #expect(
-            try received(ExtensionPeerError.rejected("Synthetic refusal.")) == "Synthetic refusal.")
-        #expect(
-            try received(HostWorkerError.disableRejected("Synthetic worker refusal."))
-                == "Synthetic worker refusal.")
-    }
-
     @Test func unauthorizedCallersNeverReserveAnOwnerOrCopyTheirPayload() async throws {
         let fixture = try Fixture(mode: "normal")
         defer { fixture.clean() }
@@ -161,6 +146,24 @@ import Testing
         fixture.authorized = true
         try await release(session)
         #expect(fixture.ended)
+    }
+
+    @Test func helperRefusalsKeepTheirMessageAcrossTheConnection() throws {
+        func received(_ error: any Error) throws -> String {
+            let data = try NSKeyedArchiver.archivedData(
+                withRootObject: HostPrivilegedSession.wire(error), requiringSecureCoding: true)
+            return try #require(
+                try NSKeyedUnarchiver.unarchivedObject(ofClass: NSError.self, from: data)
+            ).localizedDescription
+        }
+        #expect(
+            try received(ExtensionPeerError.rejected("Synthetic refusal.")) == "Synthetic refusal.")
+        #expect(
+            try received(HostWorkerError.disableRejected("Synthetic worker refusal."))
+                == "Synthetic worker refusal.")
+        #expect(
+            try received(HostWorkerError.timedOut)
+                == "The extension process did not answer in time.")
     }
 
     @Test(arguments: ["stop-without-response", "late-stop", "stop-after-response-crash"])
