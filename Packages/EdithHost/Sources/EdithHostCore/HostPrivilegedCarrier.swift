@@ -53,10 +53,8 @@ import Security
                     try caller.authorize(source: source, owner: owner, version: version)
                 },
                 authorizeQuit: { [team] policy in
-                    guard callerIdentity.isAlive, hostIdentity.isAlive,
-                        policy.host == hostIdentity,
-                        callerIdentity == hostIdentity
-                            || Self.parentIdentity(of: callerIdentity.pid) == hostIdentity
+                    guard
+                        Self.authorizesQuit(policy, caller: callerIdentity, host: hostIdentity)
                     else { throw MarketplaceError.invalidSignature }
                     let host = try HostPrivilegedCaller.read(
                         processIdentifier: hostIdentity.pid, hostIdentifier: identifier, team: team)
@@ -93,6 +91,15 @@ import Security
         parent: (Int32) -> ExtensionProcessIdentity? = parentIdentity(of:)
     ) -> ExtensionProcessIdentity? {
         callerIsHost ? caller : parent(caller.pid)
+    }
+
+    nonisolated static func authorizesQuit(
+        _ policy: HostApplicationQuitPolicy, caller: ExtensionProcessIdentity,
+        host: ExtensionProcessIdentity,
+        parent: (Int32) -> ExtensionProcessIdentity? = parentIdentity(of:)
+    ) -> Bool {
+        caller.isAlive && host.isAlive && policy.host == host
+            && (caller == host || parent(caller.pid) == host)
     }
 
     nonisolated static func parentIdentity(of pid: Int32) -> ExtensionProcessIdentity? {

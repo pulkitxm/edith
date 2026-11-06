@@ -1,4 +1,3 @@
-import Darwin
 import EdithExtensionSupport
 import Foundation
 import ServiceManagement
@@ -39,14 +38,16 @@ struct LidAwakeApplicationQuitContext: Sendable {
             input["reason"] as? String == "applicationQuit",
             let pid = input["hostPID"] as? Int32,
             let generation = input["hostGeneration"] as? String,
-            let host = ExtensionProcessIdentity.read(pid), host.generation == generation,
-            pid == getppid()
+            let host = ExtensionProcessIdentity.current, host.pid == pid,
+            host.generation == generation
         else { return nil }
         self.host = host
     }
 
     func validate() throws {
-        guard host.isAlive, host.pid == getppid() else { throw ExtensionPeerError.invalidRequest }
+        guard host.isAlive, host == ExtensionProcessIdentity.current else {
+            throw ExtensionPeerError.invalidRequest
+        }
     }
 
     func encoded() throws -> Data {
