@@ -405,10 +405,14 @@ struct HostWorkflowPackageReview: Equatable {
         environment.changed()
     }
 
-    func openStorage() {
+    func openStorage() { openSettings("storage") }
+
+    func openAgents() { openSettings("mcp") }
+
+    private func openSettings(_ tab: String) {
         guard stage == .finished, !busy else { return }
         dismiss()
-        defaults.set("storage", forKey: AppStorageKeys.General.settingsTab)
+        defaults.set(tab, forKey: AppStorageKeys.General.settingsTab)
         defaults.set("settings", forKey: AppStorageKeys.General.mainWindowSection)
     }
 

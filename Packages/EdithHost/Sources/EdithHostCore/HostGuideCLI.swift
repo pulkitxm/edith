@@ -724,7 +724,11 @@ public enum HostGuideCLI {
         ed mcp install --client all     register it with every agent client found
         ed mcp install --client claude --dry-run   preview one client, write nothing
         ed mcp status                   which clients already have Edith registered
+        ed mcp uninstall --client all   remove it again
         ```
+
+        Settings > Agents in the Edith window does the same with a Connect button per
+        client.
 
         ## Completions
 
@@ -771,7 +775,10 @@ public enum HostGuideCLI {
         ed mcp install --client all                 every agent client found on this Mac
         ed mcp install --client claude              or codex, cursor, vscode
         ed mcp status                               what is registered where
+        ed mcp uninstall --client all               remove it from every client
         ```
+
+        A person can do the same from Settings > Agents in the Edith window.
 
         Each client gets a stdio server named `edith` that runs this app's `ed mcp`.
         Claude Code is registered with its own `claude mcp add --scope user`, and Codex

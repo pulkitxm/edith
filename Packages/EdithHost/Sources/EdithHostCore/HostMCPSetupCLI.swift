@@ -21,7 +21,8 @@ public struct HostMCPSetupCLI: Sendable {
     public func execute(_ arguments: [String]) throws -> ExtensionCLIReply {
         guard let action = arguments.first else {
             throw HostCLIError.usage(
-                "Run ed mcp install --client <name> to register Edith, or ed mcp status.")
+                "Run ed mcp install --client <name> to register Edith, ed mcp uninstall --client <name> to remove it, or ed mcp status."
+            )
         }
         let args = try HostCLIArguments(
             Array(arguments.dropFirst()), flags: ["--json", "--dry-run"],
@@ -34,9 +35,13 @@ public struct HostMCPSetupCLI: Sendable {
             try args.require(
                 words: 0...0, flags: ["--json", "--dry-run"], options: ["--client", "--command"])
             return try install(args)
+        case "uninstall":
+            try args.require(
+                words: 0...0, flags: ["--json", "--dry-run"], options: ["--client", "--command"])
+            return try uninstall(args)
         default:
             throw HostCLIError.usage(
-                "Unknown mcp command \(action). Use ed mcp install or ed mcp status; ed mcp alone serves MCP over stdio."
+                "Unknown mcp command \(action). Use ed mcp install, ed mcp uninstall or ed mcp status; ed mcp alone serves MCP over stdio."
             )
         }
     }
@@ -95,47 +100,105 @@ public struct HostMCPSetupCLI: Sendable {
         return try HostCLIOutput.text(table + "\n\n" + hint)
     }
 
-    private func install(_ args: HostCLIArguments) throws -> ExtensionCLIReply {
+    private func clients(_ args: HostCLIArguments) throws -> [HostMCPClient]? {
         guard let name = args.options["--client"] else {
             throw HostCLIError.usage("Pass --client with \(Self.clientNames).")
         }
-        let clients: [HostMCPClient]
-        if name == "all" {
-            clients = HostMCPClient.allCases
-        } else if let client = HostMCPClient(rawValue: name.lowercased()) {
-            clients = [client]
-        } else {
+        if name == "all" { return nil }
+        guard let client = HostMCPClient(rawValue: name.lowercased()) else {
             throw HostCLIError.usage("Unknown client \(name). Use \(Self.clientNames).")
         }
+        return [client]
+    }
+
+    private func json(
+        _ outcomes: [HostMCPInstaller.Outcome], command: String, dryRun: Bool, failed: Bool
+    ) throws -> ExtensionCLIReply {
+        let value = HostCLIJSON.object([
+            "command": .string(command), "dryRun": .bool(dryRun),
+            "clients": .array(
+                outcomes.map {
+                    .object([
+                        "client": .string($0.client.rawValue),
+                        "path": .string($0.path),
+                        "action": .string($0.action.rawValue),
+                        "applied": .bool($0.applied),
+                        "snippet": .string($0.snippet),
+                        "run": $0.run.map(HostCLIJSON.strings) ?? .null,
+                        "note": $0.note.map(HostCLIJSON.string) ?? .null,
+                        "backup": $0.backup.map(HostCLIJSON.string) ?? .null,
+                    ])
+                }),
+        ])
+        return try ExtensionCLIReply(
+            stdout: String(decoding: try value.encoded(), as: UTF8.self) + "\n", stderr: "",
+            exitCode: failed ? 1 : 0)
+    }
+
+    private func uninstall(_ args: HostCLIArguments) throws -> ExtensionCLIReply {
+        let clients = try clients(args)
         let dryRun = args.flags.contains("--dry-run")
-        let explicit = name != "all"
         let (installer, command) = try installer(args)
-        let outcomes = clients.map {
-            installer.install($0, dryRun: dryRun, onlyIfPresent: !explicit)
-        }
+        let outcomes = installer.uninstall(clients, dryRun: dryRun)
         let failed = outcomes.contains {
-            $0.action == .skipped || explicit && $0.action == .manual
+            $0.action == .skipped || clients != nil && $0.action == .manual
         }
         if args.flags.contains("--json") {
-            let value = HostCLIJSON.object([
-                "command": .string(command), "dryRun": .bool(dryRun),
-                "clients": .array(
-                    outcomes.map {
-                        .object([
-                            "client": .string($0.client.rawValue),
-                            "path": .string($0.path),
-                            "action": .string($0.action.rawValue),
-                            "applied": .bool($0.applied),
-                            "snippet": .string($0.snippet),
-                            "run": $0.run.map(HostCLIJSON.strings) ?? .null,
-                            "note": $0.note.map(HostCLIJSON.string) ?? .null,
-                            "backup": $0.backup.map(HostCLIJSON.string) ?? .null,
-                        ])
-                    }),
-            ])
-            return try ExtensionCLIReply(
-                stdout: String(decoding: try value.encoded(), as: UTF8.self) + "\n", stderr: "",
-                exitCode: failed ? 1 : 0)
+            return try json(outcomes, command: command, dryRun: dryRun, failed: failed)
+        }
+        var out = outcomes.map { describeRemoval($0, dryRun: dryRun) }
+        let restart = outcomes.filter { $0.applied }.map(\.client.title)
+        if dryRun, outcomes.contains(where: { $0.action == .removed }) {
+            out.append("Nothing was changed. Run the same command without --dry-run to apply.")
+        } else if !restart.isEmpty {
+            out.append("Restart \(Self.list(restart)) to unload Edith.")
+        } else if outcomes.allSatisfy({ $0.action == .unchanged }) {
+            out.append("Edith is not registered with any agent client, so nothing changed.")
+        }
+        let err = outcomes.filter { $0.action == .skipped }.map {
+            "error: \($0.client.title): \($0.note ?? "not removed")\n"
+        }
+        return try ExtensionCLIReply(
+            stdout: out.joined(separator: "\n\n") + "\n", stderr: err.joined(),
+            exitCode: failed ? 1 : 0)
+    }
+
+    private func describeRemoval(_ outcome: HostMCPInstaller.Outcome, dryRun: Bool) -> String {
+        let title = outcome.client.title
+        let path = display(outcome.path)
+        switch outcome.action {
+        case .removed:
+            if let run = outcome.runLine {
+                return dryRun
+                    ? "\(title): would run\n  \(run)" : "\(title): removed Edith with\n  \(run)"
+            }
+            if dryRun { return "\(title): would remove Edith from \(path)" }
+            let backup = outcome.backup.map { ", previous file saved as \(display($0))" } ?? ""
+            return "\(title): removed Edith from \(path)\(backup)"
+        case .manual:
+            let note = outcome.note ?? "not removed."
+            return "\(title): \(note) Run it yourself:\n  \(outcome.runLine ?? "")"
+        case .skipped:
+            if let run = outcome.runLine, !outcome.client.editsFileWithoutTool {
+                return "\(title): not removed. Run it yourself:\n  \(run)"
+            }
+            return
+                "\(title): not removed. Delete the edith entry from \(path) yourself."
+        case .created, .updated, .unchanged, .notFound:
+            return "\(title): not registered, nothing to remove"
+        }
+    }
+
+    private func install(_ args: HostCLIArguments) throws -> ExtensionCLIReply {
+        let clients = try clients(args)
+        let dryRun = args.flags.contains("--dry-run")
+        let (installer, command) = try installer(args)
+        let outcomes = installer.install(clients, dryRun: dryRun)
+        let failed = outcomes.contains {
+            $0.action == .skipped || clients != nil && $0.action == .manual
+        }
+        if args.flags.contains("--json") {
+            return try json(outcomes, command: command, dryRun: dryRun, failed: failed)
         }
         var out = outcomes.map { describe($0, dryRun: dryRun) }
         let restart = outcomes.filter { $0.applied }.map(\.client.title)
@@ -187,6 +250,8 @@ public struct HostMCPSetupCLI: Sendable {
         case .manual:
             return
                 "\(title): \(outcome.note ?? "not registered.") Once \(title) is installed, run:\n  \(outcome.runLine ?? "")"
+        case .removed:
+            return "\(title): removed Edith from \(path)"
         case .created, .updated:
             let added = outcome.action == .created
             if let run = outcome.runLine {

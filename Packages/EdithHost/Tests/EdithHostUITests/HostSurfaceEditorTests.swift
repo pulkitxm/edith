@@ -506,7 +506,7 @@ import HostWorkerFixtureSupport
         #expect(
             HostNavigationCatalog.settings.map(\.id) == [
                 "general", "surfaces", "agentActivity", "permissions", "agent", "jev", "data",
-                "storage", "shortcuts", "terminal", "icloud", "updates",
+                "storage", "shortcuts", "terminal", "mcp", "icloud", "updates",
             ])
         #expect(
             HostNavigationCatalog.maintenance.map(\.id) == [
@@ -585,8 +585,7 @@ import HostWorkerFixtureSupport
         #expect(
             core.map(\.id) == [
                 "general", "surfaces", "permissions", "agent", "data", "storage", "shortcuts",
-                "terminal", "icloud",
-                "updates",
+                "terminal", "mcp", "icloud", "updates",
             ])
         #expect(core.first { $0.id == "terminal" }?.extensionID == nil)
         let installed = HostNavigationCatalog.settingsSections(

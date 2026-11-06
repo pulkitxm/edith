@@ -34,6 +34,10 @@ import Testing
         let services = try HostCoreServices(
             identity: fixture.marketplace.identity, marketplace: fixture.marketplace,
             togglePanel: {})
+        let agentsFixture = try HostAgentsFixture()
+        defer { agentsFixture.clean() }
+        let agents = agentsFixture.model()
+        await agents.refresh()
         for variant in Variant.all {
             let general = try await render(variant, name: "settings-general") {
                 settings("general") {
@@ -64,6 +68,10 @@ import Testing
                 settings("terminal") { HostToolingSettingsPage(defaults: fixture.defaults) }
             }
             expectBalanced(terminal, variant)
+            let agentsPane = try await render(variant, name: "settings-agents") {
+                settings("mcp") { HostAgentsSettingsPage(model: agents) }
+            }
+            expectBalanced(agentsPane, variant)
             try await render(variant, name: "settings-permissions") {
                 settings("permissions") {
                     HostPermissionsList(

@@ -59,6 +59,7 @@ struct HostGetStartedCard: View {
     let defaults: UserDefaults
     let finishSetup: (() -> Void)?
     let openPermissions: () -> Void
+    let openAgents: () -> Void
     let openExtensions: () -> Void
     let openExtension: (String) -> Void
     @AppStorage(HostSettingsCatalog.onboardingCompletedKey, store: SharedDefaults.store)
@@ -69,17 +70,18 @@ struct HostGetStartedCard: View {
     private var tried = false
     @AppStorage(HostSettingsCatalog.getStartedAgentKey, store: SharedDefaults.store)
     private var agentConnected = false
-    @State private var copied = false
     @Environment(\.colorScheme) private var scheme
 
     init(
         marketplace: HostMarketplace, permissions: HostPermissions, defaults: UserDefaults,
         finishSetup: (() -> Void)?, openPermissions: @escaping () -> Void,
-        openExtensions: @escaping () -> Void, openExtension: @escaping (String) -> Void
+        openAgents: @escaping () -> Void, openExtensions: @escaping () -> Void,
+        openExtension: @escaping (String) -> Void
     ) {
         self.marketplace = marketplace; self.permissions = permissions
         self.defaults = defaults; self.finishSetup = finishSetup
-        self.openPermissions = openPermissions; self.openExtensions = openExtensions
+        self.openPermissions = openPermissions; self.openAgents = openAgents
+        self.openExtensions = openExtensions
         self.openExtension = openExtension
         _onboardingCompleted = AppStorage(
             wrappedValue: false, HostSettingsCatalog.onboardingCompletedKey, store: defaults)
@@ -228,6 +230,12 @@ struct HostGetStartedCard: View {
                             step.done ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                     Text(copy.detail).font(.edithText(.caption)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let hint = copy.hint, !step.done {
+                        Text(hint).font(.edithText(.caption, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -249,6 +257,7 @@ struct HostGetStartedCard: View {
         let title: String
         let detail: String
         let action: PageAction?
+        var hint: String? = nil
     }
 
     private func copy(for kind: HostGetStartedStep.Kind, state: HostGetStarted) -> Copy {
@@ -282,16 +291,10 @@ struct HostGetStartedCard: View {
                 })
         case .agent:
             Copy(
-                title: "Connect an AI agent",
-                detail: copied
-                    ? "Copied. Paste it in a terminal to connect every agent on this Mac."
-                    : "Let Claude Code, Codex, Cursor or VS Code use your Edith extensions.",
-                action: PageAction(copied ? "Copy again" : "Copy setup command") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(HostGetStarted.agentCommand, forType: .string)
-                    copied = true
-                    agentConnected = true
-                })
+                title: "Connect your coding agents",
+                detail: "Let Claude Code, Codex, Cursor or VS Code use your Edith extensions.",
+                action: PageAction("Connect agents", perform: openAgents),
+                hint: "Or run " + HostGetStarted.agentCommand)
         }
     }
 }

@@ -2,7 +2,7 @@
 
 `ed mcp` serves every Edith operation to an agent over MCP stdio.
 [`ed mcp install`](./install.md) registers it with Claude Code, Codex, Cursor and
-VS Code in one step.
+VS Code in one step, and [`ed mcp uninstall`](./uninstall.md) removes it again.
 
 ```
 ed mcp
@@ -29,7 +29,16 @@ here too, so one registration covers both surfaces.
 
 ## Registering it
 
-One command registers Edith with every agent client found on this Mac, using the
+The easiest way is Settings > Agents in the Edith window, also reachable from the
+Get Started card on Home and from the last onboarding step. It lists Claude Code,
+Codex, Cursor and VS Code, says whether each one is installed on this Mac and
+whether it is Connected, Not connected, Points at another Edith (the entry runs a
+different `ed`, such as a moved app or a development build) or Needs manual setup.
+Connect, Connect all and Disconnect run the same code as the commands below, and a
+step Edith cannot do for you shows the exact snippet with a Copy button. Open it
+from a terminal with `ed app reveal settings --tab mcp`.
+
+From a terminal, one command registers Edith with every agent client found on this Mac, using the
 `ed` inside the installed app:
 
 ```
@@ -55,8 +64,8 @@ args = ["mcp"]
 
 Cursor gets `mcpServers.edith` in `~/.cursor/mcp.json`, and VS Code gets
 `servers.edith` with `"type": "stdio"` in its user `mcp.json`. See
-[`ed mcp install`](./install.md) and [`ed mcp status`](./status.md). Restart the
-client afterwards.
+[`ed mcp install`](./install.md), [`ed mcp uninstall`](./uninstall.md) and
+[`ed mcp status`](./status.md). Restart the client afterwards.
 
 ## How an agent should use it
 
