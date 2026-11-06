@@ -5,10 +5,10 @@ import Testing
 
 func fixturePackage(
     _ id: String = "keepAwake", version: String = "1.0.0", hostABI: String = "host-1",
-    dependencies: [String] = [], url: String? = nil
+    dependencies: [String] = [], url: String? = nil, minimumHostBuild: Int? = nil
 ) -> ExtensionPackage {
     ExtensionPackage(
-        id: id, version: version, hostABI: hostABI,
+        id: id, version: version, hostABI: hostABI, minimumHostBuild: minimumHostBuild,
         downloadURL: URL(
             string: url
                 ?? "https://github.com/example/app/releases/download/extension-\(id)-\(version)/\(id).zip"
@@ -51,6 +51,62 @@ func fixturePackage(
         try catalog.installationPlan(
             for: "keepAwake", hostABI: "host-3", architecture: "arm64",
             systemVersion: .init(major: 14))
+    }
+}
+
+@Test func buildsNeedingANewerHostAreSkippedForTheLastCompatibleVersion() throws {
+    let payload = Data(
+        """
+        {"schemaVersion":1,"revision":7,"packages":[
+        {"id":"usage","version":"1.0.2","hostABI":"edith-host-11","architecture":"arm64",
+        "minimumSystemVersion":"14.0.0",
+        "downloadURL":"https://github.com/example/app/releases/download/usage-1.0.2/usage.zip",
+        "sha256":"\(String(repeating: "a", count: 64))","downloadBytes":1024,
+        "installedBytes":2048,"dependencies":[]},
+        {"id":"usage","version":"1.0.3","hostABI":"edith-host-11","architecture":"arm64",
+        "minimumSystemVersion":"14.0.0","minimumHostBuild":396,
+        "downloadURL":"https://github.com/example/app/releases/download/usage-1.0.3/usage.zip",
+        "sha256":"\(String(repeating: "b", count: 64))","downloadBytes":1024,
+        "installedBytes":2048,"dependencies":[]}]}
+        """.utf8)
+    let catalog = try JSONDecoder().decode(ExtensionCatalog.self, from: payload)
+    try catalog.validate(repository: "example/app")
+    #expect(catalog.packages.map(\.minimumHostBuild) == [nil, 396])
+    func selected(hostBuild: Int) throws -> String? {
+        try catalog.installationPlan(
+            for: "usage", hostABI: "edith-host-11", architecture: "arm64",
+            systemVersion: .init(major: 14), hostBuild: hostBuild
+        ).last?.version
+    }
+    #expect(try selected(hostBuild: 395) == "1.0.2")
+    #expect(try selected(hostBuild: 396) == "1.0.3")
+    #expect(
+        !catalog.packages[1].isCompatible(
+            hostABI: "edith-host-11", architecture: "arm64", systemVersion: .init(major: 14),
+            hostBuild: 395))
+    #expect(throws: MarketplaceError.incompatiblePackage) {
+        try catalog.packages[1].admitting(
+            hostABI: "edith-host-11", architecture: "arm64", systemVersion: .init(major: 14),
+            hostBuild: 395
+        ) {}
+    }
+}
+
+@Test func packagesWithoutAHostBuildRequirementKeepTheirEncodedShape() throws {
+    let package = fixturePackage()
+    let encoded = try JSONEncoder().encode(package)
+    #expect(!String(decoding: encoded, as: UTF8.self).contains("minimumHostBuild"))
+    #expect(try JSONDecoder().decode(ExtensionPackage.self, from: encoded) == package)
+    #expect(
+        package.isCompatible(
+            hostABI: "host-1", architecture: "arm64", systemVersion: .init(major: 14),
+            hostBuild: 0))
+}
+
+@Test(arguments: [0, -1])
+func invalidHostBuildRequirementsAreRejected(_ build: Int) {
+    #expect(throws: MarketplaceError.invalidCatalog) {
+        try fixturePackage(url: nil, minimumHostBuild: build).validate(repository: "example/app")
     }
 }
 

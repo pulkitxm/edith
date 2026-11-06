@@ -20,6 +20,7 @@ import {
 } from "./build-extension-support.mjs";
 import { verifyExtensionNativeDependencies } from "./extension-ghostty-native.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
+import { minimumHostBuild } from "./extension-host-build.mjs";
 import {
   extensionFingerprint,
   extensionReleaseTag,
@@ -396,6 +397,7 @@ export async function buildExtensionPackage({
   const identity = environment.EXTENSION_SIGN_IDENTITY;
   if (!development && !identity?.startsWith("Developer ID Application: "))
     throw new Error("A Developer ID Application signing identity is required");
+  const requiredHostBuild = development ? undefined : minimumHostBuild(root);
   const fingerprint = await extensionFingerprint(root, definition, definitions);
   const tag =
     tagOverride ??
@@ -843,6 +845,9 @@ export async function buildExtensionPackage({
     hostABI: definition.hostABI,
     architecture: "arm64",
     dependencies: definition.dependencies,
+    ...(requiredHostBuild === undefined
+      ? {}
+      : { minimumHostBuild: requiredHostBuild }),
   };
   await writeFile(
     resolve(payload, "package.json"),

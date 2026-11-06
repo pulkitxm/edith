@@ -44,12 +44,14 @@ public struct ExtensionPackageStore: Sendable {
     public func installedPackage(
         id: String, hostABI: String, architecture: String, version: String? = nil,
         systemVersion: ExtensionSystemVersion = .init(
-            ProcessInfo.processInfo.operatingSystemVersion)
+            ProcessInfo.processInfo.operatingSystemVersion),
+        hostBuild: Int = ExtensionHostBuild.current
     ) throws -> ExtensionPackage? {
         let compatible = try installedPackages().filter {
             $0.id == id && (version == nil || $0.version == version)
                 && $0.isCompatible(
-                    hostABI: hostABI, architecture: architecture, systemVersion: systemVersion)
+                    hostABI: hostABI, architecture: architecture, systemVersion: systemVersion,
+                    hostBuild: hostBuild)
         }
         if let selected = try selections().first(where: { compatible.contains($0) }) {
             return selected
@@ -263,7 +265,8 @@ public struct ExtensionPackageStore: Sendable {
     public func prune(
         hostABI: String,
         systemVersion: ExtensionSystemVersion = .init(
-            ProcessInfo.processInfo.operatingSystemVersion)
+            ProcessInfo.processInfo.operatingSystemVersion),
+        hostBuild: Int = ExtensionHostBuild.current
     ) throws {
         let operation = try PackageFileLock(
             url: root.appendingPathComponent(".operation.lock"), exclusive: true)
@@ -282,7 +285,7 @@ public struct ExtensionPackageStore: Sendable {
             }
             let compatible = ordered.filter {
                 ExtensionHostABI.accepts($0.hostABI, host: hostABI)
-                    && $0.minimumSystemVersion <= systemVersion
+                    && $0.minimumSystemVersion <= systemVersion && $0.supports(hostBuild: hostBuild)
             }
             let keep =
                 (compatible.isEmpty ? Array(ordered.prefix(2)) : Array(compatible.prefix(2)))

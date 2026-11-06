@@ -63,12 +63,19 @@ public enum ExtensionHostABI {
     }
 }
 
+public enum ExtensionHostBuild {
+    public static let current =
+        Int(
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") ?? 0
+}
+
 public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let version: String
     public let hostABI: String
     public let architecture: String
     public let minimumSystemVersion: ExtensionSystemVersion
+    public let minimumHostBuild: Int?
     public let downloadURL: URL
     public let sha256: String
     public let downloadBytes: Int64
@@ -77,8 +84,8 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
 
     public init(
         id: String, version: String, hostABI: String, architecture: String = "arm64",
-        minimumSystemVersion: ExtensionSystemVersion = .init(major: 14), downloadURL: URL,
-        sha256: String,
+        minimumSystemVersion: ExtensionSystemVersion = .init(major: 14),
+        minimumHostBuild: Int? = nil, downloadURL: URL, sha256: String,
         downloadBytes: Int64, installedBytes: Int64, dependencies: [String] = []
     ) {
         self.id = id
@@ -86,6 +93,7 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
         self.hostABI = hostABI
         self.architecture = architecture
         self.minimumSystemVersion = minimumSystemVersion
+        self.minimumHostBuild = minimumHostBuild
         self.downloadURL = downloadURL
         self.sha256 = sha256
         self.downloadBytes = downloadBytes
@@ -103,19 +111,26 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
             } && value != "." && value != ".." && !value.hasPrefix(".")
     }
 
+    public func supports(hostBuild: Int) -> Bool {
+        (minimumHostBuild ?? 0) <= hostBuild
+    }
+
     public func isCompatible(
-        hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion
+        hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion,
+        hostBuild: Int = ExtensionHostBuild.current
     ) -> Bool {
         ExtensionHostABI.accepts(self.hostABI, host: hostABI) && self.architecture == architecture
-            && systemVersion >= minimumSystemVersion
+            && systemVersion >= minimumSystemVersion && supports(hostBuild: hostBuild)
     }
 
     public func admitting<Result>(
         hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion,
-        operation: () throws -> Result
+        hostBuild: Int = ExtensionHostBuild.current, operation: () throws -> Result
     ) throws -> Result {
         guard
-            isCompatible(hostABI: hostABI, architecture: architecture, systemVersion: systemVersion)
+            isCompatible(
+                hostABI: hostABI, architecture: architecture, systemVersion: systemVersion,
+                hostBuild: hostBuild)
         else { throw MarketplaceError.incompatiblePackage }
         return try operation()
     }
@@ -127,7 +142,7 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
                 !$0.isEmpty && $0.allSatisfy({ $0.isASCII && $0.isNumber })
             }),
             architecture == "arm64" || architecture == "x86_64",
-            minimumSystemVersion >= .init(major: 14),
+            minimumSystemVersion >= .init(major: 14), (minimumHostBuild ?? 1) > 0,
             downloadBytes > 0, downloadBytes <= 512 * 1024 * 1024,
             installedBytes > 0, installedBytes <= 1024 * 1024 * 1024,
             sha256.count == 64, sha256.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
@@ -182,7 +197,9 @@ public struct ExtensionCatalog: Codable, Equatable, Sendable {
     }
 
     public func installationPlan(
-        for id: String, hostABI: String, architecture: String, systemVersion: ExtensionSystemVersion
+        for id: String, hostABI: String, architecture: String,
+        systemVersion: ExtensionSystemVersion,
+        hostBuild: Int = ExtensionHostBuild.current
     ) throws -> [ExtensionPackage] {
         var result: [ExtensionPackage] = []
         var visiting = Set<String>()
@@ -195,7 +212,7 @@ public struct ExtensionCatalog: Codable, Equatable, Sendable {
                     $0.id == id
                         && $0.isCompatible(
                             hostABI: hostABI, architecture: architecture,
-                            systemVersion: systemVersion)
+                            systemVersion: systemVersion, hostBuild: hostBuild)
                 }).max(by: {
                     $0.version.compare($1.version, options: .numeric) == .orderedAscending
                 })
