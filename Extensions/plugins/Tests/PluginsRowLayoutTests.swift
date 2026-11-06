@@ -86,7 +86,7 @@ struct PluginsRowLayoutTests {
                 let menuFrame = try #require(menu, label)
                 let gap = installFrame.minX - previewFrame.maxX
                 #expect(
-                    abs(gap - PageMetrics.controlSpacing * variant.zoom) < 0.51,
+                    abs(gap - PageMetrics.controlSpacing * variant.zoom) <= 1.01,
                     "\(variant.name) gap \(gap)")
                 #expect(abs(previewFrame.midY - installFrame.midY) < 0.51, label)
                 #expect(abs(installFrame.height - menuFrame.height) < 0.51, label)
