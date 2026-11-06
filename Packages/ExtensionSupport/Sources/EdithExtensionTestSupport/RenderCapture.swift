@@ -70,6 +70,8 @@ public enum RenderCapture {
         }
     }
 
+    private static let blankGrace = Duration.seconds(5)
+
     @TaskLocal private static var holdsScale = false
     private static var scaleHeld = false
     private static var scaleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -92,12 +94,33 @@ public enum RenderCapture {
         return try await $holdsScale.withValue(true) { try await body() }
     }
 
+    public static func withScale<T>(_ zoom: Double, _ body: @MainActor () async throws -> T)
+        async rethrows -> T
+    {
+        try await exclusiveScale {
+            let defaults = ExtensionScope.process.defaults()
+            let storedZoom = defaults.object(forKey: WindowZoom.defaultsKey)
+            let storedScale = UIScale.current
+            defaults.set(zoom, forKey: WindowZoom.defaultsKey)
+            UIScale.apply(zoom)
+            defer {
+                UIScale.apply(storedScale)
+                if let storedZoom {
+                    defaults.set(storedZoom, forKey: WindowZoom.defaultsKey)
+                } else {
+                    defaults.removeObject(forKey: WindowZoom.defaultsKey)
+                }
+            }
+            return try await body()
+        }
+    }
+
     @discardableResult
     public static func render<Content: View>(
         _ name: String, variant: Variant, settle: Duration = .milliseconds(450),
         @ViewBuilder content: () -> Content
     ) async throws -> Rendered {
-        try await exclusiveScale {
+        try await withScale(variant.zoom) {
             try await renderHoldingScale(name, variant: variant, settle: settle, content: content)
         }
     }
@@ -107,19 +130,6 @@ public enum RenderCapture {
         @ViewBuilder content: () -> Content
     ) async throws -> Rendered {
         let label = "\(name)-\(variant.name)"
-        let defaults = ExtensionScope.process.defaults()
-        let storedZoom = defaults.object(forKey: WindowZoom.defaultsKey)
-        let storedScale = UIScale.current
-        defaults.set(variant.zoom, forKey: WindowZoom.defaultsKey)
-        UIScale.apply(variant.zoom)
-        defer {
-            UIScale.apply(storedScale)
-            if let storedZoom {
-                defaults.set(storedZoom, forKey: WindowZoom.defaultsKey)
-            } else {
-                defaults.removeObject(forKey: WindowZoom.defaultsKey)
-            }
-        }
         let state = ExtensionPresentationState(
             compact: variant.compact, visible: false, availableWidth: variant.width,
             intrinsic: false)
@@ -150,19 +160,28 @@ public enum RenderCapture {
             TextEditingCommands.shutdown()
         }
         try await Task.sleep(for: settle)
-        window.layoutIfNeeded()
-        host.layoutSubtreeIfNeeded()
-        CATransaction.flush()
-        guard !TestWindowHost.isExposedOnDesktop(window) else {
-            throw RenderCaptureError.exposedOnDesktop(label)
+        let capture = { () throws -> NSBitmapImageRep in
+            window.layoutIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            CATransaction.flush()
+            guard !TestWindowHost.isExposedOnDesktop(window) else {
+                throw RenderCaptureError.exposedOnDesktop(label)
+            }
+            guard host.bounds.size == variant.size else {
+                throw RenderCaptureError.wrongSize(label, host.bounds.size)
+            }
+            guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+                throw RenderCaptureError.missingBitmap(label)
+            }
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            return bitmap
         }
-        guard host.bounds.size == variant.size else {
-            throw RenderCaptureError.wrongSize(label, host.bounds.size)
+        var bitmap = try capture()
+        let deadline = ContinuousClock.now + blankGrace
+        while distinctColors(bitmap) <= 1, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+            bitmap = try capture()
         }
-        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
-            throw RenderCaptureError.missingBitmap(label)
-        }
-        host.cacheDisplay(in: host.bounds, to: bitmap)
         guard distinctColors(bitmap) > 1 else { throw RenderCaptureError.blank(label) }
         if let directory {
             try FileManager.default.createDirectory(

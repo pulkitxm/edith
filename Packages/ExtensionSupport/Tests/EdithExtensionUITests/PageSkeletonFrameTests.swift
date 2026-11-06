@@ -97,7 +97,7 @@ private struct SyntheticForm: View {
 }
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .exclusiveScale)
 struct PageSkeletonFrameTests {
     private static let tolerance = 2
     private static let settle = ContentActivityTiming.placeholderDelay + .milliseconds(600)
@@ -182,15 +182,16 @@ struct PageSkeletonFrameTests {
                 "skeleton-frame-form-page", variant: variant, floor: 0,
                 loading: { PageSkeleton(layout: .form).pageSurface() },
                 content: { SyntheticForm().pageSurface() })
-            let column = UIScale.pt(PageMetrics.formWidth)
             try await Self.compare(
                 "skeleton-frame-form-column", variant: variant, floor: 0,
                 loading: {
-                    PageSkeleton(layout: .form).frame(maxWidth: column, maxHeight: .infinity)
+                    PageSkeleton(layout: .form)
+                        .frame(maxWidth: UIScale.pt(PageMetrics.formWidth), maxHeight: .infinity)
                         .frame(maxWidth: .infinity).pageSurface()
                 },
                 content: {
-                    SyntheticForm().frame(maxWidth: column, maxHeight: .infinity)
+                    SyntheticForm()
+                        .frame(maxWidth: UIScale.pt(PageMetrics.formWidth), maxHeight: .infinity)
                         .frame(maxWidth: .infinity).pageSurface()
                 })
         }

@@ -388,7 +388,7 @@ struct DesignSystemGallery {
 }
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .exclusiveScale)
 struct DesignSystemGalleryTests {
     @Test func galleryRendersEveryComponentWithoutHorizontalOverflow() async throws {
         let previous = UIScale.current

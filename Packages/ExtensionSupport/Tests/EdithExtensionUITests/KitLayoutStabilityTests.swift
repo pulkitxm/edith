@@ -20,7 +20,7 @@ private extension View {
     }
 }
 
-@MainActor @Suite(.serialized) struct SettingsFormRowTests {
+@MainActor @Suite(.serialized, .exclusiveScale) struct SettingsFormRowTests {
     private struct Rows: View {
         let probe: RowProbe
         @State private var on = true
@@ -101,7 +101,7 @@ private extension View {
     }
 }
 
-@MainActor @Suite(.serialized) struct SearchFieldStabilityTests {
+@MainActor @Suite(.serialized, .exclusiveScale) struct SearchFieldStabilityTests {
     private struct Field: View {
         let compact: Bool
         let text: String
@@ -118,7 +118,7 @@ private extension View {
     }
 }
 
-@MainActor @Suite(.serialized) struct PageViewportCenteringTests {
+@MainActor @Suite(.serialized, .exclusiveScale) struct PageViewportCenteringTests {
     private func marks(_ pinned: Bool) async throws -> (
         block: CGRect, header: CGRect, height: Double
     ) {
@@ -163,7 +163,7 @@ private extension View {
     }
 }
 
-@MainActor @Suite(.serialized) struct WorldClockAlignmentTests {
+@MainActor @Suite(.serialized, .exclusiveScale) struct WorldClockAlignmentTests {
     private func topInk(_ bitmap: NSBitmapImageRep, columns: Range<Int>) -> Int? {
         let scale = bitmap.pixelsWide / Int(bitmap.size.width)
         let luminance = { (x: Int, y: Int) -> Double in
