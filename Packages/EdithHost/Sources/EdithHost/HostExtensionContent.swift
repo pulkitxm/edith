@@ -48,6 +48,7 @@ struct HostExtensionContent: View {
     @Environment(\.windowVisible) private var visible
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.pageGuide) private var guide
 
     private var active: Bool { marketplace.surfaceAvailability.activeIDs.contains(extensionID) }
     private var transitioning: Bool {
@@ -108,15 +109,17 @@ struct HostExtensionContent: View {
     var body: some View {
         Group {
             if let controller {
-                HostEmbeddedController(controller: controller, compact: compact, visible: visible)
-                    .frame(height: contentHeight.map { CGFloat($0) })
-                    .clipped()
-                    .animation(
-                        animatesHeight && surface == nil
-                            ? Motion.animation(Motion.glide, reduceMotion: reduceMotion) : nil,
-                        value: contentHeight
-                    )
-                    .id(ObjectIdentifier(controller))
+                HostEmbeddedController(
+                    controller: controller, compact: compact, visible: visible, guide: guide
+                )
+                .frame(height: contentHeight.map { CGFloat($0) })
+                .clipped()
+                .animation(
+                    animatesHeight && surface == nil
+                        ? Motion.animation(Motion.glide, reduceMotion: reduceMotion) : nil,
+                    value: contentHeight
+                )
+                .id(ObjectIdentifier(controller))
             } else if transitioning {
                 loading("Preparing " + title)
             } else if !eligible {
@@ -285,8 +288,13 @@ struct HostEmbeddedController: NSViewControllerRepresentable {
     let controller: NSViewController
     let compact: Bool
     let visible: Bool
-    func makeNSViewController(context: Context) -> NSViewController { controller }
+    var guide: PageGuideAction? = nil
+    func makeNSViewController(context: Context) -> NSViewController {
+        PageGuideBridge.attach(guide, to: controller.view)
+        return controller
+    }
     func updateNSViewController(_ controller: NSViewController, context: Context) {
+        PageGuideBridge.attach(guide, to: controller.view)
         (controller as? HostRemoteViewController)?.apply(compact: compact, visible: visible)
     }
     func sizeThatFits(

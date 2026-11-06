@@ -115,7 +115,7 @@ import Testing
         }
     }
 
-    @Test func introductionAndReopenButtonSitInTheTitlebarStrip() async throws {
+    @Test func introductionLeavesTheTitlebarWithoutAnInfoButton() async throws {
         defer { windows.close() }
         let fixture = try Fixture(installed: ["calendar"], active: ["calendar"])
         defer { fixture.clean() }
@@ -136,91 +136,76 @@ import Testing
                 workspace(fixture)
             }
             #expect(find(seen, label: "Skip all introductions") == nil)
-            let toggle = try #require(frame(seen, label: "Toggle sidebar"))
-            let about = try #require(frame(seen, label: "About Calendar"))
-            let window = try #require(seen.window)
-            let top = window.convertToScreen(seen.convert(seen.bounds, to: nil)).maxY
-            let strip = HostTitlebarMetrics.stripHeight * variant.zoom
-            #expect(about.minY >= top - strip - 0.5)
-            #expect(about.maxY <= top + 0.5)
-            #expect(abs(about.midY - toggle.midY) <= 1)
-            #expect(abs(about.height - toggle.height) <= 0.5)
-            #expect(abs(about.width - toggle.width) <= 0.5)
-            let right = window.convertToScreen(seen.convert(seen.bounds, to: nil)).maxX
-            let gutters = [PageMetrics.gutter, PageMetrics.compactGutter].map { $0 * variant.zoom }
-            #expect(gutters.contains { abs(right - about.maxX - $0) <= 1 }, "\(variant.name)")
+            #expect(find(seen, label: "About Calendar") == nil)
         }
     }
 
-    @Test func reopenButtonMatchesTheSidebarToggleBesideAPageHeader() async throws {
+    static let guideVariants =
+        Variant.all + [
+            Variant(name: "zoom-dark", width: 1100, height: 760, zoom: 1.6, scheme: .dark),
+            Variant(name: "compact-zoom-dark", width: 900, height: 700, zoom: 1.6, scheme: .dark),
+        ]
+
+    @Test func extensionPageHeaderEndsWithTheIntroductionButton() async throws {
         defer { windows.close() }
         let fixture = try Fixture(installed: [])
         defer { fixture.clean() }
         let entry = try #require(HostIndex.bundled().first { $0.id == "herdr" && $0.guide != nil })
         HostIntroductions(defaults: fixture.defaults).markSeen(entry.id)
-        let variants =
-            Variant.all + [
-                Variant(name: "zoom-dark", width: 1100, height: 760, zoom: 1.6, scheme: .dark),
-                Variant(
-                    name: "compact-zoom-dark", width: 900, height: 700, zoom: 1.6, scheme: .dark),
-            ]
-        for variant in variants {
-            let host = try await render(variant, name: "reopen-header") {
-                HStack(spacing: 0) {
-                    Button {
-                    } label: {
-                        HostTitlebarButtonLabel(icon: .sidebarLeft)
+        for variant in Self.guideVariants {
+            let host = try await render(variant, name: "guide-header") {
+                HostIntroducedPage(entry: entry, defaults: fixture.defaults, showsReopen: true) {
+                    GuidedExtensionContent(scheme: variant.scheme) {
+                        PageWorkspace {
+                            PageHeader(title: { Text("Synthetic agents") }) {
+                                HStack(spacing: UIScale.pt(2)) {
+                                    PageToolbarButton(
+                                        action: {}, icon: .link, helperText: "Synthetic connections"
+                                    )
+                                    PageToolbarButton(
+                                        action: {}, icon: .search, helperText: "Synthetic search")
+                                }
+                            }
+                        } content: {
+                            Color.clear
+                        }
                     }
-                    .buttonStyle(.edith(.toolbar))
-                    .accessibilityLabel("Toggle sidebar")
-                    .frame(height: UIScale.pt(HostTitlebarMetrics.rowHeight))
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.horizontal, UIScale.pt(8))
-                    syntheticHeaderPage(entry, fixture: fixture, scheme: variant.scheme)
                 }
             }
-            let toggle = try #require(frame(host, label: "Toggle sidebar"))
-            let about = try #require(frame(host, label: "About " + entry.title))
+            let about = try #require(frame(host, label: "About " + entry.title), "\(variant.name)")
             let search = try #require(frame(host, label: "Synthetic search"))
-            #expect(abs(about.midY - toggle.midY) <= 1, "\(variant.name)")
-            #expect(abs(about.size.width - toggle.size.width) <= 0.5, "\(variant.name)")
-            #expect(abs(about.size.height - toggle.size.height) <= 0.5, "\(variant.name)")
-            #expect(abs(about.maxX - search.maxX) <= 1, "\(variant.name)")
+            #expect(abs(about.midY - search.midY) <= 1, "\(variant.name)")
+            #expect(about.minX >= search.maxX, "\(variant.name)")
+            #expect(abs(about.width - search.width) <= 0.5, "\(variant.name)")
+            #expect(abs(about.height - search.height) <= 0.5, "\(variant.name)")
         }
     }
 
-    private func syntheticHeaderPage(
-        _ entry: HostExtension, fixture: Fixture, scheme: ColorScheme
-    ) -> some View {
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-                DashSkin.paper(scheme == .dark)
-                    .frame(height: UIScale.pt(HostTitlebarMetrics.stripHeight))
+    @Test func headerlessExtensionPageGetsTheButtonAboveItsContent() async throws {
+        defer { windows.close() }
+        let fixture = try Fixture(installed: [])
+        defer { fixture.clean() }
+        let entry = try #require(
+            HostIndex.bundled().first { $0.id == "keepAwake" && $0.guide != nil })
+        HostIntroductions(defaults: fixture.defaults).markSeen(entry.id)
+        for variant in Self.guideVariants {
+            let host = try await render(variant, name: "guide-headerless") {
                 HostIntroducedPage(entry: entry, defaults: fixture.defaults, showsReopen: true) {
-                    PageWorkspace {
-                        PageHeader(title: { Text("Synthetic agents") }) {
-                            HStack(spacing: UIScale.pt(2)) {
-                                ForEach(
-                                    [
-                                        (EdithIcon.link, "Synthetic connections"),
-                                        (.send, "Synthetic message"), (.search, "Synthetic search"),
-                                    ], id: \.1
-                                ) { icon, label in
-                                    PageToolbarButton(action: {}, icon: icon, helperText: label)
-                                }
+                    GuidedExtensionContent(scheme: variant.scheme) {
+                        Form {
+                            Section {
+                                Toggle("Synthetic setting", isOn: .constant(true))
+                                    .accessibilityLabel("Synthetic setting")
                             }
                         }
-                    } content: {
-                        Color.clear
+                        .settingsForm()
                     }
                 }
-                .overlayPreferenceValue(HostIntroductionReopenKey.self, alignment: .topTrailing) {
-                    if let reopen = $0 { HostIntroductionReopenButton(reopen: reopen) }
-                }
             }
-            .environment(\.compactLayout, geometry.size.width < UIScale.pt(640))
+            let about = try #require(frame(host, label: "About " + entry.title), "\(variant.name)")
+            let setting = try #require(frame(host, label: "Synthetic setting"))
+            #expect(about.minY >= setting.maxY - 0.5, "\(variant.name)")
         }
-        .background(DashSkin.paper(scheme == .dark))
     }
 
     @Test func suiteLandingRendersInstalledAvailableAndError() async throws {
@@ -490,6 +475,30 @@ import Testing
             UserDefaults(suiteName: identity.defaultsSuite)?.removePersistentDomain(
                 forName: identity.defaultsSuite)
             try? FileManager.default.removeItem(at: directory)
+        }
+    }
+}
+
+private struct GuidedExtensionContent<Page: View>: View {
+    let scheme: ColorScheme
+    @ViewBuilder let page: () -> Page
+    @Environment(\.pageGuide) private var guide
+    @State private var controller: NSViewController?
+
+    var body: some View {
+        Group {
+            if let controller {
+                HostEmbeddedController(
+                    controller: controller, compact: false, visible: true, guide: guide)
+            } else {
+                Color.clear
+            }
+        }
+        .onAppear {
+            let hosted = NSHostingController(
+                rootView: ExtensionPageHost { page() }.environment(\.colorScheme, scheme))
+            hosted.view.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+            controller = hosted
         }
     }
 }
