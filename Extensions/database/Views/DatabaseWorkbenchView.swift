@@ -253,6 +253,7 @@ struct DatabaseWorkbenchView: View {
                         }
                     }
                 }
+                .buttonStyle(.edith(.row))
                 .themedSelection()
                 .frame(width: UIScale.pt(280), height: UIScale.pt(360))
             }

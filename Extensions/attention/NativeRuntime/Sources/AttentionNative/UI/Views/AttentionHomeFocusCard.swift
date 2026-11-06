@@ -73,6 +73,7 @@ import SwiftUI
             if let error {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(3)
                 Button("Retry") { retry += 1 }.font(.edithText(.caption))
+                    .buttonStyle(.edithDefault)
             }
             if load.hasContent || error == nil, !loading {
                 content

@@ -17,6 +17,8 @@ enum DownloadRowMetrics {
     static let rowHeight = 56.0
     static let groupInset = 6.0
     static let toolbarInset = 6.0
+    static let rowPadding = 10.0
+    static let rowLabelInset = 1.0
 
     static func height(of row: DownloadListRow) -> CGFloat {
         let insets =
@@ -718,35 +720,37 @@ struct DownloadSheet: View {
     ]
 
     private func itemRow(_ item: YoutubeDownloader.DownloadItem) -> some View {
-        HStack(spacing: UIScale.pt(12)) {
-            Button {
-                if case .done = item.status {
-                    downloader.openResult(item)
-                } else {
-                    logItem = item
-                }
-            } label: {
-                HStack(spacing: UIScale.pt(12)) {
-                    statusIcon(item.status)
-                        .frame(width: UIScale.pt(20), height: UIScale.pt(20))
-                    DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(32))
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        Text(item.resolvedTitle ?? displayURL(item.url))
-                            .font(.edithText(.callout).weight(.medium))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        statusDetail(item)
-                    }
-                    Spacer(minLength: UIScale.pt(8))
-                }
-                .contentShape(Rectangle())
+        Button {
+            if case .done = item.status {
+                downloader.openResult(item)
+            } else {
+                logItem = item
             }
-            .buttonStyle(.edith(.borderless))
-            .help(statusHelp(item))
-            itemActions(item)
+        } label: {
+            HStack(spacing: UIScale.pt(12)) {
+                statusIcon(item.status)
+                    .frame(width: UIScale.pt(20), height: UIScale.pt(20))
+                DownloadThumb(url: item.url, dark: dark, height: UIScale.pt(32))
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                    Text(item.resolvedTitle ?? displayURL(item.url))
+                        .font(.edithText(.callout).weight(.medium))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    statusDetail(item)
+                }
+                Spacer(minLength: UIScale.pt(8))
+                itemActions(item).hidden().accessibilityHidden(true)
+            }
+            .padding(.horizontal, UIScale.pt(DownloadRowMetrics.rowLabelInset))
+            .frame(maxHeight: .infinity)
         }
-        .padding(.horizontal, UIScale.pt(10))
+        .buttonStyle(.edith(.row))
+        .help(statusHelp(item))
+        .overlay(alignment: .trailing) {
+            itemActions(item)
+                .padding(.trailing, UIScale.pt(DownloadRowMetrics.rowPadding))
+        }
         .frame(height: UIScale.pt(DownloadRowMetrics.rowHeight))
     }
 

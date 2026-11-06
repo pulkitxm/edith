@@ -33,7 +33,10 @@ struct HerdrFilterButton: View {
                 )
                 .overlay(alignment: .topTrailing) { badge }
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+        )
         .accessibilityLabel("Filter sessions")
         .accessibilityValue(
             HerdrSessionFilters.summary(of: chips)

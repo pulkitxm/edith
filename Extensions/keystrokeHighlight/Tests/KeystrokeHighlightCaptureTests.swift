@@ -43,6 +43,40 @@ import Testing
         }
     }
 
+    @Test func keysDrawOneCleanGlyphWithoutAnAccentGhost() async throws {
+        func render(_ key: String) async throws -> NSBitmapImageRep {
+            let entries = [KeystrokeHighlightEntry(keys: [key], expiresAt: .distantFuture)]
+            return try await RenderCapture.render(
+                "keystroke-glyph",
+                variant: RenderCapture.Variant(
+                    name: "glyph-dark", width: 400, height: 240, zoom: 1, scheme: .dark)
+            ) {
+                KeystrokeHighlightStage(entries: entries, position: .bottom)
+                    .environment(\.colorScheme, .dark)
+            }.bitmap
+        }
+        let glyph = try await render("4")
+        let blank = try await render(" ")
+        var changed = 0
+        var tinted = 0
+        for y in 0..<glyph.pixelsHigh {
+            for x in 0..<glyph.pixelsWide {
+                guard let color = glyph.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+                    let empty = blank.colorAt(x: x, y: y)?.usingColorSpace(.sRGB)
+                else { continue }
+                let channels = [color.redComponent, color.greenComponent, color.blueComponent]
+                let base = [empty.redComponent, empty.greenComponent, empty.blueComponent]
+                guard zip(channels, base).contains(where: { abs($0 - $1) > 0.03 }) else {
+                    continue
+                }
+                changed += 1
+                if (channels.max() ?? 0) - (channels.min() ?? 0) > 0.2 { tinted += 1 }
+            }
+        }
+        #expect(changed > 0)
+        #expect(tinted == 0)
+    }
+
     private static func edgesAreClear(_ bitmap: NSBitmapImageRep) -> Bool {
         let inset = 16 * bitmap.pixelsWide / Int(bitmap.size.width)
         let background = bitmap.colorAt(x: 0, y: 0)

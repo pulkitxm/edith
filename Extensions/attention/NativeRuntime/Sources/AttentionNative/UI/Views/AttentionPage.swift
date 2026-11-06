@@ -693,5 +693,6 @@ struct BrowserInstallCard: View {
             )
             .font(.edithText(.subheadline)).foregroundStyle(.secondary)
         }
+        .buttonStyle(.edithDefault)
     }
 }

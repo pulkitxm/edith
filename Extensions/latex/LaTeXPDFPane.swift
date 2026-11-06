@@ -47,6 +47,7 @@ struct LaTeXPDFPane: View {
                     Button("Open PDF") { delivery(false) }; Spacer()
                     Button("Save PDF as…") { delivery(true) }
                 }
+                .buttonStyle(.edithDefault)
             } else if let url {
                 HStack {
                     Button("Open PDF") { NSWorkspace.shared.open(url) }
@@ -61,6 +62,7 @@ struct LaTeXPDFPane: View {
                         }
                     }
                 }
+                .buttonStyle(.edithDefault)
             }
         }
     }
@@ -81,6 +83,7 @@ struct LaTeXPDFPane: View {
             }
             .help("Next page").disabled(controls.page >= controls.count)
         }
+        .buttonStyle(.edith(.toolbar))
     }
     private var zoom: some View {
         HStack {
@@ -101,6 +104,7 @@ struct LaTeXPDFPane: View {
                 controls.view?.autoScales = true; controls.update()
             }.help("Fit PDF to pane")
         }
+        .buttonStyle(.edith(.toolbar))
     }
 }
 

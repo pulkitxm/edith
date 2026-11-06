@@ -595,7 +595,9 @@ struct CompanionLibraryScreen: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous), filled: true))
     }
 
     private func hitRow(_ hit: CompanionSearchHit) -> some View {
@@ -631,7 +633,9 @@ struct CompanionLibraryScreen: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous), filled: true))
     }
 
     private func kindChip(_ kind: String) -> some View {

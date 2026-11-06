@@ -329,7 +329,7 @@ struct CleanerCard: View {
             } label: {
                 CleanerCheckbox(selection: model.overallSelection, dark: dark)
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edithControl)
             .accessibilityLabel("Select all items")
             Text("Select all").font(.edithText(.callout)).fontWeight(.medium)
             Spacer(minLength: UIScale.pt(8))
@@ -505,53 +505,61 @@ private struct CleanerCategoryHeader: View {
     let model: CleanerModel
     let dark: Bool
     let onClean: (String) -> Void
-    @State private var hover = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var selection: JunkSelection { model.categorySelection(category.id) }
     private var selectedCount: Int { model.selectedItemCount(categoryID: category.id) }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(CleanerRowMetrics.spacing)) {
+        Button {
+            withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+                model.toggleExpand(category.id)
+            }
+        } label: {
+            HStack(spacing: UIScale.pt(CleanerRowMetrics.spacing)) {
+                Color.clear.frame(
+                    width: UIScale.pt(CleanerRowMetrics.checkbox),
+                    height: UIScale.pt(CleanerRowMetrics.checkbox))
+                EdithIconView(.chevronRight)
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(category.expanded ? 90 : 0))
+                    .frame(width: UIScale.pt(CleanerRowMetrics.chevron))
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(category.name).font(.edithText(.body)).fontWeight(.medium)
+                        .lineLimit(1)
+                    Text(category.detail).font(.edithText(.caption))
+                        .foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: UIScale.pt(8))
+                Text(category.itemCount == 1 ? "1 item" : "\(category.itemCount) items")
+                    .font(.edithText(.caption)).monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                Text(category.sizeText)
+                    .font(.edithText(.callout)).fontWeight(.medium).monospacedDigit()
+                    .frame(minWidth: UIScale.pt(CleanerRowMetrics.size), alignment: .trailing)
+                    .fixedSize()
+                Color.clear.frame(width: UIScale.pt(CleanerRowMetrics.action), height: 1)
+            }
+            .padding(.horizontal, UIScale.pt(CleanerRowMetrics.inset))
+            .padding(.vertical, UIScale.pt(10))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .accessibilityValue(category.expanded ? "Expanded" : "Collapsed")
+        .accessibilityHint("Shows the items in this category")
+        .overlay(alignment: .leading) {
             Button {
                 model.toggleCategory(category.id)
             } label: {
                 CleanerCheckbox(selection: selection, dark: dark)
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edithControl)
             .accessibilityLabel("Select \(category.name)")
-            Button {
-                withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
-                    model.toggleExpand(category.id)
-                }
-            } label: {
-                HStack(spacing: UIScale.pt(CleanerRowMetrics.spacing)) {
-                    EdithIconView(.chevronRight)
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(category.expanded ? 90 : 0))
-                        .frame(width: UIScale.pt(CleanerRowMetrics.chevron))
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(category.name).font(.edithText(.body)).fontWeight(.medium)
-                            .lineLimit(1)
-                        Text(category.detail).font(.edithText(.caption))
-                            .foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: UIScale.pt(8))
-                    Text(category.itemCount == 1 ? "1 item" : "\(category.itemCount) items")
-                        .font(.edithText(.caption)).monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                    Text(category.sizeText)
-                        .font(.edithText(.callout)).fontWeight(.medium).monospacedDigit()
-                        .frame(minWidth: UIScale.pt(CleanerRowMetrics.size), alignment: .trailing)
-                        .fixedSize()
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.edith(.borderless))
-            .accessibilityValue(category.expanded ? "Expanded" : "Collapsed")
-            .accessibilityHint("Shows the items in this category")
+            .padding(.leading, UIScale.pt(CleanerRowMetrics.inset))
+        }
+        .overlay(alignment: .trailing) {
             Button("Clean") { onClean(category.id) }
                 .font(.edithText(.caption)).fontWeight(.medium)
                 .foregroundStyle(DashSkin.accent(dark))
@@ -561,15 +569,10 @@ private struct CleanerCategoryHeader: View {
                 .help(
                     selectedCount == 0
                         ? "Tick items in this category to clean them."
-                        : "Move the selected items in \(category.name) to the Trash.")
+                        : "Move the selected items in \(category.name) to the Trash."
+                )
+                .padding(.trailing, UIScale.pt(CleanerRowMetrics.inset))
         }
-        .padding(.horizontal, UIScale.pt(CleanerRowMetrics.inset))
-        .padding(.vertical, UIScale.pt(10))
-        .background(
-            RoundedRectangle(cornerRadius: UIScale.pt(8))
-                .fill(hover ? Color.primary.opacity(0.05) : .clear)
-        )
-        .onHover { hover = $0 }
     }
 }
 
@@ -577,7 +580,6 @@ private struct CleanerItemLine: View {
     let item: CleanerItemRow
     let model: CleanerModel
     let dark: Bool
-    @State private var hovering = false
 
     var body: some View {
         Button {
@@ -612,14 +614,9 @@ private struct CleanerItemLine: View {
             .padding(.leading, UIScale.pt(CleanerRowMetrics.itemIndent))
             .padding(.trailing, UIScale.pt(CleanerRowMetrics.inset))
             .padding(.vertical, UIScale.pt(6))
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    .fill(hovering ? Color.primary.opacity(0.05) : .clear)
-            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .onHover { hovering = $0 }
         .contextMenu {
             Button("Reveal in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([item.path])
@@ -870,7 +867,7 @@ private struct CleanerFilterBar: View {
             }
             .fixedSize()
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithControl)
         .accessibilityAddTraits(model.filters.protectDirty ? .isSelected : [])
         .help("Worktrees with work you have not committed are left out of the results.")
     }

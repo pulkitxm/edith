@@ -225,63 +225,69 @@ private struct HerdrTerminalList: View {
     private func row(_ terminal: HerdrPanelTerminal) -> some View {
         let selected = panels.selectedID(in: owner) == terminal.id
         let closing = panels.isChecking(terminal.id)
-        return HStack(spacing: UIScale.pt(4)) {
-            Button {
-                panels.select(terminal.id, in: owner)
-            } label: {
-                HStack(spacing: UIScale.pt(6)) {
-                    EdithIconView(.terminal)
-                        .font(.edithText(.caption).weight(.semibold))
-                        .foregroundStyle(
-                            terminal.running
-                                ? HerdrStatusColor.color(.working, dark: dark)
-                                : DashSkin.inkFaint(dark))
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(terminal.title)
-                            .font(.edithText(.callout).weight(selected ? .semibold : .medium))
-                            .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text(closing ? "Closing…" : terminal.location)
-                            .font(DashSkin.mono(9))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .presenterTextBlur(hideAgents && !closing, fontSize: 9)
-                    }
-                    Spacer(minLength: 0)
-                    if terminal.running {
-                        Circle()
-                            .fill(HerdrStatusColor.color(.working, dark: dark))
-                            .frame(width: UIScale.pt(6), height: UIScale.pt(6))
-                            .accessibilityLabel("Running")
-                    }
+        return Button {
+            panels.select(terminal.id, in: owner)
+        } label: {
+            HStack(spacing: UIScale.pt(6)) {
+                EdithIconView(.terminal)
+                    .font(.edithText(.caption).weight(.semibold))
+                    .foregroundStyle(
+                        terminal.running
+                            ? HerdrStatusColor.color(.working, dark: dark)
+                            : DashSkin.inkFaint(dark))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(terminal.title)
+                        .font(.edithText(.callout).weight(selected ? .semibold : .medium))
+                        .foregroundStyle(selected ? DashSkin.ink(dark) : DashSkin.inkSoft(dark))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(closing ? "Closing…" : terminal.location)
+                        .font(DashSkin.mono(9))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .presenterTextBlur(hideAgents && !closing, fontSize: 9)
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.edith(.borderless))
-            .opacity(closing ? 0.55 : 1)
-            .accessibilityLabel("\(terminal.title), \(terminal.location)")
-            .accessibilityAddTraits(selected ? .isSelected : [])
-            if closing {
-                SkeletonGroup {
-                    SkeletonBlock(width: 10, height: 10, corner: 5)
-                }
-                .frame(width: UIScale.pt(18), height: UIScale.pt(18))
-                .accessibilityLabel("Closing \(terminal.title)")
-            } else {
-                iconButton(.close, label: "Close \(terminal.title)") {
-                    panels.requestClose(terminal.id)
+                Spacer(minLength: 0)
+                if terminal.running {
+                    Circle()
+                        .fill(HerdrStatusColor.color(.working, dark: dark))
+                        .frame(width: UIScale.pt(6), height: UIScale.pt(6))
+                        .accessibilityLabel("Running")
                 }
             }
+            .padding(.leading, UIScale.pt(8))
+            .padding(.trailing, UIScale.pt(26))
+            .padding(.vertical, UIScale.pt(5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .opacity(closing ? 0.55 : 1)
+        .accessibilityLabel("\(terminal.title), \(terminal.location)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .overlay(alignment: .trailing) {
+            rowAccessory(terminal, closing: closing)
+                .padding(.trailing, UIScale.pt(4))
         }
         .disabled(closing)
-        .padding(.leading, UIScale.pt(8))
-        .padding(.trailing, UIScale.pt(4))
-        .padding(.vertical, UIScale.pt(5))
         .background(
             RoundedRectangle(cornerRadius: UIScale.pt(6))
                 .fill(selected ? DashSkin.accent(dark).opacity(0.16) : Color.clear))
+    }
+
+    @ViewBuilder
+    private func rowAccessory(_ terminal: HerdrPanelTerminal, closing: Bool) -> some View {
+        if closing {
+            SkeletonGroup {
+                SkeletonBlock(width: 10, height: 10, corner: 5)
+            }
+            .frame(width: UIScale.pt(18), height: UIScale.pt(18))
+            .accessibilityLabel("Closing \(terminal.title)")
+        } else {
+            iconButton(.close, label: "Close \(terminal.title)") {
+                panels.requestClose(terminal.id)
+            }
+        }
     }
 
     private func iconButton(_ icon: EdithIcon, label: String, action: @escaping () -> Void)
