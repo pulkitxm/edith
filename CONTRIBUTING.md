@@ -89,7 +89,9 @@ The source tree is organized by package:
 The app icon is drawn in `Resources/AppIcon.svg`. `make icon` renders it with
 Chrome and derives the checked-in `AppIcon.icns`, the site icons, the promo
 video logo and the usage share card icon from that. Run it after changing the
-SVG.
+SVG. It needs `pngquant`, which keeps the `.icns` small enough for the host size
+limit. `iconutil` re-encodes layers at full size, so `scripts/write-icns.py`
+writes the file instead.
 
 The Spotify player in `apps/music-player` is a Rust crate. Run
 `cargo test --locked` and `cargo clippy --locked --all-targets -- -D warnings`
