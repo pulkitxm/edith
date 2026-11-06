@@ -24,6 +24,18 @@ struct EmbeddedMusicUISearchRequest: Codable, Equatable, Sendable {
     }
 }
 
+struct EmbeddedMusicUIListingsRequest: Codable, Equatable, Sendable {
+    static let limit = 64
+    var paths: [String]
+
+    func validate() throws {
+        guard !paths.isEmpty, paths.count <= Self.limit, Set(paths).count == paths.count else {
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
+        for path in paths { try EmbeddedMusicUIAction(kind: .startFolder, path: path).validate() }
+    }
+}
+
 struct EmbeddedMusicUIListing: Codable, Equatable, Sendable {
     var folders: [EmbeddedMusicUIEntry]
     var tracks: [EmbeddedMusicUIEntry]

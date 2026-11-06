@@ -107,11 +107,16 @@ icon:
 	  sips -z $$((s*2)) $$((s*2)) "$$ARTWORK" --out "AppIcon.iconset/icon_$${s}x$${s}@2x.png" >/dev/null; \
 	done; \
 	iconutil -c icns AppIcon.iconset -o Resources/AppIcon.icns; \
+	pngquant --force --ext .png --speed 1 --strip 256 AppIcon.iconset/*.png; \
+	python3 -B scripts/write-icns.py AppIcon.iconset Resources/AppIcon.icns; \
 	rm -rf AppIcon.iconset; \
 	cp "$$ARTWORK" apps/site/app-icon.png; \
 	cp "$$ARTWORK" apps/promo-video/public/logo.png; \
 	sips -z 512 512 "$$ARTWORK" --out apps/site/app-icon-512.png >/dev/null; \
 	sips -z 180 180 "$$ARTWORK" --out apps/site/favicon-180.png >/dev/null; \
+	sips -z 128 128 "$$ARTWORK" --out Extensions/usage/Resources/share-icon.png >/dev/null; \
+	pngquant --force --ext .png --speed 1 --strip 256 apps/site/app-icon-512.png apps/site/favicon-180.png \
+	  Extensions/usage/Resources/share-icon.png; \
 	rm -rf "$$(dirname "$$ARTWORK")"
 
 wiki:

@@ -42,11 +42,13 @@ struct HostExtensionContent: View {
     @State private var error: String?
     @State private var retry = 0
     @State private var contentHeight: Double?
+    @State private var animatesHeight = false
     @State private var release: (@MainActor () -> Void)?
     @Environment(\.compactLayout) private var compact
     @Environment(\.windowVisible) private var visible
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.pageGuide) private var guide
 
     private var active: Bool { marketplace.surfaceAvailability.activeIDs.contains(extensionID) }
     private var transitioning: Bool {
@@ -65,9 +67,19 @@ struct HostExtensionContent: View {
                     && !marketplace.sessions.pendingDisableIDs.contains(extensionID)))
     }
     private var parkingKey: String? {
-        guard location == "main", surface == nil, navigation == nil else { return nil }
-        return extensionID + "\u{0}" + (section ?? "")
+        guard navigation == nil else { return nil }
+        if location == "main", surface == nil { return extensionID + "\u{0}" + (section ?? "") }
+        guard location == "home", let surface,
+            let encoded = try? Self.parkingEncoder.encode(surface)
+        else { return nil }
+        return extensionID + "\u{0}" + (section ?? "") + "\u{0}"
+            + String(decoding: encoded, as: UTF8.self)
     }
+    private static let parkingEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return encoder
+    }()
     private var installedVersion: String {
         (marketplace.installed[extensionID]?.version ?? "") + ":"
             + (marketplace.sessions.generations[extensionID]?.uuidString ?? "settings")
@@ -97,14 +109,17 @@ struct HostExtensionContent: View {
     var body: some View {
         Group {
             if let controller {
-                HostEmbeddedController(controller: controller, compact: compact, visible: visible)
-                    .frame(height: contentHeight.map { CGFloat($0) })
-                    .clipped()
-                    .animation(
-                        Motion.animation(Motion.glide, reduceMotion: reduceMotion),
-                        value: contentHeight
-                    )
-                    .id(ObjectIdentifier(controller))
+                HostEmbeddedController(
+                    controller: controller, compact: compact, visible: visible, guide: guide
+                )
+                .frame(height: contentHeight.map { CGFloat($0) })
+                .clipped()
+                .animation(
+                    animatesHeight && surface == nil
+                        ? Motion.animation(Motion.glide, reduceMotion: reduceMotion) : nil,
+                    value: contentHeight
+                )
+                .id(ObjectIdentifier(controller))
             } else if transitioning {
                 loading("Preparing " + title)
             } else if !eligible {
@@ -167,9 +182,7 @@ struct HostExtensionContent: View {
             {
                 presentationID = parked.presentationID
                 if let remote = parked.controller as? HostRemoteViewController {
-                    remote.changed = { [weak remote] in contentHeight = remote?.contentHeight }
-                    remote.retry = { retry += 1 }
-                    contentHeight = remote.contentHeight
+                    observe(remote)
                 }
                 controller = parked.controller
                 return
@@ -185,9 +198,7 @@ struct HostExtensionContent: View {
                     presenter.endPresentation(id: token); return
                 }
                 if let remote = loaded as? HostRemoteViewController {
-                    remote.changed = { [weak remote] in contentHeight = remote?.contentHeight }
-                    remote.retry = { retry += 1 }
-                    contentHeight = remote.contentHeight
+                    observe(remote)
                 }
                 controller = loaded
                 if let navigation {
@@ -249,6 +260,16 @@ struct HostExtensionContent: View {
         let surface: SurfaceSnapshotRequest?; let retry: Int
         let deliveryID: UUID?; let presentable: Bool
     }
+    private func observe(_ remote: HostRemoteViewController) {
+        animatesHeight = false
+        remote.changed = { [weak remote] in
+            animatesHeight = contentHeight != nil
+            contentHeight = remote?.contentHeight
+        }
+        remote.retry = { retry += 1 }
+        contentHeight = remote.contentHeight
+    }
+
     private func clear() {
         navigation?.delivery.reject()
         if let parkingKey, let controller, error == nil {
@@ -259,7 +280,7 @@ struct HostExtensionContent: View {
             presenter?.endPresentation(id: presentationID)
         }
         controller = nil; error = nil
-        contentHeight = nil
+        contentHeight = nil; animatesHeight = false
     }
 }
 
@@ -267,8 +288,13 @@ struct HostEmbeddedController: NSViewControllerRepresentable {
     let controller: NSViewController
     let compact: Bool
     let visible: Bool
-    func makeNSViewController(context: Context) -> NSViewController { controller }
+    var guide: PageGuideAction? = nil
+    func makeNSViewController(context: Context) -> NSViewController {
+        PageGuideBridge.attach(guide, to: controller.view)
+        return controller
+    }
     func updateNSViewController(_ controller: NSViewController, context: Context) {
+        PageGuideBridge.attach(guide, to: controller.view)
         (controller as? HostRemoteViewController)?.apply(compact: compact, visible: visible)
     }
     func sizeThatFits(
@@ -276,10 +302,11 @@ struct HostEmbeddedController: NSViewControllerRepresentable {
         context: Context
     ) -> CGSize? {
         guard let remote = controller as? HostRemoteViewController else { return nil }
-        remote.apply(
-            compact: compact, visible: visible,
-            width: proposal.width ?? controller.view.bounds.width)
+        let width = proposal.width ?? controller.view.bounds.width
+        if remote.state.width == 0, width.isFinite, width > 0 {
+            remote.apply(compact: compact, visible: visible, width: width)
+        }
         guard let height = remote.contentHeight else { return nil }
-        return CGSize(width: proposal.width ?? controller.view.bounds.width, height: height)
+        return CGSize(width: width, height: height)
     }
 }

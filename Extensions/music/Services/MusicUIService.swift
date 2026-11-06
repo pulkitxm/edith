@@ -19,6 +19,7 @@ import WebKit
     private var resumeAudio = false
     private var stopped = false
     private let invalidateHostSlots: () -> Void
+    private var announcedSlots: (footer: Bool, sidebar: Bool)?
     init(
         worker: MusicWorker, version: String = "", browser: MusicBrowserPresentation? = nil,
         invalidateHostSlots: (() -> Void)? = nil
@@ -93,6 +94,13 @@ import WebKit
         return (visible && !collapsed, visible && collapsed)
     }
 
+    private func announceHostSlots() {
+        let slots = hostSlots()
+        if let announcedSlots, announcedSlots == slots { return }
+        announcedSlots = slots
+        invalidateHostSlots()
+    }
+
     private func trackHostSlots() {
         guard !stopped else { return }
         withObservationTracking {
@@ -100,7 +108,7 @@ import WebKit
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, !self.stopped else { return }
-                self.invalidateHostSlots()
+                self.announceHostSlots()
                 self.trackHostSlots()
             }
         }
@@ -125,10 +133,20 @@ import WebKit
                     MusicUISettings(version: version, preferences: preferences()))
             }
             let slots = hostSlots()
+            announcedSlots = slots
             return try JSONEncoder().encode(
                 MusicHostSlots(version: version, footer: slots.footer, sidebar: slots.sidebar))
         case "music.ui.level":
             return try JSONEncoder().encode(worker.player.readLevel())
+        case "music.ui.listings":
+            let request = try JSONDecoder().decode(MusicUIListingsRequest.self, from: payload)
+            try request.validate()
+            let paths = request.paths
+            let found = await Task.detached { MusicLibraryIndex.listings(paths) }.value
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try JSONEncoder().encode(
+                found.mapValues { Self.listing(folders: $0.folders, tracks: $0.tracks) })
         case "music.ui.cachedListing":
             let query = try JSONDecoder().decode(MusicUIQuery.self, from: payload)
             try MusicUIAction(kind: .startFolder, path: query.path).validate()
@@ -477,11 +495,8 @@ import WebKit
             case .barAutoHide: key = AppStorageKeys.Music.barAutoHide
             default: key = AppStorageKeys.Music.gridView
             }
-            let changed = SharedDefaults.store.object(forKey: key) as? Bool != (value == 1)
             SharedDefaults.store.set(value == 1, forKey: key)
-            if changed, [.barCollapsed, .barAutoHide].contains(action.kind) {
-                invalidateHostSlots()
-            }
+            if [.barCollapsed, .barAutoHide].contains(action.kind) { announceHostSlots() }
         case .fadeLength:
             guard let value = action.value, MusicFade.secondsRange.contains(value) else {
                 throw ExtensionPeerError.invalidRequest

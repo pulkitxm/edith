@@ -12,6 +12,7 @@ public struct ExtensionPageHost<Content: View>: View {
         var zoom = 1.0
     @State private var router = WindowRouter()
     @State private var remotePresentation: ExtensionPresentationState?
+    @State private var guide: PageGuideAction?
     private let content: () -> Content
 
     public init(@ViewBuilder content: @escaping () -> Content) {
@@ -41,6 +42,9 @@ public struct ExtensionPageHost<Content: View>: View {
 
     private func page(compact: Bool) -> some View {
         NavigationRouteHost(router: router) { content() }
+            .pageGuideFallback()
+            .environment(\.pageGuide, guide)
+            .background { PageGuideProbe { guide = $0 }.frame(width: 0, height: 0) }
             .environment(\.compactLayout, compact)
             .tint(themeColor(theme))
             .tracksWindowVisibility()

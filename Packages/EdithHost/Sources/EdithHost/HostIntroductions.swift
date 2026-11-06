@@ -89,19 +89,20 @@ struct HostIntroducedPage<Content: View>: View {
                 intro(entry, guide)
                     .defaultScrollAnchor(.top)
             } else {
-                content().onAppear {
-                    defaults.set(true, forKey: HostSettingsCatalog.getStartedTriedKey)
-                }
+                content()
+                    .environment(\.pageGuide, guide)
+                    .onAppear {
+                        defaults.set(true, forKey: HostSettingsCatalog.getStartedTriedKey)
+                    }
             }
         }
-        .preference(
-            key: HostIntroductionReopenKey.self,
-            value: showsReopen && !presenting && entry?.guide != nil
-                ? entry.map { entry in
-                    HostIntroductionReopen(id: entry.id, title: entry.title) {
-                        [reopened = $reopened] in reopened.wrappedValue = true
-                    }
-                } : nil)
+    }
+
+    private var guide: PageGuideAction? {
+        guard showsReopen, let entry, entry.guide != nil else { return nil }
+        return PageGuideAction(id: entry.id, title: entry.title) { [reopened = $reopened] in
+            reopened.wrappedValue = true
+        }
     }
 
     private func intro(_ entry: HostExtension, _ guide: HostExtensionGuide) -> some View {
@@ -128,55 +129,4 @@ struct HostIntroducedPage<Content: View>: View {
 enum HostTitlebarMetrics {
     static let stripHeight = 41.0
     static let rowHeight = 31.0
-    static let iconSize = 15.0
-    static let iconFrame = 22.0
-}
-
-struct HostIntroductionReopen: Equatable, Sendable {
-    let id: String
-    let title: String
-    let perform: @MainActor @Sendable () -> Void
-
-    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id && lhs.title == rhs.title }
-}
-
-struct HostIntroductionReopenKey: PreferenceKey {
-    static let defaultValue: HostIntroductionReopen? = nil
-
-    static func reduce(
-        value: inout HostIntroductionReopen?, nextValue: () -> HostIntroductionReopen?
-    ) {
-        value = value ?? nextValue()
-    }
-}
-
-struct HostTitlebarButtonLabel: View {
-    let icon: EdithIcon
-
-    var body: some View {
-        EdithIconView(icon)
-            .font(.system(size: UIScale.pt(HostTitlebarMetrics.iconSize), weight: .medium))
-            .foregroundStyle(.secondary)
-            .frame(
-                width: UIScale.pt(HostTitlebarMetrics.iconFrame),
-                height: UIScale.pt(HostTitlebarMetrics.iconFrame))
-    }
-}
-
-struct HostIntroductionReopenButton: View {
-    let reopen: HostIntroductionReopen
-    @Environment(\.compactLayout) private var compact
-
-    var body: some View {
-        Button(action: reopen.perform) {
-            HostTitlebarButtonLabel(icon: .info)
-        }
-        .buttonStyle(.edith(.toolbar))
-        .help("About " + reopen.title)
-        .accessibilityLabel("About " + reopen.title)
-        .accessibilityIdentifier("introduction.reopen")
-        .frame(height: UIScale.pt(HostTitlebarMetrics.rowHeight))
-        .padding(.trailing, PageMetrics.gutter(compact))
-        .offset(y: -UIScale.pt(HostTitlebarMetrics.stripHeight))
-    }
 }
