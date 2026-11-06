@@ -18,12 +18,11 @@ private final class AppMaintenanceRequestCapture: @unchecked Sendable {
 }
 
 @Suite struct AppMaintenanceTests {
-    @Test func hostSectionsSelectTheirOwnPage() {
-        #expect(AppMaintenanceSection(hostSection: "Updates") == .updates)
-        #expect(AppMaintenanceSection(hostSection: "Remove") == .removal)
-        #expect(AppMaintenanceSection(hostSection: "History") == .history)
-        #expect(AppMaintenanceSection(hostSection: "appMaintenance") == .updates)
-        #expect(AppMaintenanceSection(hostSection: nil) == .updates)
+    @Test func tabsLiveInsideTheAppUpdatesPage() {
+        #expect(AppMaintenanceView.title == "App Updates")
+        #expect(AppMaintenanceSection.allCases.map(\.rawValue) == ["updates", "remove", "history"])
+        #expect(AppMaintenanceSection.allCases.map(\.title) == ["Updates", "Remove", "History"])
+        #expect(AppMaintenanceSection(rawValue: "Updates") == nil)
         #expect(AppMaintenanceSection.removal.uiScope == .removal)
         #expect(AppMaintenanceSection.history.uiScope == .history)
         #expect(AppMaintenanceSection.updates.uiScope == .updates)

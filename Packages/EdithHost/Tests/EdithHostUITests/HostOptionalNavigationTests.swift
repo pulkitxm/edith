@@ -71,31 +71,6 @@ struct HostOptionalNavigationTests {
         }
     }
 
-    @Test func maintenanceSelectionUsesOnlyAvailableOriginalSections() {
-        #expect(
-            HostNavigationCatalog.maintenanceDestination("Updates", active: ["homebrew"])?.id
-                == "Packages")
-        #expect(
-            HostNavigationCatalog.maintenanceDestination("Updates", active: ["cleaner"])?.id
-                == "Cleaner")
-        #expect(
-            HostNavigationCatalog.maintenanceDestination("Remove", active: ["appMaintenance"])?.id
-                == "Remove")
-        #expect(
-            HostNavigationCatalog.maintenanceDestination(
-                "History", active: ["appMaintenance", "homebrew"])?.id == "History")
-        #expect(
-            HostNavigationCatalog.maintenanceDestination(
-                "unknown", active: ["appMaintenance", "cleaner"])?.id == "Updates")
-        #expect(
-            HostNavigationCatalog.maintenanceDestination(
-                "Cleaner", active: ["homebrew", "cleaner"])?.id
-                == "Cleaner")
-        #expect(
-            HostNavigationCatalog.maintenanceDestination("Updates", active: ["blitztree"]) == nil)
-        #expect(HostNavigationCatalog.maintenanceDestination("Updates", active: []) == nil)
-    }
-
     @Test func disablingAndRestoringLastProviderRetainsSuitePreferences() throws {
         try withDefaults { defaults in
             for (suite, providers) in landingProviders {

@@ -497,23 +497,19 @@ import HostWorkerFixtureSupport
     @Test func mainNavigationPreservesEstablishedDestinationOrderAndSections() {
         #expect(
             HostNavigationCatalog.pages.map(\.id) == [
-                "home", "agents", "dashboard", "herdr", "quinjet", "companion", "plugins",
-                "machines", "docs", "system", "runningApps", "blitztree", "calendar",
-                "appMaintenance", "desk", "media", "studio", "socialManager", "timeLapse",
-                "downloads", "music", "virtualCamera", "data", "database", "codeStats", "seoAudit",
-                "latex", "attention", "extensions", "settings", "about",
+                "home", "agents", "usage", "herdr", "quinjet", "companion", "plugins",
+                "machines", "docs", "utilities", "appMaintenance", "homebrew", "cleaner",
+                "blitztree", "system", "calendar", "desk", "media", "studio", "timeLapse",
+                "virtualCamera", "music", "downloads", "socialManager", "developer", "database",
+                "codeStats", "seoAudit", "latex", "attention", "extensions", "settings", "about",
             ])
         #expect(
             HostNavigationCatalog.settings.map(\.id) == [
                 "general", "surfaces", "agentActivity", "permissions", "agent", "jev", "data",
                 "storage", "shortcuts", "terminal", "mcp", "icloud", "updates",
             ])
-        #expect(
-            HostNavigationCatalog.maintenance.map(\.id) == [
-                "Updates", "Packages", "Remove", "Cleaner", "History",
-            ])
-        #expect(HostNavigationCatalog.page("dashboard").extensionID == "usage")
-        #expect(HostNavigationCatalog.page("runningApps").extensionID == "system")
+        #expect(HostNavigationCatalog.page("usage").extensionID == "usage")
+        #expect(HostNavigationCatalog.page("system").extensionID == "system")
     }
 
     @Test func mainNavigationHonorsExplicitSuiteSelectionAndFallsBackAfterDisable() throws {
@@ -1347,12 +1343,11 @@ import HostWorkerFixtureSupport
         #expect((button as AnyObject).accessibilityPerformPress?() == true)
         #expect(opened == ["keepAwake"])
         #expect(fixture.worker("keepAwake") === worker)
-        #expect(HostNavigationCatalog.route(extensionID: "usage")?.page == "dashboard")
-        #expect(HostNavigationCatalog.route(extensionID: "system")?.page == "runningApps")
-        #expect(HostNavigationCatalog.route(extensionID: "music")?.page == "music")
-        #expect(HostNavigationCatalog.route(extensionID: "homebrew")?.page == "appMaintenance")
-        #expect(HostNavigationCatalog.route(extensionID: "homebrew")?.section == "Packages")
-        #expect(HostNavigationCatalog.route(extensionID: "cleaner")?.section == "Cleaner")
+        #expect(HostNavigationCatalog.route(extensionID: "usage") == "usage")
+        #expect(HostNavigationCatalog.route(extensionID: "system") == "system")
+        #expect(HostNavigationCatalog.route(extensionID: "music") == "music")
+        #expect(HostNavigationCatalog.route(extensionID: "homebrew") == "homebrew")
+        #expect(HostNavigationCatalog.route(extensionID: "cleaner") == "cleaner")
         #expect(HostNavigationCatalog.route(extensionID: "keepAwake") == nil)
         #expect(await fixture.marketplace.sessions.shutdown())
     }

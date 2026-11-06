@@ -597,16 +597,17 @@ struct AttentionListeningPanel: View {
 
 enum AttentionPageTitles {
     static let titles: [String: String] = [
-        "home": "Home", "machines": "Fleet", "docs": "Docs", "agents": "Agents",
-        "dashboard": "Usage", "herdr": "Sessions", "quinjet": "Review", "companion": "Memory",
-        "plugins": "Plugins", "appMaintenance": "Maintenance", "blitztree": "BlitzTree",
-        "system": "System", "runningApps": "Running apps", "desk": "Desk", "media": "Media",
-        "studio": "Studio", "latex": "LaTeX", "socialManager": "Social Manager",
-        "timeLapse": "Screen Recorder",
-        "downloads": "Downloads", "music": "Music", "calendar": "Calendar",
-        "virtualCamera": "Virtual Camera", "data": "Data", "database": "Database",
-        "attention": "Attention", "seoAudit": "Site Audit", "codeStats": "Code Stats",
-        "extensions": "Extensions", "settings": "Settings", "about": "About",
+        "home": "Home", "agents": "Agents & Terminal", "usage": "Usage", "herdr": "Agents",
+        "quinjet": "Code Review", "companion": "Memory", "plugins": "Plugins",
+        "machines": "Machines", "docs": "Docs", "utilities": "Mac Utilities",
+        "appMaintenance": "App Updates", "homebrew": "Homebrew", "cleaner": "Cleaner",
+        "blitztree": "Disk Map", "system": "Running Apps", "calendar": "Calendar",
+        "desk": "Desk", "media": "Media", "studio": "Studio", "timeLapse": "Screen Recorder",
+        "virtualCamera": "Virtual Camera", "music": "Music", "downloads": "Downloads",
+        "socialManager": "Social Manager", "developer": "Developer & Data",
+        "database": "Database", "codeStats": "Code Stats", "seoAudit": "Site Audit",
+        "latex": "LaTeX", "attention": "Attention", "extensions": "Extensions",
+        "settings": "Settings", "about": "About",
     ]
 
     static func title(_ key: String) -> String? { titles[key] }

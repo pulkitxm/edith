@@ -1,20 +1,13 @@
 {
   "id": "machines",
   "title": "Machines",
-  "icon": "display",
+  "icon": "machines",
   "category": "agents",
   "background": true,
   "commands": [
     "machines"
   ],
-  "pages": [
-    {
-      "id": "machines",
-      "title": "Machines",
-      "icon": "server",
-      "order": 6
-    }
-  ],
+  "page": true,
   "homeCards": [
     "machines",
     "extension:machines"

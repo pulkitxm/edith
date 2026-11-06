@@ -9,6 +9,9 @@ enum CleanerDrivePicker: Identifiable {
 }
 
 struct CleanerPage: View {
+    static let title = "Cleaner"
+    static let subtitle =
+        "Find build caches, downloads and old worktrees you can safely remove. Nothing is deleted until you confirm."
     @State var model: CleanerModel
     @State private var drivePicker: CleanerDrivePicker?
     @Environment(\.colorScheme) private var scheme
@@ -16,13 +19,8 @@ struct CleanerPage: View {
 
     var body: some View {
         PageWorkspace {
-            if hasHeaderActions {
-                HStack {
-                    Spacer(minLength: 0)
-                    headerActions
-                }
-                .pageGutter(compact)
-                .padding(.top, UIScale.pt(PageMetrics.top))
+            PageHeader(Self.title, subtitle: Self.subtitle, divider: true) {
+                if hasHeaderActions { headerActions }
             }
         } content: {
             CleanerCard(

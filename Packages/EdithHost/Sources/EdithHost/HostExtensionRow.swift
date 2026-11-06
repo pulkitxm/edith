@@ -7,9 +7,10 @@ struct HostExtensionIcon: View {
     var size: CGFloat = 40
     var tint: Color?
 
+    static func resolve(_ entry: HostExtension) -> EdithIcon { entry.icon }
+
     var body: some View {
-        PageGuideBadge(
-            extensionID: entry.id, icon: entry.icon, size: size, tint: tint)
+        PageGuideBadge(icon: Self.resolve(entry), size: size, tint: tint)
     }
 }
 

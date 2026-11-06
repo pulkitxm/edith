@@ -5,6 +5,7 @@ import {
   orderedIndex,
   parseShortcut,
   renderIndex,
+  sidebarGroups,
   validateDeclaration,
 } from "./extension-index.mjs";
 
@@ -26,8 +27,6 @@ test("declarations reject unknown keys, mismatched ids and invalid commands", ()
     ...declaration,
     launchWhen: [],
     hotkeys: [],
-    pages: [],
-    sections: [],
     homeCards: [],
     notchCards: [],
     notchTabs: [],
@@ -91,68 +90,75 @@ test("launch conditions need a key and a boolean default and exclude background"
   ).toThrow();
 });
 
-test("pages default to detachable and sections name a known page", () => {
-  const paged = {
-    ...declaration,
-    category: "agents",
-    pages: [{ id: "samplePage", title: "Sample", icon: "bookmark", order: 1 }],
-    sections: [
-      {
-        page: "appMaintenance",
-        id: "Sample",
-        title: "Sample",
-        icon: "bookmark",
-        summary: "A synthetic section.",
-        order: 1,
-      },
-    ],
-  };
-  const validated = validateDeclaration(paged, "sample");
-  expect(validated.pages).toEqual([
-    {
-      id: "samplePage",
-      title: "Sample",
-      icon: "bookmark",
-      order: 1,
-      detachable: true,
-    },
-  ]);
-  expect(validated.sections).toEqual(paged.sections);
-  for (const pages of [
-    [{ id: "samplePage", title: "Sample", icon: "bookmark" }],
-    [{ id: "samplePage", title: "Sample", icon: "bookmark", order: 1.5 }],
-    [
-      {
-        id: "samplePage",
-        title: "Sample",
-        icon: "bookmark",
-        order: 1,
-        extra: 1,
-      },
-    ],
-    [
-      {
-        id: "samplePage",
-        title: "Sample",
-        icon: "bookmark",
-        order: 1,
-        detachable: "no",
-      },
-    ],
+test("a page takes its title, icon and group from the extension itself", () => {
+  const paged = { ...declaration, category: "utilities", page: true };
+  expect(validateDeclaration(paged, "sample").page).toEqual({
+    detachable: true,
+  });
+  expect(
+    validateDeclaration({ ...paged, page: { detachable: false } }, "sample")
+      .page,
+  ).toEqual({ detachable: false });
+  expect("page" in validateDeclaration(declaration, "sample")).toBe(false);
+  for (const [page, reason] of [
+    [{ title: "Packages" }, "title must not be set"],
+    [{ title: "Sample" }, "title must not be set"],
+    [{ icon: "bookmark" }, "icon must not be set"],
+    [{ id: "samplePage" }, "id must not be set"],
+    [{ order: 1 }, "order must not be set"],
+    [{ group: "appMaintenance" }, "group must not be set"],
+    [{ parent: "appMaintenance" }, "parent must not be set"],
+    [{ category: "agents" }, "category must not be set"],
+    [{ detachable: "no" }, "detachable must be a boolean"],
+    [{ logoName: "sample" }, "unknown keys logoName"],
+    [{ extra: 1 }, "unknown keys extra"],
+    [false, "must be true or an object"],
+    [[{}], "must be true or an object"],
   ])
-    expect(() => validateDeclaration({ ...paged, pages }, "sample")).toThrow();
+    expect(() => validateDeclaration({ ...paged, page }, "sample")).toThrow(
+      reason,
+    );
+  for (const category of ["desk", "labs"])
+    expect(() => validateDeclaration({ ...paged, category }, "sample")).toThrow(
+      `${category} extensions have no sidebar group`,
+    );
   expect(() =>
     validateDeclaration(
       {
         ...paged,
-        sections: [{ ...paged.sections[0], page: "settings" }],
+        pages: [{ id: "sample", title: "Packages", icon: "box", order: 1 }],
       },
       "sample",
     ),
-  ).toThrow();
+  ).toThrow("pages is not supported");
   expect(() =>
-    validateDeclaration({ ...paged, category: "desk" }, "sample"),
-  ).toThrow();
+    validateDeclaration(
+      {
+        ...paged,
+        sections: [
+          {
+            page: "appMaintenance",
+            id: "Packages",
+            title: "Packages",
+            icon: "box",
+            summary: "A synthetic section.",
+            order: 1,
+          },
+        ],
+      },
+      "sample",
+    ),
+  ).toThrow("sections is not supported");
+});
+
+test("every bundled page belongs to a sidebar group and no page id collides with a built-in page", async () => {
+  const index = JSON.parse(await renderIndex());
+  for (const entry of index.filter((item) => item.page))
+    expect(sidebarGroups).toContain(entry.category);
+  for (const entry of index) {
+    expect(Object.keys(entry)).not.toContain("pages");
+    expect(Object.keys(entry)).not.toContain("sections");
+  }
 });
 
 test("surface declarations register independent Home cards, Notch cards and tabs", () => {

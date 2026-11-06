@@ -72,9 +72,7 @@ final class AppMaintenanceService: ExtensionService {
             let client = configuration.engineClient,
             let location = configuration.location, let section = configuration.section,
             (location == "settings" && section == "extension")
-                || (location == "main"
-                    && (section == "appMaintenance"
-                        || AppMaintenanceSection(rawValue: section) != nil)),
+                || (location == "main" && section == "appMaintenance"),
             location != "settings"
                 || (configuration.input["tile"] == nil && configuration.input["target"] == nil)
         else { return false }
@@ -109,9 +107,7 @@ final class AppMaintenanceService: ExtensionService {
                 rootView: ExtensionPageHost { AppMaintenanceSettings(model: settingsModel) })
         }
         guard let model = uiModel else { return nil }
-        let section = AppMaintenanceSection(hostSection: uiSection)
-        return NSHostingController(
-            rootView: ExtensionPageHost { AppMaintenanceView(model: model, section: section) })
+        return NSHostingController(rootView: ExtensionPageHost { AppMaintenancePage(model: model) })
     }
 
     func stopUI(for presentation: UUID?) -> [Task<Void, Never>] {

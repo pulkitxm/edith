@@ -1,7 +1,7 @@
 {
   "id": "hinge",
   "title": "Hinge",
-  "icon": "lidAwake",
+  "icon": "hinge",
   "category": "labs",
   "background": false,
   "commands": [],

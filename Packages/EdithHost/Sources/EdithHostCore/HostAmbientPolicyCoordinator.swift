@@ -104,7 +104,7 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
     public static func topic(owner: String, location: String, section: String?) -> String? {
         switch (owner, location, section) {
         case ("usage", "main", nil), ("usage", "main", "usage"),
-            ("usage", "main", "dashboard"), ("usage", "home", "limits"),
+            ("usage", "home", "limits"),
             ("usage", "notch", "limits"):
             return "usage.limits"
         case ("herdr", "main", nil), ("herdr", "main", "herdr"),

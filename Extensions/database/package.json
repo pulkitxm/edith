@@ -7,14 +7,7 @@
   "commands": [
     "database"
   ],
-  "pages": [
-    {
-      "id": "database",
-      "title": "Database",
-      "icon": "database",
-      "order": 1
-    }
-  ],
+  "page": true,
   "homeCards": [
     "databases",
     "extension:database"

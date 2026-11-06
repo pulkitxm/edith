@@ -29,7 +29,7 @@ here too, so one registration covers both surfaces.
 
 ## Registering it
 
-The easiest way is Settings > Agents in the Edith window, also reachable from the
+The easiest way is Settings > Connect agents in the Edith window, also reachable from the
 Get Started card on Home and from the last onboarding step. It lists Claude Code,
 Codex, Cursor and VS Code, says whether each one is installed on this Mac and
 whether it is Connected, Not connected, Points at another Edith (the entry runs a

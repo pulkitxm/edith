@@ -1,20 +1,13 @@
 {
   "id": "attention",
   "title": "Attention",
-  "icon": "hourglass",
+  "icon": "attention",
   "category": "developer",
   "background": true,
   "commands": [
     "attention"
   ],
-  "pages": [
-    {
-      "id": "attention",
-      "title": "Attention",
-      "icon": "hourglass",
-      "order": 5
-    }
-  ],
+  "page": true,
   "homeCards": [
     "focus",
     "extension:attention"

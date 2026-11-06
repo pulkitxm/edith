@@ -14,11 +14,11 @@ import Testing
     @Test func completeOriginalCatalogsExcludeUtilityDestinationsAndKeepShortcutOrder() {
         #expect(
             HostNavigationCatalog.pages.map(\.id) == [
-                "home", "agents", "dashboard", "herdr", "quinjet", "companion", "plugins",
-                "machines", "docs", "system", "runningApps", "blitztree", "calendar",
-                "appMaintenance", "desk", "media", "studio", "socialManager", "timeLapse",
-                "downloads", "music", "virtualCamera", "data", "database", "codeStats", "seoAudit",
-                "latex", "attention", "extensions", "settings", "about",
+                "home", "agents", "usage", "herdr", "quinjet", "companion", "plugins",
+                "machines", "docs", "utilities", "appMaintenance", "homebrew", "cleaner",
+                "blitztree", "system", "calendar", "desk", "media", "studio", "timeLapse",
+                "virtualCamera", "music", "downloads", "socialManager", "developer", "database",
+                "codeStats", "seoAudit", "latex", "attention", "extensions", "settings", "about",
             ])
         #expect(
             HostNavigationCatalog.settings.map(\.id) == [
@@ -52,8 +52,8 @@ import Testing
                 visited.append($0); return true
             })
         let expectedPage =
-            id == "micMute" ? "music" : (id == "systemStats" ? "system" : "extensions")
-        #expect(route.page == expectedPage && route.section == nil)
+            id == "micMute" ? "music" : (id == "systemStats" ? "utilities" : "extensions")
+        #expect(route.page == expectedPage)
         #expect(route.restoreOnly == (id == "micMute"))
         #expect(route.settingsExtensionID == (["clipboard", "emoji"].contains(id) ? id : nil))
         #expect(visited == [expectedPage])
@@ -71,7 +71,7 @@ import Testing
         let route = try HostWorkerNavigationRouting.resolve(
             extensionID: "bifrost", version: "1.0.0", activeVersions: admitted("bifrost"),
             currentPage: "music", visible: { _ in true })
-        #expect(route.restoreOnly && route.page == "music" && route.section == nil)
+        #expect(route.restoreOnly && route.page == "music")
     }
 
     @Test(arguments: ["terminal", "clipboard", "emoji", "micMute", "systemStats"])
@@ -129,7 +129,7 @@ import Testing
                     #expect(
                         route.page
                             == (id == "micMute"
-                                ? "music" : (id == "systemStats" ? "system" : "extensions")))
+                                ? "music" : (id == "systemStats" ? "utilities" : "extensions")))
                 } else {
                     #expect(throws: HostWindowNavigationError.inactiveOwner) {
                         try HostWorkerNavigationRouting.resolve(

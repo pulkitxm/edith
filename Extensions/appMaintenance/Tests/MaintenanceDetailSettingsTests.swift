@@ -189,13 +189,16 @@ import Testing
         _ = service.stopUI(for: replacementID)
         #expect(service.settingsModel == nil)
         #expect(service.view(for: replacementID) == nil)
-        for section in ["appMaintenance", "Updates", "Remove", "History"] {
-            let engineID = UUID()
+        let engineID = UUID()
+        #expect(
+            service.configureUI(
+                try configuration(engineID, location: "main", section: "appMaintenance")))
+        #expect(service.settingsModel == nil)
+        #expect(service.view(for: engineID) != nil)
+        for section in ["Updates", "Remove", "History", "Packages"] {
             #expect(
-                service.configureUI(try configuration(engineID, location: "main", section: section))
-            )
-            #expect(service.settingsModel == nil)
-            #expect(service.view(for: engineID) != nil)
+                !service.configureUI(
+                    try configuration(UUID(), location: "main", section: section)))
         }
         await runtime.stop()
     }

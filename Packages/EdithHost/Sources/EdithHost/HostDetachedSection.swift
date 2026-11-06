@@ -16,8 +16,6 @@ struct HostDetachedSection: View {
     @State private var router = WindowRouter()
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
         var settings = "general"
-    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
-        var maintenance = "Updates"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -25,7 +23,7 @@ struct HostDetachedSection: View {
             GeometryReader { geometry in
                 HostPageContent(
                     marketplace: marketplace, updater: updater, permissions: permissions,
-                    destination: destination, settings: $settings, maintenanceSection: $maintenance,
+                    destination: destination, settings: $settings,
                     presenter: presenter, showWelcome: showWelcome,
                     panelShortcutChanged: panelShortcutChanged,
                     additionalSettings: additionalSettings,

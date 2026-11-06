@@ -155,11 +155,10 @@ struct HostMarketplaceStorefrontTests {
         #expect(HostExtensionRowState.Action.retry.title == "Retry")
     }
 
-    @Test func openTargetNamesThePageAndSection() {
-        #expect(HostExtensionActions.openTarget(extensionID: "usage")?.page == "dashboard")
-        #expect(HostExtensionActions.openTarget(extensionID: "usage")?.section == nil)
-        let maintenance = HostExtensionActions.openTarget(extensionID: "homebrew")
-        #expect(maintenance == .init(page: "appMaintenance", section: "Packages"))
+    @Test func openTargetIsTheExtensionsOwnPage() {
+        #expect(HostExtensionActions.openTarget(extensionID: "usage") == "usage")
+        #expect(HostExtensionActions.openTarget(extensionID: "homebrew") == "homebrew")
+        #expect(HostExtensionActions.openTarget(extensionID: "appMaintenance") == "appMaintenance")
         #expect(HostExtensionActions.openTarget(extensionID: "keepAwake") == nil)
     }
 
@@ -170,17 +169,15 @@ struct HostMarketplaceStorefrontTests {
         let tool = HostExtension(
             id: "tool", title: "Tool", icon: .heart, category: "desk", hotkeys: [hotkey],
             homeCards: ["a", "b"], notchCards: ["n"])
-        let found = HostExtensionPlacements.placements(
-            for: tool, route: ("dashboard", nil), pageTitles: ["dashboard": "Usage"])
-        #expect(found.map(\.title) == ["Sidebar", "Home", "Notch", "Hotkeys"])
-        #expect(found[0].detail.contains("Usage"))
-        #expect(found[1].detail.contains("2 cards"))
-        #expect(found[3].detail.contains("⇧⌘M Mute"))
-        let maintenance = HostExtensionPlacements.placements(
-            for: tool, route: ("appMaintenance", "Packages"),
-            sectionTitles: ["Packages": "Packages"])
-        #expect(maintenance[0].title == "Maintenance")
-        #expect(maintenance[0].detail.contains("Packages"))
+        let found = HostExtensionPlacements.placements(for: tool)
+        #expect(found.map(\.title) == ["Home", "Notch", "Hotkeys"])
+        #expect(found[0].detail.contains("2 cards"))
+        #expect(found[2].detail.contains("⇧⌘M Mute"))
+        let paged = HostExtension(
+            id: "tool", title: "Tool", icon: .heart, category: "utilities", page: HostPage())
+        let sidebar = HostExtensionPlacements.placements(for: paged)
+        #expect(sidebar.map(\.title) == ["Sidebar"])
+        #expect(sidebar[0].detail == "Adds Tool to the sidebar under Mac Utilities.")
         let quiet = HostExtension(id: "quiet", title: "Quiet", icon: .heart, category: "desk")
         #expect(HostExtensionPlacements.placements(for: quiet).map(\.title) == ["Background"])
     }
@@ -190,13 +187,12 @@ struct HostMarketplaceStorefrontTests {
             id: "k", prefix: "p", title: "Go", subtitle: "", code: 1, modifiers: 0, label: "⌥Space")
         let keyed = HostExtension(
             id: "k", title: "K", icon: .heart, category: "desk", hotkeys: [hotkey])
-        #expect(HostExtensionPlacements.hint(for: keyed, route: nil) == "Press ⌥Space to use it.")
+        #expect(HostExtensionPlacements.hint(for: keyed) == "Press ⌥Space to use it.")
+        let paged = HostExtension(
+            id: "homebrew", title: "Homebrew", icon: .box, category: "utilities", hotkeys: [hotkey],
+            page: HostPage())
         #expect(
-            HostExtensionPlacements.hint(
-                for: keyed, route: ("music", nil), pageTitles: ["music": "Music"])
-                == "Find it in the sidebar as Music.")
-        #expect(
-            HostExtensionPlacements.hint(for: keyed, route: ("appMaintenance", "Cleaner"))
-                == "Find it in the sidebar under Maintenance.")
+            HostExtensionPlacements.hint(for: paged)
+                == "Find Homebrew in the sidebar under Mac Utilities.")
     }
 }

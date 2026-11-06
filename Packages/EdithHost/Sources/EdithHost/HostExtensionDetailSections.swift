@@ -29,8 +29,8 @@ struct HostExtensionHero<Action: View>: View {
         let dark = scheme == .dark
         return HStack(alignment: .center, spacing: UIScale.pt(16)) {
             PageGuideBadge(
-                extensionID: entry.id, icon: entry.icon,
-                size: HostExtensionDetailLayout.heroIcon, tone: .monochrome
+                icon: HostExtensionIcon.resolve(entry), size: HostExtensionDetailLayout.heroIcon,
+                tone: .monochrome
             )
             .flushLeading()
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {

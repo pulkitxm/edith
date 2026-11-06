@@ -1,19 +1,13 @@
 {
   "id": "socialManager",
   "title": "Social Manager",
-  "icon": "people",
+  "icon": "socialManager",
   "category": "media",
   "background": false,
   "commands": [],
-  "pages": [
-    {
-      "id": "socialManager",
-      "title": "Social Manager",
-      "icon": "people",
-      "order": 2,
-      "detachable": false
-    }
-  ],
+  "page": {
+    "detachable": false
+  },
   "homeCards": [
     "extension:socialManager"
   ],

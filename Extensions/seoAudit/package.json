@@ -7,14 +7,7 @@
   "commands": [
     "seo"
   ],
-  "pages": [
-    {
-      "id": "seoAudit",
-      "title": "Site Audit",
-      "icon": "seoAudit",
-      "order": 3
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:seoAudit"
   ],
