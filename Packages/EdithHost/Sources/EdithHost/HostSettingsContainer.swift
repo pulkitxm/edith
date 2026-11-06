@@ -55,6 +55,7 @@ enum HostSettingsSummary {
         case "storage": "Measured app, extension packages, cache and retained user data"
         case "shortcuts": "Global and application keyboard shortcuts"
         case "terminal": "Command line and terminal integration"
+        case "mcp": "Connect Claude Code, Codex, Cursor and VS Code to Edith"
         case "icloud": "Backup and synchronization"
         case "updates": "Version and automatic update behavior"
         default: nil

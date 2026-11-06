@@ -316,11 +316,15 @@ struct DashboardView: View {
         if compact {
             VStack(spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 PageCard(title: "Activity") { activityHeatmap }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("usage-activity")
                 RateLimitsDialsView(dark: dark)
             }
         } else {
             HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                 PageCard(title: "Activity", fill: true) { activityHeatmap }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("usage-activity")
                 RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
             }
             .fixedSize(horizontal: false, vertical: true)

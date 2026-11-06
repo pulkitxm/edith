@@ -81,13 +81,6 @@ import Testing
         try #require(remote.entriesLoaded)
     }
 
-    @Test func gridColumnsFillOrAvoidStrandingTiles() {
-        #expect(EmbeddedMusicTile.columnCount(count: 2, fit: 10) == 2)
-        #expect(EmbeddedMusicTile.columnCount(count: 8, fit: 10) == 8)
-        #expect(EmbeddedMusicTile.columnCount(count: 18, fit: 7) == 6)
-        #expect(EmbeddedMusicTile.columnCount(count: 8, fit: 7) == 5)
-    }
-
     @Test func pageFooterAndSidebarRenderEveryStateAtBothWidthsThemesAndZoom() async throws {
         try await withSession { session in
             for library in [Library.loading, .empty, .populated, .spotify] {
@@ -112,6 +105,14 @@ import Testing
             _ = try await session.render(
                 route: .page, width: 1600, height: 1000, scheme: .light,
                 name: "page-grid-1600-light")
+            for width in [1600.0, 1100.0] {
+                _ = try await session.render(
+                    width: width, height: nil, scheme: .dark,
+                    name: "grid-skeleton-\(Int(width))-dark"
+                ) {
+                    EmbeddedMusicLibrarySkeleton(grid: true).pageContent(false)
+                }
+            }
             SharedDefaults.store.set(false, forKey: AppStorageKeys.Music.gridView)
         }
     }

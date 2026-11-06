@@ -50,32 +50,32 @@ enum EmbeddedMusicSceneRoute: String, CaseIterable {
 }
 
 struct EmbeddedMusicFooterScene: View {
+    var remote = EmbeddedMusicRemote.shared
     @State private var accounts = EmbeddedMusicAccounts.shared
     @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
         var autoHide = false
 
     var body: some View {
         if accounts.playerReady && (!autoHide || accounts.playerTitle != nil) {
-            EmbeddedMusicFooter()
+            EmbeddedMusicFooter(remote: remote)
         }
     }
 }
 
 struct EmbeddedMusicSidebarScene: View {
+    var remote = EmbeddedMusicRemote.shared
     @State private var accounts = EmbeddedMusicAccounts.shared
     @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
         var autoHide = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
         "accent"
-    @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
-        var collapsed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if accounts.playerReady && (!autoHide || accounts.playerTitle != nil) {
             EmbeddedMusicSidebarPill(theme: themeColor(theme)) {
                 withAnimation(Motion.animation(Motion.glide, reduceMotion: reduceMotion)) {
-                    collapsed = false; EmbeddedMusicRemote.shared.send(.barCollapsed, value: 0)
+                    remote.setBarCollapsed(false)
                 }
             }
         }

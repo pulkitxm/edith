@@ -316,7 +316,7 @@ struct UsageDashboardCaptureTests {
         #expect(abs(range.box.minX - scope.box.minX) * 1100 < 2)
     }
 
-    static func scene(_ fixture: Fixture) async throws -> Scene {
+    static func scene(_ fixture: Fixture, days: Int = 84) async throws -> Scene {
         let suite = "usage-capture-" + UUID().uuidString
         let preferences = try #require(UserDefaults(suiteName: suite))
         preferences.removePersistentDomain(forName: suite)
@@ -337,7 +337,8 @@ struct UsageDashboardCaptureTests {
                 model.contentLoad.begin(),
                 message: "The usage history file is not valid JSON.")
         case .populated, .notice:
-            model.ingest(try JSONDecoder().decode(DashUsage.self, from: populatedDocument()))
+            model.ingest(
+                try JSONDecoder().decode(DashUsage.self, from: populatedDocument(days: days)))
             await model.awaitPendingComputation()
         }
         guard fixture == .notice else { return Scene(model: model, client: nil) }
@@ -390,7 +391,7 @@ struct UsageDashboardCaptureTests {
         }
     }
 
-    static func populatedDocument() throws -> Data {
+    static func populatedDocument(days dayCount: Int = 84) throws -> Data {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         let models = [
@@ -399,7 +400,7 @@ struct UsageDashboardCaptureTests {
         let sources = ["claude-code", "codex"]
         let projects = ["sample-api", "sample-web", "sample-cli"]
         var days: [[String: Any]] = []
-        for offset in 0..<84 {
+        for offset in 0..<dayCount {
             guard offset % 7 != 5,
                 let date = calendar.date(byAdding: .day, value: -offset, to: today)
             else { continue }

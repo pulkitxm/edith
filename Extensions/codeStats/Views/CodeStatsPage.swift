@@ -186,27 +186,10 @@ struct CodeStatsReportSections: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsKPIGrid(report: report, dark: dark)
-            if !projection.showsContributions {
-                if !projection.isSingleDay {
-                    CodeStatsTopDaysCard(days: projection.topDays, dark: dark)
-                }
-            } else if sharesActivityRow {
-                CodeStatsActivityRow(projection: projection, dark: dark)
-            } else {
-                CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
-            }
-            CodeStatsTrendCard(projection: projection, dark: dark)
+            CodeStatsActivityRow(projection: projection, dark: dark)
             CodeStatsRepositoryCards(projection: projection, dark: dark)
             CodeStatsLanguageCards(projection: projection, dark: dark)
-            if !projection.isSingleDay {
-                CodeStatsHabitCards(
-                    projection: projection, dark: dark,
-                    showsTopDays: projection.showsContributions && !sharesActivityRow)
-            }
+            CodeStatsHabitCards(projection: projection, dark: dark)
         }
-    }
-
-    private var sharesActivityRow: Bool {
-        projection.heatWeeks.count <= CodeStatsActivityRow.sharedRowWeeks
     }
 }

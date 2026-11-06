@@ -67,6 +67,9 @@ enum HostNavigationCatalog {
             id: "terminal", title: "Terminal", icon: .terminal, extensionID: nil,
             summary: "Command line and terminal integration"),
         .init(
+            id: "mcp", title: "Agents", icon: .link, extensionID: nil,
+            summary: "Connect Claude Code, Codex, Cursor and VS Code to Edith"),
+        .init(
             id: "icloud", title: "iCloud", icon: .cloud, extensionID: nil,
             summary: "Backup and synchronization"),
         .init(

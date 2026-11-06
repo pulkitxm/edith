@@ -60,7 +60,7 @@ import Testing
                     #expect(find(host, label: "Add widgets") == nil)
                 } else {
                     try expectInside(
-                        host, labels: variant.zoom == 1 ? ["Copy setup command", "Hide"] : ["Hide"])
+                        host, labels: variant.zoom == 1 ? ["Connect agents", "Hide"] : ["Hide"])
                     #expect(find(host, label: "Browse extensions") == nil)
                     #expect(find(host, label: "Continue setup") == nil)
                 }
@@ -93,8 +93,9 @@ import Testing
         }
     }
 
-    @Test func connectingAnAgentCopiesTheCommandForEveryClient() {
+    @Test func connectingAnAgentOpensAgentsSettingsAndKeepsTheCommandAsAHint() {
         #expect(HostGetStarted.agentCommand == "ed mcp install --client all")
+        #expect(HostNavigationCatalog.settings.contains { $0.id == "mcp" && $0.extensionID == nil })
     }
 
     @Test func dismissedGetStartedLeavesAnOrientedEmptyHome() async throws {
@@ -143,7 +144,83 @@ import Testing
             #expect(about.minY >= top - strip - 0.5)
             #expect(about.maxY <= top + 0.5)
             #expect(abs(about.midY - toggle.midY) <= 1)
+            #expect(abs(about.height - toggle.height) <= 0.5)
+            #expect(abs(about.width - toggle.width) <= 0.5)
+            let right = window.convertToScreen(seen.convert(seen.bounds, to: nil)).maxX
+            let gutters = [PageMetrics.gutter, PageMetrics.compactGutter].map { $0 * variant.zoom }
+            #expect(gutters.contains { abs(right - about.maxX - $0) <= 1 }, "\(variant.name)")
         }
+    }
+
+    @Test func reopenButtonMatchesTheSidebarToggleBesideAPageHeader() async throws {
+        defer { windows.close() }
+        let fixture = try Fixture(installed: [])
+        defer { fixture.clean() }
+        let entry = try #require(HostIndex.bundled().first { $0.id == "herdr" && $0.guide != nil })
+        HostIntroductions(defaults: fixture.defaults).markSeen(entry.id)
+        let variants =
+            Variant.all + [
+                Variant(name: "zoom-dark", width: 1100, height: 760, zoom: 1.6, scheme: .dark),
+                Variant(
+                    name: "compact-zoom-dark", width: 900, height: 700, zoom: 1.6, scheme: .dark),
+            ]
+        for variant in variants {
+            let host = try await render(variant, name: "reopen-header") {
+                HStack(spacing: 0) {
+                    Button {
+                    } label: {
+                        HostTitlebarButtonLabel(icon: .sidebarLeft)
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .accessibilityLabel("Toggle sidebar")
+                    .frame(height: UIScale.pt(HostTitlebarMetrics.rowHeight))
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.horizontal, UIScale.pt(8))
+                    syntheticHeaderPage(entry, fixture: fixture, scheme: variant.scheme)
+                }
+            }
+            let toggle = try #require(frame(host, label: "Toggle sidebar"))
+            let about = try #require(frame(host, label: "About " + entry.title))
+            let search = try #require(frame(host, label: "Synthetic search"))
+            #expect(abs(about.midY - toggle.midY) <= 1, "\(variant.name)")
+            #expect(abs(about.size.width - toggle.size.width) <= 0.5, "\(variant.name)")
+            #expect(abs(about.size.height - toggle.size.height) <= 0.5, "\(variant.name)")
+            #expect(abs(about.maxX - search.maxX) <= 1, "\(variant.name)")
+        }
+    }
+
+    private func syntheticHeaderPage(
+        _ entry: HostExtension, fixture: Fixture, scheme: ColorScheme
+    ) -> some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                DashSkin.paper(scheme == .dark)
+                    .frame(height: UIScale.pt(HostTitlebarMetrics.stripHeight))
+                HostIntroducedPage(entry: entry, defaults: fixture.defaults, showsReopen: true) {
+                    PageWorkspace {
+                        PageHeader(title: { Text("Synthetic agents") }) {
+                            HStack(spacing: UIScale.pt(2)) {
+                                ForEach(
+                                    [
+                                        (EdithIcon.link, "Synthetic connections"),
+                                        (.send, "Synthetic message"), (.search, "Synthetic search"),
+                                    ], id: \.1
+                                ) { icon, label in
+                                    PageToolbarButton(action: {}, icon: icon, helperText: label)
+                                }
+                            }
+                        }
+                    } content: {
+                        Color.clear
+                    }
+                }
+                .overlayPreferenceValue(HostIntroductionReopenKey.self, alignment: .topTrailing) {
+                    if let reopen = $0 { HostIntroductionReopenButton(reopen: reopen) }
+                }
+            }
+            .environment(\.compactLayout, geometry.size.width < UIScale.pt(640))
+        }
+        .background(DashSkin.paper(scheme == .dark))
     }
 
     @Test func suiteLandingRendersInstalledAvailableAndError() async throws {

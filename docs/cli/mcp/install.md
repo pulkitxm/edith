@@ -2,7 +2,8 @@
 
 [CLI reference](../README.md) | [MCP](./README.md)
 
-Register Edith's MCP server with a coding agent.
+Register Edith's MCP server with a coding agent. The Connect buttons in Settings >
+Agents run the same code.
 
 ```sh
 ed mcp install --client <claude|codex|cursor|vscode|all> [--dry-run] [--command <path>] [--json]
@@ -37,10 +38,11 @@ paste. Restart the client to load the server, then ask the agent to call
 
 `--json` reports `command`, `dryRun` and one object per client with `client`,
 `path`, `action` (`created`, `updated`, `unchanged`, `skipped`, `manual` or
-`notFound`), `applied`, `run` (the client command, or `null`), `snippet`, `note`
+`notFound`; [`ed mcp uninstall`](./uninstall.md) adds `removed`), `applied`, `run` (the client command, or `null`), `snippet`, `note`
 and `backup`.
 
 ## Related
 
+- [`ed mcp uninstall`](./uninstall.md)
 - [`ed mcp status`](./status.md)
 - [`ed mcp`](./README.md)

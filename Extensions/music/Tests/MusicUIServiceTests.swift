@@ -327,6 +327,28 @@ extension MusicExtensionTests {
             #expect(
                 FileManager.default.fileExists(
                     atPath: root.appendingPathComponent("Mock Waves.wav").path))
+            let shelf = root.appendingPathComponent("Mock Shelf")
+            try FileManager.default.createDirectory(at: shelf, withIntermediateDirectories: true)
+            try Data().write(to: shelf.appendingPathComponent("Mock Leaf.wav"))
+            let prefetched = try JSONDecoder().decode(
+                [String: MusicUIListing].self,
+                from: await service.execute(
+                    "music.ui.listings",
+                    payload: JSONEncoder().encode(
+                        MusicUIListingsRequest(paths: ["Mock Shelf", "Mock Collection"]))))
+            #expect(prefetched["Mock Shelf"]?.tracks.map(\.path) == ["Mock Shelf/Mock Leaf.wav"])
+            #expect(prefetched["Mock Collection"] == MusicUIListing(folders: [], tracks: []))
+            let shelfCached = try await service.execute(
+                "music.ui.cachedListing",
+                payload: JSONEncoder().encode(MusicUIQuery(path: "Mock Shelf")))
+            #expect(
+                try JSONDecoder().decode(MusicUIListing?.self, from: shelfCached)?.tracks.map(
+                    \.path) == ["Mock Shelf/Mock Leaf.wav"])
+            await #expect(throws: (any Error).self) {
+                try await service.execute(
+                    "music.ui.listings",
+                    payload: JSONEncoder().encode(MusicUIListingsRequest(paths: ["../escape"])))
+            }
             await #expect(throws: (any Error).self) {
                 try await service.execute(
                     "music.ui.action",

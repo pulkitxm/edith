@@ -103,23 +103,20 @@ private struct CodeStatsShareRow: View {
 struct CodeStatsHabitCards: View {
     let projection: CodeStatsProjection
     let dark: Bool
-    var showsTopDays = true
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        if showsTopDays {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                    punchcard.frame(minWidth: UIScale.pt(560))
-                    topDays.frame(width: UIScale.pt(CodeStatsTopDaysCard.width))
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                    punchcard
-                    topDays
-                }
+        if compact {
+            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                punchcard
+                topDays
             }
         } else {
-            punchcard
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                punchcard
+                topDays.frame(width: UIScale.pt(CodeStatsTopDaysCard.width))
+            }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -129,50 +126,75 @@ struct CodeStatsHabitCards: View {
 
     private var punchcard: some View {
         PageCard(title: "When you commit", note: "Weekday by hour", fill: true) {
-            ViewThatFits(in: .horizontal) {
-                punchcardGrid
-                ScrollView(.horizontal) {
-                    punchcardGrid
-                }
-                .scrollIndicators(.automatic)
-            }
+            CodeStatsPunchcardGrid(projection: projection, dark: dark)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("code-stats-punchcard")
+    }
+}
+
+struct CodeStatsPunchcardGrid: View {
+    static let minimumSide = 10.0
+    static let maximumSide = 40.0
+    static let gap = 2.0
+    static let labelWidth = 28.0
+
+    let projection: CodeStatsProjection
+    let dark: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            grid
+            ScrollView(.horizontal) {
+                grid
+            }
+            .scrollIndicators(.automatic)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private var punchcardGrid: some View {
-        Grid(horizontalSpacing: UIScale.pt(2), verticalSpacing: UIScale.pt(2)) {
+    private var grid: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(Self.gap)) {
             ForEach(Array(projection.punchcardRows.enumerated()), id: \.offset) { row, name in
-                GridRow {
+                HStack(spacing: UIScale.pt(Self.gap)) {
                     Text(name)
                         .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: UIScale.pt(28), alignment: .leading)
+                        .frame(width: UIScale.pt(Self.labelWidth), alignment: .leading)
                     ForEach(projection.punchcard[(row * 24)..<(row * 24 + 24)]) { cell in
                         RoundedRectangle(cornerRadius: UIScale.pt(2))
                             .fill(CodeStatsHeat.color(cell.level, dark: dark))
-                            .frame(minWidth: UIScale.pt(10), maxWidth: .infinity)
-                            .frame(height: UIScale.pt(16))
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(
+                                minWidth: UIScale.pt(Self.minimumSide),
+                                maxWidth: UIScale.pt(Self.maximumSide)
+                            )
                             .help(
                                 "\(cell.weekday) \(cell.hour):00, \(CodeStatsNumberFormat.grouped(cell.commits)) commits"
                             )
                     }
                 }
             }
-            GridRow {
-                Text("")
+            HStack(spacing: UIScale.pt(Self.gap)) {
+                Color.clear.frame(width: UIScale.pt(Self.labelWidth), height: UIScale.pt(1))
                 ForEach(0..<24, id: \.self) { hour in
                     Text(hour.isMultiple(of: 6) ? "\(hour)" : "")
                         .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
+                        .fixedSize()
+                        .frame(
+                            minWidth: UIScale.pt(Self.minimumSide),
+                            maxWidth: UIScale.pt(Self.maximumSide))
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
-
 }
 
 struct CodeStatsTopDaysCard: View {
     static let width = 300.0
+    static let listMaximumWidth = 340.0
 
     let days: [CodeStatsTopDay]
     let dark: Bool
@@ -208,6 +230,9 @@ struct CodeStatsTopDaysCard: View {
                         .foregroundStyle(DashSkin.inkSoft(dark))
                 }
             }
+            .frame(maxWidth: UIScale.pt(Self.listMaximumWidth), alignment: .leading)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("code-stats-top-days")
     }
 }

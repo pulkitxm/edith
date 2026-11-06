@@ -128,6 +128,8 @@ struct HostIntroducedPage<Content: View>: View {
 enum HostTitlebarMetrics {
     static let stripHeight = 41.0
     static let rowHeight = 31.0
+    static let iconSize = 15.0
+    static let iconFrame = 22.0
 }
 
 struct HostIntroductionReopen: Equatable, Sendable {
@@ -148,24 +150,33 @@ struct HostIntroductionReopenKey: PreferenceKey {
     }
 }
 
+struct HostTitlebarButtonLabel: View {
+    let icon: EdithIcon
+
+    var body: some View {
+        EdithIconView(icon)
+            .font(.system(size: UIScale.pt(HostTitlebarMetrics.iconSize), weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(
+                width: UIScale.pt(HostTitlebarMetrics.iconFrame),
+                height: UIScale.pt(HostTitlebarMetrics.iconFrame))
+    }
+}
+
 struct HostIntroductionReopenButton: View {
     let reopen: HostIntroductionReopen
     @Environment(\.compactLayout) private var compact
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Button(action: reopen.perform) {
-            EdithIconView(.info)
-                .font(.system(size: UIScale.pt(15), weight: .medium))
-                .foregroundStyle(DashSkin.inkSoft(scheme == .dark))
-                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+            HostTitlebarButtonLabel(icon: .info)
         }
         .buttonStyle(.edith(.toolbar))
         .help("About " + reopen.title)
         .accessibilityLabel("About " + reopen.title)
         .accessibilityIdentifier("introduction.reopen")
         .frame(height: UIScale.pt(HostTitlebarMetrics.rowHeight))
-        .padding(.trailing, PageMetrics.gutter(compact) - UIScale.pt(10))
+        .padding(.trailing, PageMetrics.gutter(compact))
         .offset(y: -UIScale.pt(HostTitlebarMetrics.stripHeight))
     }
 }

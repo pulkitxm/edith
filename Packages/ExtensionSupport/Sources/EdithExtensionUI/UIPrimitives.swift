@@ -133,29 +133,48 @@ private struct EdithButtonBody<Label: View>: View {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @Environment(\.font) private var font
+    @Environment(\.edithInteractionPreview) private var preview
     @State private var hovering = false
 
     private var metrics: EdithButtonMetrics { .metrics(for: role) }
+    private var cornerRadius: CGFloat { UIScale.pt(metrics.cornerRadius) }
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: UIScale.pt(metrics.cornerRadius))
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
     private var fillsWidth: Bool { role == .row || role == .selection }
     private var inactive: Bool { activeState == .inactive }
-    private var emphasized: Bool { selected || pressed || hovering }
     private var resolvedTint: Color { tint ?? themeColor(themeName) }
+    private var interaction: EdithInteractionState {
+        EdithInteractionState.resolve(
+            hovering: hovering, pressed: pressed, enabled: enabled, preview: preview)
+    }
+    private var plateTone: EdithHoverTone {
+        switch role {
+        case .row, .selection, .primary, .destructive: .neutral
+        case .secondary, .toolbar, .iconOnly, .borderless: .tinted
+        }
+    }
+    private var showsPlate: Bool {
+        guard fillsWidth, selected else { return interaction.active }
+        return interaction.pressed
+    }
 
     @ViewBuilder var body: some View {
         if role.usesFeatureAppearance {
             label
                 .font(font ?? .edithText(.body))
                 .overlay {
-                    if focused, enabled {
-                        shape.strokeBorder(resolvedTint.opacity(0.8), lineWidth: 2)
-                            .allowsHitTesting(false)
-                    }
+                    EdithOutsetHoverPlate(
+                        state: interaction, focused: focused && enabled, tint: tint,
+                        tone: plateTone, cornerRadius: nil, outset: true)
                 }
                 .contentShape(Rectangle())
-                .opacity(enabled ? 1 : 0.42)
+                .opacity(enabled ? 1 : EdithInteractionMetrics.disabledOpacity)
+                .onHover { hovering = $0 }
+                .animation(
+                    Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                    value: interaction
+                )
                 .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
         } else {
             label
@@ -169,17 +188,23 @@ private struct EdithButtonBody<Label: View>: View {
                     alignment: fillsWidth ? .leading : .center
                 )
                 .foregroundStyle(foreground)
-                .background(background, in: shape)
+                .background {
+                    ZStack {
+                        shape.fill(background)
+                        EdithHoverPlate(
+                            hovered: showsPlate, pressed: interaction.pressed && showsPlate,
+                            tint: tint, tone: plateTone, cornerRadius: cornerRadius)
+                    }
+                }
                 .overlay(shape.strokeBorder(border, lineWidth: borderWidth))
                 .contentShape(Rectangle())
-                .opacity(enabled ? (inactive ? 0.72 : 1) : 0.42)
-                .brightness(pressed && enabled ? -0.08 : 0)
-                .onHover { hovering = enabled && $0 }
-                .animation(
-                    Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering
+                .opacity(
+                    enabled ? (inactive ? 0.72 : 1) : EdithInteractionMetrics.disabledOpacity
                 )
+                .onHover { hovering = $0 }
                 .animation(
-                    Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: pressed
+                    Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                    value: interaction
                 )
                 .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
         }
@@ -204,16 +229,16 @@ private struct EdithButtonBody<Label: View>: View {
         let boost = contrast == .increased ? 0.05 : 0
         switch role {
         case .primary:
-            return resolvedTint.opacity(pressed ? 0.74 : 0.9)
+            return resolvedTint.opacity(0.9)
         case .destructive:
-            return Color.red.opacity(pressed ? 0.72 : 0.88)
+            return Color.red.opacity(0.88)
         case .secondary:
-            return Color.primary.opacity((emphasized ? 0.11 : 0.07) + boost)
+            return Color.primary.opacity((selected ? 0.11 : 0.07) + boost)
         case .row, .selection:
             if selected { return resolvedTint.opacity(0.2 + boost) }
-            return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
+            return Color.primary.opacity(boost)
         case .toolbar, .iconOnly:
-            return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
+            return Color.primary.opacity(selected ? 0.08 + boost : boost)
         case .borderless:
             return .clear
         }
@@ -221,7 +246,7 @@ private struct EdithButtonBody<Label: View>: View {
 
     private var border: Color {
         guard !role.usesFeatureAppearance else { return .clear }
-        if focused { return resolvedTint.opacity(0.95) }
+        if focused, enabled { return resolvedTint.opacity(0.95) }
         if selected, differentiateWithoutColor { return Color.primary.opacity(0.75) }
         switch role {
         case .secondary:
@@ -234,7 +259,7 @@ private struct EdithButtonBody<Label: View>: View {
     }
 
     private var borderWidth: Double {
-        if focused || (selected && differentiateWithoutColor) { return 2 }
+        if (focused && enabled) || (selected && differentiateWithoutColor) { return 2 }
         return contrast == .increased ? 1 : 0.75
     }
 }

@@ -13,6 +13,7 @@ import Observation
     private(set) var favouritesLoaded = false
     private(set) var folderPath = ""
     private(set) var folders: [EmbeddedMusicFolder] = []
+    private(set) var listedPath: String?
     private(set) var folderTracks: [EmbeddedTrack] = []
     private(set) var searchTracks: [EmbeddedTrack] = []
     private(set) var searchFolders: [EmbeddedMusicFolder] = []
@@ -56,7 +57,9 @@ import Observation
     private var cursor = 0
     private var folderIntentRevision: UInt64 = 0
     private var readQuery: EmbeddedMusicUIQuery?
-    private var folderCache: [String: [EmbeddedMusicFolder]] = [:]
+    private var listings: [String: EmbeddedMusicListing] = [:]
+    @ObservationIgnored private var prefetchTask: Task<Void, Never>?
+    @ObservationIgnored private var prefetchGeneration: UInt64 = 0
 
     var current: EmbeddedTrack? {
         currentFile.map {
@@ -167,8 +170,9 @@ import Observation
         EmbeddedPlaybackLevel.shared.reset()
         for task in ownedTasks.values { task.cancel() }
         tasks.removeAll()
-        catalogTask = nil; searchTask = nil; searchDebounceTask = nil
+        catalogTask = nil; searchTask = nil; searchDebounceTask = nil; prefetchTask = nil
         catalogGeneration &+= 1; listingGeneration &+= 1; searchGeneration &+= 1
+        prefetchGeneration &+= 1
         for client in clients.values { retire(client) }
         clients.removeAll(); invoke = nil
         tracks = []; folders = []; folderTracks = []; searchTracks = []; searchFolders = []
@@ -180,7 +184,7 @@ import Observation
         EmbeddedMusicTools.shared.error = nil
         entriesLoaded = false; searchLoaded = false; favouritesLoaded = false
         catalogLoaded = false
-        folderCache.removeAll(); EmbeddedTrackMeta.clear()
+        listings.removeAll(); listedPath = nil; EmbeddedTrackMeta.clear()
         EmbeddedMusicAccounts.shared.reset()
         EmbeddedMusicDetailPresenter.shared.dismiss()
         EmbeddedYoutubeDownloader.shared.stop()
@@ -262,7 +266,7 @@ import Observation
         looping = value.playback.repeating
         restorePending = value.restorePending
         entriesLoaded = true; favouritesLoaded = true
-        folderCache[folderPath] = folders
+        remember(folderPath)
         EmbeddedMusicVideoSession.apply(value.videoControl)
         EmbeddedMusicAccounts.shared.apply(value)
         let tools = EmbeddedMusicTools.shared
@@ -281,13 +285,12 @@ import Observation
         if let intent = value.folderIntent, intent.revision > folderIntentRevision {
             folderIntentRevision = intent.revision
             let changed = folderPath != intent.path || showingFavourites || !query.isEmpty
-            folderPath = intent.path; showingFavourites = false
+            showingFavourites = false
             if changed {
-                folders = []; folderTracks = []
-                entriesLoaded = false
                 clearSearch()
+                enter(intent.path)
                 rescan()
-                showCachedListing()
+                if !entriesLoaded { showCachedListing() }
             }
         }
     }
@@ -338,6 +341,7 @@ import Observation
                 _ = try await self.request(
                     "music.ui.action",
                     action: .init(kind: kind, path: path, target: target, value: value))
+                if kind.mutatesLibrary { self.forgetOtherListings() }
                 self.rescan(force: true)
             } catch {
                 if !Task.isCancelled, kind.mutatesLibrary {
@@ -345,6 +349,11 @@ import Observation
                 }
             }
         }
+    }
+
+    func setBarCollapsed(_ collapsed: Bool) {
+        SharedDefaults.store.set(collapsed, forKey: AppStorageKeys.Music.barCollapsed)
+        send(.barCollapsed, value: collapsed ? 1 : 0)
     }
 
     func streaming(_ action: String) { spotify(["action": action]) }
@@ -449,8 +458,8 @@ import Observation
             else { return }
             self.folders = cached.folders.map { .init(url: $0.url, relativePath: $0.path) }
             self.folderTracks = cached.tracks.map { .init(url: $0.url, relativePath: $0.path) }
-            self.folderCache[path] = self.folders
             self.entriesLoaded = true
+            self.remember(path)
         }
     }
 
@@ -493,18 +502,76 @@ import Observation
         else { return nil }
         return page
     }
-    func subfolders(of path: String) -> [EmbeddedMusicFolder]? { folderCache[path] }
+    func subfolders(of path: String) -> [EmbeddedMusicFolder]? { listings[path]?.folders }
+    func cachedListing(_ path: String) -> EmbeddedMusicListing? { listings[path] }
     func open(_ folder: EmbeddedMusicFolder) { navigate(to: folder.relativePath) }
     func navigate(to path: String) {
         showingFavourites = false
         let moved = folderPath != path
         if moved {
-            entriesLoaded = false
             clearSearch()
+            enter(path)
         }
-        folderPath = path
         rescan()
-        if moved { showCachedListing() }
+        if moved, !entriesLoaded { showCachedListing() }
+    }
+
+    private func enter(_ path: String) {
+        folderPath = path
+        if let cached = listings[path] {
+            folders = cached.folders; folderTracks = cached.tracks
+            listedPath = path
+            entriesLoaded = true
+            prefetchSubfolders()
+        } else {
+            entriesLoaded = false
+        }
+    }
+
+    private func remember(_ path: String) {
+        listings[path] = EmbeddedMusicListing(folders: folders, tracks: folderTracks)
+        listedPath = path
+        prefetchSubfolders()
+    }
+
+    private func prefetchSubfolders() {
+        guard prefetchTask == nil, !suspended, invoke != nil else { return }
+        let paths = Array(
+            folders.map(\.relativePath).filter { listings[$0] == nil }
+                .prefix(EmbeddedMusicUIListingsRequest.limit))
+        guard !paths.isEmpty,
+            let payload = try? JSONEncoder().encode(
+                EmbeddedMusicUIListingsRequest(paths: paths))
+        else { return }
+        prefetchGeneration &+= 1
+        let token = prefetchGeneration
+        let lifecycleToken = lifecycle
+        prefetchTask = ownedTask { [weak self] in
+            guard let self else { return }
+            let data = try? await self.dataRequest("music.ui.listings", payload: payload)
+            guard self.prefetchGeneration == token else { return }
+            self.prefetchTask = nil
+            guard !Task.isCancelled, self.lifecycle == lifecycleToken, let data,
+                let found = try? JSONDecoder().decode(
+                    [String: EmbeddedMusicUIListing].self, from: data)
+            else { return }
+            var added = false
+            for path in paths {
+                guard self.listings[path] == nil, let listing = found[path],
+                    (try? listing.validate()) != nil
+                else { continue }
+                self.listings[path] = EmbeddedMusicListing(
+                    folders: listing.folders.map { .init(url: $0.url, relativePath: $0.path) },
+                    tracks: listing.tracks.map { .init(url: $0.url, relativePath: $0.path) })
+                added = true
+            }
+            if added { self.prefetchSubfolders() }
+        }
+    }
+
+    private func forgetOtherListings() {
+        listings = listings.filter { $0.key == folderPath }
+        prefetchGeneration &+= 1; prefetchTask = nil
     }
     func reveal(_ track: EmbeddedTrack) {
         let path = (track.relativePath as NSString).deletingLastPathComponent

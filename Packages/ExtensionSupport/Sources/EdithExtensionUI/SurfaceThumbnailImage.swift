@@ -23,7 +23,10 @@ struct SurfaceThumbnailImage: View {
         .task(id: thumbnail.data) {
             image = nil
             guard !Task.isCancelled else { return }
-            let decoded = try? thumbnail.decodedImage(maximumDimension: 160)
+            let source = thumbnail
+            let decoded = await Task.detached(priority: .userInitiated) {
+                try? source.decodedImage(maximumDimension: 160)
+            }.value
             guard !Task.isCancelled else { return }
             image = decoded
         }

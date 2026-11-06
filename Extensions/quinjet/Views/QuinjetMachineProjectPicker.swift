@@ -528,7 +528,9 @@ private struct QuinjetFolderRowStyle: ButtonStyle {
                     .strokeBorder(
                         selected ? DashSkin.accent(dark).opacity(0.55) : DashSkin.lineStrong(dark))
             }
+            .edithHoverHighlight(
+                tone: .neutral, cornerRadius: UIScale.pt(8), pressed: configuration.isPressed
+            )
             .edithButtonTarget(.selection)
-            .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }

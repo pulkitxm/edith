@@ -3000,7 +3000,6 @@
         "Extensions/herdr/Views/Support/LauncherUsage.swift",
         "Extensions/herdr/Views/Support/OwnedTerminalUIPresentation.swift",
         "Extensions/herdr/Views/Support/QuinjetLaunchModels.swift",
-        "Extensions/herdr/Views/Support/QuinjetToolbarButtonStyle.swift",
         "Extensions/herdr/Views/Support/SessionSearchCommand.swift",
         "Extensions/herdr/Views/Support/TerminalDropTransfer.swift",
         "Extensions/herdr/Views/Support/TerminalDropTransferStatus.swift",

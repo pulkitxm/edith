@@ -51,7 +51,8 @@ struct HostPageContent: View {
                     HostGetStartedCard(
                         marketplace: marketplace, permissions: permissions, defaults: defaults,
                         finishSetup: showWelcome, openPermissions: openPermissions,
-                        openExtensions: { select("extensions") }, openExtension: openExtension)))
+                        openAgents: openAgents, openExtensions: { select("extensions") },
+                        openExtension: openExtension)))
         case "extensions":
             MarketplacePage(
                 marketplace: marketplace, presenter: presenter, openExtension: openExtension,
@@ -102,6 +103,7 @@ struct HostPageContent: View {
     @ViewBuilder private var settingsContent: some View {
         switch settingsDestination {
         case "terminal": HostToolingSettingsPage(defaults: defaults)
+        case "mcp": HostAgentsSettingsPage(defaults: defaults)
         case "surfaces": HostSurfaceEditor(marketplace: marketplace)
         case "general":
             HostSettingsPage(
@@ -149,6 +151,10 @@ struct HostPageContent: View {
     }
     private func openPermissions() {
         settings = "permissions"
+        select("settings")
+    }
+    private func openAgents() {
+        settings = "mcp"
         select("settings")
     }
     private func introduced(_ id: String, section: String? = nil) -> some View {

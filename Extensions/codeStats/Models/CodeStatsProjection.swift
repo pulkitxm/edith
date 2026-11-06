@@ -104,9 +104,9 @@ struct CodeStatsProjection: Equatable, Sendable {
     static let monthlyTrendThreshold = 104
     static let dailyTrendDays = 31
     static let dailyRollingWindow = 7
-    static let contributionWeeks = 5
 
     var heatWeeks: [CodeStatsHeatWeek] = []
+    var calendar = Calendar.current
     var dayCount = 0
     var trendGranularity = CodeStatsTrendGranularity.weekly
     var trend: [CodeStatsTrendPoint] = []
@@ -126,6 +126,7 @@ struct CodeStatsProjection: Equatable, Sendable {
 
     init(report: CodeStatsReport, calendar: Calendar = .current) {
         let dates = DateResolver(calendar: calendar)
+        self.calendar = calendar
         dayCount = report.daily.count
         heatWeeks = Self.heatWeeks(report.daily, calendar: calendar, dates: dates)
         let trendSource = Self.trendSource(report, dates: dates, calendar: calendar)
@@ -164,8 +165,6 @@ struct CodeStatsProjection: Equatable, Sendable {
     }
 
     var isSingleDay: Bool { dayCount == 1 }
-
-    var showsContributions: Bool { heatWeeks.count >= Self.contributionWeeks }
 
     var showsStackedTrend: Bool {
         Set((repositoryMonthly + languageMonthly).map(\.date)).count > 1
