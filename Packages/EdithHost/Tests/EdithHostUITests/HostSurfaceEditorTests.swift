@@ -1166,6 +1166,47 @@ import HostWorkerFixtureSupport
         #expect(row.tone == .attention)
     }
 
+    @Test func anUpdateThatFinishesOnRestartOffersARestartOnItsRowAndThePage() async throws {
+        let fixture = try Fixture(packageState: "restart", activeIDs: ["calendar"])
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        #expect(await fixture.marketplace.enable(id: "calendar") == nil)
+        #expect(fixture.marketplace.updatableIDs == ["calendar"])
+        #expect(await fixture.marketplace.download(id: "calendar") == nil)
+        #expect(fixture.marketplace.sessions.versions["calendar"] == "1.0.0")
+        #expect(fixture.marketplace.updatableIDs.isEmpty)
+        let entry = try #require(fixture.marketplace.entries.first { $0.id == "calendar" })
+        let row = HostExtensionRowState(entry, marketplace: fixture.marketplace)
+        #expect(row.stage == .restartRequired)
+        #expect(row.status == "Restart to finish updating · 1.1.0")
+        #expect(row.action == .restart)
+        #expect(row.action?.title == "Restart Edith")
+        #expect(row.tone == .attention)
+        #expect(row.progress == nil)
+        let notice = try #require(HostMarketplaceRestartNotice(marketplace: fixture.marketplace))
+        #expect(notice.title == "Restart to finish updating")
+        #expect(
+            notice.message
+                == "\(entry.title) is updated and keeps running its current version until Edith restarts."
+        )
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: MarketplacePage(marketplace: fixture.marketplace)
+                .environment(\.automaticViewActionsEnabled, false)
+                .transaction { $0.animation = nil })
+        host.frame = CGRect(x: 0, y: 0, width: 1100, height: 760)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: notice.message) != nil)
+        #expect(find(host, label: "Restart Edith to finish updating \(entry.title)") != nil)
+        #expect(find(host, label: "Update All (1)") == nil)
+        #expect(await fixture.marketplace.sessions.shutdown())
+    }
+
     @Test func extensionsPageRendersCompactRegularZoomedLightAndDark() async throws {
         let fixture = try Fixture(packageState: "abi")
         defer { fixture.clean() }
@@ -1631,6 +1672,19 @@ import HostWorkerFixtureSupport
                 try Data(repeating: 1, count: 128).write(
                     to: store.directory(for: package).appendingPathComponent("synthetic-payload"))
                 try store.commit([package])
+                if packageState == "restart" {
+                    let staged = ExtensionPackage(
+                        id: id, version: "1.1.0", hostABI: HostContract.compatibility,
+                        downloadURL: URL(
+                            string:
+                                "https://github.com/pulkitxm/edith/releases/download/synthetic/\(id).zip"
+                        )!, sha256: String(repeating: "a", count: 64), downloadBytes: 128,
+                        installedBytes: 128)
+                    try FileManager.default.createDirectory(
+                        at: store.directory(for: staged), withIntermediateDirectories: true)
+                    try store.commit([package, staged])
+                    try store.select(package)
+                }
                 if packageState == "removal" {
                     lease = try store.lease(package)
                     #expect(try store.requestRemoval(id: id) == false)
@@ -1663,21 +1717,23 @@ import HostWorkerFixtureSupport
                 ExtensionCatalog(revision: 1, packages: packages))
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
-            try JSONEncoder().encode(
-                SignedExtensionCatalog(payload: payload, signature: key.signature(for: payload))
-            ).write(to: cache)
+            let envelope = try JSONEncoder().encode(
+                SignedExtensionCatalog(payload: payload, signature: key.signature(for: payload)))
+            try envelope.write(to: cache)
+            let restart = packageState == "restart"
             let client = ExtensionCatalogClient(
                 url: URL(string: "https://github.com/pulkitxm/edith/catalog")!,
                 publicKey: key.publicKey.rawRepresentation,
                 repository: MarketplaceConfiguration.repository, cache: cache,
-                fetch: { [requests] _ in try await requests.reject() })
+                fetch: { [requests] _ in restart ? envelope : try await requests.reject() })
             let installer = ExtensionPackageInstaller(
                 store: store, download: { _, _ in throw MarketplaceError.downloadFailed },
-                verify: { _ in throw MarketplaceError.invalidSignature })
+                verify: { _ in if !restart { throw MarketplaceError.invalidSignature } })
             marketplace = try HostMarketplace(
                 identity: identity,
                 entries: entries, store: store,
-                catalogClient: client, installer: installer, sessions: sessions)
+                catalogClient: client, installer: installer, sessions: sessions,
+                needsRestart: { restart && $0.version == "1.1.0" })
         }
 
         func clean() {

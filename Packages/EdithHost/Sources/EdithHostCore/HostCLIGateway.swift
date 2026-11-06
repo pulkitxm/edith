@@ -63,15 +63,17 @@ import Foundation
         let candidates = marketplace.updatableIDs
         let failed = await marketplace.updateAll()
         try Task.checkCancellation()
-        let updated = candidates.filter {
+        let finished = candidates.filter {
             failed[$0] == nil && !marketplace.updateAvailable(id: $0)
         }
-        let skipped = Set(candidates).subtracting(updated).subtracting(failed.keys)
+        let restart = finished.filter { marketplace.restartPending[$0] != nil }
+        let updated = finished.filter { marketplace.restartPending[$0] == nil }
+        let skipped = Set(candidates).subtracting(finished).subtracting(failed.keys)
         var failures = failed
         for id in skipped { failures[id] = "Another operation is running for this extension." }
         return try JSONSerialization.data(
             withJSONObject: [
-                "updated": updated, "failed": failures,
+                "updated": updated, "failed": failures, "restartRequired": restart,
                 "upToDate": marketplace.downloadedIDs.subtracting(candidates).sorted(),
             ], options: .sortedKeys)
     }
@@ -170,6 +172,8 @@ import Foundation
             "version": marketplace.installed[id]?.version as Any? ?? NSNull(),
             "availableVersion": marketplace.available[id]?.version as Any? ?? NSNull(),
             "updateAvailable": marketplace.updateAvailable(id: id), "offline": marketplace.offline,
+            "restartRequired": marketplace.restartPending[id] != nil,
+            "pendingVersion": marketplace.restartPending[id]?.version as Any? ?? NSNull(),
             "timings": ExtensionLoadTimings.shared.json(id: id),
         ]
     }
