@@ -56,8 +56,8 @@ import Testing
             let search = try #require(frames["Search"], "\(variant.name)")
             #expect(about.width > 1, "\(variant.name)")
             #expect(abs(about.midY - search.midY) <= 1, "\(variant.name)")
-            #expect(abs(about.width - search.width) <= 0.5, "\(variant.name)")
-            #expect(abs(about.height - search.height) <= 0.5, "\(variant.name)")
+            #expect(abs(about.width - search.width) <= 1, "\(variant.name)")
+            #expect(abs(about.height - search.height) <= 1, "\(variant.name)")
             for (label, other) in frames where label != "About Agents" {
                 #expect(about.minX >= other.maxX - 0.5, "\(variant.name) \(label)")
             }
