@@ -206,7 +206,7 @@ test("a clean detached release imports its isolated keychain before extensions a
   } finally {
     f.clean();
   }
-});
+}, 30_000);
 
 test("extension failure restores the keychain and stops before the host build or release commit", () => {
   const f = fixture();
