@@ -496,3 +496,25 @@ test("role support overrides retain their scopes and native non-presentation rol
   ]);
   expect(() => runtimeRoleLinkFlags(undefined, support)).toThrow();
 });
+
+test("renamed native frameworks keep their original headers on the compile search path", () => {
+  const flags = nativePackageLinkFlags(
+    "/source",
+    {
+      nativePackage: "Extensions/studio/NativeRuntime",
+      nativeProduct: "StudioNativeRuntime",
+      nativeFrameworks: [
+        ".build/artifacts/pdfium/PDFium.xcframework/macos-arm64_x86_64/PDFium.framework",
+      ],
+    },
+    "/payload/app.bundle/Contents",
+    "libStudioNativeRuntime.studio-0123456789abcdef.dylib",
+  );
+  const searched = flags.flatMap((flag, index) =>
+    flag === "-F" ? [flags[index + 1]] : [],
+  );
+  expect(searched).toContain("/payload/app.bundle/Contents/Frameworks");
+  expect(searched).toContain(
+    "/source/Extensions/studio/NativeRuntime/.build/artifacts/pdfium/PDFium.xcframework/macos-arm64_x86_64",
+  );
+});

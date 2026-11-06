@@ -12,7 +12,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import {
   buildExtensionContext,
   buildExtensionKit,
@@ -418,10 +418,19 @@ export function nativePackageLinkFlags(root, definition, contents, library) {
   )
     throw new Error("A linked native product requires its private library");
   const frameworks = resolve(contents, "Frameworks");
+  const packageRoot = resolve(root, definition.nativePackage ?? "");
+  const headerDirectories = [
+    ...new Set(
+      (definition.nativeFrameworks ?? []).map((source) =>
+        dirname(resolve(packageRoot, source)),
+      ),
+    ),
+  ];
   return [
     ...nativeClangModuleFlags(root, definition),
     "-F",
     frameworks,
+    ...headerDirectories.flatMap((directory) => ["-F", directory]),
     "-I",
     resolve(root, definition.nativePackage, ".build/release/Modules"),
     "-L",
