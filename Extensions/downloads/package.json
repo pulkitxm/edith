@@ -1,7 +1,7 @@
 {
   "id": "downloads",
   "title": "Downloads",
-  "icon": "arrowDown",
+  "icon": "downloads",
   "category": "media",
   "background": true,
   "commands": [
@@ -9,14 +9,7 @@
     "downloads",
     "dl"
   ],
-  "pages": [
-    {
-      "id": "downloads",
-      "title": "Downloads",
-      "icon": "arrowDown",
-      "order": 4
-    }
-  ],
+  "page": true,
   "homeCards": [
     "media",
     "extension:downloads"

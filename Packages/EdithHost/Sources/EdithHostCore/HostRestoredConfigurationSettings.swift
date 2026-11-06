@@ -41,7 +41,7 @@ enum HostRestoredConfigurationSettings {
             fallback: .integer(10)),
         .init(
             "appMaintenanceCategoriesExpanded", .bool, group: "panel",
-            summary: "Whether App Maintenance sections are expanded in the main sidebar.",
+            summary: "Unused. App Updates keeps its tabs inside its own page.",
             fallback: .bool(true),
             owner: "appMaintenance"),
         .init(

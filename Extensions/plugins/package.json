@@ -1,20 +1,13 @@
 {
   "id": "plugins",
   "title": "Plugins",
-  "icon": "layers",
+  "icon": "plugins",
   "category": "agents",
   "background": false,
   "commands": [
     "skills"
   ],
-  "pages": [
-    {
-      "id": "plugins",
-      "title": "Plugins",
-      "icon": "layers",
-      "order": 5
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:plugins"
   ],

@@ -92,7 +92,7 @@ import Testing
         await permissions.refresh()
         for variant in Variant.all {
             for page in [
-                "home", "desk", "agents", "system", "media", "data", "about", "extensions",
+                "home", "desk", "agents", "utilities", "media", "developer", "about", "extensions",
             ] {
                 try await render(variant, name: "page-\(page)") {
                     detail(fixture, permissions: permissions, page: page, scheme: variant.scheme)
@@ -140,7 +140,7 @@ import Testing
             HostPageContent(
                 marketplace: fixture.marketplace, updater: HostUpdater(startingUpdater: false),
                 permissions: permissions, destination: HostNavigationCatalog.page(page),
-                settings: .constant("general"), maintenanceSection: .constant("Updates"),
+                settings: .constant("general"),
                 showWelcome: {}, defaults: fixture.defaults, select: { _ in })
         }
     }

@@ -61,41 +61,18 @@ struct HostExtensionSettingsRoute: Equatable {
 }
 
 enum HostExtensionActions {
-    struct OpenTarget: Equatable {
-        let page: String
-        let section: String?
-    }
-
-    static func openTarget(extensionID: String) -> OpenTarget? {
-        HostNavigationCatalog.route(extensionID: extensionID).map {
-            OpenTarget(page: $0.page, section: $0.section)
-        }
-    }
-
-    static func pageTitles() -> [String: String] {
-        Dictionary(
-            HostNavigationCatalog.pages.map { ($0.id, $0.title) },
-            uniquingKeysWith: { first, _ in first })
-    }
-
-    static func sectionTitles() -> [String: String] {
-        Dictionary(
-            HostNavigationCatalog.maintenance.map { ($0.id, $0.title) },
-            uniquingKeysWith: { first, _ in first })
+    static func openTarget(extensionID: String) -> String? {
+        HostNavigationCatalog.route(extensionID: extensionID)
     }
 
     static func placements(for entry: HostExtension) -> [HostExtensionPlacement] {
         HostExtensionPlacements.placements(
             for: entry,
-            hasSettings: HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable,
-            route: HostNavigationCatalog.route(extensionID: entry.id), pageTitles: pageTitles(),
-            sectionTitles: sectionTitles())
+            hasSettings: HostExtensionSettingsPolicy.policy(for: entry.id) != .unavailable)
     }
 
     static func hint(for entry: HostExtension) -> String {
-        HostExtensionPlacements.hint(
-            for: entry, route: HostNavigationCatalog.route(extensionID: entry.id),
-            pageTitles: pageTitles(), sectionTitles: sectionTitles())
+        HostExtensionPlacements.hint(for: entry)
     }
 
     static func open(

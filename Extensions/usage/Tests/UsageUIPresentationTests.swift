@@ -88,14 +88,15 @@ import Vision
         #expect(UsageUISceneRoute(context: ["location": "main"])?.interior == .dashboard)
         #expect(UsageUISceneRoute(context: ["location": "settings"])?.interior == .settings)
         #expect(
-            UsageUISceneRoute(context: ["location": "main", "section": "dashboard"])?.interior
+            UsageUISceneRoute(context: ["location": "main", "section": "usage"])?.interior
                 == .dashboard)
+        #expect(UsageUISceneRoute(context: ["location": "main", "section": "dashboard"]) == nil)
         #expect(
             UsageUISceneRoute(context: ["location": "settings", "section": "usage"])?.interior
                 == .settings)
         #expect(
             UsageUISceneRoute(context: [
-                "location": "main", "section": "dashboard", "target": "home",
+                "location": "main", "section": "usage", "target": "home",
             ]) == nil)
         #expect(UsageUISceneRoute(context: try context("notch", SurfaceTile(.calendar))) == nil)
         let tooLarge = NSMutableDictionary(dictionary: [

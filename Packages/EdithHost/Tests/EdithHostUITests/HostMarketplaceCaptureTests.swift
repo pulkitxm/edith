@@ -66,7 +66,8 @@ import Testing
                 MarketplacePage(marketplace: fixture.marketplace), name: "page-stages",
                 variant: variant)
             #expect(find(host, label: "Agents & Terminal suite enabled") != nil)
-            #expect(find(host, label: "Find it in the sidebar as Usage.") != nil)
+            #expect(
+                find(host, label: "Find Usage in the sidebar under Agents & Terminal.") != nil)
             for label in ["Open Usage", "Retry Launcher", "Cancel installing Agents"] {
                 #expect(find(host, label: label) != nil, "\(label)")
             }

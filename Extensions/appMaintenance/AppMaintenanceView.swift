@@ -5,17 +5,21 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum AppMaintenanceSection: String, CaseIterable, Identifiable {
-    case updates = "Updates"
-    case removal = "Remove"
-    case history = "History"
+    case updates
+    case removal = "remove"
+    case history
 
     var id: Self { self }
 
-    var reviewsSelection: Bool { self != .history }
-
-    init(hostSection: String?) {
-        self = hostSection.flatMap(Self.init(rawValue:)) ?? .updates
+    var title: String {
+        switch self {
+        case .updates: "Updates"
+        case .removal: "Remove"
+        case .history: "History"
+        }
     }
+
+    var reviewsSelection: Bool { self != .history }
 
     var uiScope: AppMaintenanceUIScope {
         switch self {
@@ -26,9 +30,27 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
     }
 }
 
-struct AppMaintenanceView: View {
+struct AppMaintenancePage: View {
     @State var model: AppMaintenanceModel
-    let section: AppMaintenanceSection
+    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store)
+    private var sectionRaw = AppMaintenanceSection.updates.rawValue
+
+    private var section: Binding<AppMaintenanceSection> {
+        Binding(
+            get: { AppMaintenanceSection(rawValue: sectionRaw) ?? .updates },
+            set: { sectionRaw = $0.rawValue })
+    }
+
+    var body: some View {
+        AppMaintenanceView(model: model, section: section)
+            .navigationRoute("tab", selection: section)
+    }
+}
+
+struct AppMaintenanceView: View {
+    static let title = "App Updates"
+    @State var model: AppMaintenanceModel
+    @Binding var section: AppMaintenanceSection
     @State private var query = ""
     @State private var confirmingRemoval = false
     @State private var confirmingUpdates = false
@@ -85,11 +107,14 @@ struct AppMaintenanceView: View {
 
     var body: some View {
         PageWorkspace {
-            PageSubtitle(section.summary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .pageGutter(compact)
-                .padding(.top, UIScale.pt(16))
-                .padding(.bottom, UIScale.pt(12))
+            PageHeader(Self.title, subtitle: section.summary)
+            PageTabPicker(
+                "App Updates section", selection: $section,
+                options: AppMaintenanceSection.allCases, label: \.title
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageGutter(compact)
+            .padding(.bottom, UIScale.pt(12))
             if section.reviewsSelection { toolbar }
             Divider()
         } content: {

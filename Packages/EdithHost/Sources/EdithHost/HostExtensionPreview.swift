@@ -64,7 +64,7 @@ struct HostExtensionPreview: View {
         case "audioMixer": audioMixerPreview(phase: phase)
         default:
             HostExtensionPreviewScene(
-                id: entry.id, icon: entry.icon, dark: dark, phase: phase)
+                id: entry.id, icon: HostExtensionIcon.resolve(entry), dark: dark, phase: phase)
         }
     }
 

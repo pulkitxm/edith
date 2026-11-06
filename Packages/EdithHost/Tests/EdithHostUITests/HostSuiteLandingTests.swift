@@ -36,14 +36,13 @@ import Testing
             showDetails: { details.append($0.id) })
         #expect(pages == ["database"])
         #expect(details.isEmpty)
-        #expect(HostNavigationCatalog.route(extensionID: "database")?.page == "database")
+        #expect(HostNavigationCatalog.route(extensionID: "database") == "database")
         #expect(!HostExtensionSettingsPolicy.canPresent(id: "database", active: true))
         #expect(!HostExtensionSettingsPolicy.canPresent(id: "database", active: false))
     }
 
-    @Test func maintenanceAndUtilityNavigationPreserveTheirOwnedDestinations() throws {
-        let route = try #require(HostNavigationCatalog.route(extensionID: "homebrew"))
-        #expect(route.page == "appMaintenance" && route.section == "Packages")
+    @Test func utilityNavigationOpensTheExtensionsOwnPage() throws {
+        #expect(HostNavigationCatalog.route(extensionID: "homebrew") == "homebrew")
         var pages: [String] = [], details: [String] = []
         HostExtensionActions.open(
             try entry("homebrew"), active: true, openPage: { pages.append($0) },

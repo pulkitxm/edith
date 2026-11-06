@@ -9,7 +9,6 @@ struct HostPageContent: View {
     let permissions: HostPermissions
     let destination: HostNavigationPage
     @Binding var settings: String
-    @Binding var maintenanceSection: String
     var requestedSettings: Binding<HostSettingsNavigation?> = .constant(nil)
     var presenter: (any HostExtensionContentPresenting)? = nil
     var showWelcome: (() -> Void)? = nil
@@ -18,7 +17,6 @@ struct HostPageContent: View {
     var defaults: UserDefaults = SharedDefaults.store
     var showsIntroductionButton = false
     let select: (String) -> Void
-    private var active: Set<String> { marketplace.surfaceAvailability.navigableIDs }
     private var settingsSections: [HostNavigationSection] {
         HostNavigationCatalog.settingsSections(
             installed: Set(marketplace.installed.keys),
@@ -62,42 +60,12 @@ struct HostPageContent: View {
             }
         case "about": HostAboutPage(identity: marketplace.identity)
         default:
-            if destination.id == "appMaintenance",
-                let child = HostNavigationCatalog.maintenanceDestination(
-                    maintenanceSection, active: active), let id = child.extensionID
-            {
-                VStack(spacing: 0) {
-                    maintenanceHeader(current: child, tight: id == "appMaintenance")
-                    if id != "appMaintenance" { Divider() }
-                    introduced(id, section: child.id)
-                }
-                .navigationRoute(
-                    "tab",
-                    selection: Binding(get: { child.id }, set: { maintenanceSection = $0 }),
-                    isValid: { raw in maintenanceSections.contains { $0.id == raw } })
-            } else if let id = destination.extensionID {
+            if let id = destination.extensionID {
                 introduced(id)
             } else {
                 landing
             }
         }
-    }
-    private var maintenanceSections: [HostNavigationSection] {
-        HostNavigationCatalog.maintenance.filter { $0.extensionID.map(active.contains) ?? false }
-    }
-    private func maintenanceHeader(current: HostNavigationSection, tight: Bool) -> some View {
-        let sections = maintenanceSections
-        return PageHeader(current.title, subtitle: current.summary) {
-            Picker("Section", selection: $maintenanceSection) {
-                ForEach(sections) { section in
-                    Label(section.title, edith: section.icon).tag(section.id)
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .accessibilityLabel("App Maintenance section")
-        }
-        .padding(.bottom, tight ? -UIScale.pt(6) : 0)
     }
     @ViewBuilder private var settingsContent: some View {
         switch settingsDestination {
@@ -136,12 +104,8 @@ struct HostPageContent: View {
         }
     }
     private func openExtension(_ id: String) {
-        if let route = HostNavigationCatalog.route(extensionID: id) {
-            if route.page == "appMaintenance", let section = route.section {
-                maintenanceSection = section
-            }
-            if route.page == "settings", let section = route.section { settings = section }
-            select(route.page)
+        if let page = HostNavigationCatalog.route(extensionID: id) {
+            select(page)
         } else {
             defaults.set(id, forKey: HostMarketplaceKeys.expandedExtension)
             select("extensions")
@@ -151,14 +115,14 @@ struct HostPageContent: View {
         settings = "permissions"
         select("settings")
     }
-    private func introduced(_ id: String, section: String? = nil) -> some View {
+    private func introduced(_ id: String) -> some View {
         HostIntroducedPage(
             entry: marketplace.entries.first { $0.id == id }, defaults: defaults,
             showsReopen: showsIntroductionButton
         ) {
-            content(id, section: section)
+            content(id)
         }
-        .id(id + "/" + (section ?? ""))
+        .id(id)
     }
     private func content(_ id: String, section: String? = nil) -> some View {
         HostExtensionContent(

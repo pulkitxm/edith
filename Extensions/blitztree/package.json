@@ -5,14 +5,7 @@
   "category": "utilities",
   "background": false,
   "commands": [],
-  "pages": [
-    {
-      "id": "blitztree",
-      "title": "Disk Map",
-      "icon": "blitztree",
-      "order": 2
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:blitztree"
   ],

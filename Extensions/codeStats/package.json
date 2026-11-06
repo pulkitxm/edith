@@ -1,20 +1,13 @@
 {
   "id": "codeStats",
   "title": "Code Stats",
-  "icon": "chartLine",
+  "icon": "codeStats",
   "category": "developer",
   "background": true,
   "commands": [
     "code-stats"
   ],
-  "pages": [
-    {
-      "id": "codeStats",
-      "title": "Code Stats",
-      "icon": "chartLine",
-      "order": 2
-    }
-  ],
+  "page": true,
   "homeCards": [
     "codeStats",
     "extension:codeStats"

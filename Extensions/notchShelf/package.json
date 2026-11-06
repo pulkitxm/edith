@@ -1,7 +1,7 @@
 {
   "id": "notchShelf",
   "title": "Notch Shelf",
-  "icon": "tray",
+  "icon": "notchShelf",
   "category": "desk",
   "background": true,
   "commands": [

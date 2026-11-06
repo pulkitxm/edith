@@ -16,14 +16,7 @@
       "shortcut": "control+option+command+v"
     }
   ],
-  "pages": [
-    {
-      "id": "virtualCamera",
-      "title": "Virtual Camera",
-      "icon": "virtualCamera",
-      "order": 6
-    }
-  ],
+  "page": true,
   "homeCards": [
     "media",
     "extension:virtualCamera"

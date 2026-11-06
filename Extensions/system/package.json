@@ -1,7 +1,7 @@
 {
   "id": "system",
   "title": "Running Apps",
-  "icon": "toolbox",
+  "icon": "system",
   "category": "utilities",
   "background": false,
   "commands": [
@@ -9,14 +9,7 @@
     "apps",
     "tools"
   ],
-  "pages": [
-    {
-      "id": "runningApps",
-      "title": "Running Apps",
-      "icon": "cpu",
-      "order": 1
-    }
-  ],
+  "page": true,
   "homeCards": [
     "actions",
     "extension:system"

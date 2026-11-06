@@ -128,10 +128,15 @@ default `shortcut` such as `control+shift+e`; the host registers it while the
 extension is idle and starts the extension on the first press. `launchWhen`
 lists preference keys (`key`, `default`) that start a non-background extension
 at launch while any of them is true, for a toggle such as Focus Dim that must
-be restored. `pages` adds sidebar pages (`id`, `title`, `icon`, `order`,
-optional `detachable` and `logoName`) under the landing page of the
-extension's category, sorted by `order`. `sections` adds Maintenance sections
-(`page: "appMaintenance"`, `id`, `title`, `icon`, `summary`, `order`).
+be restored. `page` gives the extension one sidebar page: `true`, or an object
+with an optional `detachable`. The page id is the extension id, and
+it sits under its category's group with the extension's own `title` and `icon`,
+in the same order as the category page. Only `agents`, `utilities`, `media` and
+`developer` have sidebar groups. A page cannot set its own title, icon, id,
+order or group, and tabs inside a page belong to the extension's UI (a
+`navigationRoute("tab", ...)`), so `extension-index.mjs` rejects them. When
+`Packages/EdithIcons` has an icon named after the extension id, `icon` must be
+that icon, so every surface draws the same one.
 After editing it, run `bun scripts/extension-index.mjs --write` and rebuild the development
 app, since the host index ships inside the app. Set `background` only when the
 extension must run before anything opens it.

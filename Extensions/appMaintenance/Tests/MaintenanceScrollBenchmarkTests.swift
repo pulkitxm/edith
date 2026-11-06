@@ -41,7 +41,7 @@ import Testing
         defer { fixture.remove() }
         let model = fixture.model()
         let (window, host) = ScrollHarness.host(
-            AppMaintenanceView(model: model, section: section)
+            AppMaintenanceView(model: model, section: .constant(section))
                 .environment(\.compactLayout, false)
                 .environment(\.colorScheme, .dark),
             size: CGSize(width: 1100, height: 760))

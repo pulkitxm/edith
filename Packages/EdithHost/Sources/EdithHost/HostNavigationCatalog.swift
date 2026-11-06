@@ -20,18 +20,11 @@ struct HostNavigationPage: Identifiable, Equatable {
     var sections: [HostNavigationSection] = []
     var landing = false
     var detachable = true
-    var logoName: String? = nil
 }
 
 enum HostNavigationCatalog {
-    static func route(extensionID: String) -> (page: String, section: String?)? {
-        if let page = pages.first(where: { $0.extensionID == extensionID }) {
-            return (page.id, nil)
-        }
-        if let section = maintenance.first(where: { $0.extensionID == extensionID }) {
-            return ("appMaintenance", section.id)
-        }
-        return nil
+    static func route(extensionID: String) -> String? {
+        pages.first { $0.extensionID == extensionID }?.id
     }
     static let settings: [HostNavigationSection] = [
         .init(
@@ -59,7 +52,7 @@ enum HostNavigationCatalog {
             extensionID: nil, summary: "Where Edith keeps things, and what leaves this Mac"),
         .init(
             id: "storage", title: "Storage", icon: .drive, extensionID: nil,
-            summary: "Disk space used by Edith and its extensions"),
+            summary: "Measured app, extension packages, cache and retained user data"),
         .init(
             id: "shortcuts", title: "Shortcuts", icon: .keyboard, extensionID: nil,
             summary: "Global and application keyboard shortcuts"),
@@ -74,62 +67,39 @@ enum HostNavigationCatalog {
             extensionID: nil, summary: "Version and automatic update behavior"),
     ]
     static let entries = (try? HostIndex.bundled()) ?? []
-    static let maintenance = sections(entries, page: "appMaintenance")
     static let pages = pages(entries)
-
-    static func sections(_ entries: [HostExtension], page: String) -> [HostNavigationSection] {
-        entries.flatMap { entry in
-            entry.sections.filter { $0.page == page }.map { (entry.id, $0) }
-        }
-        .sorted { $0.1.order < $1.1.order }
-        .map { owner, section in
-            HostNavigationSection(
-                id: section.id, title: section.title, icon: section.icon,
-                extensionID: owner, summary: section.summary)
-        }
-    }
+    static let groupIcons: [String: EdithIcon] = [
+        "agents": .suiteAgents, "utilities": .toolbox, "desk": .cursor, "media": .suiteMedia,
+        "developer": .database,
+    ]
 
     static func pages(_ entries: [HostExtension]) -> [HostNavigationPage] {
-        func children(_ suite: String, parent: String) -> [HostNavigationPage] {
-            entries.filter { $0.category == suite }
-                .flatMap { entry in entry.pages.map { (entry.id, $0) } }
-                .sorted { $0.1.order < $1.1.order }
-                .map { owner, page in
-                    HostNavigationPage(
-                        id: page.id, title: page.title, icon: page.icon, suite: suite,
-                        parentID: parent, extensionID: owner, detachable: page.detachable,
-                        logoName: page.logoName)
-                }
+        let groups = HostMarketplaceCatalog.suites.compactMap { suite in
+            groupIcons[suite.id].map { (suite, $0) }
         }
-        return [
-            .init(id: "home", title: "Home", icon: .home),
-            .init(
-                id: "agents", title: "Agents & Terminal", icon: .suiteAgents, suite: "agents",
-                landing: true),
-        ] + children("agents", parent: "agents") + [
-            .init(
-                id: "system", title: "Mac Utilities", icon: .toolbox, suite: "utilities",
-                landing: true)
-        ] + children("utilities", parent: "system") + [
-            .init(
-                id: "appMaintenance", title: "Maintenance",
-                icon: .appMaintenance, suite: "utilities",
-                sections: sections(entries, page: "appMaintenance"), landing: true),
-            .init(id: "desk", title: "Desk", icon: .cursor, suite: "desk", landing: true),
-            .init(
-                id: "media", title: "Media", icon: .suiteMedia,
-                suite: "media", landing: true),
-        ] + children("media", parent: "media") + [
-            .init(
-                id: "data", title: "Developer & Data", icon: .database,
-                suite: "developer", landing: true)
-        ] + children("developer", parent: "data") + [
-            .init(id: "extensions", title: "Extensions", icon: .puzzle),
-            .init(
-                id: "settings", title: "Settings", icon: .gear, sections: settings,
-                detachable: false),
-            .init(id: "about", title: "About", icon: .info, detachable: false),
-        ]
+        return [.init(id: "home", title: "Home", icon: .home)]
+            + groups.flatMap { suite, icon in
+                [
+                    HostNavigationPage(
+                        id: suite.id, title: suite.title, icon: icon, suite: suite.id,
+                        landing: true)
+                ]
+                    + entries.filter { $0.category == suite.id }.compactMap { entry in
+                        entry.page.map { page in
+                            HostNavigationPage(
+                                id: entry.id, title: entry.title,
+                                icon: HostExtensionIcon.resolve(entry), suite: suite.id,
+                                parentID: suite.id, extensionID: entry.id,
+                                detachable: page.detachable)
+                        }
+                    }
+            } + [
+                .init(id: "extensions", title: "Extensions", icon: .puzzle),
+                .init(
+                    id: "settings", title: "Settings", icon: .gear, sections: settings,
+                    detachable: false),
+                .init(id: "about", title: "About", icon: .info, detachable: false),
+            ]
     }
     static let suiteProviders = HostMarketplaceCatalog.providers(entries)
     static func page(_ id: String) -> HostNavigationPage { pages.first { $0.id == id } ?? pages[0] }
@@ -139,21 +109,11 @@ enum HostNavigationCatalog {
         if let provider = page.extensionID, !active.contains(provider) { return false }
         guard let suite = page.suite else { return true }
         guard !active.isDisjoint(with: suiteProviders[suite] ?? []) else { return false }
-        let sectionProviders = Set(page.sections.compactMap(\.extensionID))
-        guard sectionProviders.isEmpty || !active.isDisjoint(with: sectionProviders) else {
-            return false
-        }
         let enabled =
             defaults.object(forKey: "suite" + suite.capitalized + "Enabled") as? Bool
             ?? true
         guard enabled else { return false }
         return true
-    }
-    static func maintenanceDestination(_ selection: String, active: Set<String>)
-        -> HostNavigationSection?
-    {
-        let available = maintenance.filter { $0.extensionID.map(active.contains) ?? false }
-        return available.first { $0.id == selection } ?? available.first
     }
     static func settingsSections(installed: Set<String>, pending: Set<String>)
         -> [HostNavigationSection]

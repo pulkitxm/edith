@@ -39,8 +39,7 @@ import Testing
     @Test func everyBundledIconNameResolves() throws {
         for entry in try HostIndex.bundled() {
             let icons =
-                [entry.icon] + entry.pages.map(\.icon) + entry.sections.map(\.icon)
-                + (entry.guide?.steps.map(\.icon) ?? [])
+                [entry.icon] + (entry.guide?.steps.map(\.icon) ?? [])
             #expect(!icons.contains(.placeholder), "\(entry.id)")
         }
     }

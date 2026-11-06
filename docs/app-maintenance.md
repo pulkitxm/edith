@@ -1,6 +1,6 @@
-# App Maintenance
+# App Updates
 
-App Maintenance combines Homebrew package management, an App Update Center, verified single-app disk image installation, and review-first removal. Enable one extension from Edith's Extensions pane, then open App Maintenance from the main sidebar.
+App Updates combines an App Update Center, verified single-app disk image installation, and review-first removal. Enable it from Edith's Extensions pane, then open **Mac Utilities > App Updates** in the main sidebar. The page has three tabs: Updates, Remove and History (`ed app reveal appMaintenance --tab remove`). Homebrew and Cleaner are separate extensions with their own pages under Mac Utilities.
 
 ## Manage Homebrew packages
 
@@ -14,7 +14,7 @@ The Updates section checks installed apps through Homebrew casks and formulae, M
 
 Select any combination to build a batch plan. Edith shows the command before running it, requires confirmation, limits concurrent work to the configured bound, retries failures, records a result for every item, and supports cancellation. Managed sources run their native command. Feed-based apps open so their own updater remains in control. You can reveal an app, copy its command, ignore one version, snooze it for a day, or exclude the app. Hidden policies can be reset from update settings.
 
-Automatic refresh is off by default and only performs discovery when enabled. It never installs an update. Optional notifications only follow an automatic refresh. If Edith Automations is installed and enabled, the settings popover exposes `ed maintenance updates --json` as the safe scheduling hook. Closing App Maintenance cancels active discovery and update work.
+Automatic refresh is off by default and only performs discovery when enabled. It never installs an update. Optional notifications only follow an automatic refresh. If Edith Automations is installed and enabled, the settings popover exposes `ed maintenance updates --json` as the safe scheduling hook. Closing App Updates cancels active discovery and update work.
 
 Update policy and per-item history are stored in `~/Library/Application Support/Edith/app-update-center.json`. Settings participate in Edith's settings backup. Use `ed maintenance backup-updates <path>` to make an explicit portable copy of policy and history.
 
@@ -40,7 +40,7 @@ Select an app to build a removal plan. Edith always shows the application bundle
 
 Every row can be unchecked or revealed in Finder. Confirmed rows move to the macOS Trash, so they remain recoverable until the Trash is emptied. Apple apps, Edith itself, symlinked bundles, nested application paths, display-name guesses, and files that change after review are rejected.
 
-No macOS permission is required to inventory apps, install into `~/Applications`, or remove user-owned files. Installing into `/Applications`, replacing administrator-owned apps, or removing administrator-owned files can be refused by macOS. App Maintenance reports the failure and never falls back to permanent deletion or privilege escalation.
+No macOS permission is required to inventory apps, install into `~/Applications`, or remove user-owned files. Installing into `/Applications`, replacing administrator-owned apps, or removing administrator-owned files can be refused by macOS. App Updates reports the failure and never falls back to permanent deletion or privilege escalation.
 
 The command line exposes the same package, installer, inventory, scan, and removal operations:
 

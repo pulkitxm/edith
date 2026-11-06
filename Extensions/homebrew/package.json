@@ -1,22 +1,13 @@
 {
   "id": "homebrew",
   "title": "Homebrew",
-  "icon": "box",
+  "icon": "homebrew",
   "category": "utilities",
   "background": false,
   "commands": [
     "brew"
   ],
-  "sections": [
-    {
-      "page": "appMaintenance",
-      "id": "Packages",
-      "title": "Packages",
-      "icon": "box",
-      "summary": "Manage installed and discoverable Homebrew packages.",
-      "order": 2
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:homebrew"
   ],
