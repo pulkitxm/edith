@@ -424,7 +424,7 @@ struct BlitzTreePage: View {
                 .font(.edithText(.callout)).fontWeight(.medium).monospacedDigit()
                 .frame(minWidth: UIScale.pt(80), alignment: .trailing)
                 .fixedSize()
-            HStack(spacing: UIScale.pt(4)) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 Button {
                     reveal(entry)
                 } label: {

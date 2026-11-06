@@ -89,10 +89,14 @@ struct StudioRecentRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: UIScale.pt(8))
-            Button("Add to Files") { model.add(run.outputs) }
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                Button("Add to Files") { model.add(run.outputs) }
+                    .buttonStyle(.edith(.toolbar))
+                Button("Show in Finder") {
+                    StudioFileActions.reveal(run.outputs, facade: model.facade)
+                }
                 .buttonStyle(.edith(.toolbar))
-            Button("Show in Finder") { StudioFileActions.reveal(run.outputs, facade: model.facade) }
-                .buttonStyle(.edith(.toolbar))
+            }
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(8))

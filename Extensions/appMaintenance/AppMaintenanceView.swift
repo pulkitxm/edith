@@ -158,7 +158,10 @@ struct AppMaintenanceView: View {
     }
 
     private var toolbar: some View {
-        WrapHStack(spacing: UIScale.pt(10), lineSpacing: UIScale.pt(8)) {
+        WrapHStack(
+            spacing: UIScale.pt(PageMetrics.controlSpacing),
+            lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
+        ) {
             Button {
                 model.refresh(interval: updateRefreshInterval)
             } label: {

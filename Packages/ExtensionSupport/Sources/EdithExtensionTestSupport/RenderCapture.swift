@@ -95,15 +95,18 @@ public enum RenderCapture {
     @discardableResult
     public static func render<Content: View>(
         _ name: String, variant: Variant, settle: Duration = .milliseconds(450),
+        inspect: (NSView) throws -> Void = { _ in },
         @ViewBuilder content: () -> Content
     ) async throws -> Rendered {
         try await exclusiveScale {
-            try await renderHoldingScale(name, variant: variant, settle: settle, content: content)
+            try await renderHoldingScale(
+                name, variant: variant, settle: settle, inspect: inspect, content: content)
         }
     }
 
     private static func renderHoldingScale<Content: View>(
         _ name: String, variant: Variant, settle: Duration,
+        inspect: (NSView) throws -> Void,
         @ViewBuilder content: () -> Content
     ) async throws -> Rendered {
         let label = "\(name)-\(variant.name)"
@@ -164,6 +167,7 @@ public enum RenderCapture {
         }
         host.cacheDisplay(in: host.bounds, to: bitmap)
         guard distinctColors(bitmap) > 1 else { throw RenderCaptureError.blank(label) }
+        try inspect(host)
         if let directory {
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)

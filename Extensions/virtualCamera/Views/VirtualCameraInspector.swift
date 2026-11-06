@@ -465,15 +465,17 @@ struct VirtualCameraImageRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
-            Button(path == nil ? "Choose…" : "Replace…", action: choose)
-                .buttonStyle(.edith(.secondary))
-            if path != nil {
-                Button(action: remove) {
-                    EdithIconView(.trash)
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                Button(path == nil ? "Choose…" : "Replace…", action: choose)
+                    .buttonStyle(.edith(.secondary))
+                if path != nil {
+                    Button(action: remove) {
+                        EdithIconView(.trash)
+                    }
+                    .buttonStyle(.edith(.iconOnly))
+                    .help("Remove the image")
+                    .accessibilityLabel("Remove the image")
                 }
-                .buttonStyle(.edith(.iconOnly))
-                .help("Remove the image")
-                .accessibilityLabel("Remove the image")
             }
         }
     }
