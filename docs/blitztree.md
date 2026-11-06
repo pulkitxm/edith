@@ -1,6 +1,6 @@
 # BlitzTree
 
-Enable **BlitzTree** in Extensions, then open **Maintenance > BlitzTree**.
+Enable **Disk Map** in Extensions, then open **Mac Utilities > Disk Map**.
 This is a native implementation inside Edith, inspired by
 [BlitzTree](https://github.com/ahmedkhaleel2004/blitztree). The scanner and UI ship
 with Edith. No separate app, CLI, Rust installation or download is required.

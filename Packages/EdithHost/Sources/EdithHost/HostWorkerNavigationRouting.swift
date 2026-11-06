@@ -4,7 +4,6 @@ import Foundation
 
 struct HostWindowRoute: Equatable {
     let page: String
-    let section: String?
     let relativePath: String?
     let presentationID: UUID?
     let location: String?
@@ -56,13 +55,13 @@ enum HostWorkerNavigationRouting {
         guard activeVersions[extensionID] == version else {
             throw HostWindowNavigationError.inactiveOwner
         }
-        let owned: (page: String, section: String?)
+        let owned: String
         let restoreOnly = ["micMute", "bifrost"].contains(extensionID)
         let settingsID = ["clipboard", "emoji"].contains(extensionID) ? extensionID : nil
         switch extensionID {
-        case "clipboard", "emoji": owned = ("extensions", nil)
-        case "micMute", "bifrost": owned = (currentPage, nil)
-        case "systemStats": owned = ("system", nil)
+        case "clipboard", "emoji": owned = "extensions"
+        case "micMute", "bifrost": owned = currentPage
+        case "systemStats": owned = "utilities"
         default:
             guard let catalog = HostNavigationCatalog.route(extensionID: extensionID) else {
                 throw HostWindowNavigationError.invalidDestination
@@ -72,8 +71,8 @@ enum HostWorkerNavigationRouting {
         guard !restoreOnly || section == nil else {
             throw HostWindowNavigationError.invalidDestination
         }
-        let page = section ?? owned.page
-        guard page == owned.page || (extensionID == "music" && page == "downloads"),
+        let page = section ?? owned
+        guard page == owned || (extensionID == "music" && page == "downloads"),
             HostNavigationCatalog.pages.contains(where: { $0.id == page }),
             visible(page),
             location.map({
@@ -96,8 +95,7 @@ enum HostWorkerNavigationRouting {
             else { throw HostWindowNavigationError.invalidDestination }
         }
         return HostWindowRoute(
-            page: page, section: page == owned.page ? owned.section : nil,
-            relativePath: relativePath, presentationID: presentationID, location: location,
-            restoreOnly: restoreOnly, settingsExtensionID: settingsID)
+            page: page, relativePath: relativePath, presentationID: presentationID,
+            location: location, restoreOnly: restoreOnly, settingsExtensionID: settingsID)
     }
 }

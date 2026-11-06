@@ -28,7 +28,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Site Audit | local project storage and optional Lighthouse CLI | saved projects and bounded run history | `ed extensions verify seoAudit`; `ed extensions doctor seoAudit` |
 | Code Stats | `git`, the optional `gh` CLI, and the mirror folder, reporting a disconnected drive as degraded | mirrored repositories and the stored report | `ed extensions doctor codeStats`; `ed code-stats status` |
 | System | built-in running-application module | regular applications visible through AppKit | `ed apps ls --json`; `ed app relaunch` |
-| App Maintenance | built-in app and package inspection | readable application and package sources | `ed extensions verify appMaintenance`; `ed tools install homebrew` |
+| App Updates | built-in app and package inspection | readable application and package sources | `ed extensions verify appMaintenance`; `ed tools install homebrew` |
 | Machines | readable machine registry with valid names, hosts, and SSH ports | configured machine count | `ed machines ls --json`; `ed machines add --help` |
 | Database | bundled local broker | bounded startup and authenticated peer readiness | `ed extensions doctor database --json`; reopen Database after resolving the reported failure |
 | Companion | configured endpoint | backend health checks and optional dependency health | `ed companion doctor --json` |

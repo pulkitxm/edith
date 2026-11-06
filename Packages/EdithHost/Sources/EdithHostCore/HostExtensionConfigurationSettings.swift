@@ -152,7 +152,7 @@ enum HostExtensionConfigurationSettings {
     private static let appMaintenance: [HostCLISetting] = [
         .init(
             AppStorageKeys.AppMaintenance.enabled, .bool, group: "system",
-            summary: "App Maintenance extension is on. Change it with `ed extensions enable`.",
+            summary: "App Updates extension is on. Change it with `ed extensions enable`.",
             fallback: .bool(false), readOnly: true),
         .init(
             AppStorageKeys.AppMaintenance.installDestination, .string, group: "system",
@@ -215,7 +215,7 @@ enum HostExtensionConfigurationSettings {
             fallback: .bool(false), readOnly: true),
         .init(
             AppStorageKeys.Homebrew.defaultKind, .string, group: "homebrew",
-            summary: "Package kind selected when App Maintenance opens Packages.",
+            summary: "Package kind selected when Homebrew opens.",
             allowed: ["formula", "cask"], fallback: .string("formula")),
     ]
 

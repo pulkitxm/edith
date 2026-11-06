@@ -66,44 +66,11 @@ public struct HostLaunchCondition: Codable, Hashable, Sendable {
     }
 }
 
-public struct HostPage: Codable, Hashable, Sendable, Identifiable {
-    public let id: String
-    public let title: String
-    public let icon: EdithIcon
-    public let order: Int
+public struct HostPage: Codable, Hashable, Sendable {
     public let detachable: Bool
-    public let logoName: String?
 
-    public init(
-        id: String, title: String, icon: EdithIcon, order: Int, detachable: Bool = true,
-        logoName: String? = nil
-    ) {
-        self.id = id
-        self.title = title
-        self.icon = icon
-        self.order = order
+    public init(detachable: Bool = true) {
         self.detachable = detachable
-        self.logoName = logoName
-    }
-}
-
-public struct HostPageSection: Codable, Hashable, Sendable, Identifiable {
-    public let page: String
-    public let id: String
-    public let title: String
-    public let icon: EdithIcon
-    public let summary: String
-    public let order: Int
-
-    public init(
-        page: String, id: String, title: String, icon: EdithIcon, summary: String, order: Int
-    ) {
-        self.page = page
-        self.id = id
-        self.title = title
-        self.icon = icon
-        self.summary = summary
-        self.order = order
     }
 }
 
@@ -142,8 +109,7 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public let commands: [String]
     public let hotkeys: [HostHotKey]
     public let launchWhen: [HostLaunchCondition]
-    public let pages: [HostPage]
-    public let sections: [HostPageSection]
+    public let page: HostPage?
     public let homeCards: [String]
     public let notchCards: [String]
     public let notchTabs: [String]
@@ -152,8 +118,7 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
     public init(
         id: String, title: String, icon: EdithIcon, category: String,
         background: Bool = true, commands: [String] = [], hotkeys: [HostHotKey] = [],
-        launchWhen: [HostLaunchCondition] = [], pages: [HostPage] = [],
-        sections: [HostPageSection] = [], homeCards: [String] = [],
+        launchWhen: [HostLaunchCondition] = [], page: HostPage? = nil, homeCards: [String] = [],
         notchCards: [String] = [], notchTabs: [String] = [], guide: HostExtensionGuide? = nil
     ) {
         self.id = id
@@ -164,8 +129,7 @@ public struct HostExtension: Codable, Hashable, Sendable, Identifiable {
         self.commands = commands
         self.hotkeys = hotkeys
         self.launchWhen = launchWhen
-        self.pages = pages
-        self.sections = sections
+        self.page = page
         self.homeCards = homeCards
         self.notchCards = notchCards
         self.notchTabs = notchTabs

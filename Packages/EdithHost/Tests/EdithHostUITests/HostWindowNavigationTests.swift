@@ -235,7 +235,7 @@ struct HostWindowNavigationTests {
         #expect(!fixture.window.isVisible)
     }
 
-    @Test func maintenanceDefaultRoutePreservesItsOriginalSelectedSection() async throws {
+    @Test func cleanerRoutesToItsOwnPage() async throws {
         let fixture = NavigationFixture()
         defer { fixture.finish() }
         fixture.versions["cleaner"] = "1.0.0"
@@ -243,8 +243,8 @@ struct HostWindowNavigationTests {
         let navigation = fixture.navigation(didApply: { received = $0 })
         fixture.register(navigation)
         try await navigation.navigate(extensionID: "cleaner", version: "1.0.0")
-        #expect(fixture.selected == "appMaintenance")
-        #expect(received?.section == "Cleaner")
+        #expect(fixture.selected == "cleaner")
+        #expect(received?.page == "cleaner")
     }
 
     private func settle(until condition: () -> Bool) async {

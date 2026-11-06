@@ -1,7 +1,7 @@
 {
   "id": "colorPicker",
   "title": "Color Picker",
-  "icon": "eyedropper",
+  "icon": "colorPicker",
   "category": "desk",
   "background": false,
   "commands": [

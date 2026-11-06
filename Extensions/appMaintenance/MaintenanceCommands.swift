@@ -104,7 +104,7 @@ enum MaintenanceCommands {
             }
             try model.backupUpdates(to: URL(fileURLWithPath: request.path))
             return Data("{\"saved\":true}".utf8)
-        default: throw ExtensionPeerError.rejected("App Maintenance does not support this command.")
+        default: throw ExtensionPeerError.rejected("App Updates does not support this command.")
         }
     }
 

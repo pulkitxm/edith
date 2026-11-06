@@ -39,7 +39,7 @@ struct UsageUISceneRoute: Equatable {
         self.section = section
         switch location {
         case .main, .settings:
-            guard section.map({ ["usage", "dashboard"].contains($0) }) ?? true,
+            guard section.map({ $0 == "usage" }) ?? true,
                 context["target"] == nil,
                 context["tile"] == nil
             else { return nil }

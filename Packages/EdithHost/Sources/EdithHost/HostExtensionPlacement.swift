@@ -12,31 +12,19 @@ struct HostExtensionPlacement: Equatable, Identifiable {
 enum HostExtensionPlacements {
     static let hotkeyLimit = 3
 
-    static func placements(
-        for entry: HostExtension, hasSettings: Bool = false,
-        route: (page: String, section: String?)? = nil, pageTitles: [String: String] = [:],
-        sectionTitles: [String: String] = [:]
-    ) -> [HostExtensionPlacement] {
+    static func group(of entry: HostExtension) -> String {
+        HostMarketplaceCatalog.suite(for: entry)?.title ?? entry.category
+    }
+
+    static func placements(for entry: HostExtension, hasSettings: Bool = false)
+        -> [HostExtensionPlacement]
+    {
         var result: [HostExtensionPlacement] = []
-        if let route {
-            if route.page == "appMaintenance" {
-                let section = route.section.flatMap { sectionTitles[$0] } ?? entry.title
-                result.append(
-                    .init(
-                        icon: .wrench, title: "Maintenance",
-                        detail: "Open Maintenance in the sidebar and choose \(section)."))
-            } else {
-                let page = pageTitles[route.page] ?? entry.title
-                result.append(
-                    .init(
-                        icon: .sidebarLeft, title: "Sidebar",
-                        detail: "Adds \(page) to the sidebar. Open it any time."))
-            }
-        } else if let page = entry.pages.min(by: { $0.order < $1.order }) {
+        if entry.page != nil {
             result.append(
                 .init(
                     icon: .sidebarLeft, title: "Sidebar",
-                    detail: "Adds \(page.title) to the sidebar."))
+                    detail: "Adds \(entry.title) to the sidebar under \(group(of: entry))."))
         }
         if !entry.homeCards.isEmpty {
             result.append(
@@ -72,15 +60,9 @@ enum HostExtensionPlacements {
         return result
     }
 
-    static func hint(
-        for entry: HostExtension, route: (page: String, section: String?)?,
-        pageTitles: [String: String] = [:], sectionTitles: [String: String] = [:]
-    ) -> String {
-        if let route {
-            if route.page == "appMaintenance" {
-                return "Find it in the sidebar under Maintenance."
-            }
-            return "Find it in the sidebar as \(pageTitles[route.page] ?? entry.title)."
+    static func hint(for entry: HostExtension) -> String {
+        if entry.page != nil {
+            return "Find \(entry.title) in the sidebar under \(group(of: entry))."
         }
         if let key = entry.hotkeys.first { return "Press \(key.label) to use it." }
         if !entry.notchCards.isEmpty || !entry.notchTabs.isEmpty {

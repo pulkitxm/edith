@@ -33,7 +33,7 @@ public enum HostAppLinksCLI {
 
     private static let documents: [Document] = [
         .init(owner: "latex", id: "guide", title: "LaTeX guide", path: "docs/latex.md"),
-        .init(owner: "blitztree", id: "guide", title: "BlitzTree guide", path: "docs/blitztree.md"),
+        .init(owner: "blitztree", id: "guide", title: "Disk Map guide", path: "docs/blitztree.md"),
         .init(
             owner: "socialManager", id: "guide", title: "Social Manager guide",
             path: "docs/social-manager.md"),
@@ -41,23 +41,25 @@ public enum HostAppLinksCLI {
             owner: "attention", id: "guide", title: "Attention guide",
             path: "docs/cli/attention/README.md"),
         .init(
-            owner: "usage", id: "guide", title: "Agent Usage guide",
+            owner: "usage", id: "guide", title: "Usage guide",
             path: "docs/cli/usage/README.md"),
-        .init(owner: "herdr", id: "guide", title: "Herdr guide", path: "docs/cli/herdr/README.md"),
+        .init(owner: "herdr", id: "guide", title: "Agents guide", path: "docs/cli/herdr/README.md"),
         .init(owner: "plugins", id: "guide", title: "Plugins guide", path: "docs/plugins.md"),
-        .init(owner: "quinjet", id: "guide", title: "Quinjet guide", path: "docs/quinjet.md"),
+        .init(owner: "quinjet", id: "guide", title: "Code Review guide", path: "docs/quinjet.md"),
         .init(
             owner: "seoAudit", id: "extensions", title: "Extensions guide",
             path: "docs/cli/extensions/README.md"),
         .init(
             owner: "codeStats", id: "cli", title: "Code Stats commands",
             path: "docs/cli/code-stats/README.md"),
-        .init(owner: "system", id: "guide", title: "System guide", path: "docs/cli/apps/README.md"),
         .init(
-            owner: "appMaintenance", id: "guide", title: "App Maintenance guide",
+            owner: "system", id: "guide", title: "Running Apps guide",
+            path: "docs/cli/apps/README.md"),
+        .init(
+            owner: "appMaintenance", id: "guide", title: "App Updates guide",
             path: "docs/app-maintenance.md"),
         .init(
-            owner: "appMaintenance", id: "packages", title: "Homebrew package guide",
+            owner: "homebrew", id: "guide", title: "Homebrew guide",
             path: "docs/homebrew-manager.md"),
         .init(
             owner: "machines", id: "guide", title: "Machines guide",
@@ -65,12 +67,12 @@ public enum HostAppLinksCLI {
         .init(
             owner: "database", id: "extensions", title: "Extensions guide",
             path: "docs/cli/extensions/README.md"),
-        .init(owner: "companion", id: "guide", title: "Companion guide", path: "docs/companion.md"),
+        .init(owner: "companion", id: "guide", title: "Memory guide", path: "docs/companion.md"),
         .init(
             owner: "keepAwake", id: "guide", title: "Keep Awake settings",
             path: "docs/cli/config/README.md"),
         .init(
-            owner: "systemStats", id: "guide", title: "System metrics guide",
+            owner: "systemStats", id: "guide", title: "Menu Bar Stats guide",
             path: "docs/cli/system/README.md"),
         .init(
             owner: "micMute", id: "extensions", title: "Extensions guide",
@@ -81,7 +83,7 @@ public enum HostAppLinksCLI {
         .init(
             owner: "studio", id: "guide", title: "Studio guide", path: "docs/cli/studio/README.md"),
         .init(
-            owner: "timeLapse", id: "guide", title: "Screen recording guide",
+            owner: "timeLapse", id: "guide", title: "Screen Recorder guide",
             path: "docs/time-lapse.md"),
         .init(owner: "music", id: "guide", title: "Music guide", path: "docs/cli/music/README.md"),
         .init(
@@ -91,7 +93,8 @@ public enum HostAppLinksCLI {
             owner: "virtualCamera", id: "guide", title: "Virtual Camera guide",
             path: "docs/cli/camera/README.md"),
         .init(
-            owner: "notchShelf", id: "guide", title: "Shelf guide", path: "docs/cli/shelf/README.md"
+            owner: "notchShelf", id: "guide", title: "Notch Shelf guide",
+            path: "docs/cli/shelf/README.md"
         ),
         .init(
             owner: "clipboard", id: "guide", title: "Clipboard guide",

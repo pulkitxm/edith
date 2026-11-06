@@ -444,8 +444,9 @@ struct HostWorkflowPackageReview: Equatable {
         defaults.set(page, forKey: AppStorageKeys.General.mainWindowSection)
     }
 
-    func destinations(for entry: HostExtension) -> [HostPage] {
-        entry.pages.sorted { $0.order < $1.order }
+    func destination(for entry: HostExtension) -> HostNavigationPage? {
+        guard entry.page != nil else { return nil }
+        return HostNavigationCatalog.pages(entries).first { $0.extensionID == entry.id }
     }
 
     private func persistStage() {

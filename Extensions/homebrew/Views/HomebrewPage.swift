@@ -4,6 +4,8 @@ import EdithExtensionUI
 import SwiftUI
 
 struct HomebrewMaintenanceView: View {
+    static let title = "Homebrew"
+    static let subtitle = "Manage installed and discoverable Homebrew packages."
     @State private var model: HomebrewPageModel
     @State private var pendingUninstall: HomebrewPackage?
     @State private var kindRaw: String
@@ -33,6 +35,7 @@ struct HomebrewMaintenanceView: View {
 
     var body: some View {
         PageWorkspace {
+            PageHeader(Self.title, subtitle: Self.subtitle, divider: true)
             if model.status?.available != false {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     filterBar

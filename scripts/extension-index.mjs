@@ -13,6 +13,7 @@ const categories = [
   "developer",
   "labs",
 ];
+const reservedPageIDs = ["home", "extensions", "settings", "about"];
 const commandWord = /^[a-z][a-z0-9-]{0,40}$/;
 const keyCodes = {
   a: 0,
@@ -70,8 +71,7 @@ export function parseShortcut(shortcut, context) {
   };
 }
 
-const pageParents = ["agents", "utilities", "media", "developer"];
-const sectionPages = ["appMaintenance"];
+export const sidebarGroups = ["agents", "utilities", "media", "developer"];
 const surfaceCards = [
   "actions",
   "activity",
@@ -144,36 +144,43 @@ function requireIcon(name, directory) {
     );
 }
 
-function page(declaration, directory) {
-  requireIcon(declaration.icon, directory);
-  const { detachable = true, ...rest } = checked(
-    declaration,
-    directory,
-    "pages",
-    {
-      id: "string",
-      title: "string",
-      icon: "string",
-      order: "number",
-    },
-    { detachable: "boolean", logoName: "string" },
-  );
-  return { ...rest, detachable };
-}
+const pageOptions = { detachable: "boolean" };
 
-function section(declaration, directory) {
-  requireIcon(declaration.icon, directory);
-  checked(declaration, directory, "sections", {
-    page: "string",
-    id: "string",
-    title: "string",
-    icon: "string",
-    summary: "string",
-    order: "number",
-  });
-  if (!sectionPages.includes(declaration.page))
-    throw new Error(`${directory}: unknown section page ${declaration.page}`);
-  return declaration;
+export function page(declaration, directory, category) {
+  if (declaration === undefined) return undefined;
+  const fail = (reason) => {
+    throw new Error(`${directory}: page ${reason}`);
+  };
+  if (!sidebarGroups.includes(category))
+    fail(`is not allowed: ${category} extensions have no sidebar group`);
+  if (declaration === true) return { detachable: true };
+  if (typeof declaration !== "object" || Array.isArray(declaration))
+    fail("must be true or an object of page options");
+  for (const key of ["title", "icon"])
+    if (Object.hasOwn(declaration, key))
+      fail(
+        `${key} must not be set: the sidebar entry uses the extension ${key}`,
+      );
+  for (const key of ["id", "order"])
+    if (Object.hasOwn(declaration, key))
+      fail(
+        `${key} must not be set: the page id is the extension id and the order follows the category`,
+      );
+  for (const key of ["group", "parent", "category", "section", "sections"])
+    if (Object.hasOwn(declaration, key))
+      fail(`${key} must not be set: the page sits under its category`);
+  const unknown = Object.keys(declaration).filter(
+    (key) => !Object.hasOwn(pageOptions, key),
+  );
+  if (unknown.length) fail(`has unknown keys ${unknown.join(", ")}`);
+  for (const [key, type] of Object.entries(pageOptions))
+    if (
+      Object.hasOwn(declaration, key) &&
+      (typeof declaration[key] !== type ||
+        (type === "string" && !declaration[key]))
+    )
+      fail(`${key} must be a ${type}`);
+  return { detachable: true, ...declaration };
 }
 
 function guide(declaration, directory) {
@@ -242,13 +249,17 @@ export function validateDeclaration(declaration, directory) {
     "commands",
     "hotkeys",
     "launchWhen",
-    "pages",
-    "sections",
+    "page",
     "homeCards",
     "notchCards",
     "notchTabs",
     "guide",
   ];
+  for (const key of ["pages", "sections"])
+    if (Object.hasOwn(declaration, key))
+      throw new Error(
+        `${directory}: ${key} is not supported, declare "page" so the extension appears once under its category with its own title and icon`,
+      );
   const unknown = Object.keys(declaration).filter((key) => !keys.includes(key));
   if (unknown.length)
     throw new Error(`${directory}: unknown keys ${unknown.join(", ")}`);
@@ -258,6 +269,10 @@ export function validateDeclaration(declaration, directory) {
     if (typeof declaration[key] !== "string" || !declaration[key])
       throw new Error(`${directory}: ${key} is required`);
   requireIcon(declaration.icon, directory);
+  if (knownIcons.has(declaration.id) && declaration.icon !== declaration.id)
+    throw new Error(
+      `${directory}: icon must be ${declaration.id}, the icon Packages/EdithIcons draws for this extension, so every surface shows the same icon`,
+    );
   if (!categories.includes(declaration.category))
     throw new Error(`${directory}: unknown category ${declaration.category}`);
   if (typeof declaration.background !== "boolean")
@@ -284,16 +299,9 @@ export function validateDeclaration(declaration, directory) {
     throw new Error(`${directory}: launchWhen needs key and boolean default`);
   if (declaration.background && launchWhen.length)
     throw new Error(`${directory}: background already starts at launch`);
-  for (const field of ["hotkeys", "pages", "sections"])
-    if (!Array.isArray(declaration[field] ?? []))
-      throw new Error(`${directory}: ${field} must be a list`);
-  const pages = (declaration.pages ?? []).map((entry) =>
-    page(entry, directory),
-  );
-  if (pages.length && !pageParents.includes(declaration.category))
-    throw new Error(
-      `${directory}: ${declaration.category} extensions have no pages`,
-    );
+  if (!Array.isArray(declaration.hotkeys ?? []))
+    throw new Error(`${directory}: hotkeys must be a list`);
+  const sidebarPage = page(declaration.page, directory, declaration.category);
   return {
     ...declaration,
     launchWhen,
@@ -306,10 +314,7 @@ export function validateDeclaration(declaration, directory) {
       `extension:${directory}`,
     ]),
     notchTabs: surfaceItems(declaration, directory, "notchTabs", notchTabs),
-    pages,
-    sections: (declaration.sections ?? []).map((entry) =>
-      section(entry, directory),
-    ),
+    ...(sidebarPage === undefined ? {} : { page: sidebarPage }),
     hotkeys: (declaration.hotkeys ?? []).map((entry) =>
       hotkey(entry, directory),
     ),
@@ -352,15 +357,14 @@ export function orderedIndex(declarations, previous = []) {
 export async function renderIndex(root = process.cwd()) {
   const previous = JSON.parse(await readFile(resolve(root, indexPath), "utf8"));
   const index = orderedIndex(await extensionDeclarations(root), previous);
-  for (const [field, values] of [
-    ["page id", index.flatMap(({ pages }) => pages.map(({ id }) => id))],
-    [
-      "section id",
-      index.flatMap(({ sections }) => sections.map(({ id }) => id)),
-    ],
-  ])
-    if (new Set(values).size !== values.length)
-      throw new Error(`Two extensions declare the same ${field}`);
+  const pageIDs = index.filter((entry) => entry.page).map(({ id }) => id);
+  const reserved = pageIDs.filter((id) =>
+    [...categories, ...reservedPageIDs].includes(id),
+  );
+  if (reserved.length)
+    throw new Error(
+      `${reserved.join(", ")}: an extension page id collides with a built-in page`,
+    );
   for (const field of ["id", "prefix"]) {
     const values = index.flatMap(({ hotkeys }) =>
       hotkeys.map((entry) => entry[field]),

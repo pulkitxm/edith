@@ -1,20 +1,13 @@
 {
   "id": "latex",
   "title": "LaTeX",
-  "icon": "docText",
+  "icon": "latex",
   "category": "developer",
   "background": false,
   "commands": [
     "latex"
   ],
-  "pages": [
-    {
-      "id": "latex",
-      "title": "LaTeX",
-      "icon": "docText",
-      "order": 4
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:latex"
   ],
