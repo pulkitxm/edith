@@ -4,11 +4,15 @@ import {bar} from './theme';
 import {Hook} from './scenes/Hook';
 import {Reveal} from './scenes/Reveal';
 import {Size} from './scenes/Size';
+import {Marketplace} from './scenes/Marketplace';
+import {AgentsMcp} from './scenes/AgentsMcp';
 
 const scenes: {id: string; bars: number; component: React.FC}[] = [
   {id: 'hook', bars: 3, component: Hook},
   {id: 'reveal', bars: 3, component: Reveal},
   {id: 'size', bars: 2, component: Size},
+  {id: 'marketplace', bars: 4, component: Marketplace},
+  {id: 'agents', bars: 3, component: AgentsMcp},
 ];
 
 const tail = 63;
