@@ -17,6 +17,44 @@ public enum ExtensionPrivilegedService {
     public static var service: SMAppService { .daemon(plistName: plistName) }
 }
 
+public enum ExtensionPrivilegedError: Error, LocalizedError, Equatable, Sendable {
+    public enum Step: Equatable, Sendable {
+        case start
+        case command(String)
+        case release
+
+        var request: String {
+            switch self {
+            case .start: "start the privileged part of the extension"
+            case .command(let name): "run the \(name) request"
+            case .release: "restore the system settings the extension changed"
+            }
+        }
+    }
+
+    case noAnswer(Step, seconds: Int)
+    case closed(Step)
+    case outdatedCarrier
+
+    public var errorDescription: String? {
+        switch self {
+        case .noAnswer(let step, let seconds):
+            "Edith's privileged helper did not answer within \(seconds) seconds when asked to \(step.request)."
+        case .closed(let step):
+            "Edith's privileged helper closed the connection when asked to \(step.request)."
+        case .outdatedCarrier:
+            "Edith's privileged helper is still running from before Edith was updated and cannot answer this version. Restart the Mac once, then try again."
+        }
+    }
+
+    var leftTheStartUnanswered: Bool {
+        switch self {
+        case .noAnswer(.start, _), .closed(.start): true
+        default: false
+        }
+    }
+}
+
 @MainActor protocol ExtensionPrivilegedTransport: AnyObject {
     func activate(source: URL, owner: String, version: String) async throws
     func invoke(_ command: String, payload: Data) async throws -> Data
@@ -37,6 +75,7 @@ public enum ExtensionPrivilegedService {
     private let serviceStatus: @MainActor () -> SMAppService.Status
     private let registerService: @MainActor () throws -> Void
     private let openApproval: @MainActor () -> Void
+    private let carrierPredatesHost: @MainActor () -> Bool
     private let connect:
         @MainActor (@escaping @MainActor () -> Void) -> any ExtensionPrivilegedTransport
     private var channel: (any ExtensionPrivilegedTransport)?
@@ -52,6 +91,7 @@ public enum ExtensionPrivilegedService {
             status: { ExtensionPrivilegedService.service.status },
             register: { try ExtensionPrivilegedService.service.register() },
             openApproval: { SMAppService.openSystemSettingsLoginItems() },
+            carrierPredatesHost: { ExtensionPrivilegedCarrierProcess.predatesHost() },
             connect: {
                 let hostIdentifier: String?
                 if case .connectOnly(let identifier) = mode {
@@ -59,7 +99,11 @@ public enum ExtensionPrivilegedService {
                 } else {
                     hostIdentifier = nil
                 }
-                return ExtensionPrivilegedXPC(hostIdentifier: hostIdentifier, invalidated: $0)
+                return ExtensionPrivilegedXPC(
+                    connection: NSXPCConnection(
+                        machServiceName: ExtensionPrivilegedService.identifier,
+                        options: .privileged),
+                    hostIdentifier: hostIdentifier, invalidated: $0)
             })
     }
 
@@ -68,13 +112,14 @@ public enum ExtensionPrivilegedService {
         status: @escaping @MainActor () -> SMAppService.Status,
         register: @escaping @MainActor () throws -> Void = {},
         openApproval: @escaping @MainActor () -> Void = {},
+        carrierPredatesHost: @escaping @MainActor () -> Bool = { false },
         connect:
             @escaping @MainActor (@escaping @MainActor () -> Void) ->
             any ExtensionPrivilegedTransport
     ) {
         self.owner = owner; self.source = source; self.version = version; self.mode = mode
         serviceStatus = status; registerService = register; self.openApproval = openApproval
-        self.connect = connect
+        self.carrierPredatesHost = carrierPredatesHost; self.connect = connect
     }
 
     public var status: SMAppService.Status {
@@ -141,6 +186,12 @@ public enum ExtensionPrivilegedService {
             return created
         } catch {
             if channelID == id { shutdown() } else { created.invalidate() }
+            if mode == .managed,
+                (error as? ExtensionPrivilegedError)?.leftTheStartUnanswered == true,
+                carrierPredatesHost()
+            {
+                throw ExtensionPrivilegedError.outdatedCarrier
+            }
             throw error
         }
     }
@@ -154,15 +205,23 @@ public enum ExtensionPrivilegedService {
     }
 }
 
-@MainActor private final class ExtensionPrivilegedXPC: ExtensionPrivilegedTransport {
-    private let connection = NSXPCConnection(
-        machServiceName: ExtensionPrivilegedService.identifier, options: .privileged)
+@MainActor final class ExtensionPrivilegedXPC: ExtensionPrivilegedTransport {
+    static let answerLimit = 20
+    private let connection: NSXPCConnection
+    private let answerLimit: Duration
     private let invalidated: @MainActor () -> Void
     private var proxy: ExtensionPrivilegedProtocol?
-    private var pending: [UUID: ExtensionPrivilegedReply] = [:]
+    private var pending:
+        [UUID: (reply: ExtensionPrivilegedReply, step: ExtensionPrivilegedError.Step)] =
+            [:]
     private var closed = false
 
-    init(hostIdentifier: String?, invalidated: @escaping @MainActor () -> Void) {
+    init(
+        connection: NSXPCConnection, hostIdentifier: String?,
+        answerLimit: Duration = .seconds(ExtensionPrivilegedXPC.answerLimit),
+        invalidated: @escaping @MainActor () -> Void
+    ) {
+        self.connection = connection; self.answerLimit = answerLimit
         self.invalidated = invalidated
         if let hostIdentifier {
             guard let requirement = Self.requirement(hostIdentifier: hostIdentifier) else {
@@ -206,44 +265,50 @@ public enum ExtensionPrivilegedService {
     }
 
     func activate(source: URL, owner: String, version: String) async throws {
-        guard let proxy else { throw ExtensionPeerError.unavailable }
-        _ = try await call { completion in
+        _ = try await call(.start) { proxy, completion in
             proxy.activate(source.path, owner: owner, version: version) { completion(Data(), $0) }
         }
     }
     func invoke(_ command: String, payload: Data) async throws -> Data {
-        guard let proxy else { throw ExtensionPeerError.unavailable }
-        return try await call { completion in
+        try await call(.command(command)) { proxy, completion in
             proxy.invoke(command, payload: payload, reply: completion)
         }
     }
     func release() async throws {
-        guard let proxy else { throw ExtensionPeerError.unavailable }
-        _ = try await call { completion in proxy.release { completion(Data(), $0) } }
+        _ = try await call(.release) { proxy, completion in
+            proxy.release { completion(Data(), $0) }
+        }
     }
     func invalidate() {
         guard !closed else { return }; closed = true
         connection.invalidate(); proxy = nil
-        for reply in pending.values { reply.finish(.failure(ExtensionPeerError.unavailable)) }
+        for request in pending.values {
+            request.reply.finish(.failure(ExtensionPrivilegedError.closed(request.step)))
+        }
         pending.removeAll(); invalidated()
     }
 
-    private func call(_ send: (@escaping @Sendable (Data?, NSError?) -> Void) -> Void) async throws
-        -> Data
-    {
-        guard !closed else { throw ExtensionPeerError.unavailable }
+    private func call(
+        _ step: ExtensionPrivilegedError.Step,
+        _ send: (ExtensionPrivilegedProtocol, @escaping @Sendable (Data?, NSError?) -> Void) -> Void
+    ) async throws -> Data {
+        guard !closed, let proxy else { throw ExtensionPrivilegedError.closed(step) }
         let reply = ExtensionPrivilegedReply()
-        let id = UUID(); pending[id] = reply
+        let id = UUID(); pending[id] = (reply, step)
+        let limit = answerLimit
         let timeout = Task {
-            try? await Task.sleep(for: .seconds(20))
+            try? await Task.sleep(for: limit)
             guard !Task.isCancelled else { return }
-            if reply.finish(.failure(ExtensionPeerError.timedOut)) { invalidate() }
+            let seconds = Int(limit.components.seconds)
+            if reply.finish(.failure(ExtensionPrivilegedError.noAnswer(step, seconds: seconds))) {
+                invalidate()
+            }
         }
         defer { timeout.cancel(); pending[id] = nil }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard reply.begin(continuation) else { return }
-                send { data, error in
+                send(proxy) { data, error in
                     if let error {
                         reply.finish(.failure(error))
                     } else if let data, data.count <= 32_768 {

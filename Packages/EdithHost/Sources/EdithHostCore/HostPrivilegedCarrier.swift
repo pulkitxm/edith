@@ -32,14 +32,14 @@ import Security
             requirement: requirement
         ) { [self] box in
             let connection = box.connection
-            guard sessions.count < 8 else { connection.invalidate(); return }
+            guard sessions.count < 8 else { Self.reject(connection); return }
             guard let callerIdentity = ExtensionProcessIdentity.read(connection.processIdentifier),
                 let caller = try? HostPrivilegedCaller.read(
                     processIdentifier: connection.processIdentifier,
                     hostIdentifier: identifier, team: team),
                 let hostIdentity = Self.hostIdentity(
                     of: callerIdentity, callerIsHost: caller.container == nil)
-            else { connection.invalidate(); return }
+            else { Self.reject(connection); return }
             let id = UUID()
             let admission = HostPrivilegedAdmission(
                 root: URL(fileURLWithPath: "/Library/Application Support/Edith Extension Carrier")
@@ -81,6 +81,11 @@ import Security
             connection.resume()
         }
         return true
+    }
+
+    nonisolated static func reject(_ connection: NSXPCConnection) {
+        connection.resume()
+        connection.invalidate()
     }
 
     nonisolated static func hostIdentity(
