@@ -173,7 +173,7 @@ struct NotchShelfContentView: View {
                     slot.allowsHitTesting(false).contentShape(Rectangle())
                 }
                 .buttonStyle(.edith(.borderless))
-                .help(value.detail + (value.value.isEmpty ? "" : ": " + value.value))
+                .help(glanceHelp(value))
                 .accessibilityLabel(value.detail + ", " + value.value)
             } else {
                 slot
@@ -187,15 +187,20 @@ struct NotchShelfContentView: View {
                         value.urgency == 2
                             ? Color.red : value.urgency == 1 ? .orange : .white.opacity(0.85)
                     )
+                    .presenterCover(value.covered)
                     .frame(width: controller.glanceWingWidth, height: collapsedBase.height)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .help(value.detail + (value.value.isEmpty ? "" : ": " + value.value))
+            .help(glanceHelp(value))
             .accessibilityLabel(value.detail + ", " + value.value)
         } else {
             Color.clear.frame(width: controller.glanceWingWidth, height: collapsedBase.height)
         }
+    }
+
+    private func glanceHelp(_ value: NotchSurfaceGlance) -> String {
+        value.covered || value.value.isEmpty ? value.detail : value.detail + ": " + value.value
     }
 
     @ViewBuilder private var expanded: some View {
@@ -239,7 +244,7 @@ struct NotchShelfContentView: View {
     private var header: some View {
         HStack(spacing: 4) {
             if let client = controller as? NotchChromeClient,
-                client.activeIDs.contains("music"), !client.hides(.music)
+                client.activeIDs.contains("music")
             {
                 NotchNativeSlotView(client: client, tile: SurfaceTile(.music), kind: .header)
                     .frame(width: 24, height: 24).padding(.trailing, 6)

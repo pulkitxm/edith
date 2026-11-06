@@ -149,9 +149,7 @@ final class CalendarUIEngine {
             authorized: allowed, blurEvents: blur, days: store.pagination.days,
             events: stopped
                 ? []
-                : CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(store.events)).map {
-                    blur ? privateEvent($0) : $0
-                },
+                : CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(store.events)),
             ready: !stopped && store.agendaKnown)
     }
 
@@ -208,37 +206,5 @@ final class CalendarUIEngine {
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
             Set(object.keys).isSubset(of: keys)
         else { throw ExtensionPeerError.invalidRequest }
-    }
-
-    private func privateEvent(_ event: CalendarEventPayload) -> CalendarEventPayload {
-        var hidden = event
-        hidden.title = "Meeting"
-        hidden.calendar = "Calendar"
-        hidden.location = event.location == nil ? nil : "Private location"
-        hidden.latitude = nil
-        hidden.longitude = nil
-        if let url = MeetingLink.url(for: event) {
-            var components = URLComponents()
-            components.scheme = url.scheme
-            components.host = url.host
-            components.path = "/private"
-            hidden.meetingURL = components.url?.absoluteString
-        } else {
-            hidden.meetingURL = nil
-        }
-        hidden.url = nil
-        hidden.notes = event.notes == nil ? nil : "Private notes"
-        hidden.organizer = event.organizer.map { privateParticipant($0) }
-        hidden.attendees = event.attendees.map { privateParticipant($0) }
-        return hidden
-    }
-
-    private func privateParticipant(_ participant: CalendarParticipantPayload)
-        -> CalendarParticipantPayload
-    {
-        var hidden = participant
-        hidden.name = "Participant"
-        hidden.address = nil
-        return hidden
     }
 }

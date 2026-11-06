@@ -6,6 +6,7 @@ struct NotchSurfaceGlance: Equatable, Codable, Sendable {
     let source: SurfaceGlanceSource
     let icon: EdithIcon
     var muted = false
+    var covered = false
     let value: String
     let detail: String
     let urgency: Int
@@ -204,7 +205,7 @@ extension NotchShelfController {
     var glanceContext: NotchGlanceContext {
         var context = NotchGlanceContext()
         context.now = glanceNow
-        context.files = privacy.hides(.ability("notchShelf")) ? 0 : items.count
+        context.files = items.count
         if let facts = glanceFacts("herdr") {
             func value(_ key: String) -> Int { Int(facts[key] ?? 0) }
             context.working = value("working")
@@ -236,8 +237,7 @@ extension NotchShelfController {
     }
 
     private func glanceFacts(_ id: String) -> [String: Double]? {
-        guard activeIDs.contains(id), !privacy.hides(Self.glancePrivacyWidget(id)),
-            let snapshot = surfaceSnapshots[id]
+        guard activeIDs.contains(id), let snapshot = surfaceSnapshots[id]
         else { return nil }
         return snapshot.facts ?? [:]
     }
@@ -250,9 +250,14 @@ extension NotchShelfController {
             .permissions: "herdr",
         ]
         if let id = providerBacked[source], glanceFacts(id) == nil { return nil }
-        if source == .files, privacy.hides(.ability("notchShelf")) { return nil }
         if source == .music, !musicGlancesEnabled { return nil }
-        return glanceContext.resolve(source, leading: leading)
+        guard var value = glanceContext.resolve(source, leading: leading) else { return nil }
+        if value.source == .files {
+            value.covered = privacy.hides(.ability("notchShelf"))
+        } else if let id = providerBacked[value.source] {
+            value.covered = privacy.hides(Self.glancePrivacyWidget(id))
+        }
+        return value
     }
 
     var leadingGlance: NotchSurfaceGlance? {

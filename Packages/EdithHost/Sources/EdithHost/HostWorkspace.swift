@@ -201,8 +201,7 @@ struct HostWorkspace: View {
         }
         .onChange(of: musicAdmission, initial: true) {
             musicSlots?.synchronize(
-                version: musicAdmission.version, mediaEnabled: musicAdmission.mediaEnabled,
-                hidden: musicAdmission.hidden)
+                version: musicAdmission.version, mediaEnabled: musicAdmission.mediaEnabled)
             musicSlots?.setVisible(musicWindowID, visible: musicAdmission.visible)
         }
         .onExitCommand { InputFocus.resignEditing() }
@@ -217,7 +216,7 @@ struct HostWorkspace: View {
         let mediaEnabled: Bool
         let hidden: Bool
         let visible: Bool
-        var eligible: Bool { version != nil && mediaEnabled && !hidden && visible }
+        var eligible: Bool { version != nil && mediaEnabled && visible }
     }
     private var musicFooterShown: Bool { musicAdmission.eligible && musicSlots?.footer == true }
     private var musicSidebarShown: Bool { musicAdmission.eligible && musicSlots?.sidebar == true }
@@ -238,6 +237,7 @@ struct HostWorkspace: View {
         )
         .environment(\.compactLayout, region == .sidebar)
         .frame(maxWidth: .infinity)
+        .allowsHitTesting(!musicAdmission.hidden)
     }
     private var titlebar: some View {
         HStack(spacing: 14) {

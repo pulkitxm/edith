@@ -122,7 +122,7 @@ struct HomeMeetingsCard: View {
                 .lineLimit(1)
                 .foregroundStyle(DashSkin.ink(dark))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .presenterBlur(store.blurEvents)
+                .presenterCover(store.blurEvents, dark: dark)
             if MeetingLink.url(for: event) != nil, showsActions,
                 presentation?.tile.shows("join") != false
             {

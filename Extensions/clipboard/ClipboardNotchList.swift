@@ -1,9 +1,13 @@
+import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
 struct ClipboardNotchList: View {
     let history: ClipboardHistoryModel
     var available = true
+    @State private var privacy = ExtensionSharedState.current.map(
+        SurfacePrivacyState.init(channel:))
+    private var presenting: Bool { privacy?.hides(.ability("clipboard")) ?? false }
 
     private var sortedEntries: [ClipboardEntry] {
         history.entries.sorted { lhs, rhs in
@@ -22,6 +26,8 @@ struct ClipboardNotchList: View {
                         }
                     }
                     .padding(.horizontal, 4).padding(.bottom, 2)
+                    .disabled(presenting)
+                    .presenterCover(presenting)
                 }
             } else {
                 Text("Clipboard history is off")

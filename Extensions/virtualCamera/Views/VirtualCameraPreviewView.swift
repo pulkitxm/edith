@@ -135,10 +135,7 @@ final class VirtualCameraPreviewNSView: NSView {
     }
 
     private func applyCover() {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        content.isHidden = covered
-        CATransaction.commit()
+        PresenterLayerCover.apply(covered, to: content, in: self)
     }
 
     private func applyMirror() {

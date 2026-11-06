@@ -84,10 +84,10 @@ final class HostMusicSlots {
     var pendingTaskCount: Int { retiring.count + (task == nil ? 0 : 1) }
     private var eligible: Bool { allowed && version != nil && !visibleWindows.isEmpty }
 
-    func synchronize(version: String?, mediaEnabled: Bool, hidden: Bool) {
+    func synchronize(version: String?, mediaEnabled: Bool) {
         let changed = self.version != version
         self.version = version
-        allowed = mediaEnabled && !hidden
+        allowed = mediaEnabled
         if changed { clear(); lastRead = nil }
         if eligible {
             installObserver()

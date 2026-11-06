@@ -113,12 +113,13 @@ struct NotchRemoteCameraTab: View {
                 GeometryReader { geometry in
                     ZStack {
                         Color.black
-                        if let image = model.image, !NotchPresenterState.shared.hides(.camera) {
+                        if let image = model.image {
                             Image(nsImage: image).resizable().scaledToFill().scaleEffect(
                                 x: -1, y: 1
                             )
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .clipped()
+                            .presenterCover(NotchPresenterState.shared.hides(.camera))
                         }
                     }.overlay(alignment: .bottomTrailing) {
                         if (model.state?.devices.count ?? 0) > 1 {

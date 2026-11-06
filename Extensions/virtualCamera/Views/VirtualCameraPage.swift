@@ -260,14 +260,6 @@ struct VirtualCameraStage: View {
             } else if model.needsCameraAccess && !model.hasPreviewFrame {
                 VirtualCameraAccessPrompt(model: model)
             }
-            if CameraPrivacy.shared.hides(.camera), model.state.privacy != .stopped {
-                Color.black
-                    .overlay {
-                        Label("Hidden in Presenter Mode", edith: .lock)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .allowsHitTesting(false)
-            }
             if model.showsGrid, model.state.privacy != .stopped {
                 VirtualCameraThirdsGrid()
                     .allowsHitTesting(false)

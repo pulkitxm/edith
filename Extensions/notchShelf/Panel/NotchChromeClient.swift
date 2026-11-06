@@ -308,7 +308,7 @@ import Observation
     }
 
     func slot(tile: SurfaceTile, kind: NotchPanelSlot.Kind, rectangle: CGRect) -> NotchPanelSlot? {
-        guard let snapshot, snapshot.panel.visible, !tile.hidden, !hides(tile.widget),
+        guard let snapshot, snapshot.panel.visible, !tile.hidden,
             let provider = slotProvider(tile: tile, kind: kind),
             let version = snapshot.activeVersions[provider],
             [rectangle.minX, rectangle.minY, rectangle.width, rectangle.height].allSatisfy(
@@ -443,7 +443,7 @@ import Observation
     func endCanvasDrag() { perform(.endMove) }
     func beginExternalDrag(of item: ShelfItem) { perform(.drag) { $0.itemID = item.id } }
     func thumbnail(for item: ShelfItem) async -> NSImage? {
-        guard !stopped, !hides(.ability("notchShelf")), let snapshot else { return nil }
+        guard !stopped, let snapshot else { return nil }
         if let task = thumbnailTasks[item.id] { return await task.value }
         let token = generation
         let task = Task { [weak self] () -> NSImage? in

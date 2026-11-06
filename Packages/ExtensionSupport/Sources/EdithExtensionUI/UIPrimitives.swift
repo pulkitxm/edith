@@ -287,10 +287,12 @@ extension View {
     public func presenterCover(_ on: Bool, dark: Bool = true) -> some View {
         if on {
             compositingGroup()
-                .blur(radius: UIScale.pt(28))
+                .blur(radius: UIScale.pt(PresenterLayerCover.blurRadius))
                 .overlay {
-                    (dark ? Color.black : Color.white).opacity(0.45)
-                        .allowsHitTesting(false)
+                    (dark ? Color.black : Color.white).opacity(
+                        Double(PresenterLayerCover.dimOpacity)
+                    )
+                    .allowsHitTesting(false)
                 }
                 .privacySensitive(true)
         } else {

@@ -100,20 +100,16 @@ import Testing
         #expect(snapshot.message == "Open Calendar to grant access to your meetings.")
     }
 
-    @Test func presenterMasksPrivateCalendarDataBeforeCrossingTheWorkerBoundary() async throws {
+    @Test func presentingKeepsRealCalendarDataForTheBlurOverlay() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
         _ = await fixture.store.refreshAndWait()
         try fixture.channel.publish(["active": "1", "blurCalendar": "1"])
         fixture.presentation.refresh()
         let snapshot = fixture.surface.snapshot(.init(.calendar))
-        #expect(
-            snapshot.rows.allSatisfy {
-                $0.title == "Meeting" && $0.detail.isEmpty && $0.sourceID == "hidden"
-            })
-        #expect(snapshot.sources.isEmpty)
-        let text = String(decoding: try snapshot.encoded(), as: UTF8.self)
-        #expect(!text.contains("Synthetic meeting") && !text.contains("Synthetic calendar"))
+        #expect(snapshot.rows.map(\.title).contains("Synthetic meeting one"))
+        #expect(!snapshot.rows.contains { $0.title == "Meeting" || $0.sourceID == "hidden" })
+        #expect(Set(snapshot.sources.map(\.id)) == ["calendar-one", "calendar-two"])
     }
 
     @Test func aMeetingActionResolvesTheCurrentWorkerRecordAndNeverAcceptsAURLPayload() async throws

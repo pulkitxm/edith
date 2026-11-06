@@ -65,6 +65,8 @@ struct HostNotchCompactCard: View {
             if model.admittedVersions != nil {
                 if model.providers.isEmpty, model.loading { LoadingIndicator() }
                 content
+                    .disabled(model.presenting)
+                    .presenterCover(model.presenting)
             }
             if let error = model.error {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(3)

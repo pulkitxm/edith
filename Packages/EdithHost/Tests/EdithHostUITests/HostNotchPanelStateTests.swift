@@ -28,11 +28,6 @@ struct HostNotchPanelStateTests {
             #expect(throws: HostNotchPanelError.invalidState) {
                 try state.validate(fixture.admission(active: active, layout: .init(tiles: [])))
             }
-            #expect(throws: HostNotchPanelError.unavailableProvider) {
-                var hidden = admission
-                hidden.hiddenWidgets = [widget]
-                try state.validate(hidden)
-            }
             if providers.count > 1 {
                 let noncanonical = fixture.slot(provider: providers[1], tile: tile)
                 #expect(throws: HostNotchPanelError.unavailableProvider) {
@@ -151,13 +146,10 @@ struct HostNotchPanelStateTests {
         }
     }
 
-    @Test func foreignSavedTilesDisabledProvidersAndPrivacyAreRejected() throws {
+    @Test func foreignSavedTilesAndDisabledProvidersAreRejected() throws {
         let fixture = HostNotchStateFixture()
         #expect(throws: HostNotchPanelError.unavailableProvider) {
             try fixture.state().validate(fixture.admission(active: ["notchShelf": "1.0.0"]))
-        }
-        #expect(throws: HostNotchPanelError.unavailableProvider) {
-            try fixture.state().validate(fixture.admission(hidden: [.music]))
         }
         #expect(throws: HostNotchPanelError.invalidState) {
             try fixture.state().validate(fixture.admission(layout: .init(tiles: [])))
@@ -283,14 +275,13 @@ struct HostNotchStateFixture {
     }
     func admission(
         previousRevision: UInt64? = nil, active: [String: String]? = nil,
-        layout: SurfaceLayout? = nil, hidden: Set<SurfaceWidget> = [], reserved: [String: Int] = [:]
+        layout: SurfaceLayout? = nil, reserved: [String: Int] = [:]
     ) -> HostNotchPanelAdmission {
         HostNotchPanelAdmission(
             ownershipID: ownershipID, notchVersion: "1.0.0", presentationID: presentationID,
             display: display, previousRevision: previousRevision,
             activeVersions: active ?? ["notchShelf": "1.0.0", "music": "1.0.0"],
-            layout: layout ?? .init(tiles: [tile]), hiddenWidgets: hidden,
-            reservedProviderScenes: reserved)
+            layout: layout ?? .init(tiles: [tile]), reservedProviderScenes: reserved)
     }
     func mutate(_ fields: [String: Any]) throws -> HostNotchPanelState {
         var document = try #require(
