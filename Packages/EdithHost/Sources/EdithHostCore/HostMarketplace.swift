@@ -20,6 +20,7 @@ public final class HostMarketplace {
     public private(set) var operations: [String: HostExtensionOperation] = [:]
     public private(set) var batch: HostExtensionBatch?
     public private(set) var readyIDs: Set<String> = []
+    public private(set) var restartPending: [String: ExtensionPackage] = [:]
     public var failures: [String: String] {
         sessions.failureReasons.merging(operationFailures) { _, operation in operation }
     }
@@ -79,12 +80,14 @@ public final class HostMarketplace {
     static let lastCatalogRefreshKey = "lastCatalogRefresh"
     static let lastCatalogCompatibilityKey = "lastCatalogCompatibility"
     static let catalogRefreshInterval: TimeInterval = 8 * 60 * 60
+    static let restartPendingKey = "extensionUpdatesPendingRestart"
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let store: ExtensionPackageStore
     @ObservationIgnored private let catalogClient: ExtensionCatalogClient
     @ObservationIgnored private let installer: ExtensionPackageInstaller
     @ObservationIgnored private let verificationReceipts: HostBundleVerificationReceipts
     @ObservationIgnored private let verifyInstalledBundle: ExtensionPackageInstaller.Verify
+    @ObservationIgnored private let needsRestart: @MainActor (ExtensionPackage) -> Bool
     @ObservationIgnored private var catalog: ExtensionCatalog?
     @ObservationIgnored private var catalogRefresh: Task<Void, Never>?
     @ObservationIgnored private var catalogFetch: Task<ExtensionCatalogClient.Result, Error>?
@@ -107,7 +110,8 @@ public final class HostMarketplace {
         sessions: HostExtensionSessions,
         verificationReceipts: HostBundleVerificationReceipts? = nil,
         verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil,
-        transferProgress: HostTransferProgress = HostTransferProgress()
+        transferProgress: HostTransferProgress = HostTransferProgress(),
+        needsRestart: (@MainActor (ExtensionPackage) -> Bool)? = nil
     ) throws {
         self.identity = identity
         self.entries = entries
@@ -116,6 +120,8 @@ public final class HostMarketplace {
         self.installer = installer
         self.sessions = sessions
         self.verificationReceipts = verificationReceipts ?? HostBundleVerification.receipts
+        self.needsRestart =
+            needsRestart ?? { [store] package in !store.loadedImageConflicts(package).isEmpty }
         let development = identity.development
         let team = ExtensionCodeSignature.teamIdentifier()
         self.verifyInstalledBundle =
@@ -162,6 +168,7 @@ public final class HostMarketplace {
         }
         automaticallyUpdatesExtensions =
             preferences.object(forKey: "automaticallyUpdatesExtensions") as? Bool ?? true
+        try selectUpdatesStagedForRestart()
         try store.completePendingRemovals()
         try store.prune(hostABI: HostContract.compatibility)
         try reloadInstalled()
@@ -254,6 +261,24 @@ public final class HostMarketplace {
         } catch {
             self.error =
                 "Saved extension information could not be verified. Check for updates to try again."
+        }
+    }
+
+    private func selectUpdatesStagedForRestart() throws {
+        guard let data = preferences.data(forKey: Self.restartPendingKey) else { return }
+        let staged = (try? JSONDecoder().decode([ExtensionPackage].self, from: data)) ?? []
+        let installed = try store.installedPackages()
+        for package in staged where installed.contains(package) { try store.select(package) }
+        preferences.removeObject(forKey: Self.restartPendingKey)
+    }
+
+    private func setRestartPending(_ package: ExtensionPackage?, for id: String) {
+        restartPending[id] = package
+        let staged = restartPending.values.sorted { $0.id < $1.id }
+        if staged.isEmpty {
+            preferences.removeObject(forKey: Self.restartPendingKey)
+        } else if let data = try? JSONEncoder().encode(staged) {
+            preferences.set(data, forKey: Self.restartPendingKey)
         }
     }
 
@@ -506,7 +531,9 @@ public final class HostMarketplace {
 
     public func updateAvailable(id: String) -> Bool {
         if downloadedIDs.contains(id), installed[id] == nil, available[id] != nil { return true }
-        guard let package = installed[id], let next = available[id] else { return false }
+        guard let package = restartPending[id] ?? installed[id], let next = available[id] else {
+            return false
+        }
         return package.version.compare(next.version, options: .numeric) == .orderedAscending
     }
 
@@ -760,9 +787,14 @@ public final class HostMarketplace {
     @discardableResult private func activate(
         _ package: ExtensionPackage, starting: Bool
     ) async -> String? {
+        if sessions.versions[package.id] != package.version, needsRestart(package) {
+            setRestartPending(package, for: package.id)
+            return nil
+        }
         do {
             if sessions.replaceIdle(package) {
                 try await mutateStore { [store] in try store.select(package) }
+                setRestartPending(nil, for: package.id)
                 return nil
             }
             if starting {
@@ -776,6 +808,7 @@ public final class HostMarketplace {
                 || sessions.versions[package.id] == package.version
             {
                 try await mutateStore { [store] in try store.select(package) }
+                setRestartPending(nil, for: package.id)
             }
         } catch {
             return fail(
@@ -859,6 +892,7 @@ public final class HostMarketplace {
         readyIDs.remove(id)
         do {
             try await sessions.disable(id: id)
+            setRestartPending(nil, for: id)
             try await mutateStore { [store] in _ = try store.requestRemoval(id: id) }
             try reloadInstalled()
         } catch MarketplaceError.packageCleanupPending {
