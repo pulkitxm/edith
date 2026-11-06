@@ -22,6 +22,7 @@ let package = Package(
             dependencies: [
                 "PluginsExtension",
                 .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
             ],
             path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

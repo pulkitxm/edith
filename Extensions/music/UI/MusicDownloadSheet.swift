@@ -693,7 +693,7 @@ struct EmbeddedDownloadSheet: View {
                     .foregroundStyle(theme)
                     .disabled(downloader.isRunning)
                 case .done:
-                    HStack(spacing: UIScale.pt(4)) {
+                    HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                         Button {
                             downloader.openResult(item)
                         } label: {
@@ -778,7 +778,7 @@ struct EmbeddedDownloadSheet: View {
                 .foregroundStyle(theme)
                 .disabled(downloader.isRunning)
             case .done:
-                HStack(spacing: UIScale.pt(4)) {
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                     Button {
                         downloader.openResult(item)
                     } label: {
