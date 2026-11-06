@@ -70,43 +70,74 @@ private func commitsPerDay(_ totals: CodeStatsTotals) -> String {
 
 struct CodeStatsHeatmapCard: View {
     let weeks: [CodeStatsHeatWeek]
+    var calendar = Calendar.current
     let dark: Bool
 
     var body: some View {
-        PageCard(
-            title: "Contributions", note: "Commits per day, hover a day for details", fill: true
-        ) {
-            CodeStatsHeatGrid(weeks: weeks, dark: dark, fillsWidth: true)
+        PagePanel(fill: true) {
+            PageSectionHeader(
+                "Contributions", subtitle: "Commits per day, hover a day for details")
+        } content: {
+            CodeStatsHeatGrid(weeks: weeks, dark: dark, calendar: calendar, fillsWidth: true)
+                .frame(maxHeight: .infinity, alignment: .center)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("code-stats-contributions")
+    }
+}
+
+enum CodeStatsActivityLayout {
+    static let heatmapMinimumWidth = 280.0
+    static let trendMinimumWidth = 360.0
+
+    static func heatmapWidth(row: CGFloat, weekCount: Int) -> CGFloat {
+        let spacing = UIScale.pt(PageMetrics.cardSpacing)
+        let padding = UIScale.pt(2 * PageMetrics.cardPadding)
+        let available = max(0, row - spacing - UIScale.pt(trendMinimumWidth))
+        let grid = ActivityCalendarLayout.fittedWidth(
+            available: max(0, available - padding), weekCount: weekCount)
+        return min(max(UIScale.pt(heatmapMinimumWidth), grid + padding), max(available, 0))
     }
 }
 
 struct CodeStatsActivityRow: View {
-    static let sharedRowWeeks = 27
-
     let projection: CodeStatsProjection
     let dark: Bool
+    @Environment(\.compactLayout) private var compact
+    @State private var rowWidth: CGFloat = 0
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                heatmap.frame(minWidth: UIScale.pt(420))
-                topDays.frame(width: UIScale.pt(CodeStatsTopDaysCard.width))
-            }
-            .fixedSize(horizontal: false, vertical: true)
+        if compact {
             VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
                 heatmap
-                topDays
+                trend
+            }
+        } else {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                heatmap.frame(
+                    width: CodeStatsActivityLayout.heatmapWidth(
+                        row: rowWidth, weekCount: projection.heatWeeks.count))
+                trend.frame(minWidth: UIScale.pt(CodeStatsActivityLayout.trendMinimumWidth))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: {
+                rowWidth = $0
             }
         }
     }
 
     private var heatmap: some View {
-        CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
+        CodeStatsHeatmapCard(
+            weeks: projection.heatWeeks, calendar: projection.calendar, dark: dark)
     }
 
-    private var topDays: some View {
-        CodeStatsTopDaysCard(days: projection.topDays, dark: dark)
+    private var trend: some View {
+        CodeStatsTrendCard(projection: projection, dark: dark)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("code-stats-trend")
     }
 }
 
@@ -114,6 +145,7 @@ struct CodeStatsHeatGrid: View {
     let weeks: [CodeStatsHeatWeek]
     let dark: Bool
     var cellSize: CGFloat = 14
+    var calendar = Calendar.current
     var fillsWidth = false
     @Environment(\.codeStatsActions) private var actions
     var body: some View {
@@ -127,7 +159,8 @@ struct CodeStatsHeatGrid: View {
                 })
         }
         ActivityCalendarGrid(
-            weeks: calendarWeeks, dark: dark, cellSize: cellSize, fillsWidth: fillsWidth
+            weeks: calendarWeeks, dark: dark, cellSize: cellSize, calendar: calendar,
+            fillsWidth: fillsWidth
         ) { day in
             if let cell = cells[day.id] {
                 CodeStatsDayPopover(cell: cell, detail: actions.dayDetails[cell.id], dark: dark)
