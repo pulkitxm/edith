@@ -13,7 +13,7 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
     private var failedClosures = Set<UUID>()
     private var parked: [(key: String, version: String, id: UUID, controller: NSViewController)] =
         []
-    private let parkingCapacity = 8
+    private let parkingCapacity = 16
     private(set) var cleanupFailed = false
 
     init(manager: HostRemoteSessionManager) {
@@ -237,6 +237,10 @@ final class HostRemoteViewController: NSViewController {
         view.layer?.masksToBounds = true
         view.contentHeight = contentHeight
         view.moved = { [weak self] in self?.terminalInput?.stateChanged() }
+        view.resized = { [weak self] width in
+            guard let self, width > 0 else { return }
+            apply(compact: state.compact, visible: state.visible, width: width)
+        }
         self.view = view
         activateLocal()
         if let terminalUI, HostTerminalUIRequest.accepts(request) {
@@ -254,6 +258,7 @@ final class HostRemoteViewController: NSViewController {
         guard activation == nil, !connected, !detached else { return }
         let token = revision
         activation = Task { [weak self] in
+            await HostPresentationPacer.turn()
             guard let self else { return }
             defer { if revision == token { activation = nil } }
             do {
@@ -461,13 +466,29 @@ private final class HostRemoteContainerView: NSView {
     var contentHeight: Double?
     weak var measuredContent: NSView?
     var measured: ((Double) -> Void)?
+    var resized: ((Double) -> Void)?
     override var intrinsicContentSize: NSSize {
         NSSize(width: NSView.noIntrinsicMetric, height: contentHeight ?? NSView.noIntrinsicMetric)
     }
     override func layout() {
         super.layout()
+        resized?(Double(bounds.width))
         guard let measuredContent, let measured else { return }
         let natural = measuredContent.intrinsicContentSize.height
         measured(natural == NSView.noIntrinsicMetric ? measuredContent.frame.height : natural)
+    }
+}
+
+@MainActor enum HostPresentationPacer {
+    private static var tail: Task<Void, Never>?
+
+    static func turn() async {
+        let previous = tail
+        let next = Task { @MainActor in
+            await previous?.value
+            try? await Task.sleep(for: .milliseconds(4))
+        }
+        tail = next
+        await next.value
     }
 }

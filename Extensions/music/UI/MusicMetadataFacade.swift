@@ -23,6 +23,11 @@ struct EmbeddedTrack: Identifiable, Equatable, Sendable {
     }
 }
 
+struct EmbeddedMusicListing: Equatable, Sendable {
+    let folders: [EmbeddedMusicFolder]
+    let tracks: [EmbeddedTrack]
+}
+
 struct EmbeddedMusicFolder: Identifiable, Equatable, Sendable {
     let url: URL
     let relativePath: String

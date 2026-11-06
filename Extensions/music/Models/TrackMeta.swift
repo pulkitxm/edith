@@ -244,6 +244,30 @@ public enum MusicLibraryIndex {
             })
     }
 
+    public static func listings(_ paths: [String]) -> [String: MusicLibraryContentListing] {
+        var result: [String: MusicLibraryContentListing] = [:]
+        var walked: [String: MusicListingRecord] = [:]
+        let base = TrackMeta.basePath
+        for path in paths {
+            guard !Task.isCancelled else { break }
+            if let cached = listing(path) {
+                result[path] = cached
+                continue
+            }
+            let entries = TrackMeta.entries(in: path, base: base)
+            walked[path] = MusicListingRecord(
+                folders: entries.folders.map(\.relativePath),
+                tracks: entries.tracks.map(\.relativePath))
+            result[path] = MusicLibraryContentListing(
+                folder: MusicFolder(url: TrackMeta.url(for: path, base: base), relativePath: path),
+                folders: entries.folders, tracks: entries.tracks)
+        }
+        if !walked.isEmpty {
+            mutate { $0.listings.merge(walked) { _, next in next } }
+        }
+        return result
+    }
+
     public static func storeListing(_ path: String, folders: [String], tracks: [String]) {
         mutate {
             $0.listings[path] = MusicListingRecord(folders: folders, tracks: tracks)

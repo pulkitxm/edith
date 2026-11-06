@@ -65,7 +65,6 @@ struct EmbeddedMusicPage: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search = ""
-    @State private var gridWidth: CGFloat = 0
     @State private var showDownloader = false
     @State private var deleteTarget: EmbeddedTrack?
     @State private var showNewFolder = false
@@ -289,11 +288,7 @@ struct EmbeddedMusicPage: View {
     }
 
     private var viewIsEmpty: Bool {
-        let loaded =
-            remote.showingFavourites
-            ? remote.favouritesLoaded
-            : (search.isEmpty ? remote.entriesLoaded : remote.searchLoaded)
-        return loaded && filteredFolders.isEmpty && filteredTracks.isEmpty
+        viewLoaded && filteredFolders.isEmpty && filteredTracks.isEmpty
     }
 
     private var libraryIsEmpty: Bool {
@@ -459,14 +454,26 @@ struct EmbeddedMusicPage: View {
         }
     }
 
+    private var viewLoaded: Bool {
+        remote.showingFavourites
+            ? remote.favouritesLoaded
+            : (search.isEmpty ? remote.entriesLoaded : remote.searchLoaded)
+    }
+
+    private var retainsPreviousFolder: Bool {
+        !viewLoaded && !remote.showingFavourites && search.isEmpty && remote.listedPath != nil
+            && !(filteredFolders.isEmpty && filteredTracks.isEmpty)
+    }
+
     @ViewBuilder private var trackList: some View {
-        if remote.showingFavourites
-            ? !remote.favouritesLoaded
-            : (search.isEmpty ? !remote.entriesLoaded : !remote.searchLoaded)
-        {
+        if !viewLoaded && !retainsPreviousFolder {
             ScrollView {
-                EmbeddedMusicLibrarySkeleton(grid: gridView)
-                    .pageContent(compact)
+                LoadingContainer(state: .loading) {
+                    EmptyView()
+                } placeholder: {
+                    EmbeddedMusicLibrarySkeleton(grid: gridView)
+                }
+                .pageContent(compact)
             }
         } else if filteredFolders.isEmpty && filteredTracks.isEmpty {
             EmbeddedMusicLocalEmptyState(
@@ -486,9 +493,12 @@ struct EmbeddedMusicPage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
-                Group {
+                LoadingContainer(state: .content, updating: retainsPreviousFolder) {
                     if gridView { gridContent } else { listContent }
+                } placeholder: {
+                    EmptyView()
                 }
+                .allowsHitTesting(!retainsPreviousFolder)
                 .pageContent(compact)
                 .animation(
                     Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: contentKey)
@@ -530,9 +540,7 @@ struct EmbeddedMusicPage: View {
     }
 
     private var gridContent: some View {
-        let layout = EmbeddedMusicTile.layout(
-            count: filteredFolders.count + filteredTracks.count, available: gridWidth)
-        return LazyVGrid(columns: layout.columns, spacing: UIScale.pt(16)) {
+        EmbeddedMusicTileGrid { _ in
             ForEach(filteredFolders) { folder in
                 EmbeddedMusicFolderTile(
                     folder: folder, theme: theme, location: location(of: folder.relativePath),
@@ -561,13 +569,6 @@ struct EmbeddedMusicPage: View {
                     onOpenFolder: { remote.reveal(track) }
                 )
             }
-        }
-        .environment(\.musicTileArt, layout.art)
-        .frame(maxWidth: .infinity)
-        .onGeometryChange(for: CGFloat.self) {
-            $0.size.width
-        } action: {
-            gridWidth = $0
         }
     }
 
@@ -914,29 +915,35 @@ private func trackMenu(
     Button("Move to Trash", role: .destructive, action: onDelete)
 }
 
+struct EmbeddedMusicTileGrid<Content: View>: View {
+    @ViewBuilder let content: (EmbeddedMusicTile.Layout) -> Content
+    @State private var width: CGFloat = 0
+
+    var body: some View {
+        let layout = EmbeddedMusicTile.layout(available: width)
+        LazyVGrid(columns: layout.columns, spacing: UIScale.pt(EmbeddedMusicTile.rowSpacing)) {
+            content(layout)
+        }
+        .environment(\.musicTileArt, layout.art)
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            width = $0
+        }
+    }
+}
+
 struct EmbeddedMusicLibrarySkeleton: View {
     let grid: Bool
-    @State private var width: CGFloat = 0
 
     var body: some View {
         SkeletonGroup {
             if grid {
-                let layout = EmbeddedMusicTile.layout(count: 12, available: width)
-                LazyVGrid(columns: layout.columns, spacing: UIScale.pt(16)) {
-                    ForEach(0..<12, id: \.self) { index in
-                        VStack(alignment: .center, spacing: UIScale.pt(7)) {
-                            SkeletonBlock(width: layout.art, height: layout.art, corner: 8)
-                            SkeletonBlock(width: index.isMultiple(of: 2) ? 96 : 78, height: 12)
-                            SkeletonBlock(width: 64, height: 10)
-                        }
-                        .padding(UIScale.pt(EmbeddedMusicTile.inset))
+                EmbeddedMusicTileGrid { layout in
+                    ForEach(0..<layout.placeholderCount, id: \.self) { index in
+                        EmbeddedMusicTileSkeleton(wide: index.isMultiple(of: 2))
                     }
-                }
-                .frame(maxWidth: .infinity)
-                .onGeometryChange(for: CGFloat.self) {
-                    $0.size.width
-                } action: {
-                    width = $0
                 }
             } else {
                 LazyVStack(spacing: UIScale.pt(2)) {
@@ -965,44 +972,58 @@ struct EmbeddedMusicLibrarySkeleton: View {
     }
 }
 
+struct EmbeddedMusicTileSkeleton: View {
+    var wide = true
+    @Environment(\.musicTileArt) private var art
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+            SkeletonBlock(width: art, height: art, corner: 12)
+            VStack(spacing: UIScale.pt(1)) {
+                Text(verbatim: "Folder").font(.edithText(.callout).weight(.medium)).hidden()
+                    .overlay { SkeletonBlock(width: wide ? 96 : 78, height: 12) }
+                Text(verbatim: "Folder").font(.edithText(.subheadline)).hidden()
+                    .overlay { SkeletonBlock(width: 64, height: 10) }
+            }
+            .frame(width: UIScale.pt(art))
+        }
+        .padding(UIScale.pt(EmbeddedMusicTile.inset))
+    }
+}
+
 private enum EmbeddedMusicRowColumn {
     static var value: CGFloat { UIScale.pt(56) }
     static var trailing: CGFloat { UIScale.pt(16) }
 }
 
 enum EmbeddedMusicTile {
-    struct Layout {
-        let columns: [GridItem]
+    struct Layout: Equatable {
+        let columnCount: Int
         let art: Double
+        let spacing: CGFloat
+
+        var columns: [GridItem] {
+            Array(
+                repeating: GridItem(.flexible(), spacing: spacing, alignment: .top),
+                count: columnCount)
+        }
+        var placeholderCount: Int { columnCount * 2 }
     }
 
     static let art = 118.0
     static let maximumArt = 200.0
     static let inset = 6.0
     static let spacing = 14.0
+    static let rowSpacing = 16.0
 
-    static func columnCount(count: Int, fit: Int) -> Int {
-        let fit = max(1, fit)
-        guard count > fit else { return max(1, count) }
-        let smallest = max(1, (fit + 1) * 2 / 3)
-        let candidates = Array(stride(from: fit, through: smallest, by: -1))
-        if let even = candidates.first(where: { count.isMultiple(of: $0) }) { return even }
-        return candidates.max {
-            Double(count % $0) / Double($0) < Double(count % $1) / Double($1)
-        } ?? fit
-    }
-
-    static func layout(count: Int, available: CGFloat) -> Layout {
+    static func layout(available: CGFloat) -> Layout {
         let gap = UIScale.pt(spacing)
         let minimum = UIScale.pt(art + inset * 2)
-        let fit = available > 0 ? Int((available + gap) / (minimum + gap)) : 1
-        let columns = columnCount(count: count, fit: fit)
+        let columns = available > 0 ? max(1, Int((available + gap) / (minimum + gap))) : 1
         let cell = (available - gap * CGFloat(columns - 1)) / CGFloat(columns)
         let fitted = Double(cell / UIScale.pt(1)) - inset * 2
         return Layout(
-            columns: Array(
-                repeating: GridItem(.flexible(), spacing: gap, alignment: .top), count: columns),
-            art: min(maximumArt, max(art, fitted)))
+            columnCount: columns, art: min(maximumArt, max(art, fitted)), spacing: gap)
     }
 }
 
@@ -1010,7 +1031,7 @@ extension EnvironmentValues {
     @Entry var musicTileArt = EmbeddedMusicTile.art
 }
 
-private struct EmbeddedMusicFolderTile: View {
+struct EmbeddedMusicFolderTile: View {
     let folder: EmbeddedMusicFolder
     let theme: Color
     let location: String?
@@ -1621,11 +1642,12 @@ extension View {
 
 struct EmbeddedMusicFooter: View {
     @State private var accounts = EmbeddedMusicAccounts.shared
-    init(accounts: EmbeddedMusicAccounts? = nil) {
+    @State private var remote = EmbeddedMusicRemote.shared
+    init(accounts: EmbeddedMusicAccounts? = nil, remote: EmbeddedMusicRemote? = nil) {
         _accounts = State(initialValue: accounts ?? .shared)
+        _remote = State(initialValue: remote ?? .shared)
     }
     @State private var playerOptionsPresented = false
-    @State private var remote = EmbeddedMusicRemote.shared
     @Environment(\.windowVisible) private var visible
     @AppStorage(
         AppStorageKeys.General.theme,
@@ -1717,8 +1739,7 @@ struct EmbeddedMusicFooter: View {
 
     private var collapseToggle: some View {
         Button {
-            collapsed = true
-            EmbeddedMusicRemote.shared.send(.barCollapsed, value: 1)
+            remote.setBarCollapsed(true)
         } label: {
             EdithIconView(.chevronDown)
                 .font(.system(size: UIScale.pt(10), weight: .semibold))

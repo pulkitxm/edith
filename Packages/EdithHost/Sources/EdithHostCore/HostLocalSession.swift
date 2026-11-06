@@ -86,6 +86,7 @@ final class HostLocalSession {
         let directory = store.directory(for: package)
         let payload = store.payloadDirectory(for: package)
         let team = ExtensionCodeSignature.teamIdentifier()
+        let verified = HostVerifiedBundles()
         var runtimes: [ExtensionBundleRuntime] = []
         for role in [ExtensionBundleRuntime.Role.app, .helper, .agent] {
             let bundle = payload.appendingPathComponent("\(role.rawValue).bundle")
@@ -95,6 +96,7 @@ final class HostLocalSession {
                     readOnlyPackage: package, directory: directory, role: role,
                     hostABI: HostContract.compatibility, environment: environment,
                     verify: { url in
+                        guard !verified.contains(url) else { return }
                         try HostBundleVerification.verify(url) { url in
                             if development {
                                 try ExtensionCodeSignature.verifyDevelopment(url)
@@ -103,6 +105,7 @@ final class HostLocalSession {
                                 try ExtensionCodeSignature.verify(url, teamIdentifier: team)
                             }
                         }
+                        verified.insert(url)
                     }))
         }
         guard !runtimes.isEmpty else { throw HostWorkerError.rejected }
@@ -331,5 +334,18 @@ public final class HostLocalEngineBridge: NSObject {
         private let send: (Data) -> Void
         init(send: @escaping (Data) -> Void) { self.send = send }
         @MainActor func finish(_ data: Data) { send(data) }
+    }
+}
+
+final class HostVerifiedBundles: @unchecked Sendable {
+    private let lock = NSLock()
+    private var paths = Set<String>()
+
+    func contains(_ url: URL) -> Bool {
+        lock.withLock { paths.contains(url.standardizedFileURL.path) }
+    }
+
+    func insert(_ url: URL) {
+        lock.withLock { _ = paths.insert(url.standardizedFileURL.path) }
     }
 }

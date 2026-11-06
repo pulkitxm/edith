@@ -23,6 +23,8 @@ import Observation
     private var usageUpdatedAt: Double?
     private var limitsUpdatedAt: Double?
     private var limitsRefreshedAt: Double?
+    private static var announcedUsage: Double??
+    private static var announcedLimits: [Double?]?
     private(set) var latestLimits: LimitsTopicSnapshot?
     private(set) var refreshing = false
     private(set) var notice: String?
@@ -98,8 +100,17 @@ import Observation
     func document() async throws -> DashUsage {
         try await prepare()
         let data = try await checkedPayload("usage.ui.document")
-        guard UsageHistory.isValidDocument(data) else { throw ExtensionPeerError.invalidRequest }
-        return try JSONDecoder().decode(DashUsage.self, from: data)
+        let decode = Task.detached(priority: .userInitiated) {
+            guard UsageHistory.isValidDocument(data) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return try JSONDecoder().decode(DashUsage.self, from: data)
+        }
+        return try await withTaskCancellationHandler {
+            try await decode.value
+        } onCancel: {
+            decode.cancel()
+        }
     }
 
     func cachedHomeUsage() async -> HomeUsageSnapshot? {
@@ -259,7 +270,10 @@ import Observation
         let usageDate = object["usageUpdatedAt"] as? Double
         if usageUpdatedAt != usageDate || (previous && !refreshing) {
             usageUpdatedAt = usageDate
-            UsageEvents.post(UsageEvents.usageUpdated)
+            if Self.announcedUsage != .some(usageDate) || (previous && !refreshing) {
+                Self.announcedUsage = .some(usageDate)
+                UsageEvents.post(UsageEvents.usageUpdated)
+            }
         }
         let limitsDate = object["limitsUpdatedAt"] as? Double
         let refreshedAt = object["limitsRefreshedAt"] as? Double
@@ -268,7 +282,10 @@ import Observation
             latestLimits = snapshot.current
             limitsUpdatedAt = limitsDate
             limitsRefreshedAt = refreshedAt
-            UsageEvents.post(UsageEvents.limitsUpdated)
+            if Self.announcedLimits != [limitsDate, refreshedAt] {
+                Self.announcedLimits = [limitsDate, refreshedAt]
+                UsageEvents.post(UsageEvents.limitsUpdated)
+            }
         }
     }
 

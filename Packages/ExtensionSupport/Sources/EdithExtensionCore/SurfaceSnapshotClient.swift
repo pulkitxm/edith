@@ -70,7 +70,17 @@ public final class SurfaceSnapshotClient {
         let payload = try request.encoded(providerID: providerID)
         let data = try await invoke(
             providerID: providerID, target: target, command: "surface.snapshot", payload: payload)
-        return try SurfaceSnapshot.decode(data, providerID: providerID)
+        return try await Self.decode(data, providerID: providerID)
+    }
+
+    private nonisolated static func decode(_ data: Data, providerID: String) async throws
+        -> SurfaceSnapshot
+    {
+        let snapshot = try await Task.detached(priority: .userInitiated) {
+            try SurfaceSnapshot.decode(data, providerID: providerID)
+        }.value
+        try Task.checkCancellation()
+        return snapshot
     }
 
     public func perform(
@@ -97,7 +107,7 @@ public final class SurfaceSnapshotClient {
         let payload = try request.encoded(providerID: providerID)
         let data = try await invoke(
             providerID: providerID, target: target, command: "surface.perform", payload: payload)
-        return try SurfaceSnapshot.decode(data, providerID: providerID)
+        return try await Self.decode(data, providerID: providerID)
     }
 
     public func retain(activeVersions: [String: String]) {
