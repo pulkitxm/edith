@@ -148,7 +148,9 @@ struct PageMetricLayout: Layout {
 
     func rowCounts(count: Int, width: CGFloat) -> [Int] {
         guard count > 0 else { return [] }
-        let fitted = Int((width + spacing) / (minimumWidth + spacing))
+        let fitted =
+            width.isFinite && minimumWidth + spacing > 0
+            ? Int(max(0, (width + spacing) / (minimumWidth + spacing))) : count
         let columns = max(1, min(fitted, maximumColumns ?? count, count))
         let rows = Int((Double(count) / Double(columns)).rounded(.up))
         return (0..<rows).map { count / rows + ($0 < count % rows ? 1 : 0) }
@@ -166,7 +168,7 @@ struct PageMetricLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let count = max(1, min(subviews.count, maximumColumns ?? subviews.count))
         let width =
-            proposal.width
+            proposal.width.flatMap { $0.isFinite ? $0 : nil }
             ?? minimumWidth * CGFloat(count) + spacing * CGFloat(count - 1)
         var start = 0
         var total: CGFloat = 0
