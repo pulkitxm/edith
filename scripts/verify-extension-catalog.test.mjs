@@ -173,6 +173,7 @@ test("catalog and package schemas fail closed even with a valid signature", () =
       "14.4.0-beta",
       "14.4.2147483648",
     ],
+    minimumHostBuild: [null, 0, -1, 1.5, "396", 1_000_000_000],
     sha256: ["A".repeat(64), "abc"],
     sourceFingerprint: [null, "abc"],
     downloadBytes: [0, 512 * 1024 ** 2 + 1],
@@ -209,6 +210,14 @@ test("catalog and package schemas fail closed even with a valid signature", () =
         publicKey,
       ),
     /Duplicate/,
+  );
+});
+
+test("packages may record the oldest host build that can load them", () => {
+  const value = catalog([{ ...packageRecord, minimumHostBuild: 396 }]);
+  assert.deepEqual(
+    JSON.parse(verifiedCatalogPayload(signed(value), publicKey)),
+    value,
   );
 });
 

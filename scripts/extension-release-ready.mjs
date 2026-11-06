@@ -22,7 +22,13 @@ export function verifyCatalog(envelope, publicKey) {
   return JSON.parse(verifiedCatalogPayload(Buffer.from(envelope), publicKey));
 }
 
-export function missingPackages(expected, catalog) {
+export function missingPackages(
+  expected,
+  catalog,
+  hostBuild = Number.MAX_SAFE_INTEGER,
+) {
+  if (!Number.isSafeInteger(hostBuild) || hostBuild < 1)
+    throw new Error("Invalid host build");
   for (const published of catalog.packages)
     validateMinimumSystemVersion(published.minimumSystemVersion);
   return expected.filter((entry) => {
@@ -32,6 +38,7 @@ export function missingPackages(expected, catalog) {
         published.id === entry.id &&
         published.hostABI === entry.hostABI &&
         published.architecture === entry.architecture &&
+        (published.minimumHostBuild ?? 0) <= hostBuild &&
         compareSystemVersions(
           published.minimumSystemVersion,
           entry.minimumSystemVersion,
@@ -113,6 +120,7 @@ export async function verifyCurrentMain({
 
 export async function waitForPackages({
   expected,
+  hostBuild,
   url,
   publicKey,
   timeout = 120 * 60_000,
@@ -177,7 +185,7 @@ export async function waitForPackages({
       const catalog = verifyCatalog(data, publicKey);
       if (pointer && pointer.revision !== catalog.revision)
         throw new Error("Catalog pointer revision mismatch");
-      missing = missingPackages(expected, catalog);
+      missing = missingPackages(expected, catalog, hostBuild);
       if (missing.length === 0) {
         await verifySource();
         return catalog.revision;
@@ -214,6 +222,7 @@ if (
   const target = process.env.REBUILD ? undefined : process.env.BUILT_SHA;
   const revision = await waitForPackages({
     expected: await expectedPackages(process.argv[2] ?? process.cwd()),
+    hostBuild: Number(process.env.RELEASE_BUILD),
     publicKey: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=",
     timeout: 0,
     fetchCatalog: fetchMetadata,

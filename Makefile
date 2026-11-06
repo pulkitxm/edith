@@ -474,7 +474,7 @@ ci-marketplace-runtime:
 ci-marketplace-host: ci-host host
 	python3 -B scripts/test-host-build-metadata.py
 	bun scripts/extension-host-abi.mjs --write
-	bun test scripts/build-extension-support.test.js scripts/extension-owned-sources.test.js scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
+	bun test scripts/build-extension-support.test.js scripts/extension-owned-sources.test.js scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js scripts/extension-host-build.test.js
 	$(MAKE) ci-marketplace-runtime
 	$(MAKE) ci-extension-support ci-extension-docs
 	$(MAKE) ci-comments

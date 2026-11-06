@@ -845,6 +845,40 @@ import HostWorkerFixtureSupport
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
     }
 
+    @Test func aCatalogBuildNeedingANewerHostIsNotOfferedAndTheInstalledVersionStays()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let installed = fixture.package("1.0.2")
+        let newer = fixture.package("1.0.3", minimumHostBuild: ExtensionHostBuild.current + 1)
+        try fixture.install([installed])
+        await fixture.network.set(data: try fixture.envelope(packages: [installed, newer]))
+        let marketplace = try fixture.marketplace()
+        await marketplace.checkForUpdates()
+        #expect(marketplace.error == nil)
+        #expect(marketplace.available["sample"] == installed)
+        #expect(!marketplace.updateAvailable(id: "sample"))
+        #expect(marketplace.updatableIDs.isEmpty)
+        #expect(marketplace.installed["sample"] == installed)
+    }
+
+    @Test func anInstalledBuildNeedingANewerHostIsNotRestored() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([
+            fixture.package("1.0.3", minimumHostBuild: ExtensionHostBuild.current + 1)
+        ])
+        let defaults = try #require(UserDefaults(suiteName: fixture.identity.defaultsSuite))
+        defaults.set(["sample"], forKey: "enabledExtensions")
+        let marketplace = try fixture.marketplace()
+        await marketplace.restoreEnabledExtensions()
+        #expect(marketplace.downloadedIDs == ["sample"])
+        #expect(marketplace.installed.isEmpty)
+        #expect(marketplace.sessions.states["sample"] == .notInstalled)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+    }
+
     @Test func failedDownloadsKeepThePreviouslyInstalledVersion() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -1545,13 +1579,13 @@ import HostWorkerFixtureSupport
         func package(
             _ version: String, abi: String = HostContract.compatibility,
             minimumSystemVersion: ExtensionSystemVersion = .init(major: 14), id: String = "sample",
-            dependencies: [String] = []
+            dependencies: [String] = [], minimumHostBuild: Int? = nil
         )
             -> ExtensionPackage
         {
             ExtensionPackage(
                 id: id, version: version, hostABI: abi,
-                minimumSystemVersion: minimumSystemVersion,
+                minimumSystemVersion: minimumSystemVersion, minimumHostBuild: minimumHostBuild,
                 downloadURL: URL(
                     string: "https://github.com/pulkitxm/edith/releases/download/fixture/\(id).zip"
                 )!, sha256: String(repeating: "a", count: 64), downloadBytes: 1, installedBytes: 1,
