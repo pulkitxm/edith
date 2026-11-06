@@ -381,6 +381,9 @@ final class TerminalSessionHolder {
             else { return }
             self.nativePaneAction?(action)
         }
+        view.onKeyEquivalent = { [weak view] event in
+            HerdrWindowReader.ReaderView.performKey(event, in: view?.window)
+        }
         view.onOpenTarget = { [weak self, weak view] value, untrusted in
             guard let self, let view, self.generation == viewGeneration else { return false }
             return self.openTarget(value, untrusted: untrusted, view: view)

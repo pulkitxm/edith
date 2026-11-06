@@ -211,6 +211,7 @@ extension GhosttyTerminalView {
         guard event.type == .keyDown, window?.firstResponder === self else {
             return super.performKeyEquivalent(with: event)
         }
+        if onKeyEquivalent?(event) == true { return true }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             .subtracting([.capsLock, .function, .numericPad])
         let character = event.charactersIgnoringModifiers?.lowercased()

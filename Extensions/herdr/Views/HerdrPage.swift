@@ -1046,9 +1046,17 @@ struct HerdrWindowReader: NSViewRepresentable {
     }
 
     final class ReaderView: NSView {
+        private static let readers = NSHashTable<ReaderView>.weakObjects()
         var onWindow: ((NSWindow?, NSWindow?) -> Void)?
         var onKey: ((NSEvent) -> Bool)?
         private weak var current: NSWindow?
+
+        static func performKey(_ event: NSEvent, in window: NSWindow?) -> Bool {
+            guard event.type == .keyDown, let window else { return false }
+            return readers.allObjects.contains { reader in
+                reader.window === window && reader.onKey?(event) == true
+            }
+        }
 
         override func performKeyEquivalent(with event: NSEvent) -> Bool {
             if event.type == .keyDown, onKey?(event) == true { return true }
@@ -1057,6 +1065,7 @@ struct HerdrWindowReader: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            if window == nil { Self.readers.remove(self) } else { Self.readers.add(self) }
             guard current !== window else { return }
             onWindow?(current, window)
             current = window
