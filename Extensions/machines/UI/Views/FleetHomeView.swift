@@ -21,7 +21,10 @@ struct FleetHomeView: View {
 
     var body: some View {
         PageScaffold(pinnedHeader: true, header: {}) {
-            PageLoading(state: loaded ? .content : .loading, layout: .cards) {
+            PageLoading(
+                state: loaded ? .content : .loading, layout: .analytics,
+                showsSkeletonControls: false
+            ) {
                 if FleetFirstRun.needsRemoteMachine(model.snapshots) { firstRunCard }
                 fleetBanner
                 metricsGrid

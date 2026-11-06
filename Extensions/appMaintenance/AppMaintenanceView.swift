@@ -231,11 +231,7 @@ struct AppMaintenanceView: View {
     @ViewBuilder
     private var content: some View {
         if model.phase == .loading {
-            ScrollView {
-                PageSkeleton(layout: .list)
-                    .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
-                    .pageContent(compact)
-            }
+            loadingSkeleton
         } else if section == .updates, updatesState != .list {
             updatesStateView.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else if !section.reviewsSelection {
@@ -257,6 +253,32 @@ struct AppMaintenanceView: View {
                         maxHeight: .infinity)
                 detail
                     .frame(minWidth: UIScale.pt(360), maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var loadingSkeleton: some View {
+        if !section.reviewsSelection {
+            AppMaintenanceInventorySkeleton()
+        } else if compact {
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    AppMaintenanceInventorySkeleton()
+                        .frame(height: min(UIScale.pt(240), proxy.size.height * 0.36))
+                    Divider()
+                    AppMaintenanceRemovalSkeleton()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        } else {
+            HStack(spacing: 0) {
+                AppMaintenanceInventorySkeleton()
+                    .frame(width: UIScale.pt(300))
+                Divider()
+                AppMaintenanceRemovalSkeleton()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -1124,6 +1146,46 @@ private struct AppMaintenanceDetailSkeleton: View {
         .padding(UIScale.pt(14))
         .frame(maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .topLeading)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+    }
+}
+
+private struct AppMaintenanceInventorySkeleton: View {
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        SkeletonGroup {
+            VStack(spacing: 0) {
+                SkeletonBlock(height: 28, corner: 7)
+                    .pageGutter(compact)
+                    .padding(.vertical, UIScale.pt(12))
+                Divider()
+                VStack(spacing: 0) {
+                    ForEach(0..<12, id: \.self) { index in
+                        HStack(spacing: UIScale.pt(10)) {
+                            SkeletonBlock(width: 28, height: 28, corner: 7)
+                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                SkeletonBlock(width: index.isMultiple(of: 2) ? 120 : 92, height: 10)
+                                SkeletonBlock(width: 64, height: 8)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, PageMetrics.gutter(compact))
+                        .frame(height: AppMaintenanceRowMetrics.application)
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+                .clipped()
+                Divider()
+                HStack {
+                    SkeletonBlock(width: 96, height: 9)
+                    Spacer()
+                }
+                .pageGutter(compact)
+                .frame(height: UIScale.pt(34))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading apps")
     }
 }
 

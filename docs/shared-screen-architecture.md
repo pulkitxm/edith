@@ -49,6 +49,11 @@ The ticket API supports existing event-driven and staged loaders.
 refresh feedback, and unavailable states. `PageLoading` supplies shared page
 placeholder recipes. Feature views choose analytics, list, cards, or editor
 geometry instead of implementing another loading screen.
+A skeleton occupies the frame its content will occupy: the same container,
+column width, origin, header, and section structure. Recipes fill their
+container from the top, and the form recipe is a grouped `Form` with the same
+`settingsForm()` style, so it inherits the column and insets of the real form.
+Callers do not add their own padding or width caps around a skeleton.
 Skeletons appear on the first frame, including between staged status and report
 requests. Setup and empty results appear only after their data requests finish.
 

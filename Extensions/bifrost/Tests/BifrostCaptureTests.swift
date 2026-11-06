@@ -28,6 +28,7 @@ import Testing
                 }
             }
         }
+        var skeletonFrames: [String: RenderCapture.InkBounds] = [:]
         for fixture in Fixture.allCases {
             for key in keys { defaults.removeObject(forKey: key) }
             let context = BifrostUIContext(invoke: Self.engine(fixture))
@@ -50,6 +51,15 @@ import Testing
                         .environment(\.automaticViewActionsEnabled, false)
                 }
                 #expect(rendered.bitmap.pixelsWide >= Int(variant.width))
+                let frame = RenderCapture.inkBounds(rendered.bitmap)
+                if fixture == .loading { skeletonFrames[variant.name] = frame }
+                if fixture == .firstRun {
+                    let skeleton = try #require(skeletonFrames[variant.name])
+                    let content = try #require(frame)
+                    #expect(
+                        skeleton.matches(content),
+                        "\(variant.name): skeleton \(skeleton), content \(content)")
+                }
                 #expect(RenderCapture.distinctColors(rendered.bitmap) > 4)
             }
         }

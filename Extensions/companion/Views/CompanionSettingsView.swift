@@ -361,7 +361,8 @@ struct CompanionSettingsScreen: View {
                 state: model.loading.state,
                 message: model.loading.errorMessage
                     ?? "Settings could not be loaded.",
-                layout: .cards, refreshing: model.loading.isRefreshing,
+                layout: .cards, showsSkeletonControls: false,
+                refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.load() } }
             ) {
                 PageGrid {

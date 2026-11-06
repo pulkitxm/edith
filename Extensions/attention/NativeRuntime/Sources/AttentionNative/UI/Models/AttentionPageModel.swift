@@ -128,6 +128,8 @@ final class AttentionPageModel {
         !settings.trackingEnabled && !settings.browserTrackingEnabled && !hasStoredEvents
     }
 
+    var showsSetup: Bool { loaded && needsSetup }
+
     var showsTimelineList: Bool {
         section == .timeline && loading.state == .content && !needsSetup && period.showsSpans
             && !timelineRows.isEmpty && !(hasFilters && !hasActivity)

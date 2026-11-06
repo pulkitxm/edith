@@ -27,7 +27,7 @@ struct AttentionPage: View {
                 EmptyView()
             },
             accessory: {
-                if !model.needsSetup {
+                if !model.showsSetup {
                     AttentionSectionBar(model: model)
                     if model.section.usesPeriod {
                         AttentionPeriodControl(model: model)
@@ -114,7 +114,7 @@ struct AttentionPage: View {
 
     private var scaffold: some View {
         PageScaffold(
-            width: model.needsSetup ? .readable : .fluid, pinnedHeader: true,
+            width: model.showsSetup ? .readable : .fluid, pinnedHeader: true,
             scrollIdentity: model.section.rawValue, activity: model.activity
         ) {
             pageHeader
@@ -127,7 +127,7 @@ struct AttentionPage: View {
                 errorTitle: "Attention could not load",
                 message: model.loading.errorMessage
                     ?? "Enable a tracking source to begin collecting activity.",
-                layout: .analytics, activity: model.activity,
+                layout: .analytics, showsSkeletonControls: false, activity: model.activity,
                 retry: { model.reload() }
             ) {
                 Group {

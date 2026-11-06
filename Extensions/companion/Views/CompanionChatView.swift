@@ -412,7 +412,8 @@ struct CompanionChatScreen: View {
                     PageLoading(
                         state: model.loading.state,
                         message: model.loadError ?? "Conversations could not be loaded.",
-                        layout: .list, refreshing: model.loading.isRefreshing,
+                        layout: .list, showsSkeletonControls: false,
+                        refreshing: model.loading.isRefreshing,
                         retry: { Task { await model.loadConversations() } }
                     ) {
                         if model.conversations.isEmpty {
@@ -450,16 +451,17 @@ struct CompanionChatScreen: View {
     private var thread: some View {
         VStack(spacing: UIScale.pt(0)) {
             if model.activeConversationId != nil {
-                PageLoading(
+                LoadingContainer(
                     state: model.messageLoad.state,
                     message: model.messageLoad.errorMessage
                         ?? "The conversation could not be loaded.",
-                    layout: .editor,
                     retry: {
                         if let id = model.activeConversationId { Task { await model.open(id) } }
                     }
                 ) {
                     transcript
+                } placeholder: {
+                    transcriptSkeleton
                 }
             } else if model.messages.isEmpty {
                 if CompanionMemoryState.resolve(status: home.status) == .empty {
@@ -477,6 +479,29 @@ struct CompanionChatScreen: View {
             personaBar
             composer
         }
+    }
+
+    private var transcriptSkeleton: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(20)) {
+            ForEach(0..<3, id: \.self) { index in
+                HStack {
+                    Spacer(minLength: UIScale.pt(80))
+                    SkeletonBlock(width: index == 1 ? 180 : 260, height: 34, corner: 14)
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                    SkeletonBlock(width: 72, height: 9)
+                    SkeletonBlock(height: 11)
+                    SkeletonBlock(height: 11)
+                    SkeletonBlock(width: index == 1 ? 220 : 340, height: 11)
+                }
+            }
+        }
+        .frame(maxWidth: columnWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.horizontal, PageMetrics.gutter(compact))
+        .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading conversation")
     }
 
     private var transcript: some View {

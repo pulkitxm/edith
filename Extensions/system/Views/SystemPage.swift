@@ -24,10 +24,26 @@ struct SystemPage: View {
             if let status = model.actionStatus {
                 actionStatus(status)
             }
-            PageLoading(state: model.loading.state, layout: .list) {
-                summary
-                PageCard {
-                    appList
+            Group {
+                if model.loading.state == .loading || model.loading.state.presentsContent {
+                    LoadingContainer(state: model.loading.state) {
+                        LazyVStack(
+                            alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)
+                        ) {
+                            summary
+                            PageCard {
+                                appList
+                            }
+                        }
+                    } placeholder: {
+                        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing))
+                        {
+                            SkeletonReplica("Loading apps") { summary }
+                            PageSkeleton(layout: .list, showsControls: false)
+                        }
+                    }
+                } else {
+                    PageLoading(state: model.loading.state, layout: .list) { EmptyView() }
                 }
             }
             .background(ScrollPauseMonitor { model.setScrolling($0) })

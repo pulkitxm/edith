@@ -443,13 +443,18 @@ public struct SkeletonBlock: View {
     }
 
     public var body: some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(corner))
-            .fill(Color.primary.opacity(0.07))
+        SkeletonSurface(shape: RoundedRectangle(cornerRadius: UIScale.pt(corner)))
             .frame(width: scaledWidth, height: UIScale.pt(height))
-            .overlay {
-                LoadingShimmer()
-                    .mask(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
-            }
+    }
+}
+
+struct SkeletonSurface<Outline: Shape>: View {
+    let shape: Outline
+
+    var body: some View {
+        shape
+            .fill(Color.primary.opacity(0.07))
+            .overlay { LoadingShimmer().mask(shape) }
             .accessibilityHidden(true)
     }
 }

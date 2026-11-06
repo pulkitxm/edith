@@ -18,8 +18,6 @@ struct ClipboardPage: View {
         Group {
             if loading {
                 PageSkeleton(layout: .form)
-                    .padding(PageMetrics.groupedFormInset)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else if let presentation, presentation.available,
                 !presentation.preferencesLoad.hasContent,
                 let error = presentation.preferencesLoad.errorMessage

@@ -29,8 +29,6 @@ struct BifrostSettings: View {
                         })
                 } else {
                     PageSkeleton(layout: .form)
-                        .padding(PageMetrics.groupedFormInset)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
             } else {
                 Form { BifrostRows(error: context?.error) }.settingsForm()

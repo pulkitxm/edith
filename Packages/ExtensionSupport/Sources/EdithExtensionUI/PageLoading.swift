@@ -96,55 +96,102 @@ public struct PageSkeleton: View {
 
     public var body: some View {
         SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-                if showsControls, layout != .form { PageSkeletonControls() }
-                switch layout {
-                case .analytics:
-                    PageMetricGrid {
-                        ForEach(0..<4, id: \.self) { _ in PageMetricSkeleton() }
-                    }
-                    PageSkeletonCard {
-                        SkeletonBlock(width: 160, height: 15)
-                        PageSkeletonChart()
-                    }
-                    PageSkeletonCard { PageSkeletonRows() }
-                case .list:
-                    PageSkeletonCard { PageSkeletonRows() }
-                case .fullList:
-                    PageSkeletonCard { PageSkeletonRows(count: 40) }
-                        .frame(height: viewportHeight)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                        .clipped()
-                case .cards:
-                    LazyVGrid(
-                        columns: PageMetrics.cardColumns(compact, minimum: 260, spacing: 12),
-                        spacing: UIScale.pt(PageMetrics.cardSpacing)
-                    ) {
-                        ForEach(0..<6, id: \.self) { _ in
-                            PageSkeletonCard {
-                                SkeletonBlock(width: 32, height: 32, corner: 8)
-                                SkeletonBlock(width: 160, height: 14)
-                                SkeletonBlock(height: 9)
-                                SkeletonBlock(width: 120, height: 9)
-                            }
-                        }
-                    }
-                case .editor:
-                    PageSkeletonCard {
-                        SkeletonBlock(height: 280, corner: 12)
-                        PageSkeletonControls()
-                    }
-                case .form:
-                    ForEach([3, 2], id: \.self) { rows in
-                        PageSkeletonCard { PageSkeletonFormRows(count: rows) }
-                    }
-                }
+            if layout == .form {
+                PageSkeletonForm()
+            } else {
+                recipe.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: layout == .form ? PageMetrics.formWidth : nil)
         }
-        .frame(maxWidth: .infinity, alignment: layout == .form ? .top : .topLeading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading content")
+    }
+
+    private var recipe: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+            if showsControls { PageSkeletonControls() }
+            switch layout {
+            case .analytics:
+                PageMetricGrid {
+                    ForEach(0..<4, id: \.self) { _ in PageMetricSkeleton() }
+                }
+                PageSkeletonCard {
+                    SkeletonBlock(width: 160, height: 15)
+                    PageSkeletonChart()
+                }
+                PageSkeletonCard { PageSkeletonRows() }
+            case .list:
+                PageSkeletonCard { PageSkeletonRows() }
+            case .fullList:
+                PageSkeletonCard { PageSkeletonRows(count: 40) }
+                    .frame(height: viewportHeight)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .clipped()
+            case .cards:
+                LazyVGrid(
+                    columns: PageMetrics.cardColumns(compact, minimum: 260, spacing: 12),
+                    spacing: UIScale.pt(PageMetrics.cardSpacing)
+                ) {
+                    ForEach(0..<6, id: \.self) { _ in
+                        PageSkeletonCard {
+                            SkeletonBlock(width: 32, height: 32, corner: 8)
+                            SkeletonBlock(width: 160, height: 14)
+                            SkeletonBlock(height: 9)
+                            SkeletonBlock(width: 120, height: 9)
+                        }
+                    }
+                }
+            case .editor:
+                PagePanel(fill: true) {
+                    EmptyView()
+                } content: {
+                    SkeletonSurface(shape: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+                        .frame(minHeight: UIScale.pt(280), maxHeight: .infinity)
+                    PageSkeletonControls()
+                }
+            case .form:
+                PageSkeletonForm()
+            }
+        }
+    }
+}
+
+struct PageSkeletonForm: View {
+    static let sections = [2, 4, 3]
+
+    var body: some View {
+        Form {
+            ForEach(Array(Self.sections.enumerated()), id: \.offset) { section, rows in
+                Section {
+                    ForEach(0..<rows, id: \.self) { index in
+                        PageSkeletonFormRow(described: index.isMultiple(of: 2))
+                    }
+                } header: {
+                    if section > 0 { Text("Section placeholder").skeletonized() }
+                }
+            }
+        }
+        .settingsForm()
+        .allowsHitTesting(false)
+    }
+}
+
+struct PageSkeletonFormRow: View {
+    let described: Bool
+
+    var body: some View {
+        LabeledContent {
+            Toggle("", isOn: .constant(false))
+                .labelsHidden()
+                .hidden()
+                .overlay { SkeletonSurface(shape: Capsule()) }
+        } label: {
+            Text(described ? "Setting name placeholder" : "Setting placeholder")
+            if described {
+                Text("A longer description placeholder for this setting row")
+            }
+        }
+        .skeletonized()
+        .accessibilityHidden(true)
     }
 }
 
@@ -185,25 +232,6 @@ struct PageSkeletonRows: View {
                     }
                     Spacer(minLength: 0)
                     SkeletonBlock(width: 56, height: 11)
-                }
-            }
-        }
-    }
-}
-
-struct PageSkeletonFormRows: View {
-    let count: Int
-
-    var body: some View {
-        VStack(spacing: UIScale.pt(16)) {
-            ForEach(0..<count, id: \.self) { index in
-                HStack(spacing: UIScale.pt(12)) {
-                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                        SkeletonBlock(width: index.isMultiple(of: 2) ? 140 : 180, height: 11)
-                        SkeletonBlock(width: index.isMultiple(of: 2) ? 240 : 200, height: 8)
-                    }
-                    Spacer(minLength: 0)
-                    SkeletonBlock(width: 44, height: 22, corner: 7)
                 }
             }
         }
