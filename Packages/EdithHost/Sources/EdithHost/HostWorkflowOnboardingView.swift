@@ -283,17 +283,12 @@ private struct HostOnboardingTileButton: View {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @Environment(\.colorScheme) private var scheme
-    @State private var hovering = false
 
     var body: some View {
         configuration.label
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(12))
-                    .fill(
-                        Color.primary.opacity(configuration.isPressed ? 0.06 : hovering ? 0.03 : 0)
-                    )
-                    .allowsHitTesting(false)
-            }
+            .edithHoverHighlight(
+                tone: .neutral, cornerRadius: UIScale.pt(12), pressed: configuration.isPressed
+            )
             .overlay {
                 if focused {
                     RoundedRectangle(cornerRadius: UIScale.pt(12))
@@ -302,7 +297,6 @@ private struct HostOnboardingTileButton: View {
                 }
             }
             .opacity(enabled ? 1 : 0.5)
-            .onHover { hovering = enabled && $0 }
     }
 }
 

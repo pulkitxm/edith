@@ -94,7 +94,6 @@ struct HostExtensionRow: View {
     let toggle: (Bool) -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @State private var hovering = false
 
     private var dark: Bool { scheme == .dark }
 
@@ -126,10 +125,9 @@ struct HostExtensionRow: View {
         .frame(minHeight: UIScale.pt(HostExtensionRowMetrics.contentHeight))
         .padding(.horizontal, UIScale.pt(HostExtensionRowMetrics.horizontalPadding))
         .padding(.vertical, UIScale.pt(HostExtensionRowMetrics.verticalPadding))
-        .background(hovering ? Color.primary.opacity(0.04) : .clear)
+        .edithHoverHighlight(tone: .neutral, cornerRadius: 0)
         .contentShape(Rectangle())
         .onTapGesture(perform: details)
-        .onHover { hovering = $0 }
         .help(tagline)
         .accessibilityElement(children: .contain)
     }

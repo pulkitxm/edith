@@ -111,6 +111,7 @@ struct HerdrTabButton: View, Equatable {
                 ?? (selected ? DashSkin.lineStrong(dark) : DashSkin.line(dark)),
             strokeWidth: selected ? 1.4 : 1
         )
+        .edithHoverHighlight(cornerRadius: UIScale.pt(8))
         .contentShape(Rectangle())
         .herdrDropFrame(HerdrDropGeometry.chipPrefix + id)
         .onTapGesture { store.selectedTab = id }

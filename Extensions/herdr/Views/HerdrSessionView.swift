@@ -538,7 +538,7 @@ struct HerdrSessionView: View {
             Button("Retry") {
                 HerdrWorkOwnership.start { await prepareDiff(restarting: true) }
             }
-            .buttonStyle(QuinjetToolbarButtonStyle())
+            .buttonStyle(.edith(.secondary))
         }
         .padding(UIScale.pt(28))
         .frame(maxWidth: UIScale.pt(420))

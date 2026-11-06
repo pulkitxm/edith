@@ -573,6 +573,7 @@ private struct ShelfItemView: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(.white.opacity(controller.selectedIDs.contains(item.id) ? 0.2 : 0))
         )
+        .edithHoverHighlight(cornerRadius: 8)
         .contentShape(Rectangle())
         .gesture(moveOrDragOut)
         .onTapGesture {

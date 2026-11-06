@@ -48,6 +48,7 @@ private struct EdithSwitchBody: View {
             configuration.isOn.toggle()
         } label: {
             EdithSwitchTrack(isOn: configuration.isOn)
+                .edithHoverHighlight(outset: true)
                 .background {
                     configuration.label.foregroundStyle(.clear).frame(width: 1, height: 1).clipped()
                 }

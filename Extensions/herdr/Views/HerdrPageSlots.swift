@@ -89,10 +89,13 @@ struct HerdrMessageMenu: View {
                 }
             }
         } label: {
-            EdithIcon.send.image()
+            EdithIconView(.send)
+                .font(.edithText(.headline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
+                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
         }
-        .borderlessMenu()
+        .menuStyle(.button)
+        .buttonStyle(.edith(.toolbar))
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Message")
