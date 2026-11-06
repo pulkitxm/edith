@@ -27,6 +27,9 @@ import Testing
         let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
         #expect(object["reason"] as? String == "applicationQuit")
         #expect(object["restoreOnQuit"] as? Bool == false)
+        let host = try #require(object["host"] as? [String: Any])
+        #expect(host["pid"] as? Int32 == getpid())
+        #expect(host["generation"] as? String == ExtensionProcessIdentity.current?.generation)
         await stop(runtime)
         #expect(!fixture.events.contains("release"))
         try await fixture.worker.prepareDisable()
@@ -144,24 +147,48 @@ import Testing
         }
     }
 
-    @Test(arguments: ["reason", "generation", "parent", "extra"])
+    @Test func theInProcessHostIsTheQuitContextHostEvenWhenItsParentIsLaunchd() throws {
+        let host = try #require(ExtensionProcessIdentity.current)
+        let quit = try #require(LidAwakeApplicationQuitContext(input: try context()))
+        #expect(quit.host == host)
+        try quit.validate()
+        let payload = try JSONSerialization.jsonObject(with: try quit.encoded()) as? [String: Any]
+        let encodedHost = try #require(payload?["host"] as? [String: Any])
+        #expect(encodedHost["pid"] as? Int32 == host.pid)
+        #expect(encodedHost["generation"] as? String == host.generation)
+    }
+
+    @Test(arguments: ["reason", "generation", "parent", "child", "launchd", "extra"])
     func foreignOrStaleContextIsRejected(field: String) throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
         let input = try context().mutableCopy() as! NSMutableDictionary
+        let child = Process()
+        defer { if child.isRunning { child.terminate(); child.waitUntilExit() } }
+        func impersonate(_ identity: ExtensionProcessIdentity) {
+            input["hostPID"] = identity.pid
+            input["hostGeneration"] = identity.generation
+        }
         switch field {
         case "reason": input["reason"] = "disable"
         case "generation": input["hostGeneration"] = "0.0"
-        case "parent": input["hostPID"] = getpid()
+        case "parent": impersonate(try #require(ExtensionProcessIdentity.read(getppid())))
+        case "child":
+            child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+            child.arguments = ["30"]
+            try child.run()
+            impersonate(try #require(ExtensionProcessIdentity.read(child.processIdentifier)))
+        case "launchd": input["hostPID"] = Int32(1)
         default: input["skipRestoration"] = true
         }
+        #expect(LidAwakeApplicationQuitContext(input: input) == nil)
         let runtime = makeRuntime(fixture.worker)
         #expect((runtime.execute(input) as? NSDictionary)?["ok"] as? Bool == false)
         #expect(fixture.events.isEmpty)
     }
 
     private func context() throws -> NSDictionary {
-        let host = try #require(ExtensionProcessIdentity.read(getppid()))
+        let host = try #require(ExtensionProcessIdentity.current)
         return [
             "operation": "prepareApplicationQuit", "reason": "applicationQuit",
             "hostPID": host.pid, "hostGeneration": host.generation,
