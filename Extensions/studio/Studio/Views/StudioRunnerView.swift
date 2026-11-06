@@ -213,7 +213,7 @@ struct StudioInputTile: View {
                         .foregroundStyle(.secondary)
                         .background(Circle().fill(DashSkin.paper2(scheme == .dark)).padding(2))
                 }
-                .buttonStyle(.edith(.iconOnly))
+                .buttonStyle(.edithShaped(Circle(), filled: true))
                 .padding(UIScale.pt(5))
                 .disabled(job.isRunning)
                 .help("Remove from this run")

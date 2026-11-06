@@ -132,7 +132,7 @@ struct NotchRemoteCameraTab: View {
                                 .foregroundStyle(.white).frame(width: 32, height: 32)
                                 .background(.black.opacity(0.55), in: Circle()).contentShape(
                                     Circle())
-                            }.buttonStyle(.edith(.borderless)).padding(14).help("Switch camera")
+                            }.buttonStyle(.edithShaped(Circle())).padding(14).help("Switch camera")
                         }
                     }
                 }

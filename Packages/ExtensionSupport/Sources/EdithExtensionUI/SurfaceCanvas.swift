@@ -399,6 +399,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
                 .font(.edithText(.caption))
                 .padding(.horizontal, UIScale.pt(10)).padding(.top, UIScale.pt(8))
                 .contentShape(Rectangle())
+                .edithHoverHighlight(tone: .neutral, cornerRadius: UIScale.pt(6))
                 .onTapGesture(perform: select)
                 .gesture(
                     DragGesture(

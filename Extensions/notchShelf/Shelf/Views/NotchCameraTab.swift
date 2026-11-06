@@ -58,7 +58,7 @@ struct NotchCameraTab: View {
                 .background(.black.opacity(0.55), in: Circle())
                 .contentShape(Circle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Circle()))
         .padding(14)
         .help("Switch camera")
     }

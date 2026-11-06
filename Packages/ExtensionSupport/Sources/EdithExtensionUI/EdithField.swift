@@ -292,7 +292,7 @@ private struct EdithCheckboxBody: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithControl)
         .accessibilityAddTraits(.isToggle)
         .accessibilityValue(configuration.isOn ? "On" : "Off")
     }

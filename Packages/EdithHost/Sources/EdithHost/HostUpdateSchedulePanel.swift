@@ -117,6 +117,7 @@ struct HostUpdateSchedulePanel: View {
             if showsCustomField { customField }
             HStack(spacing: UIScale.pt(10)) {
                 Button("Run a background check now", action: updater.checkForUpdatesInBackground)
+                    .buttonStyle(.edithDefault)
                     .disabled(!updater.canCheckForUpdates)
                 Text("uses the scheduled check path")
                     .font(.system(size: UIScale.pt(11)))
@@ -239,6 +240,7 @@ struct HostUpdateSchedulePanel: View {
         HStack {
             Spacer()
             Button("Done") { dismiss() }
+                .buttonStyle(.edith(.primary))
                 .keyboardShortcut(.defaultAction)
         }
         .padding(UIScale.pt(16))

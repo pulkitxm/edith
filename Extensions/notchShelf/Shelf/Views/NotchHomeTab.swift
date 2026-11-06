@@ -40,7 +40,7 @@ struct NotchHomeTab: View {
                 }
             }
             if layout.visible.isEmpty, !controller.layoutEditing {
-                Button("Add widgets") { openEditor() }.padding(20)
+                Button("Add widgets") { openEditor() }.buttonStyle(.edithDefault).padding(20)
             }
         }.environment(\.colorScheme, .dark)
             .padding(.horizontal, 16).padding(.bottom, 14)

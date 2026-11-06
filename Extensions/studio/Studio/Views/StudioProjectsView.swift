@@ -30,12 +30,8 @@ struct StudioProjectsView: View {
                                 "No video projects yet. Choose New video project to import a clip and edit it on a timeline. Projects save automatically."
                         )
                     } else {
-                        StudioListSurface {
-                            ForEach(Array(model.videoProjects.enumerated()), id: \.element.id) {
-                                index, project in
-                                if index > 0 { Divider().opacity(0.5) }
-                                StudioProjectRow(model: model, project: project)
-                            }
+                        EdithRowList(model.videoProjects) { project in
+                            StudioProjectRow(model: model, project: project)
                         }
                     }
                 }
@@ -132,34 +128,29 @@ struct StudioProjectRow: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Button {
-                model.openVideoProject(project.url)
-            } label: {
-                HStack(spacing: UIScale.pt(10)) {
-                    EdithIconView(.film)
-                        .font(.system(size: UIScale.pt(16)))
-                        .foregroundStyle(DashSkin.accent(scheme == .dark))
-                        .frame(width: UIScale.pt(40), height: UIScale.pt(40))
-                        .background(
-                            DashSkin.accent(scheme == .dark).opacity(0.12),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(project.title)
-                            .font(.edithText(.callout).weight(.medium))
-                            .foregroundStyle(DashSkin.ink(scheme == .dark))
-                            .lineLimit(1)
-                        Text(subtitle)
-                            .font(.edithText(.caption))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
+        EdithRowButton {
+            model.openVideoProject(project.url)
+        } label: {
+            HStack(spacing: UIScale.pt(10)) {
+                EdithIconView(.film)
+                    .font(.system(size: UIScale.pt(16)))
+                    .foregroundStyle(DashSkin.accent(scheme == .dark))
+                    .frame(width: UIScale.pt(40), height: UIScale.pt(40))
+                    .background(
+                        DashSkin.accent(scheme == .dark).opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(project.title)
+                        .font(.edithText(.callout).weight(.medium))
+                        .foregroundStyle(DashSkin.ink(scheme == .dark))
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.edithText(.caption))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.edith(.borderless))
-            .help("Open \(project.title)")
+        } accessory: {
             Button(role: .destructive) {
                 model.trashProject(project)
             } label: {
@@ -169,8 +160,7 @@ struct StudioProjectRow: View {
             .help("Move \(project.title) to the Trash. You can restore it from there.")
             .accessibilityLabel("Move \(project.title) to Trash")
         }
-        .padding(.horizontal, UIScale.pt(12))
-        .padding(.vertical, UIScale.pt(8))
+        .help("Open \(project.title)")
         .contextMenu {
             Button("Open") { model.openVideoProject(project.url) }
             Divider()

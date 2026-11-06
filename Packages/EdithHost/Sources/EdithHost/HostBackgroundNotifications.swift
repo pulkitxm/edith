@@ -117,6 +117,7 @@ struct HostBackgroundNotificationSection: View {
                 Section("Coding agent notifications") {
                     Text(failure).settingsCaption()
                     Button("Try again") { Task { await model.refresh() } }
+                        .buttonStyle(.edithDefault)
                 }
             }
         }

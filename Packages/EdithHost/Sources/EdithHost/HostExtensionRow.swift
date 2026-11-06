@@ -73,15 +73,13 @@ struct HostInstallControl: View {
 
 enum HostExtensionRowMetrics {
     static let icon = 32.0
-    static let horizontalPadding = PageMetrics.cardPadding
-    static let verticalPadding = 10.0
+    static let horizontalPadding = EdithRowMetrics.plateInset + EdithRowMetrics.contentHorizontal
+    static let verticalPadding = EdithRowMetrics.plateInset + EdithRowMetrics.contentVertical
     static let contentSpacing = 12.0
     static let contentHeight = 32.0
     static let actionWidth = 76.0
     static let progressWidth = 160.0
     static let heroProgressWidth = 220.0
-    static let cornerRadius = 12.0
-    static var dividerInset: Double { horizontalPadding + icon + contentSpacing }
 }
 
 struct HostExtensionRow: View {
@@ -100,38 +98,45 @@ struct HostExtensionRow: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(HostExtensionRowMetrics.contentSpacing)) {
-            HostExtensionIcon(
-                entry: entry, size: HostExtensionRowMetrics.icon, tint: DashSkin.inkSoft(dark))
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                Text(entry.title).font(.edithText(.body).weight(.semibold))
-                    .foregroundStyle(DashSkin.ink(dark)).lineLimit(1)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityHint("Shows details")
-                    .accessibilityAction { details() }
-                if compact, state.progress == nil {
-                    status
-                } else {
-                    Text(tagline).font(.edithText(.caption))
-                        .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
+        Button(action: details) {
+            HStack(spacing: UIScale.pt(HostExtensionRowMetrics.contentSpacing)) {
+                HostExtensionIcon(
+                    entry: entry, size: HostExtensionRowMetrics.icon, tint: DashSkin.inkSoft(dark))
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(entry.title).font(.edithText(.body).weight(.semibold))
+                        .foregroundStyle(DashSkin.ink(dark)).lineLimit(1)
+                    if compact, state.progress == nil {
+                        status
+                    } else {
+                        Text(tagline).font(.edithText(.caption))
+                            .foregroundStyle(DashSkin.inkSoft(dark)).lineLimit(1)
+                    }
                 }
+                Spacer(minLength: UIScale.pt(8))
+                if !compact, state.progress == nil { status.layoutPriority(1) }
+                controls.hidden().accessibilityHidden(true)
             }
-            Spacer(minLength: UIScale.pt(8))
-            if !compact, state.progress == nil { status.layoutPriority(1) }
+            .frame(minHeight: UIScale.pt(HostExtensionRowMetrics.contentHeight))
+        }
+        .buttonStyle(.edith(.row))
+        .accessibilityLabel(entry.title)
+        .accessibilityValue(state.progress == nil ? note ?? state.status : "")
+        .accessibilityHint("\(tagline). Shows details")
+        .overlay(alignment: .trailing) {
+            controls.padding(.trailing, UIScale.pt(HostExtensionRowMetrics.horizontalPadding))
+        }
+        .help(tagline)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var controls: some View {
+        HStack(spacing: UIScale.pt(HostExtensionRowMetrics.contentSpacing)) {
             action
             Toggle("", isOn: Binding(get: { state.on }, set: toggle))
                 .labelsHidden().toggleStyle(.edithSwitch).controlSize(.small)
                 .disabled(!state.canToggle)
                 .accessibilityLabel("\(entry.title) enabled")
         }
-        .frame(minHeight: UIScale.pt(HostExtensionRowMetrics.contentHeight))
-        .padding(.horizontal, UIScale.pt(HostExtensionRowMetrics.horizontalPadding))
-        .padding(.vertical, UIScale.pt(HostExtensionRowMetrics.verticalPadding))
-        .edithHoverHighlight(tone: .neutral, cornerRadius: 0)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: details)
-        .help(tagline)
-        .accessibilityElement(children: .contain)
     }
 
     private var status: some View {
@@ -171,31 +176,21 @@ struct HostExtensionList: View {
     let row: (HostExtension) -> HostExtensionRow
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                if index > 0 {
-                    Divider().padding(.leading, UIScale.pt(HostExtensionRowMetrics.dividerInset))
-                }
-                row(entry).id(entry.id)
-            }
-        }
-        .edithSurface(cornerRadius: HostExtensionRowMetrics.cornerRadius)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: UIScale.pt(HostExtensionRowMetrics.cornerRadius), style: .continuous))
+        EdithRowList(entries, id: \.id) { entry in row(entry).id(entry.id) }
     }
 }
 
 struct HostExtensionListSkeleton: View {
     let rows: Int
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         SkeletonReplica("Loading extensions") {
             VStack(spacing: 0) {
                 ForEach(0..<rows, id: \.self) { index in
                     if index > 0 {
-                        Divider()
-                            .padding(.leading, UIScale.pt(HostExtensionRowMetrics.dividerInset))
+                        Rectangle().fill(DashSkin.line(scheme == .dark)).frame(height: 1)
+                            .padding(.horizontal, UIScale.pt(EdithRowMetrics.plateInset))
                     }
                     HStack(spacing: UIScale.pt(HostExtensionRowMetrics.contentSpacing)) {
                         SkeletonBlock(
@@ -213,7 +208,7 @@ struct HostExtensionListSkeleton: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .edithSurface(cornerRadius: HostExtensionRowMetrics.cornerRadius)
+            .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
         }
     }
 }

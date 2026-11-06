@@ -53,6 +53,7 @@ struct ClaudeAccountSettings: View {
                             }
                         }
                     }
+                    .buttonStyle(.edithDefault)
                     .help(
                         "Copy the current CLI credentials into a named account and use it for new sessions."
                     )
@@ -108,6 +109,7 @@ struct ClaudeAccountSettings: View {
                                 accountID: saved.id, accounts: accounts,
                                 defaults: SharedDefaults.store)
                         }
+                        .buttonStyle(.edithDefault)
                         .help(
                             "Sign in for subscription limits while keeping this account's launch token."
                         )
@@ -134,7 +136,9 @@ struct ClaudeAccountSettings: View {
                                     self.draft = accounts.account(draft.id)
                                 }
                             }
+                            .buttonStyle(.edith(.toolbar))
                             Button("Remove account", role: .destructive) { removeDraft() }
+                                .buttonStyle(.edith(.toolbar, tint: .red))
                         }
                         Spacer()
                     }
@@ -165,6 +169,7 @@ struct ClaudeAccountSettings: View {
                 HStack {
                     Text(error).foregroundStyle(.red)
                     Button("Reload") { Task { await accounts.read() } }
+                        .buttonStyle(.edithDefault)
                 }.font(.edithText(.caption))
             }
         }
@@ -265,6 +270,7 @@ struct ClaudeAccountLaunchPicker: View {
                 }
                 .disabled(!accounts.ready || accounts.saving)
                 Button("Manage accounts") { editing = true }
+                    .buttonStyle(.edithDefault)
             }
             if let selectionError {
                 Text(selectionError).foregroundStyle(.red)

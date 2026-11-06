@@ -149,9 +149,11 @@ struct CompanionBackendScreen: View {
                 }
                 Spacer(minLength: 0)
             }
-            .contentShape(Rectangle())
+            .padding(.vertical, UIScale.pt(CompanionHostRowMetrics.labelVertical))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edith(.row))
+        .padding(.horizontal, -UIScale.pt(CompanionHostRowMetrics.plateOutsetHorizontal))
+        .padding(.vertical, -UIScale.pt(CompanionHostRowMetrics.plateOutsetVertical))
     }
 
     private var servicesCard: some View {
@@ -398,4 +400,10 @@ struct CompanionConfigDocument: FileDocument {
     func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
     }
+}
+
+private enum CompanionHostRowMetrics {
+    static let labelVertical = -2.0
+    static let plateOutsetHorizontal = 9.0
+    static let plateOutsetVertical = 5.0
 }

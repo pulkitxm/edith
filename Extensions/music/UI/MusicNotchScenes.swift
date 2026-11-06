@@ -248,7 +248,11 @@ struct EmbeddedMusicNotchScene: View {
                         } label: {
                             Image(nsImage: icon).resizable().scaledToFit().frame(
                                 width: 24, height: 24)
-                        }.buttonStyle(.edith(.borderless)).help("Open the current music player")
+                        }.buttonStyle(
+                            .edithShaped(
+                                RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous),
+                                filled: true)
+                        ).help("Open the current music player")
                             .padding(.trailing, 6)
                             .disabled(!route.request.tile.showActions || model.hidden)
                     }
@@ -452,7 +456,9 @@ private struct EmbeddedNotchNowPlayingCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(RoundedRectangle(cornerRadius: 10, style: .continuous), filled: true)
+        )
         .help("Open player")
     }
 
@@ -472,7 +478,9 @@ private struct EmbeddedNotchNowPlayingCard: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless)).help(label).accessibilityLabel(label)
+        .buttonStyle(.edithShaped(RoundedRectangle(cornerRadius: 10, style: .continuous))).help(
+            label
+        ).accessibilityLabel(label)
     }
 }
 

@@ -270,15 +270,9 @@ struct StudioCompareView: View {
                                 }
                                 Spacer(minLength: 0)
                             }
-                            .padding(.horizontal, UIScale.pt(12))
-                            .padding(.vertical, UIScale.pt(7))
-                            .background(
-                                compare.focused == change
-                                    ? DashSkin.accent(scheme == .dark).opacity(0.14) : .clear
-                            )
-                            .edithButtonTarget(.borderless)
+                            .padding(.horizontal, UIScale.pt(3))
                         }
-                        .buttonStyle(.edith(.borderless))
+                        .buttonStyle(.edith(.row, selected: compare.focused == change))
                     }
                 }
             }

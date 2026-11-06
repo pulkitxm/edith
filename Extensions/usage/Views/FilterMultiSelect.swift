@@ -152,20 +152,16 @@ private struct FilterSelectRow: View {
                 }
                 .padding(.horizontal, UIScale.pt(6))
                 .padding(.vertical, UIScale.pt(4))
-                .background(
-                    hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(6))
-                )
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(UsageRowButtonStyle())
             HStack(spacing: UIScale.pt(8)) {
                 Button {
                     onToggle(modifiers.contains(.shift))
                 } label: {
                     checkbox
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(.edithControl)
                 Spacer(minLength: 0)
                 Button(action: onAction) {
                     Text(actionLabel)

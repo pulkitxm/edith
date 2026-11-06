@@ -73,12 +73,14 @@ struct HostCloudPage: View {
             Section("On disk") {
                 LabeledContent("App data folder") {
                     Button("Open") { NSWorkspace.shared.open(services.identity.root) }
+                        .buttonStyle(.edithDefault)
                 }
                 if preferences.enabled(.icloud), cloudAvailable,
                     let directory = services.snapshot?.cloudDirectory
                 {
                     LabeledContent("iCloud folder") {
                         Button("Open") { NSWorkspace.shared.open(directory) }
+                            .buttonStyle(.edithDefault)
                     }
                 }
             }

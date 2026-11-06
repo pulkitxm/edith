@@ -38,6 +38,7 @@ struct VideoCaptionStyleEditor: View {
             number("Y", key: "y")
             number("Text width", key: "width")
             Button("Apply style") { draft.apply("style") }
+                .buttonStyle(.edithDefault)
             DisclosureGroup("Fill, outline, shadow & gradient JSON") {
                 Text("RGBA channels use 0 through 1. Omit optional effects to remove them.")
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -45,8 +46,10 @@ struct VideoCaptionStyleEditor: View {
                     .frame(
                         height: UIScale.pt(240))
                 Button("Apply JSON") { draft.apply("json") }
+                    .buttonStyle(.edithDefault)
             }
             Button("Discard caption drafts") { draft.refresh(discard: true) }
+                .buttonStyle(.edithDefault)
             if let failure = draft.failure {
                 Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
             }

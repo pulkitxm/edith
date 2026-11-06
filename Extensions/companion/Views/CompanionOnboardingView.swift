@@ -535,7 +535,9 @@ struct CompanionSetupSheet: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(10)))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous), filled: true))
     }
 
     private var hostCardsSkeleton: some View {

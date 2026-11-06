@@ -53,7 +53,7 @@ private struct BorderlessMenuLabel<Label: View>: View {
         }
         .opacity(enabled ? 1 : BorderlessMenuMetrics.disabledOpacity)
         .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .edithHoverTracking($hovering)
         .animation(
             Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: interaction)
     }

@@ -182,6 +182,7 @@ struct VideoBeatPanel: View {
                 .padding(UIScale.pt(4))
             }
         }
+        .buttonStyle(.edithDefault)
         .padding(UIScale.pt(24))
         .frame(
             minWidth: UIScale.pt(320), idealWidth: UIScale.pt(820),

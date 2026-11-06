@@ -475,7 +475,10 @@ struct EmbeddedDownloadSheet: View {
                 .background(canStart ? theme : Color.gray.opacity(0.35))
                 .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(
+                .edithShaped(
+                    RoundedRectangle(cornerRadius: UIScale.pt(9), style: .continuous), filled: true)
+            )
             .disabled(!canStart)
         }
     }

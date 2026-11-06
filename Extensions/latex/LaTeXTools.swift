@@ -171,6 +171,7 @@ struct LaTeXSettings: View {
                         Spacer(minLength: 12)
                         if canInstall(tool) {
                             Button(failed(tool) ? "Retry" : "Install") { owner.install(tool.id) }
+                                .buttonStyle(.edithDefault)
                                 .controlSize(.small)
                         }
                     }

@@ -40,11 +40,11 @@ struct VideoInspector: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     switch tab {
-                    case .clip: clipControls
-                    case .frame: frameControls
-                    case .camera: cameraControls
-                    case .audio: audioControls
-                    case .overlays: overlayControls
+                    case .clip: clipControls.buttonStyle(.edithDefault)
+                    case .frame: frameControls.buttonStyle(.edithDefault)
+                    case .camera: cameraControls.buttonStyle(.edithDefault)
+                    case .audio: audioControls.buttonStyle(.edithDefault)
+                    case .overlays: overlayControls.buttonStyle(.edithDefault)
                     case .captions: VideoCaptionEditor(model: model)
                     }
                 }

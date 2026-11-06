@@ -617,6 +617,7 @@ struct AppMaintenanceView: View {
                     AppMaintenanceUpdateSkeleton()
                 }
                 Button("Cancel") { model.cancel() }
+                    .buttonStyle(.edithDefault)
                     .pageGutter(compact)
                     .padding(.vertical, UIScale.pt(22))
             }
@@ -698,6 +699,9 @@ struct AppMaintenanceView: View {
                             Button("Exclude This App") { model.exclude(item) }
                         }
                     }
+                    .menuStyle(.button)
+                    .buttonStyle(.edithDefault)
+                    .fixedSize()
                     Spacer()
                     Button(
                         item.action == .openUpdater && model.selectedUpdateIDs.count == 1
@@ -943,7 +947,7 @@ private struct AppMaintenanceUpdateRow: View {
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        HStack(spacing: UIScale.pt(9)) {
+        HStack(spacing: 0) {
             Toggle(
                 "",
                 isOn: Binding(get: { entry.selected }, set: setSelected)
@@ -978,9 +982,11 @@ private struct AppMaintenanceUpdateRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(EdithButtonStyle(.borderless, selected: entry.focused, tint: tint))
+            .buttonStyle(.edith(.row, tint: tint))
+            .accessibilityAddTraits(entry.focused ? .isSelected : AccessibilityTraits())
         }
-        .pageGutter(compact)
+        .padding(.leading, PageMetrics.gutter(compact))
+        .padding(.trailing, PageMetrics.gutter(compact) - UIScale.pt(9))
         .frame(maxHeight: .infinity)
         .background(entry.focused ? tint.opacity(0.2) : Color.clear)
     }
@@ -1095,6 +1101,7 @@ private struct AppMaintenanceInstallReview: View {
                 }
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
+                    .buttonStyle(.edithDefault)
                     .keyboardShortcut(.cancelAction)
                     .disabled(installing)
                 Button(plan.replacesExisting ? "Replace App" : "Install App") {

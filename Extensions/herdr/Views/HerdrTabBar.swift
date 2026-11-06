@@ -235,7 +235,10 @@ struct HerdrTabBarActions: View {
                         ? DashSkin.accent(dark).opacity(0.18) : DashSkin.paper2(dark),
                     stroke: DashSkin.line(dark))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+        )
         .accessibilityLabel(label)
         .help(tab.isSplit ? "Arrange the agents in this tab" : "Show agents side by side")
         .popover(isPresented: $layoutPopoverOpen, arrowEdge: .bottom) {
@@ -287,7 +290,10 @@ struct HerdrTabBarActions: View {
                     stroke: DashSkin.line(dark)
                 )
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+        )
         .help(open ? "Hide terminals (⌃` or ⌘J)" : "Show terminals (⌃` or ⌘J)")
         .accessibilityLabel(open ? "Hide terminals" : "Show terminals")
     }
@@ -313,7 +319,10 @@ struct HerdrTabBarActions: View {
                     stroke: DashSkin.line(dark)
                 )
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+        )
         .popover(isPresented: $compactDetailsPresented) {
             if let focused = store.focusedSession {
                 HerdrAgentDetails(store: store, tab: store.shown(focused), hideAgents: hideAgents)

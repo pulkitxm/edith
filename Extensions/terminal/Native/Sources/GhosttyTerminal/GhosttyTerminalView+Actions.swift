@@ -110,12 +110,93 @@ final class TerminalSearchField: NSSearchField {
     }
 }
 
+final class TerminalHoverButton: NSButton {
+    private var hovering = false {
+        didSet { if hovering != oldValue { refreshPlate() } }
+    }
+    private var pressing = false {
+        didSet { if pressing != oldValue { refreshPlate() } }
+    }
+
+    override var isEnabled: Bool {
+        didSet { refreshPlate() }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.cornerCurve = .continuous
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas where area.owner === self { removeTrackingArea(area) }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        hovering = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        hovering = false
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        pressing = true
+        super.mouseDown(with: event)
+        pressing = false
+        if let window {
+            hovering = bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { hovering = false }
+    }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        hovering = false
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshPlate()
+    }
+
+    private func refreshPlate() {
+        guard let layer else { return }
+        let active = isEnabled && (hovering || pressing)
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let increased = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        let base = pressing ? (dark ? 0.19 : 0.16) : (dark ? 0.12 : 0.1)
+        let fill = base + (increased ? 0.06 : 0)
+        let stroke = increased ? 0.45 : (dark ? 0.1 : 0.07)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer.backgroundColor =
+                active ? NSColor.labelColor.withAlphaComponent(fill).cgColor : nil
+            layer.borderColor = NSColor.labelColor.withAlphaComponent(stroke).cgColor
+        }
+        layer.borderWidth = active ? (increased ? 1 : 0.5) : 0
+    }
+}
+
 final class TerminalSearchBar: NSVisualEffectView, NSSearchFieldDelegate {
     let field = TerminalSearchField(frame: .zero)
     private let countLabel = NSTextField(labelWithString: "")
-    let previousButton = NSButton()
-    let nextButton = NSButton()
-    let closeButton = NSButton()
+    let previousButton = TerminalHoverButton(frame: .zero)
+    let nextButton = TerminalHoverButton(frame: .zero)
+    let closeButton = TerminalHoverButton(frame: .zero)
     var onQuery: ((String) -> Void)?
     var onNavigate: ((Bool) -> Void)?
     var onClose: (() -> Void)?

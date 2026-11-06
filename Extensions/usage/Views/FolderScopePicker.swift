@@ -116,7 +116,7 @@ struct FolderScopePicker: View {
             .padding(.vertical, UIScale.pt(4))
             .contentShape(Rectangle())
         }
-        .buttonStyle(HoverRowStyle())
+        .buttonStyle(UsageRowButtonStyle(fillsTarget: true))
     }
 
     private func chooseFolder() {
@@ -128,15 +128,5 @@ struct FolderScopePicker: View {
         if panel.runModal() == .OK {
             model.selectedPaths.formUnion(panel.urls.map(\.path))
         }
-    }
-}
-
-private struct HoverRowStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .edithHoverHighlight(
-                tone: .neutral, cornerRadius: UIScale.pt(6), pressed: configuration.isPressed
-            )
-            .edithButtonTarget(.row)
     }
 }

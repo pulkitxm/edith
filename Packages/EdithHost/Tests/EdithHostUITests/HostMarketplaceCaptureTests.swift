@@ -78,7 +78,7 @@ import Testing
         let full = try await capture(
             MarketplacePage(marketplace: fixture.marketplace), name: "page-stages-full",
             variant: .init(
-                name: "regular-light", size: .init(width: 1100, height: 3000), zoom: 1,
+                name: "regular-light", size: .init(width: 1100, height: 3200), zoom: 1,
                 scheme: .light))
         try expectVisible(full, labels: ["Update Keep Awake", "Update extensions automatically"])
         _ = try await capture(

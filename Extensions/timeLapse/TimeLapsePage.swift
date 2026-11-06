@@ -289,6 +289,7 @@ struct TimeLapseControls: View {
                         .font(.edithText(.body))
                         .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.edithDefault)
                     .help(
                         "Choose which \(recorder.sourceMode == "displays" ? "displays" : "windows") to record"
                     )

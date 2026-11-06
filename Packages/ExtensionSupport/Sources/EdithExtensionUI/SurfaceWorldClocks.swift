@@ -96,7 +96,7 @@ public struct SurfaceWorldClocks: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithBlock(inset: 6))
         .help("Add a timezone clock")
         .popover(isPresented: $showAdd, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
@@ -116,11 +116,9 @@ public struct SurfaceWorldClocks: View {
                                         .font(.system(size: UIScale.pt(10.5)))
                                         .foregroundStyle(.tertiary)
                                 }
-                                .padding(.horizontal, UIScale.pt(8))
-                                .padding(.vertical, UIScale.pt(5))
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.edith(.borderless))
+                            .buttonStyle(.edith(.row))
                         }
                         if matches.isEmpty {
                             Text("No matching timezones")
@@ -168,7 +166,7 @@ private struct ClockTile: View {
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                     .background(Circle().fill(DashSkin.paper2(dark)))
                             }
-                            .buttonStyle(.edith(.borderless))
+                            .buttonStyle(.edithShaped(Circle(), filled: true))
                             .offset(x: 5, y: -5)
                             .help("Remove clock")
                         }

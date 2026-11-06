@@ -32,6 +32,7 @@ struct CalendarPage: View {
                             title: "Couldn't refresh your calendar", tone: .warning
                         ) {
                             Button("Retry", action: store.refresh)
+                                .buttonStyle(.edithDefault)
                         }
                         .pageGutter(compact)
                         .padding(.top, UIScale.pt(PageMetrics.pinnedContentTop))

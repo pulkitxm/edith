@@ -235,7 +235,7 @@ struct NotchShelfContentView: View {
                         )
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(.edithShaped(Capsule(), filled: active))
                 .help(tab.title)
             }
         }
@@ -281,21 +281,22 @@ struct NotchShelfContentView: View {
                     Button {
                         controller.chromeLayouts.undo(.notch)
                     } label: {
-                        EdithIconView(.undo)
-                    }.disabled(!controller.chromeLayouts.canUndo(.notch)).help("Undo layout change")
+                        headerIcon(.undo)
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .disabled(!controller.chromeLayouts.canUndo(.notch)).help("Undo layout change")
                     Button {
                         controller.chromeLayouts.redo(.notch)
                     } label: {
-                        EdithIconView(.redo)
-                    }.disabled(!controller.chromeLayouts.canRedo(.notch)).help("Redo layout change")
+                        headerIcon(.redo)
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .disabled(!controller.chromeLayouts.canRedo(.notch)).help("Redo layout change")
                 }
                 Button {
                     controller.layoutEditing.toggle()
                 } label: {
-                    EdithIconView(controller.layoutEditing ? .check : .edit)
-                        .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.8))
-                        .frame(width: 28, height: 22)
-                        .background(Color.white.opacity(0.07), in: Capsule())
+                    headerIcon(controller.layoutEditing ? .check : .edit)
                 }
                 .buttonStyle(.edith(.borderless))
                 .help(controller.layoutEditing ? "Finish editing" : "Edit Notch layout")
@@ -311,13 +312,21 @@ struct NotchShelfContentView: View {
                     .background(Color.white.opacity(0.07), in: Capsule())
                     .contentShape(Capsule())
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edithShaped(Capsule()))
         }
         .padding(.horizontal, 16)
         .frame(height: 34)
         .animation(
             reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.9),
             value: controller.activeTab)
+    }
+
+    private func headerIcon(_ icon: EdithIcon) -> some View {
+        EdithIconView(icon)
+            .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.8))
+            .frame(width: 28, height: 22)
+            .background(Color.white.opacity(0.07), in: Capsule())
+            .contentShape(Capsule())
     }
 
     private func iconTab(_ tab: NotchTab) -> some View {
@@ -351,7 +360,7 @@ struct NotchShelfContentView: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Capsule(), filled: active))
         .help(tab.title)
         .onDrag { SurfaceTabDrag.provider(tab.rawValue) }
         .onDrop(of: [SurfaceTabDrag.type], isTargeted: nil) { providers in
@@ -529,7 +538,7 @@ private struct NotchAlertDropView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(RoundedRectangle(cornerRadius: 9, style: .continuous)))
         .onHover { controller.alertHover($0) }
         .onAppear {
             withAnimation(glide.delay(0.05)) { appeared = true }

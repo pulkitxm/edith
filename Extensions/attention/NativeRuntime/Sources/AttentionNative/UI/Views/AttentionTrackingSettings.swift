@@ -69,6 +69,7 @@ struct AttentionTrackingSettings: View {
                     Button("Save tracking settings") { model.save() }
                     Button("Open Attention") { ExtensionPresentation.showWindow() }
                 }
+                .buttonStyle(.edithDefault)
                 if let message = model.message {
                     Text(message).settingsCaption().foregroundStyle(.green)
                 }
@@ -82,6 +83,7 @@ struct AttentionTrackingSettings: View {
                 Section {
                     Text(error).settingsCaption().foregroundStyle(.red)
                     Button("Retry") { Task { await model.load() } }
+                        .buttonStyle(.edithDefault)
                 }
             }
         }

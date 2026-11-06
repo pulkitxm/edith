@@ -76,7 +76,11 @@ struct HerdrLayoutPopover: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.edith(.borderless))
+                    .buttonStyle(
+                        .edithShaped(
+                            RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous),
+                            filled: true)
+                    )
                     .accessibilityLabel(template.title)
                     .accessibilityAddTraits(template == current ? .isSelected : [])
                     .help("\(template.title): the focused agent takes the highlighted spot")
@@ -230,7 +234,10 @@ struct HerdrLayoutPopover: View {
             .padding(.vertical, UIScale.pt(6))
             .widgetBar(cornerRadius: 7, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(7), style: .continuous), filled: true)
+        )
         .accessibilityLabel(title)
         .help(title)
     }

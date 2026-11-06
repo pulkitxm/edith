@@ -209,6 +209,7 @@ struct CodeStatsHygieneCard: View {
                                 .foregroundStyle(DashSkin.inkSoft(dark))
                             Spacer()
                             Button("Refresh now") { Task { await model.start() } }
+                                .buttonStyle(.edithDefault)
                                 .disabled(!model.canStart)
                         }
                     }

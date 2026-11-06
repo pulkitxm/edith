@@ -129,49 +129,51 @@ struct HostOnboardingToolsView: View {
         let isOpen = open.contains(category)
         let chosen = entries.filter { model.selected.contains($0.id) }.count
         let title = suite?.title ?? category.capitalized
+        let selectAll = Button(model.groupSelected(category) ? "Select none" : "Select all") {
+            model.setGroup(category, selected: !model.groupSelected(category))
+        }
+        .buttonStyle(.edith(.borderless))
+        .foregroundStyle(DashSkin.accentDeep(dark))
+        .fixedSize()
+        .disabled(model.busy)
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: UIScale.pt(12)) {
-                Button {
-                    var next = open
-                    if isOpen { next.remove(category) } else { next.insert(category) }
-                    expanded = next
-                } label: {
-                    HStack(spacing: UIScale.pt(12)) {
-                        EdithIconView(.chevronRight)
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(isOpen ? 90 : 0))
-                            .frame(width: UIScale.pt(20))
-                        PageGuideBadge(
-                            icon: suite?.icon ?? .workflowCustom, size: 32,
-                            tint: DashSkin.inkSoft(dark))
-                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text(title).font(.edithText(.headline))
-                            Text(
-                                chosen == 0
-                                    ? "\(entries.count) tools"
-                                    : "\(chosen) of \(entries.count) selected"
-                            )
-                            .font(.edithText(.caption)).foregroundStyle(.secondary)
-                            .monospacedDigit()
-                        }
-                        Spacer(minLength: 0)
+            Button {
+                var next = open
+                if isOpen { next.remove(category) } else { next.insert(category) }
+                expanded = next
+            } label: {
+                HStack(spacing: UIScale.pt(12)) {
+                    EdithIconView(.chevronRight)
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isOpen ? 90 : 0))
+                        .frame(width: UIScale.pt(20))
+                    PageGuideBadge(
+                        icon: suite?.icon ?? .workflowCustom, size: 32,
+                        tint: DashSkin.inkSoft(dark))
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        Text(title).font(.edithText(.headline))
+                        Text(
+                            chosen == 0
+                                ? "\(entries.count) tools"
+                                : "\(chosen) of \(entries.count) selected"
+                        )
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .monospacedDigit()
                     }
-                    .contentShape(Rectangle())
+                    Spacer(minLength: 0)
+                    selectAll.hidden().accessibilityHidden(true)
                 }
-                .buttonStyle(.edith(.borderless))
-                .accessibilityLabel(title)
-                .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
-                .accessibilityIdentifier("onboarding.group.\(category)")
-                Button(model.groupSelected(category) ? "Select none" : "Select all") {
-                    model.setGroup(category, selected: !model.groupSelected(category))
-                }
-                .buttonStyle(.edith(.borderless))
-                .foregroundStyle(DashSkin.accentDeep(dark))
-                .fixedSize()
-                .disabled(model.busy)
             }
-            .padding(UIScale.pt(12))
+            .buttonStyle(.edith(.row))
+            .accessibilityLabel(title)
+            .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
+            .accessibilityIdentifier("onboarding.group.\(category)")
+            .overlay(alignment: .trailing) {
+                selectAll.padding(.trailing, UIScale.pt(HostOnboardingToolsMetrics.headerContent))
+            }
+            .padding(.horizontal, UIScale.pt(HostOnboardingToolsMetrics.headerInsetX))
+            .padding(.vertical, UIScale.pt(HostOnboardingToolsMetrics.headerInsetY))
             if isOpen {
                 Divider().padding(.horizontal, UIScale.pt(12))
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -282,6 +284,14 @@ struct HostOnboardingToolsView: View {
     }
 }
 
+enum HostOnboardingToolsMetrics {
+    static let headerPadding = 12.0
+    static let headerContent = 9.0
+    static let headerContentY = 7.0
+    static let headerInsetX = headerPadding - headerContent
+    static let headerInsetY = headerPadding - headerContentY
+}
+
 struct HostOnboardingCheckRowStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         HostOnboardingCheckRow(configuration: configuration)
@@ -312,7 +322,7 @@ private struct HostOnboardingCheckRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithControl)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
         .accessibilityValue(configuration.isOn ? "Selected" : "Not selected")
@@ -345,7 +355,7 @@ private struct HostOnboardingCheckbox: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithControl)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
         .accessibilityValue(configuration.isOn ? "On" : "Off")

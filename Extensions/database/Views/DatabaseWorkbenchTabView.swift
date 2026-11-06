@@ -265,6 +265,7 @@ struct DatabaseWorkbenchTabView: View {
                         }
                     }
                 }
+                .buttonStyle(.edithDefault)
                 .font(.system(size: UIScale.pt(11))).foregroundStyle(DashSkin.warn)
                 .padding(UIScale.pt(10)).background(DashSkin.warn.opacity(0.08))
             }

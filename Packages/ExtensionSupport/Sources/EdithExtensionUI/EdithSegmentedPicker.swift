@@ -49,7 +49,7 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
                         }
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(.edithControl)
                 .keyboardShortcut(shortcut(option))
                 .accessibilityLabel(label(option))
                 .accessibilityAddTraits(selection == option ? .isSelected : [])

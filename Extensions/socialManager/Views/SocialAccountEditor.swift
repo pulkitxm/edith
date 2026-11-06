@@ -77,6 +77,7 @@ struct SocialAccountEditor: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                    .buttonStyle(.edithDefault)
                 Button(account == nil ? "Add and open" : "Save") {
                     do {
                         let saved = try model.saveAccount(
@@ -89,6 +90,7 @@ struct SocialAccountEditor: View {
                     } catch { self.error = error.localizedDescription }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.edith(.primary))
                 .disabled(
                     name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
             }
@@ -120,6 +122,7 @@ struct SocialPlatformEditor: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                    .buttonStyle(.edithDefault)
                 Button("Add and open") {
                     do {
                         let account = try model.addWebsite(
@@ -129,6 +132,7 @@ struct SocialPlatformEditor: View {
                     } catch { self.error = error.localizedDescription }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.edith(.primary))
                 .disabled(
                     name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || website.isEmpty
                         || model.busy)
