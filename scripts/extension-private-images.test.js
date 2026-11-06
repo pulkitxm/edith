@@ -105,74 +105,76 @@ test("package linkage admits only its own private images and the host kit", () =
   ).toThrow("outside its own package");
 });
 
-test("two packages bundling the same engine name each bind their own build in one process", async () => {
-  const root = await mkdtemp(join(tmpdir(), "extension-private-images-"));
-  try {
-    const runtimes = [];
-    for (const [id, version] of [
-      ["alpha", "1.0.3"],
-      ["beta", "1.0.3"],
-      ["alpha", "1.0.2"],
-    ]) {
-      const build = join(root, "build", `${id}-${version}`);
-      await mkdir(build, { recursive: true });
-      const engineSource = join(build, "engine.c");
+test.skipIf(process.platform !== "darwin")(
+  "two packages bundling the same engine name each bind their own build in one process",
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "extension-private-images-"));
+    try {
+      const runtimes = [];
+      for (const [id, version] of [
+        ["alpha", "1.0.3"],
+        ["beta", "1.0.3"],
+        ["alpha", "1.0.2"],
+      ]) {
+        const build = join(root, "build", `${id}-${version}`);
+        await mkdir(build, { recursive: true });
+        const engineSource = join(build, "engine.c");
+        await writeFile(
+          engineSource,
+          `const char *fixture_engine(void) { return "${id}-${version}"; }\n`,
+        );
+        const engine = join(build, "libFixtureEngine.dylib");
+        run("clang", [
+          "-dynamiclib",
+          engineSource,
+          "-install_name",
+          "@rpath/libFixtureEngine.dylib",
+          "-o",
+          engine,
+        ]);
+        const contents = join(root, id, version, "app.bundle/Contents");
+        await mkdir(join(contents, "MacOS"), { recursive: true });
+        const bundled = await bundleNativeLibrary({
+          source: engine,
+          frameworks: join(contents, "Frameworks"),
+          scope: { id, role: "app", version },
+          run,
+        });
+        const runtimeSource = join(build, "runtime.c");
+        await writeFile(
+          runtimeSource,
+          "const char *fixture_engine(void);\nconst char *fixture_runtime(void) { return fixture_engine(); }\n",
+        );
+        const runtime = join(contents, "MacOS/Runtime");
+        run("clang", [
+          "-dynamiclib",
+          runtimeSource,
+          ...nativePackageLinkFlags(
+            root,
+            { nativePackage: "Native", nativeProduct: "FixtureEngine" },
+            contents,
+            bundled.image,
+          ),
+          "-install_name",
+          `@rpath/EdithExtension_${id}_app`,
+          "-o",
+          runtime,
+        ]);
+        const images = await inspectPrivateImages(contents, run);
+        verifyPrivateImageLinkage({ id }, images);
+        expect(images[0].dependencies).toContain(bundled.installName);
+        expect(images[0].dependencies).not.toContain(
+          "@rpath/libFixtureEngine.dylib",
+        );
+        runtimes.push({ name: `${id}-${version}`, runtime, ...bundled });
+      }
+      expect(new Set(runtimes.map(({ installName }) => installName)).size).toBe(
+        runtimes.length,
+      );
+      const hostSource = join(root, "host.c");
       await writeFile(
-        engineSource,
-        `const char *fixture_engine(void) { return "${id}-${version}"; }\n`,
-      );
-      const engine = join(build, "libFixtureEngine.dylib");
-      run("clang", [
-        "-dynamiclib",
-        engineSource,
-        "-install_name",
-        "@rpath/libFixtureEngine.dylib",
-        "-o",
-        engine,
-      ]);
-      const contents = join(root, id, version, "app.bundle/Contents");
-      await mkdir(join(contents, "MacOS"), { recursive: true });
-      const bundled = await bundleNativeLibrary({
-        source: engine,
-        frameworks: join(contents, "Frameworks"),
-        scope: { id, role: "app", version },
-        run,
-      });
-      const runtimeSource = join(build, "runtime.c");
-      await writeFile(
-        runtimeSource,
-        "const char *fixture_engine(void);\nconst char *fixture_runtime(void) { return fixture_engine(); }\n",
-      );
-      const runtime = join(contents, "MacOS/Runtime");
-      run("clang", [
-        "-dynamiclib",
-        runtimeSource,
-        ...nativePackageLinkFlags(
-          root,
-          { nativePackage: "Native", nativeProduct: "FixtureEngine" },
-          contents,
-          bundled.image,
-        ),
-        "-install_name",
-        `@rpath/EdithExtension_${id}_app`,
-        "-o",
-        runtime,
-      ]);
-      const images = await inspectPrivateImages(contents, run);
-      verifyPrivateImageLinkage({ id }, images);
-      expect(images[0].dependencies).toContain(bundled.installName);
-      expect(images[0].dependencies).not.toContain(
-        "@rpath/libFixtureEngine.dylib",
-      );
-      runtimes.push({ name: `${id}-${version}`, runtime, ...bundled });
-    }
-    expect(new Set(runtimes.map(({ installName }) => installName)).size).toBe(
-      runtimes.length,
-    );
-    const hostSource = join(root, "host.c");
-    await writeFile(
-      hostSource,
-      `#include <dlfcn.h>
+        hostSource,
+        `#include <dlfcn.h>
 #include <stdio.h>
 int main(int count, char **paths) {
   for (int index = 1; index < count; index++) {
@@ -185,16 +187,20 @@ int main(int count, char **paths) {
   return 0;
 }
 `,
-    );
-    const host = join(root, "host");
-    run("clang", [hostSource, "-o", host]);
-    const output = run(
-      host,
-      runtimes.map(({ runtime }) => runtime),
-      { encoding: "utf8" },
-    );
-    expect(output.trim().split("\n")).toEqual(runtimes.map(({ name }) => name));
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
+      );
+      const host = join(root, "host");
+      run("clang", [hostSource, "-o", host]);
+      const output = run(
+        host,
+        runtimes.map(({ runtime }) => runtime),
+        { encoding: "utf8" },
+      );
+      expect(output.trim().split("\n")).toEqual(
+        runtimes.map(({ name }) => name),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  120_000,
+);
