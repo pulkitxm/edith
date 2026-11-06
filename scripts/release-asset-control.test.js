@@ -21,20 +21,14 @@ test("release mutation and workflow watch share one bounded deadline and output 
       }
       expect(options.timeout).toBe(40);
       clock = 99;
-      return "complete";
+      return JSON.stringify({ status: "completed", conclusion: "success" });
     },
   });
   expect(result.workflowUrl).toContain("/123");
   expect(calls.map(({ command }) => command)).toEqual(["pukbot", "gh"]);
   expect(calls[1].args).toEqual([
-    "run",
-    "watch",
-    "123",
-    "--repo",
-    "synthetic/fixture",
-    "--exit-status",
-    "--interval",
-    "20",
+    "api",
+    "repos/synthetic/fixture/actions/runs/123",
   ]);
 });
 

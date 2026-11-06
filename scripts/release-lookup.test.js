@@ -73,7 +73,7 @@ test("published lookup does not scan unrelated releases", () => {
 test("authentication and server errors never become bootstrap absence", () => {
   for (const [status, attempts] of [
     [403, 1],
-    [429, 6],
+    [429, 4],
     [500, 6],
   ]) {
     let calls = 0;
@@ -82,7 +82,8 @@ test("authentication and server errors never become bootstrap absence", () => {
         repository,
         tag,
         retry: { sleep: () => {} },
-        execute: () => {
+        execute: (_command, args) => {
+          if (args[1] === "rate_limit") return "4990 0";
           calls++;
           throw Object.assign(new Error("Denied"), {
             stderr: `gh: Denied (HTTP ${status})`,

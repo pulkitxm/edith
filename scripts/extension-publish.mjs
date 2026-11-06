@@ -35,6 +35,7 @@ import {
 export { publishExtensionAssets } from "./immutable-release-assets.mjs";
 
 import {
+  publicReadExecute,
   TransientGitHubError,
   withGitHubRetry,
   withGitHubRetrySync,
@@ -104,7 +105,7 @@ export function mergeExtensionCatalog(previous, records, revision) {
 
 function gh(...args) {
   const run = () =>
-    execFileSync("gh", args, {
+    publicReadExecute()("gh", args, {
       encoding: "utf8",
       timeout: args[0] === "api" ? 60_000 : undefined,
       maxBuffer: 4 * 1024 ** 2,
@@ -627,10 +628,19 @@ async function publishEntries({
     EXTENSION_CATALOG_TAG: catalogTag,
     EXTENSION_CATALOG_PUBLIC_KEY: publicKey,
   };
-  const attempt = (entry) =>
+  const listing = resolve(directory, "release-listing.json");
+  await writeFile(
+    listing,
+    JSON.stringify(
+      withRateLimitRecoverySync(() => listReleases({ repository })),
+    ),
+  );
+  const attempt = (entry, shared) =>
     new Promise((done, fail) => {
       const child = spawn(process.execPath, [script, "--entry", entry.id], {
-        env: environment,
+        env: shared
+          ? { ...environment, EXTENSION_RELEASE_LISTING: listing }
+          : environment,
         stdio: ["ignore", "inherit", "inherit"],
       });
       child.on("error", fail);
@@ -640,9 +650,14 @@ async function publishEntries({
           : fail(new Error(`Extension publication failed: ${entry.id}`)),
       );
     });
-  await runBounded(include, publicationConcurrency, (entry) =>
-    withRateLimitRecovery(() => attempt(entry)),
-  );
+  await runBounded(include, publicationConcurrency, (entry) => {
+    let shared = true;
+    return withRateLimitRecovery(() => {
+      const run = attempt(entry, shared);
+      shared = false;
+      return run;
+    });
+  });
   return Promise.all(
     include.map(async (entry) =>
       JSON.parse(
@@ -902,16 +917,21 @@ if (import.meta.main) {
     });
     const entry = include.find(({ id }) => id === process.argv[3]);
     if (!entry) throw new Error("Unknown extension publication entry");
-    const record = await withRateLimitRecovery(async () =>
-      publishEntry({
+    let listing = process.env.EXTENSION_RELEASE_LISTING;
+    const record = await withRateLimitRecovery(async () => {
+      const shared = listing;
+      listing = undefined;
+      return publishEntry({
         repository,
         directory,
         entry,
         target,
-        existingReleases: listReleases({ repository }),
+        existingReleases: shared
+          ? JSON.parse(await readFile(shared, "utf8"))
+          : listReleases({ repository }),
         verifyState,
-      }),
-    );
+      });
+    });
     await writeFile(
       resolve(directory, `${entry.id}.published.json`),
       JSON.stringify(record),

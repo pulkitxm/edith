@@ -8,8 +8,8 @@ esac
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 : "${GITHUB_PATH:?GITHUB_PATH is required}"
 archive="pukbot-$platform"
-curl --fail --silent --show-error --location "https://github.com/pulkitxm/pukbot/releases/download/v0.3.32/$archive" --output "$RUNNER_TEMP/$archive"
-curl --fail --silent --show-error --location https://github.com/pulkitxm/pukbot/releases/download/v0.3.32/SHA256SUMS --output "$RUNNER_TEMP/SHA256SUMS"
+curl --fail --silent --show-error --location --retry 5 "https://github.com/pulkitxm/pukbot/releases/download/v0.3.32/$archive" --output "$RUNNER_TEMP/$archive"
+curl --fail --silent --show-error --location --retry 5 https://github.com/pulkitxm/pukbot/releases/download/v0.3.32/SHA256SUMS --output "$RUNNER_TEMP/SHA256SUMS"
 cd "$RUNNER_TEMP"
 shasum -a 256 -c <(grep -E "  $archive$" SHA256SUMS)
 chmod +x "$archive"

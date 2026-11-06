@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { withGitHubRetrySync } from "./github-retry.mjs";
+import { retryWithProbe, withGitHubRetrySync } from "./github-retry.mjs";
 
 function validateRelease(value, tag) {
   if (
@@ -28,6 +28,7 @@ export function readGitHubAPI({
   retry = {},
   allowMissing = false,
   maxBuffer = 4 * 1024 ** 2,
+  timeout = () => 60_000,
 }) {
   try {
     return withGitHubRetrySync(
@@ -35,13 +36,13 @@ export function readGitHubAPI({
         JSON.parse(
           execute("gh", ["api", path], {
             encoding: "utf8",
-            timeout: 60_000,
+            timeout: timeout(),
             killSignal: "SIGKILL",
             maxBuffer,
             stdio: ["ignore", "pipe", "pipe"],
           }),
         ),
-      retry,
+      retryWithProbe(execute, retry),
     );
   } catch (error) {
     if (allowMissing && isMissingLookup(error)) return undefined;
