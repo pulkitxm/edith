@@ -50,6 +50,17 @@ public enum PageMetrics {
 
     public static let tableNameMinimumWidth = 140.0
 
+    public static func fittedColumns(
+        count: Int, width: Double, minimum: Double, spacing: Double, limit: Int? = nil
+    ) -> Int {
+        let ceiling = max(1, min(count, limit ?? count))
+        let pitch = minimum + spacing
+        guard width.isFinite, pitch > 0 else { return ceiling }
+        let fitted = (width + spacing) / pitch
+        guard fitted >= 1 else { return 1 }
+        return fitted < Double(ceiling) ? Int(fitted) : ceiling
+    }
+
     public static func cardColumns(
         _ compact: Bool, minimum: Double, maximum: Double = .infinity,
         spacing: Double? = nil, alignment: Alignment = .top

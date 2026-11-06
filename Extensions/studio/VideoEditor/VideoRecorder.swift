@@ -388,8 +388,10 @@ struct VideoRecorderSheet: View {
                 Toggle("Include cursor", isOn: $recorder.showCursor)
                 HStack {
                     Button("Refresh sources") { Task { await recorder.loadSources() } }
+                        .buttonStyle(.edithDefault)
                     Spacer()
                     Button("Cancel") { dismiss() }
+                        .buttonStyle(.edithDefault)
                         .keyboardShortcut(.cancelAction)
                     Button("Start recording") {
                         Task {

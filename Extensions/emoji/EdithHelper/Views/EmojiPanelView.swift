@@ -242,6 +242,7 @@ struct EmojiPanelView: View {
                                 ? themeColor(themeName).opacity(0.28) : Color.clear))
         }
         .buttonStyle(.edith(.borderless))
+        .environment(\.edithDenseHover, true)
         .id(cell.id)
         .onAppear { onCellAppear(cell.id) }
         .help(emoji.name)

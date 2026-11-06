@@ -124,6 +124,7 @@ struct MachineTerminalTab: View {
             }
             if let action = presentation.action {
                 Button(action.title) { perform(action) }
+                    .buttonStyle(.edithDefault)
                     .font(.edithText(.subheadline))
             }
         }

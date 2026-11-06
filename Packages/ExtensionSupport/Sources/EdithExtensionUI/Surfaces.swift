@@ -22,6 +22,12 @@ private struct EdithSurface: ViewModifier {
     }
 }
 
+enum EdithDisclosureMetrics {
+    static let rowPadding = EdithButtonMetrics.metrics(for: .row)
+    static var plateOutset: Double { rowPadding.horizontalPadding }
+    static var labelVertical: Double { max(0, 8 - rowPadding.verticalPadding) }
+}
+
 public struct EdithDisclosureGroupStyle: DisclosureGroupStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -44,10 +50,11 @@ public struct EdithDisclosureGroupStyle: DisclosureGroupStyle {
                         .frame(width: UIScale.pt(16), height: UIScale.pt(20))
                         .accessibilityHidden(true)
                 }
-                .padding(.vertical, UIScale.pt(8))
+                .padding(.vertical, UIScale.pt(EdithDisclosureMetrics.labelVertical))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edith(.row))
+            .padding(.horizontal, -UIScale.pt(EdithDisclosureMetrics.plateOutset))
             .accessibilityValue(configuration.isExpanded ? "Expanded" : "Collapsed")
             if configuration.isExpanded {
                 configuration.content

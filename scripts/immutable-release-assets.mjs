@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { TransientGitHubError, withGitHubRetry } from "./github-retry.mjs";
 import { downloadReleaseAsset } from "./release-asset-read.mjs";
-import { uploadReleaseAsset } from "./release-asset-upload.mjs";
+import {
+  discardReleaseAsset,
+  isIncompleteAsset,
+  uploadReleaseAsset,
+} from "./release-asset-upload.mjs";
 import { lookupRelease } from "./release-lookup.mjs";
 
 const upload = (repository, releaseID, tag, file, name) =>
@@ -86,6 +90,8 @@ export async function publishExtensionAssets({
   uploadAsset = upload,
   readRelease = lookupRelease,
   downloadAsset = downloadReleaseAsset,
+  discardAsset = (repository, asset) =>
+    discardReleaseAsset({ repository, asset }),
   retry = {},
 }) {
   assert.equal(new Set(files.map(([, name]) => name)).size, files.length);
@@ -152,7 +158,14 @@ export async function publishExtensionAssets({
           throw new Error("Immutable asset differs from build output");
       }
     };
-    const before = current();
+    let before = current();
+    const incomplete = before.draft
+      ? before.assets.filter(isIncompleteAsset)
+      : [];
+    if (incomplete.length > 0) {
+      for (const asset of incomplete) discardAsset(repository, asset);
+      before = current();
+    }
     await verify(before, false);
     for (const snapshot of snapshots) {
       if (before.assets.some(({ name }) => name === snapshot.name)) continue;

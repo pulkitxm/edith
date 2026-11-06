@@ -42,6 +42,7 @@ struct UsageMachineSettingsRows: View {
                             .disabled(selected.isEmpty)
                     }
                 }
+                .buttonStyle(.edithDefault)
             }
             if let failure { Text(failure).settingsCaption().foregroundStyle(.red) }
         } header: {

@@ -113,7 +113,7 @@ struct CalendarNotchScene: View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.title).font(.edithText(.caption).weight(.medium))
-                    .lineLimit(tile.dense ? 1 : 2).presenterBlur(store.blurEvents)
+                    .lineLimit(tile.dense ? 1 : 2).presenterCover(store.blurEvents)
                 if tile.showDetails, tile.shows("time") {
                     Text(
                         event.isAllDay

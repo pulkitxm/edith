@@ -46,10 +46,26 @@ enum StudioCapture {
         }
     }
 
-    nonisolated static func recognizedText(in image: CGImage) async -> String? {
-        await Task.detached(priority: .utility) {
+    nonisolated static func upscaled(_ image: CGImage, by factor: Int = 2) -> CGImage {
+        guard
+            let context = CGContext(
+                data: nil, width: image.width * factor, height: image.height * factor,
+                bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return image }
+        context.interpolationQuality = .high
+        context.draw(
+            image,
+            in: CGRect(x: 0, y: 0, width: image.width * factor, height: image.height * factor))
+        return context.makeImage() ?? image
+    }
+
+    nonisolated static func recognizedText(in source: CGImage) async -> String? {
+        let image = upscaled(source)
+        return await Task.detached(priority: .utility) {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = false
             request.usesCPUOnly = true
             let finished = DispatchSemaphore(value: 0)
             DispatchQueue.global(qos: .utility).async {
@@ -57,7 +73,7 @@ enum StudioCapture {
                 finished.signal()
             }
             guard finished.wait(timeout: .now() + 30) == .success else { return nil }
-            return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+            return (request.results ?? []).flatMap { $0.topCandidates(3).map(\.string) }
                 .joined(separator: "\n")
         }.value
     }

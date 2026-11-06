@@ -257,6 +257,7 @@ struct TerminalTabsView: View {
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(sendBroadcast)
             Button("Send", action: sendBroadcast)
+                .buttonStyle(.edithDefault)
             if let broadcastError {
                 Text(broadcastError)
                     .font(.edithText(.subheadline))

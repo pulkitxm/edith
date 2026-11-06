@@ -112,7 +112,8 @@ import Testing
         }
     }
 
-    @Test @MainActor func namedQuotasStayHiddenByTheExistingSurfacePresentationPolicy() async throws
+    @Test @MainActor func namedQuotasStayInTheSnapshotForTheBlurOverlayWhilePresenting()
+        async throws
     {
         let accounts = [quota("Private synthetic account")]
         let controller = UsageWorkerController(allowsBackgroundCollection: { false }) { _, _ in
@@ -126,9 +127,8 @@ import Testing
             },
             privacy: { ["active": "1", "blurUsage": "1"] })
         let snapshot = try await surface.snapshot(SurfaceTile(.limits))
-        #expect(snapshot.rows.isEmpty)
-        #expect(snapshot.sources.isEmpty)
-        #expect(snapshot.message == "Hidden while presenting.")
+        #expect(snapshot.rows.contains { $0.title.contains("Private synthetic account") })
+        #expect(snapshot.message != "Hidden while presenting.")
         await controller.shutdown()
     }
 

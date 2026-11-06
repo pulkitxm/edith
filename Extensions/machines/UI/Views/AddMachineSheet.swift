@@ -137,35 +137,27 @@ struct AddMachineSheet: View {
             } else {
                 helpText("Pick a host you already set up in ~/.ssh/config.")
             }
-            VStack(spacing: UIScale.pt(0)) {
-                ForEach(configHosts) { configHost in
-                    Button {
-                        select(configHost)
-                    } label: {
-                        HStack(spacing: UIScale.pt(10)) {
-                            EdithIconView(selectedAlias == configHost.alias ? .radioOn : .ring)
-                                .foregroundStyle(
-                                    selectedAlias == configHost.alias
-                                        ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
-                            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                                Text(configHost.alias)
-                                    .font(.edithText(.body).weight(.medium))
-                                    .foregroundStyle(DashSkin.ink(dark))
-                                Text(configHost.displayTarget)
-                                    .font(.edithText(.caption, design: .monospaced))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                            }
-                            Spacer(minLength: 0)
+            EdithRowList(configHosts) { configHost in
+                EdithRowButton {
+                    select(configHost)
+                } label: {
+                    HStack(spacing: UIScale.pt(10)) {
+                        EdithIconView(selectedAlias == configHost.alias ? .radioOn : .ring)
+                            .foregroundStyle(
+                                selectedAlias == configHost.alias
+                                    ? DashSkin.accent(dark) : DashSkin.inkFaint(dark))
+                        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                            Text(configHost.alias)
+                                .font(.edithText(.body).weight(.medium))
+                                .foregroundStyle(DashSkin.ink(dark))
+                            Text(configHost.displayTarget)
+                                .font(.edithText(.caption, design: .monospaced))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
                         }
-                        .padding(.vertical, UIScale.pt(8))
-                        .padding(.horizontal, UIScale.pt(12))
-                        .contentShape(Rectangle())
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.edith(.borderless))
-                    if configHost.id != configHosts.last?.id { Divider().opacity(0.3) }
                 }
             }
-            .widgetBar(cornerRadius: 10, fill: DashSkin.paper2(dark), stroke: DashSkin.line(dark))
             labelledField("Display name", text: $name, placeholder: "Build server")
         }
     }

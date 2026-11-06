@@ -47,6 +47,7 @@ public struct ExtensionPageHost<Content: View>: View {
             .background { PageGuideProbe { guide = $0 }.frame(width: 0, height: 0) }
             .environment(\.compactLayout, compact)
             .tint(themeColor(theme))
+            .buttonStyle(EdithDefaultButtonStyle())
             .tracksWindowVisibility()
     }
 }

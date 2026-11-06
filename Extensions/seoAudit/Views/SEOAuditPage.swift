@@ -174,30 +174,19 @@ private struct SEOAuditProjectsView: View {
                     "Projects",
                     subtitle: model.projects.count == 1
                         ? "1 website" : "\(model.projects.count) websites")
-                VStack(spacing: 0) {
-                    ForEach(Array(model.projects.enumerated()), id: \.element.id) {
-                        index, project in
-                        if index > 0 {
-                            Divider().padding(.leading, UIScale.pt(SEOAuditProjectRow.dividerInset))
-                        }
-                        let active = model.isRunning && model.selectedProject?.id == project.id
-                        SEOAuditProjectRow(
-                            project: project,
-                            activeStage: active ? model.stage : nil,
-                            activeRun: active ? model.selectedRun : nil,
-                            canViewDetails: !model.isRunning
-                                || model.selectedProject?.id == project.id,
-                            actionsEnabled: !model.isRunning,
-                            viewDetails: { Task { await model.selectProject(id: project.id) } },
-                            rename: { projectBeingRenamed = project },
-                            delete: { projectBeingDeleted = project })
-                    }
+                EdithRowList(model.projects) { project in
+                    let active = model.isRunning && model.selectedProject?.id == project.id
+                    SEOAuditProjectRow(
+                        project: project,
+                        activeStage: active ? model.stage : nil,
+                        activeRun: active ? model.selectedRun : nil,
+                        canViewDetails: !model.isRunning
+                            || model.selectedProject?.id == project.id,
+                        actionsEnabled: !model.isRunning,
+                        viewDetails: { Task { await model.selectProject(id: project.id) } },
+                        rename: { projectBeingRenamed = project },
+                        delete: { projectBeingDeleted = project })
                 }
-                .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius),
-                        style: .continuous))
             }
         }
     }
@@ -299,13 +288,11 @@ struct SEOAuditNewProjectSheet: View {
 private struct SEOAuditProjectRow: View {
     static let thumbnailWidth = 72.0
     static let thumbnailHeight = 44.0
-    static let horizontalPadding = 14.0
     static let spacing = 12.0
     static let metricWidth = 52.0
     static let statusWidth = 150.0
     static let updatedWidth = 112.0
     static let menuSize = 28.0
-    static var dividerInset: Double { horizontalPadding + thumbnailWidth + spacing }
 
     let project: SEOAuditProjectSummary
     let activeStage: SEOAuditStage?
@@ -318,7 +305,6 @@ private struct SEOAuditProjectRow: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
-    @State private var hovered = false
     @State private var snapshotImage: NSImage?
     @State private var imageFinished = false
 
@@ -360,14 +346,8 @@ private struct SEOAuditProjectRow: View {
                         .frame(width: UIScale.pt(Self.menuSize), height: UIScale.pt(Self.menuSize))
                         .accessibilityHidden(true)
                 }
-                .padding(.horizontal, UIScale.pt(Self.horizontalPadding))
-                .padding(.vertical, UIScale.pt(10))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(hovered && canViewDetails ? Color.primary.opacity(0.04) : .clear)
-                .overlay(alignment: .bottom) { progressBar }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edith(.row))
             .disabled(!canViewDetails)
             .accessibilityLabel("View details for \(project.name)")
 
@@ -380,11 +360,13 @@ private struct SEOAuditProjectRow: View {
             .borderlessMenu()
             .menuIndicator(.hidden)
             .fixedSize()
-            .padding(.trailing, UIScale.pt(Self.horizontalPadding))
+            .padding(
+                .trailing,
+                UIScale.pt(EdithRowMetrics.plateInset + EdithRowMetrics.contentHorizontal)
+            )
             .accessibilityLabel("Project actions for \(project.name)")
         }
-        .onHover { hovered = $0 }
-        .animation(.easeOut(duration: 0.16), value: hovered)
+        .overlay(alignment: .bottom) { progressBar }
         .contextMenu { projectActions }
     }
 

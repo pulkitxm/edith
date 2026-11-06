@@ -213,7 +213,7 @@ struct StudioInputTile: View {
                         .foregroundStyle(.secondary)
                         .background(Circle().fill(DashSkin.paper2(scheme == .dark)).padding(2))
                 }
-                .buttonStyle(.edith(.iconOnly))
+                .buttonStyle(.edithShaped(Circle(), filled: true))
                 .padding(UIScale.pt(5))
                 .disabled(job.isRunning)
                 .help("Remove from this run")
@@ -468,19 +468,21 @@ struct StudioOutputRow: View {
                 .truncationMode(.middle)
             }
             Spacer(minLength: UIScale.pt(8))
-            if let edit = StudioCatalog.quickTool(.edit, for: output.kind) {
-                Button("Edit") { model.continueWith(edit, outputs: [output.url]) }
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                if let edit = StudioCatalog.quickTool(.edit, for: output.kind) {
+                    Button("Edit") { model.continueWith(edit, outputs: [output.url]) }
+                        .buttonStyle(.edith(.toolbar))
+                }
+                Button("Open") { StudioFileActions.open(output.url, facade: model.facade) }
                     .buttonStyle(.edith(.toolbar))
+                Button {
+                    StudioFileActions.reveal([output.url], facade: model.facade)
+                } label: {
+                    EdithIconView(.search)
+                }
+                .buttonStyle(.edith(.iconOnly))
+                .help("Show in Finder")
             }
-            Button("Open") { StudioFileActions.open(output.url, facade: model.facade) }
-                .buttonStyle(.edith(.toolbar))
-            Button {
-                StudioFileActions.reveal([output.url], facade: model.facade)
-            } label: {
-                EdithIconView(.search)
-            }
-            .buttonStyle(.edith(.iconOnly))
-            .help("Show in Finder")
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(8))

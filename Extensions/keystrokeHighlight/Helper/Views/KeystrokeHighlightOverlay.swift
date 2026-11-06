@@ -83,6 +83,7 @@ private struct KeystrokeHighlightEntryView: View {
 
     var body: some View {
         let accent = DashSkin.accent(true)
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
         return HStack(spacing: 5) {
             ForEach(Array(entry.keys.enumerated()), id: \.offset) { _, key in
                 Text(key)
@@ -92,16 +93,15 @@ private struct KeystrokeHighlightEntryView: View {
                     .minimumScaleFactor(0.72)
                     .padding(.horizontal, key.count > 2 ? 15 : 10)
                     .frame(minWidth: 44, minHeight: 46)
-                    .background(
-                        Color(red: 0.08, green: 0.09, blue: 0.11).opacity(0.94),
-                        in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(accent.opacity(0.75), lineWidth: 1)
+                    .background {
+                        ZStack {
+                            shape.fill(accent.opacity(0.6)).offset(y: 4)
+                            shape.fill(Color(red: 0.08, green: 0.09, blue: 0.11))
+                            shape.strokeBorder(accent.opacity(0.75), lineWidth: 1)
+                        }
+                        .compositingGroup()
+                        .shadow(color: .black.opacity(0.32), radius: 14, y: 7)
                     }
-                    .shadow(color: accent.opacity(0.6), radius: 0, y: 4)
-                    .shadow(color: .black.opacity(0.32), radius: 14, y: 7)
             }
         }
         .padding(.bottom, 4)

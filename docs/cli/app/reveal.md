@@ -8,8 +8,8 @@ ed app reveal [<section>] [--tab <tab>] [--list] [--json]
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `<section>` | `home`, `machines`, `docs`, `agents`, `dashboard`, `herdr`, `quinjet`, `companion`, `plugins`, `appMaintenance`, `blitztree`, `system`, `runningApps`, `desk`, `media`, `studio`, `socialManager`, `downloads`, `music`, `calendar`, `virtualCamera`, `data`, `database`, `attention`, `seoAudit`, `codeStats`, `extensions`, `settings`, `about` | none | The sidebar section to show. Without it the window comes up where it already was, and the answer names that section. |
-| `--tab` | section-specific | none | A tab inside the section. `companion` has `chat`, `capture`, `desk`, `library`, `mind`, `setup`, `settings`; `settings` has `general`, `surfaces`, `agentActivity`, `permissions`, `agent`, `jev`, `data`, `storage`, `shortcuts`, `terminal`, `mcp`, `icloud`, `updates`. |
+| `<section>` | `home`, `agents`, `usage`, `herdr`, `quinjet`, `companion`, `plugins`, `machines`, `docs`, `utilities`, `appMaintenance`, `homebrew`, `cleaner`, `blitztree`, `system`, `calendar`, `desk`, `media`, `studio`, `timeLapse`, `virtualCamera`, `music`, `downloads`, `socialManager`, `developer`, `database`, `codeStats`, `seoAudit`, `latex`, `attention`, `extensions`, `settings`, `about` | none | The sidebar section to show. A category group is named by its category id and an extension page by its extension id. Without it the window comes up where it already was, and the answer names that section. |
+| `--tab` | section-specific | none | A tab inside the section. `appMaintenance` has `updates`, `remove`, `history`; `companion` has `chat`, `capture`, `desk`, `library`, `mind`, `setup`, `settings`; `settings` has `general`, `surfaces`, `agentActivity`, `permissions`, `agent`, `jev`, `data`, `storage`, `shortcuts`, `terminal`, `mcp`, `icloud`, `updates`. |
 | `--list` | flag | off | Print every sidebar section id and title. Does not change the window. |
 | `--json` | flag | off | Emit JSON on stdout. |
 
@@ -37,9 +37,9 @@ ed app reveal companion/chat
 ```
 
 A value that contains `/` is a full route. The first segment is still the
-section, and `companion` or `settings` also take their tab from the second
-segment. [`ed app navigate`](./navigate.md) moves to the same route without
-bringing the window forward.
+section, and `appMaintenance`, `companion` or `settings` also take their tab
+from the second segment. [`ed app navigate`](./navigate.md) moves to the same
+route without bringing the window forward.
 
 The app answers when the section is on screen, so a `0` exit means the window
 is open and showing what you asked for, not merely that a request was sent.

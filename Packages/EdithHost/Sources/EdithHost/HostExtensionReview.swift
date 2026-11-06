@@ -248,6 +248,10 @@ struct HostExtensionReview: View {
         if marketplace.pendingRemovalIDs.contains(entry.id) {
             return "Removal did not finish. Remove it again to clean up the rest."
         }
+        if let staged = marketplace.restartPending[entry.id] {
+            return
+                "Version \(staged.version) is downloaded. \(entry.title) keeps running its current version until Edith restarts."
+        }
         if !installed {
             if downloaded, reviewed != nil {
                 return "This version of Edith needs a newer package. Update to keep using it."
@@ -292,6 +296,8 @@ struct HostExtensionReview: View {
             download()
         case .update:
             perform { await marketplace.download(id: entry.id) }
+        case .restart:
+            HostApplicationRelaunch.perform()
         case .retry:
             perform { await suites.select(entry, enabled: true) }
         case .retryDisable:

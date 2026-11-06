@@ -155,7 +155,7 @@ import Testing
         hidden = true
         await model.refresh()
         #expect(model.hidden)
-        #expect(model.nowPlaying == nil)
+        #expect(model.nowPlaying?.source == .external("Mock player"))
         model.nowPlayingPlayPause()
         await Task.yield(); #expect(count == 0)
         var tile = SurfaceTile(.music); tile.showActions = false;

@@ -23,7 +23,7 @@ import Testing
         #expect(fixture.controller.glanceProviderIDs == ["calendar", "herdr"])
     }
 
-    @Test func liveSnapshotIsClearedImmediatelyOnDisableOrPrivacyChange() throws {
+    @Test func liveSnapshotIsClearedOnDisableAndCoveredWhilePresenting() throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
         fixture.controller.layouts.update(.notch) { $0.notchLeadingGlance = .nextMeeting }
@@ -38,12 +38,13 @@ import Testing
             root: fixture.root, namespace: fixture.id, owner: "presenter")
         try presenter.publish(["active": "1", "blurCalendar": "1"])
         fixture.controller.synchronize()
-        #expect(fixture.controller.surfaceSnapshots.isEmpty)
-        #expect(fixture.controller.leadingGlance == nil)
+        #expect(fixture.controller.surfaceSnapshots.keys.sorted() == ["calendar"])
+        #expect(fixture.controller.leadingGlance?.source == .nextMeeting)
+        #expect(fixture.controller.leadingGlance?.covered == true)
         try presenter.clear("presenter")
         fixture.controller.synchronize()
         fixture.controller.recordSurfaceSnapshot(snapshot)
-        #expect(fixture.controller.leadingGlance != nil)
+        #expect(fixture.controller.leadingGlance?.covered == false)
         try fixture.state.publish([
             "surface.activeIDs": "[\"notchShelf\"]",
             "surface.activeVersions": "{\"notchShelf\":\"1\"}",

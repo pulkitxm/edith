@@ -193,6 +193,7 @@ private struct HerdrLaunchKindRow: View {
                     Text(model.id)
                 }
             }
+            .borderlessMenu()
             .fixedSize()
             .disabled(catalog.models.isEmpty)
             if let note = catalog.kind.note {
@@ -311,6 +312,7 @@ struct ClaudeSharedLaunchSettings: View {
                     } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
                 }
             }
+            .buttonStyle(.edithDefault)
             .disabled(accounts?.client != nil && baseline == nil)
             if let error { Text(error).font(.edithText(.caption)).foregroundStyle(.red) }
         }

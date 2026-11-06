@@ -179,7 +179,10 @@ struct HerdrTitlebarViewPicker: View {
                         stroke: accent.opacity(dark ? 0.5 : 0.35)
                     )
             }
-            .buttonStyle(.edith(.borderless, selected: store.detailOpen, tint: accent))
+            .buttonStyle(
+                .edithShaped(
+                    RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+            )
             .help(HerdrAgentDetailCommand.help(open: store.detailOpen))
             .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
         }

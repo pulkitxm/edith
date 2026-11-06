@@ -144,7 +144,7 @@ struct AppMaintenanceRenderTests {
     ) async throws {
         for variant in RenderCapture.layoutVariants {
             _ = try await RenderCapture.render(name, variant: variant) {
-                AppMaintenanceView(model: model, section: section)
+                AppMaintenanceView(model: model, section: .constant(section))
             }
         }
     }
@@ -211,7 +211,7 @@ struct AppMaintenanceRenderTests {
             let rendered = try await RenderCapture.render(
                 "maintenance-removal-partial", variant: RenderCapture.variants[0]
             ) {
-                AppMaintenanceView(model: model, section: .removal)
+                AppMaintenanceView(model: model, section: .constant(.removal))
             }
             #expect(
                 RenderCapture.find(rendered.host, label: "Move 4 items to Trash") != nil)

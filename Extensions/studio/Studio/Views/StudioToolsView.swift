@@ -152,7 +152,10 @@ struct StudioToolCard: View {
             .shadow(color: .black.opacity(hovering ? 0.08 : 0), radius: 6, y: 3)
             .edithButtonTarget(.borderless)
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous), filled: true)
+        )
         .onHover { hovering = $0 }
         .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering)
         .accessibilityLabel(tool.title)
@@ -218,6 +221,8 @@ struct StudioToolRow: View {
             )
             .edithButtonTarget(.borderless)
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous), filled: true))
     }
 }

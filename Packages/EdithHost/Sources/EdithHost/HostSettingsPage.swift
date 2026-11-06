@@ -126,7 +126,7 @@ struct HostSettingsPage: View {
                         }
                     }
                 }
-                .buttonStyle(.edith(.borderless)).accessibilityLabel("Permissions")
+                .buttonStyle(.hostFormRow).accessibilityLabel("Permissions")
                 .accessibilityValue(permissionSummary)
             } header: {
                 Text("Access")
@@ -206,9 +206,42 @@ struct HostSettingsPage: View {
                 }
             }
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Circle(), filled: true))
         .accessibilityLabel("\(name.capitalized) theme")
         .accessibilityAddTraits(themeName == name ? .isSelected : AccessibilityTraits())
         .help("Use the \(name) theme")
     }
+}
+
+enum HostFormRowMetrics {
+    static let plateOutset = 6.0
+    static let cornerRadius = 6.0
+}
+
+struct HostFormRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HostFormRowButton(configuration: configuration)
+    }
+}
+
+private struct HostFormRowButton: View {
+    let configuration: ButtonStyle.Configuration
+    @Environment(\.isEnabled) private var enabled
+
+    var body: some View {
+        configuration.label
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(HostFormRowMetrics.plateOutset)
+            .contentShape(Rectangle())
+            .edithHoverHighlight(
+                tone: .neutral, cornerRadius: HostFormRowMetrics.cornerRadius,
+                pressed: configuration.isPressed
+            )
+            .padding(-HostFormRowMetrics.plateOutset)
+            .opacity(enabled ? 1 : 0.42)
+    }
+}
+
+extension ButtonStyle where Self == HostFormRowButtonStyle {
+    static var hostFormRow: HostFormRowButtonStyle { HostFormRowButtonStyle() }
 }

@@ -95,6 +95,46 @@ struct HostNotchCompactCardTests {
         #expect(TestWindowHost.exposedWindows.isEmpty)
     }
 
+    @Test func presentingKeepsTheCompactCardContentAndSizeUnderTheBlurOverlay() async throws {
+        _ = TestWindowHost.application
+        let accessibility = try HostAccessibilityFixture.enable()
+        defer {
+            for error in accessibility.restore() { Issue.record(error) }
+        }
+        let fixture = CompactCardFixture(
+            widget: .desk, versions: ["clipboard": "1", "emoji": "2"])
+        try await fixture.model.refresh()
+        var sizes: [CGSize] = []
+        for presenting in [false, true] {
+            fixture.presenting = presenting
+            let host = NSHostingView(
+                rootView: HostNotchCompactCard(
+                    model: fixture.model, layout: .init(tiles: [fixture.origin.tile]),
+                    measured: { _ in }
+                )
+                .environment(\.automaticViewActionsEnabled, false)
+                .transaction { $0.animation = nil })
+            host.frame = .init(x: 0, y: 0, width: 420, height: 800)
+            let panel = HostNotchPanel()
+            panel.contentView = compactSlot(host)
+            for _ in 0..<6 {
+                host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10))
+            }
+            sizes.append(host.fittingSize)
+            #expect(compactText(host, "Synthetic original item"))
+            #expect(!compactText(host, "Hidden while presenting"))
+            let change = try #require(compactControls(host, label: "Change").first)
+            if presenting {
+                _ = (change as AnyObject).accessibilityPerformPress?()
+                try await Task.sleep(for: .milliseconds(50))
+                #expect(await fixture.gate.performed().isEmpty)
+            }
+            panel.close()
+        }
+        #expect(sizes[0] == sizes[1])
+        await fixture.model.stop()
+    }
+
     @Test func aCardTallerThanItsSlotStaysPinnedToTheTop() async throws {
         _ = TestWindowHost.application
         let accessibility = try HostAccessibilityFixture.enable()
@@ -334,6 +374,7 @@ private final class CompactCardFixture {
     var replaceOnNavigation = false
     var failNavigation = false
     var postNavigation: HostNotchCompactCardModel.Navigate?
+    var presenting = false
     var navigation: [(HostNotchCompactOrigin, String, String)] = []
     let gate = CompactCardGate()
     lazy var requests = makeRequests()
@@ -355,7 +396,7 @@ private final class CompactCardFixture {
         },
         postNavigation: { [self] origin, provider, version in
             try await postNavigation?(origin, provider, version)
-        })
+        }, covered: { [self] _ in presenting })
     init(widget: SurfaceWidget, versions: [String: String], dense: Bool = false) {
         self.versions = versions
         var tile = SurfaceTile(widget)
@@ -411,4 +452,17 @@ private func compactControls(_ node: NSObject, label: String, depth: Int = 0) ->
         }
     }
     return Array(Dictionary(grouping: result, by: ObjectIdentifier.init).values.compactMap(\.first))
+}
+
+@MainActor
+private func compactText(_ node: NSObject, _ text: String, depth: Int = 0) -> Bool {
+    guard depth < 64 else { return false }
+    if (node as AnyObject).accessibilityLabel?() == text { return true }
+    let value = NSSelectorFromString("accessibilityValue")
+    if node.responds(to: value), node.perform(value)?.takeUnretainedValue() as? String == text {
+        return true
+    }
+    let children = (node as AnyObject).accessibilityChildren?() as? [NSObject] ?? []
+    let views = (node as? NSView)?.subviews ?? []
+    return (children + views).contains { compactText($0, text, depth: depth + 1) }
 }

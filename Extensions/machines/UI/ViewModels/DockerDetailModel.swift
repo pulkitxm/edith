@@ -529,6 +529,7 @@ struct DockerContainerDetail: View {
                 }
                 Button("Remove", role: .destructive, action: onRemove)
             }
+            .buttonStyle(.edithDefault)
             .font(.edithText(.subheadline))
         }
         .padding(.horizontal, UIScale.pt(16))
@@ -694,6 +695,7 @@ struct DockerContainerDetail: View {
                     Button("Reattach") {
                         model.startLogs(session: session, container: live)
                     }
+                    .buttonStyle(.edith(.borderless))
                     .font(.edithText(.subheadline).weight(.medium))
                 }
                 .padding(.horizontal, UIScale.pt(12))
@@ -985,6 +987,8 @@ struct DockerContainerDetail: View {
                         .padding(.horizontal, UIScale.pt(16))
                         .padding(.vertical, UIScale.pt(5))
                         .contentShape(Rectangle())
+                        .edithHoverHighlight(tone: .neutral)
+                        .disabled(!entry.isDirectory)
                         .onTapGesture(count: 2) {
                             guard entry.isDirectory else { return }
                             requestedFilePath = entry.path

@@ -6,19 +6,16 @@ import SwiftUI
 
 private struct LaTeXProjectRow: View {
     static let icon = 32.0
-    static let horizontalPadding = 14.0
     static let spacing = 12.0
-    static var dividerInset: Double { horizontalPadding + icon + spacing }
 
     let project: LaTeXProject
     let disabled: Bool
     let open: () -> Void
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
-    @State private var hovering = false
 
     var body: some View {
-        Button(action: open) {
+        EdithRowButton(action: open) {
             HStack(spacing: UIScale.pt(Self.spacing)) {
                 PageGuideBadge(
                     icon: project.location == .disk ? .docText : .quinjet,
@@ -43,15 +40,9 @@ private struct LaTeXProjectRow: View {
                     openEditor
                 }
             }
-            .padding(.horizontal, UIScale.pt(Self.horizontalPadding))
-            .padding(.vertical, UIScale.pt(10))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(hovering && !disabled ? Color.primary.opacity(0.04) : .clear)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
         .disabled(disabled)
-        .onHover { hovering = $0 }
     }
 
     private var source: String {
@@ -212,23 +203,14 @@ struct LaTeXPage: View {
     }
 
     private var projectList: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(model.projects.enumerated()), id: \.element.id) { index, project in
-                if index > 0 {
-                    Divider().padding(.leading, UIScale.pt(LaTeXProjectRow.dividerInset))
-                }
-                LaTeXProjectRow(project: project, disabled: model.busy || model.load.isRunning) {
-                    model.launch {
-                        editing = true
-                        await model.select(project.id)
-                    }
+        EdithRowList(model.projects) { project in
+            LaTeXProjectRow(project: project, disabled: model.busy || model.load.isRunning) {
+                model.launch {
+                    editing = true
+                    await model.select(project.id)
                 }
             }
         }
-        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
     }
 
     private func workspace(_ project: LaTeXProject) -> some View {
@@ -252,10 +234,14 @@ struct LaTeXPage: View {
                 }
                 Spacer(minLength: 0)
                 if model.dirty {
-                    Button("Discard edits") { model.discard() }.disabled(model.busy)
+                    Button("Discard edits") { model.discard() }
+                        .buttonStyle(.edithDefault)
+                        .disabled(model.busy)
                 }
                 if model.load.errorMessage != nil {
-                    Button("Retry") { model.launch { await model.reload() } }.disabled(model.dirty)
+                    Button("Retry") { model.launch { await model.reload() } }
+                        .buttonStyle(.edithDefault)
+                        .disabled(model.dirty)
                 }
             }
             .font(.edithText(.caption))
@@ -427,7 +413,11 @@ struct LaTeXPage: View {
                         Button("List") { editorControls.command("list") }
                     } label: {
                         EdithIcon.text.image()
-                    }.help("Insert LaTeX").accessibilityLabel("Insert LaTeX")
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.edith(.toolbar))
+                    .fixedSize()
+                    .help("Insert LaTeX").accessibilityLabel("Insert LaTeX")
                     Menu {
                         Toggle("Wrap lines", isOn: $editorControls.wrapsLines)
                         Picker("Text size", selection: $editorControls.fontSize) {
@@ -437,7 +427,11 @@ struct LaTeXPage: View {
                         }
                     } label: {
                         EdithIcon.adjust.image()
-                    }.help("Editor options").accessibilityLabel("Editor options")
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.edith(.toolbar))
+                    .fixedSize()
+                    .help("Editor options").accessibilityLabel("Editor options")
                 }.disabled(model.busy || model.load.isRunning)
             }
             .buttonStyle(.edith(.toolbar))
@@ -509,8 +503,9 @@ struct LaTeXPage: View {
                     HStack {
                         Text("GitHub PDF").font(.edithText(.headline))
                         Spacer()
-                        Button("Refresh PDF") { model.refreshPDF() }.disabled(
-                            model.busy || model.dirty)
+                        Button("Refresh PDF") { model.refreshPDF() }
+                            .buttonStyle(.edithDefault)
+                            .disabled(model.busy || model.dirty)
                     }
                     if let buildURL = model.buildURL {
                         EdithLink("View PDF build", destination: buildURL)
@@ -617,9 +612,11 @@ private struct LaTeXReviewWorkspace: View {
             VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                 PageSectionHeader("Quinjet review", subtitle: model.selected?.repository ?? "") {
                     Button("Refresh", edith: .refresh) { model.refreshReview() }
+                        .buttonStyle(.edithDefault)
                         .disabled(model.busy)
                     if model.review?.pullRequest.state == "OPEN" { LaTeXMergeOptions(model: model) }
                     Button("Back to editor", edith: .chevronLeft, action: onClose)
+                        .buttonStyle(.edithDefault)
                 }
                 if let review = model.review {
                     HStack(alignment: .top, spacing: UIScale.pt(12)) {
@@ -657,6 +654,7 @@ private struct LaTeXReviewWorkspace: View {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(review.diff, forType: .string)
                             }
+                            .buttonStyle(.edithDefault)
                         }
                     }
                 }
@@ -724,6 +722,7 @@ private struct LaTeXMergeOptions: View {
     @State private var confirming = false
     var body: some View {
         Button("Merge options") { confirming = true }
+            .buttonStyle(.edithDefault)
             .disabled(model.dirty || model.busy)
             .confirmationDialog("Squash merge this pull request?", isPresented: $confirming) {
                 Button("Squash merge and delete branch") { model.merge(automatically: false) }

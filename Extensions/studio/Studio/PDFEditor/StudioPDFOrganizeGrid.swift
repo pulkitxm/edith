@@ -99,7 +99,7 @@ struct StudioPDFPageTile: View {
                         )
                         .background(Circle().fill(Color.white).padding(1))
                 }
-                .buttonStyle(.edith(.iconOnly))
+                .buttonStyle(.edithShaped(Circle(), filled: true))
                 .padding(UIScale.pt(6))
                 .opacity(selected || hovering ? 1 : 0.001)
                 .accessibilityLabel("Select page \(index + 1)")
@@ -205,7 +205,7 @@ struct StudioSignaturePad: View {
                                 Color.primary.opacity(color == swatch ? 0.9 : 0.15),
                                 lineWidth: 2))
                     }
-                    .buttonStyle(.edith(.iconOnly))
+                    .buttonStyle(.edithShaped(Circle(), filled: true))
                 }
                 Spacer()
                 if mode == .draw {

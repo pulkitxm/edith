@@ -7,14 +7,7 @@
   "commands": [
     "companion"
   ],
-  "pages": [
-    {
-      "id": "companion",
-      "title": "Memory",
-      "icon": "companion",
-      "order": 4
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:companion"
   ],

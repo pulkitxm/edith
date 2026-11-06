@@ -37,7 +37,7 @@ private struct EdithLinkBody<Label: View>: View {
             }
             .opacity(enabled ? 1 : EdithInteractionMetrics.disabledOpacity)
             .contentShape(Rectangle())
-            .onHover { hovering = $0 }
+            .edithHoverTracking($hovering)
             .animation(
                 Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: interaction)
     }

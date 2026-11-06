@@ -278,7 +278,10 @@ private struct TimeLapseSourceCard: View {
                     .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
             }.contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless)).disabled(disabled)
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+        ).disabled(disabled)
         .help("\(choice.title)\n\(choice.subtitle)")
         .accessibilityLabel("\(choice.title), \(choice.subtitle)")
         .accessibilityValue(selected ? "Selected" : "Not selected")

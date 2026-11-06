@@ -161,7 +161,10 @@ struct HostQuickActionsCard: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous), filled: on)
+        )
         .help(utility.cardSubtitle)
     }
 }

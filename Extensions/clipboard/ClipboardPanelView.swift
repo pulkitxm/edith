@@ -137,7 +137,7 @@ struct ClipboardPanelView: View {
                         .background(Capsule().fill(Color.orange.opacity(0.18)))
                         .foregroundStyle(Color.orange)
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(.edithShaped(Capsule()))
                 .help("Capture is paused. Click to resume.")
             }
             Text(palette.countLabel)
@@ -196,7 +196,7 @@ struct ClipboardPanelView: View {
                 .foregroundStyle(active ? themeOnAccentColor(themeName) : Color.primary)
                 .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Capsule()))
         .accessibilityAddTraits(active ? .isSelected : [])
     }
 
@@ -467,6 +467,19 @@ struct ClipboardPanelList: View, Equatable {
     }
 }
 
+private struct ClipboardPanelRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                Rectangle().fill(Color.clear)
+                    .edithHoverHighlight(
+                        tone: .neutral, cornerRadius: 8, pressed: configuration.isPressed
+                    )
+                    .padding(.horizontal, 6)
+            }
+    }
+}
+
 private struct ClipboardPanelRow: View {
     let model: ClipboardPanelRowModel
     let selection: ClipboardPanelSelection
@@ -514,7 +527,7 @@ private struct ClipboardPanelRow: View {
             .foregroundStyle(selected ? themeOnAccentColor(themeName) : Color.primary)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(ClipboardPanelRowStyle())
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(selected ? themeColor(themeName) : Color.clear)

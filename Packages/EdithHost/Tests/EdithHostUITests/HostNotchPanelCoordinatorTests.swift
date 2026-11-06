@@ -85,11 +85,11 @@ struct HostNotchPanelCoordinatorTests {
         await #expect(throws: HostNotchPanelError.staleState) {
             try await coordinator.collapseAfterAcknowledgement(forged)
         }
-        fixture.environment.hiddenWidgets = [.music]
+        fixture.environment.activeVersions["music"] = nil
         await #expect(throws: HostNotchPanelError.staleState) {
             try await coordinator.collapseAfterAcknowledgement(ticket)
         }
-        fixture.environment.hiddenWidgets = []
+        fixture.environment.activeVersions["music"] = "1.0.0"
         fixture.transport.advanceRevision()
         fixture.transport.respond()
         await settle { fixture.transport.waitCalls == 2 }

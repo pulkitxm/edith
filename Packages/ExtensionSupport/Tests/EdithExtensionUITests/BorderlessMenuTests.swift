@@ -5,7 +5,7 @@ import Testing
 @testable import EdithExtensionUI
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .exclusiveScale)
 struct BorderlessMenuTests {
     private let tint = Color(red: 1, green: 0, blue: 0)
 

@@ -14,6 +14,7 @@ struct SEOAuditPageAccordion: View {
     @Binding var expanded: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @Environment(\.openURL) private var openURL
     @State private var imageFinished = false
     @State private var snapshotImage: NSImage?
 
@@ -21,14 +22,11 @@ struct SEOAuditPageAccordion: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: UIScale.pt(10)) {
-                Toggle("Select \(page.url)", isOn: $selected)
-                    .toggleStyle(.edithCheckboxMark)
-                    .accessibilityLabel("Select \(page.url)")
-                    .padding(.leading, UIScale.pt(14))
-                Button {
-                    expanded.toggle()
-                } label: {
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: UIScale.pt(10)) {
+                    selectToggle.hidden().accessibilityHidden(true)
                     HStack(spacing: UIScale.pt(12)) {
                         statusMark
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -54,11 +52,11 @@ struct SEOAuditPageAccordion: View {
                             .rotationEffect(.degrees(expanded ? 90 : 0))
                             .animation(.easeOut(duration: 0.16), value: expanded)
                     }
-                    .padding(.trailing, UIScale.pt(14))
-                    .frame(minHeight: UIScale.pt(58))
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.edith(.borderless))
+            }
+            .buttonStyle(SEOAuditHeaderButtonStyle(minHeight: 58, cardRadius: 12))
+            .overlay(alignment: .leading) {
+                selectToggle.padding(.leading, UIScale.pt(14))
             }
             if expanded {
                 Divider().padding(.horizontal, UIScale.pt(14))
@@ -71,6 +69,12 @@ struct SEOAuditPageAccordion: View {
             RoundedRectangle(cornerRadius: UIScale.pt(12))
                 .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1))
         )
+    }
+
+    private var selectToggle: some View {
+        Toggle("Select \(page.url)", isOn: $selected)
+            .toggleStyle(.edithCheckboxMark)
+            .accessibilityLabel("Select \(page.url)")
     }
 
     private var statusMark: some View {
@@ -109,9 +113,11 @@ struct SEOAuditPageAccordion: View {
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            WrapHStack(spacing: UIScale.pt(10)) {
+            WrapHStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 if let url = URL(string: page.url) {
-                    Link(destination: url) {
+                    Button {
+                        openURL(url)
+                    } label: {
                         Label("Open page", edith: .arrowUpRight)
                     }
                     .buttonStyle(.edith(.secondary))
@@ -528,5 +534,26 @@ private extension View {
             .overlay(
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(DashSkin.line(dark), lineWidth: UIScale.pt(1)))
+    }
+}
+
+struct SEOAuditHeaderButtonStyle: ButtonStyle {
+    let minHeight: CGFloat
+    let cardRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        let inset = EdithRowMetrics.plateInset
+        configuration.label
+            .padding(.horizontal, UIScale.pt(14 - inset))
+            .frame(
+                maxWidth: .infinity, minHeight: UIScale.pt(minHeight - inset * 2),
+                alignment: .leading
+            )
+            .contentShape(Rectangle())
+            .edithHoverHighlight(
+                tone: .neutral, cornerRadius: UIScale.pt(cardRadius - inset),
+                pressed: configuration.isPressed
+            )
+            .padding(UIScale.pt(inset))
     }
 }

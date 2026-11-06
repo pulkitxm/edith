@@ -120,10 +120,15 @@ test("an unconfirmed create is retried and a failed workflow counts as transient
       return JSON.stringify({
         workflowUrl: "https://github.com/synthetic/control/actions/runs/5",
       });
-    if (args[0] === "run") {
-      if (events.filter((event) => event === "gh run").length === 1)
-        throw new Error("exit status 1");
-      return "";
+    if (args[1].includes("/actions/runs/")) {
+      events.push("run");
+      return JSON.stringify({
+        status: "completed",
+        conclusion:
+          events.filter((event) => event === "run").length === 1
+            ? "failure"
+            : "success",
+      });
     }
     if (args[1].includes("/tags/"))
       throw Object.assign(new Error("Not found"), {
@@ -256,7 +261,7 @@ test("an unacknowledged release edit retries through the release client", () => 
           });
         }
         watches++;
-        return "";
+        return JSON.stringify({ status: "completed", conclusion: "success" });
       },
       retry: { sleep: () => {} },
     },

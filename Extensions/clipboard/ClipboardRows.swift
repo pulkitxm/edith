@@ -12,6 +12,10 @@ struct ClipboardRows: View {
     @State private var recent: ClipboardRecentModel
     let history: ClipboardHistoryModel
     @State private var showHistory = false
+    @State private var privacy = ExtensionSharedState.current.map(
+        SurfacePrivacyState.init(channel:))
+    @Environment(\.colorScheme) private var scheme
+    private var presenting: Bool { privacy?.hides(.ability("clipboard")) ?? false }
     @State private var refreshObserver: NSObjectProtocol?
     @State private var refreshTask: Task<Void, Never>?
 
@@ -153,10 +157,12 @@ struct ClipboardRows: View {
             } else {
                 ForEach(recent.entries) { entry in
                     ClipboardRecentRow(entry: entry)
+                        .presenterCover(presenting, dark: scheme == .dark)
                 }
                 LabeledContent {
                     Button("Browse All") { showHistory = true }
                         .buttonStyle(.edith(.secondary))
+                        .disabled(presenting)
                 } label: {
                     Text("Full history")
                     Text("Search, pin and delete everything Edith has kept.")

@@ -88,6 +88,8 @@ test("small accepted assets stay with the release client and wait for upload com
     writeFileSync(value.file, "synthetic metadata");
     const execute = (command, args) => {
       value.calls.push([command, ...args]);
+      if (command === "gh")
+        return JSON.stringify({ status: "completed", conclusion: "success" });
       return command === "pukbot" && !args.includes("--dry-run")
         ? JSON.stringify({
             workflowUrl:
@@ -110,14 +112,8 @@ test("small accepted assets stay with the release client and wait for upload com
     ).toBe("pukbot");
     expect(value.calls.at(-1)).toEqual([
       "gh",
-      "run",
-      "watch",
-      "9",
-      "--repo",
-      "synthetic/transport",
-      "--exit-status",
-      "--interval",
-      "20",
+      "api",
+      "repos/synthetic/transport/actions/runs/9",
     ]);
     expect(
       value.calls.some((call) => call[0] === "gh" && call[1] === "release"),
@@ -322,7 +318,7 @@ test("upload and completion watch share one bounded thirty minute total deadline
             workflowUrl:
               "https://github.com/synthetic/transport/actions/runs/9",
           })
-        : "{}";
+        : JSON.stringify({ status: "completed", conclusion: "success" });
     };
     expect(
       await uploadReleaseAsset({
@@ -334,7 +330,7 @@ test("upload and completion watch share one bounded thirty minute total deadline
         now: () => elapsed,
       }),
     ).toBe("pukbot");
-    expect(timeouts).toEqual([1_800_000, 1_620_000]);
+    expect(timeouts).toEqual([1_800_000, 60_000]);
   } finally {
     value.clean();
   }

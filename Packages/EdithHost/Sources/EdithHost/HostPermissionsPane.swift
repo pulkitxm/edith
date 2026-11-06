@@ -300,7 +300,7 @@ private struct HostPermissionRow: View {
                 let enabled = usage.enabledUsers.contains(entry)
                 let required = usage.requiredBy.contains(entry)
                 HStack(spacing: UIScale.pt(4)) {
-                    PageIcon(extensionID: entry.id, icon: entry.icon, size: 16)
+                    PageIcon(icon: HostExtensionIcon.resolve(entry), size: 16)
                     Text(entry.title)
                     if required { Text("required").foregroundStyle(.tertiary) }
                 }

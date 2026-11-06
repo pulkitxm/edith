@@ -6,6 +6,7 @@ public struct ExtensionPayloadManifest: Codable, Equatable, Sendable {
     public let hostABI: String
     public let architecture: String
     public let minimumSystemVersion: ExtensionSystemVersion
+    public let minimumHostBuild: Int?
     public let dependencies: [String]
 
     public init(package: ExtensionPackage) {
@@ -14,6 +15,7 @@ public struct ExtensionPayloadManifest: Codable, Equatable, Sendable {
         hostABI = package.hostABI
         architecture = package.architecture
         minimumSystemVersion = package.minimumSystemVersion
+        minimumHostBuild = package.minimumHostBuild
         dependencies = package.dependencies
     }
 }

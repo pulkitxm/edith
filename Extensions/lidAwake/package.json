@@ -1,7 +1,7 @@
 {
   "id": "lidAwake",
   "title": "Lid Awake",
-  "icon": "laptop",
+  "icon": "lidAwake",
   "category": "utilities",
   "background": false,
   "commands": [

@@ -602,6 +602,7 @@ struct CompanionCaptureScreen: View {
                         }
                         .disabled(model.remembering)
                     }
+                    .buttonStyle(.edithDefault)
                 }
                 if let outcome = model.outcome {
                     Text(outcome)
@@ -661,7 +662,7 @@ struct CompanionCaptureScreen: View {
             }
             .contentShape(Circle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Circle(), filled: true))
         .help(model.phase == .recording ? "Stop recording" : "Start recording")
     }
 
@@ -756,6 +757,7 @@ struct CompanionCaptureScreen: View {
                             .foregroundStyle(DashSkin.inkFaint(dark))
                     }
                 }
+                .buttonStyle(.edithDefault)
             }
         }
     }

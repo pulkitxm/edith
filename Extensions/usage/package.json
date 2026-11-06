@@ -7,14 +7,7 @@
   "commands": [
     "usage"
   ],
-  "pages": [
-    {
-      "id": "dashboard",
-      "title": "Usage",
-      "icon": "usage",
-      "order": 1
-    }
-  ],
+  "page": true,
   "homeCards": [
     "activity",
     "usage",

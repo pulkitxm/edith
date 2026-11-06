@@ -1,7 +1,7 @@
 {
   "id": "windowSweaters",
   "title": "Window Sweaters",
-  "icon": "selection",
+  "icon": "windowSweaters",
   "category": "labs",
   "background": false,
   "commands": [],

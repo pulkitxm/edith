@@ -241,7 +241,7 @@ struct HostOnboardingFinishView: View {
     }
 
     private func row(_ entry: HostExtension) -> some View {
-        let pages = model.destinations(for: entry)
+        let page = model.destination(for: entry)
         return HStack(alignment: .center, spacing: UIScale.pt(12)) {
             HostExtensionIcon(entry: entry, size: HostOnboardingFinishRow.icon)
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -250,11 +250,11 @@ struct HostOnboardingFinishView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                if compact { placement(entry, pages: pages) }
+                if compact { placement(entry, page: page) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if !compact {
-                placement(entry, pages: pages)
+                placement(entry, page: page)
                     .frame(
                         width: UIScale.pt(HostOnboardingFinishRow.placementWidth),
                         alignment: .leading)
@@ -262,7 +262,7 @@ struct HostOnboardingFinishView: View {
             ZStack(alignment: .trailing) {
                 Color.clear.frame(
                     width: UIScale.pt(HostOnboardingFinishRow.actionWidth), height: 1)
-                if let page = pages.first {
+                if let page {
                     Button("Open") { model.open(page: page.id) }
                         .buttonStyle(.edith(.secondary))
                         .fixedSize()
@@ -276,22 +276,20 @@ struct HostOnboardingFinishView: View {
         .frame(minHeight: UIScale.pt(56))
     }
 
-    private func placement(_ entry: HostExtension, pages: [HostPage]) -> some View {
-        Label(location(entry, pages: pages), edith: locationIcon(entry, pages: pages))
+    private func placement(_ entry: HostExtension, page: HostNavigationPage?) -> some View {
+        Label(location(entry, page: page), edith: locationIcon(entry, page: page))
             .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
             .lineLimit(2)
     }
 
-    private func location(_ entry: HostExtension, pages: [HostPage]) -> String {
-        if !pages.isEmpty {
-            return "In the sidebar under " + pages.map(\.title).joined(separator: ", ")
-        }
+    private func location(_ entry: HostExtension, page: HostNavigationPage?) -> String {
+        if page != nil { return "In the sidebar under " + HostExtensionPlacements.group(of: entry) }
         if !entry.hotkeys.isEmpty { return "Runs in the background. Use its hotkey anywhere." }
         return "Runs in the background, from the menu bar or the notch."
     }
 
-    private func locationIcon(_ entry: HostExtension, pages: [HostPage]) -> EdithIcon {
-        if !pages.isEmpty { return .sidebarLeft }
+    private func locationIcon(_ entry: HostExtension, page: HostNavigationPage?) -> EdithIcon {
+        if page != nil { return .sidebarLeft }
         if !entry.hotkeys.isEmpty { return .keyboard }
         return .menuBar
     }

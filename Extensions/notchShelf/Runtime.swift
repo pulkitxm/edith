@@ -271,8 +271,7 @@ final class NotchShelfService: ExtensionService {
             let snapshot = try engine.chrome(
                 .init(displayID: request.displayID, presentationID: request.presentationID))
             guard request.identity == snapshot.identity,
-                let item = snapshot.items.first(where: { $0.id == request.itemID }),
-                !snapshot.hiddenWidgets.contains(.ability("notchShelf")), let controller
+                let item = snapshot.items.first(where: { $0.id == request.itemID }), let controller
             else { throw ExtensionPeerError.invalidRequest }
             let image = await controller.thumbnail(for: item)
             guard let data = image?.tiffRepresentation, data.count <= 524288 else { return Data() }

@@ -120,7 +120,10 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                                 selected(item) ? accent.opacity(0.12) : .clear,
                                 in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
                         }
-                        .buttonStyle(.edith(.borderless)).presenterBlur(
+                        .buttonStyle(
+                            .edithShaped(
+                                RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous))
+                        ).presenterBlur(
                             EmbeddedMusicPrivacyState.shared.hides(.music)
                         )
                         .contextMenu {
@@ -275,7 +278,9 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                         .background(
                             .primary.opacity(0.06),
                             in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
-                    }.buttonStyle(.edith(.borderless))
+                    }.buttonStyle(
+                        .edithShaped(
+                            RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous)))
                 }
             }
             shelf("Your playlists", library.playlists)
@@ -348,8 +353,10 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                         EdithIconView(.play).foregroundStyle(Color.themeOnAccent)
                             .frame(width: UIScale.pt(48), height: UIScale.pt(48)).background(
                                 accent, in: Circle())
-                    }.buttonStyle(.edith(.borderless)).accessibilityLabel("Play \(item.title)")
-                        .disabled(!item.playable)
+                    }.buttonStyle(.edithShaped(Circle(), filled: true)).accessibilityLabel(
+                        "Play \(item.title)"
+                    )
+                    .disabled(!item.playable)
                     iconButton(.shuffle, label: "Shuffle collection") {
                         library.setShuffle(!library.shuffle); library.play(item)
                     }
@@ -430,7 +437,7 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                                 )
                                 .foregroundStyle(.secondary)
                             }.presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
-                        }.buttonStyle(.edith(.borderless))
+                        }.buttonStyle(.edithBlock(inset: 4))
                     }
                     if library.queue.isEmpty && queueTab == "Queue" && !library.queueLoading
                         && library.queueError == nil
@@ -513,7 +520,10 @@ struct EmbeddedMusicSpotifyWorkspace: View {
                         Text(item.subtitle).font(.edithText(.caption)).foregroundStyle(.secondary)
                             .lineLimit(2)
                     }.presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
-                }.buttonStyle(.edith(.borderless))
+                }.buttonStyle(
+                    .edithShaped(
+                        RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous),
+                        filled: true))
             }
         }
     }

@@ -34,8 +34,6 @@ struct HostWorkspace: View {
     @AppStorage(AppStorageKeys.General.creditHidden, store: SharedDefaults.store) private
         var creditHidden = false
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
-    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store) private
-        var maintenanceSection = "Updates"
     @State private var requestedSettings: HostSettingsNavigation?
     @State private var workspaceWindow: NSWindow?
     @State private var router = WindowRouter()
@@ -89,8 +87,6 @@ struct HostWorkspace: View {
             wrappedValue: false, AppStorageKeys.General.creditHidden, store: defaults)
         _zoom = AppStorage(wrappedValue: 1, WindowZoom.defaultsKey, store: defaults)
         _mediaEnabled = AppStorage(wrappedValue: true, AppStorageKeys.Suites.media, store: defaults)
-        _maintenanceSection = AppStorage(
-            wrappedValue: "Updates", AppStorageKeys.AppMaintenance.section, store: defaults)
     }
     private var defaults: UserDefaults { navigationDefaults }
     private var active: Set<String> { marketplace.surfaceAvailability.navigableIDs }
@@ -166,10 +162,6 @@ struct HostWorkspace: View {
                                     extensionID: id, version: version),
                                 window: workspaceWindow)
                         }
-                        if let section = route.section {
-                            if route.page == "settings" { settings = section }
-                            if route.page == "appMaintenance" { maintenanceSection = section }
-                        }
                         binding.wrappedValue = route.page
                         await Task.yield()
                         if let id = route.settingsExtensionID {
@@ -178,12 +170,7 @@ struct HostWorkspace: View {
                             else { throw HostWindowNavigationError.routeRejected }
                             try await request.delivery.wait()
                         }
-                        guard binding.wrappedValue == route.page,
-                            route.page != "settings" || route.section == nil
-                                || settings == route.section,
-                            route.page != "appMaintenance" || route.section == nil
-                                || maintenanceSection == route.section
-                        else {
+                        guard binding.wrappedValue == route.page else {
                             throw HostWindowNavigationError.routeRejected
                         }
                     }, selected: { binding.wrappedValue },
@@ -214,8 +201,7 @@ struct HostWorkspace: View {
         }
         .onChange(of: musicAdmission, initial: true) {
             musicSlots?.synchronize(
-                version: musicAdmission.version, mediaEnabled: musicAdmission.mediaEnabled,
-                hidden: musicAdmission.hidden)
+                version: musicAdmission.version, mediaEnabled: musicAdmission.mediaEnabled)
             musicSlots?.setVisible(musicWindowID, visible: musicAdmission.visible)
         }
         .onExitCommand { InputFocus.resignEditing() }
@@ -230,7 +216,7 @@ struct HostWorkspace: View {
         let mediaEnabled: Bool
         let hidden: Bool
         let visible: Bool
-        var eligible: Bool { version != nil && mediaEnabled && !hidden && visible }
+        var eligible: Bool { version != nil && mediaEnabled && visible }
     }
     private var musicFooterShown: Bool { musicAdmission.eligible && musicSlots?.footer == true }
     private var musicSidebarShown: Bool { musicAdmission.eligible && musicSlots?.sidebar == true }
@@ -251,6 +237,7 @@ struct HostWorkspace: View {
         )
         .environment(\.compactLayout, region == .sidebar)
         .frame(maxWidth: .infinity)
+        .allowsHitTesting(!musicAdmission.hidden)
     }
     private var titlebar: some View {
         HStack(spacing: 14) {
@@ -304,14 +291,11 @@ struct HostWorkspace: View {
                         if expanded(page) {
                             ForEach(
                                 page.sections.filter {
-                                    if page.id == "settings" {
-                                        return HostNavigationCatalog.settingsSections(
-                                            installed: Set(marketplace.installed.keys),
-                                            pending: marketplace.sessions.pendingDisableIDs.union(
-                                                marketplace.pendingRemovalIDs)
-                                        ).contains($0)
-                                    }
-                                    return $0.extensionID.map(active.contains) ?? true
+                                    HostNavigationCatalog.settingsSections(
+                                        installed: Set(marketplace.installed.keys),
+                                        pending: marketplace.sessions.pendingDisableIDs.union(
+                                            marketplace.pendingRemovalIDs)
+                                    ).contains($0)
                                 }
                             ) { section in sectionRow(section, parent: page) }
                             ForEach(pages.filter { $0.parentID == page.id }) { child in row(child) }
@@ -448,7 +432,7 @@ struct HostWorkspace: View {
         -> some View
     {
         Button {
-            chooseSection(section, parent: parent)
+            chooseSection(section)
             if modifierFlags().contains(.command), let sectionWindows {
                 _ = sectionWindows.open(parent.id)
             } else {
@@ -458,9 +442,6 @@ struct HostWorkspace: View {
             HStack(spacing: UIScale.pt(9)) {
                 EdithIconView(section.icon).frame(width: UIScale.pt(18));
                 Text(section.title).lineLimit(1); Spacer(minLength: 0)
-                if let badge = status.badge(sectionID: section.id, of: parent.id) {
-                    HostSidebarBadgeLabel(badge: badge, theme: theme)
-                }
             }.font(.system(size: UIScale.pt(12.5), weight: .medium)).foregroundStyle(
                 destination.id == parent.id ? .primary : .secondary)
         }
@@ -472,7 +453,7 @@ struct HostWorkspace: View {
         .contextMenu {
             if let sectionWindows {
                 Button("Open in New Window") {
-                    chooseSection(section, parent: parent)
+                    chooseSection(section)
                     _ = sectionWindows.open(parent.id)
                 }
             }
@@ -480,8 +461,7 @@ struct HostWorkspace: View {
         .buttonStyle(
             EdithButtonStyle(
                 .row,
-                selected: destination.id == parent.id
-                    && (parent.id == "settings" ? settings : maintenanceSection) == section.id,
+                selected: destination.id == parent.id && settings == section.id,
                 tint: theme)
         ).padding(.leading, UIScale.pt(18))
     }
@@ -514,18 +494,14 @@ struct HostWorkspace: View {
     private var detail: some View {
         HostPageContent(
             marketplace: marketplace, updater: updater, permissions: permissions,
-            destination: destination, settings: $settings, maintenanceSection: $maintenanceSection,
+            destination: destination, settings: $settings,
             requestedSettings: $requestedSettings,
             presenter: presenter, showWelcome: showWelcome,
             panelShortcutChanged: panelShortcutChanged, additionalSettings: additionalSettings,
             defaults: defaults, showsIntroductionButton: true, select: select)
     }
-    private func chooseSection(_ section: HostNavigationSection, parent: HostNavigationPage) {
-        if parent.id == "settings" {
-            settings = section.id
-        } else {
-            maintenanceSection = section.id
-        }
+    private func chooseSection(_ section: HostNavigationSection) {
+        settings = section.id
     }
     private func shortcutHint(for page: HostNavigationPage) -> String? {
         guard showHints, let index = pages.firstIndex(of: page) else { return nil }

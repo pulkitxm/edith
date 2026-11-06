@@ -35,6 +35,7 @@ struct ClipboardHistoryView: View {
                 }
                 Spacer()
                 Button("Done") { dismiss() }
+                    .buttonStyle(.edithDefault)
             }
             .padding(.horizontal, ClipboardHistoryRow.inset)
             .padding(.vertical, UIScale.pt(14))

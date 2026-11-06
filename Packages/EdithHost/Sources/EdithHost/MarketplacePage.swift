@@ -234,6 +234,17 @@ struct MarketplacePage: View {
                 .buttonStyle(.edith(.primary)).disabled(suites.working)
             }
         }
+        if let restart = HostMarketplaceRestartNotice(marketplace: marketplace) {
+            PageNotice(restart.message, title: restart.title, icon: .refresh) {
+                EmptyView()
+            } actions: {
+                Button(HostExtensionRowState.Action.restart.title) {
+                    HostApplicationRelaunch.perform()
+                }
+                .buttonStyle(.edith(.primary))
+                .accessibilityIdentifier("extensions.restart")
+            }
+        }
     }
 
     private var unavailable: some View {
@@ -413,6 +424,8 @@ struct MarketplacePage: View {
                     entry, active: true, openPage: openExtension, showDetails: { selected = $0 })
             case .update where marketplace.installed[entry.id] != nil:
                 await marketplace.download(id: entry.id)
+            case .restart:
+                HostApplicationRelaunch.perform()
             case .download, .update, .retry:
                 await suites.select(entry, enabled: true)
             case .retryDisable:

@@ -7,14 +7,7 @@
   "commands": [
     "docs"
   ],
-  "pages": [
-    {
-      "id": "docs",
-      "title": "Docs",
-      "icon": "docs",
-      "order": 7
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:docs"
   ],

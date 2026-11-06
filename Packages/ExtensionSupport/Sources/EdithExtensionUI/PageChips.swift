@@ -114,7 +114,7 @@ struct PageChipChrome: ViewModifier {
             }
             .contentShape(shape)
             .opacity(enabled ? 1 : EdithInteractionMetrics.disabledOpacity)
-            .onHover { hovering = $0 }
+            .edithHoverTracking($hovering)
             .animation(
                 Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: interaction
             )

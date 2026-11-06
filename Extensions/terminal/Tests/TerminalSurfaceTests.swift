@@ -65,7 +65,9 @@ import Testing
         }
     }
 
-    @Test func presenterHidesSessionsAndPreventsCreatingOrFocusingShells() async throws {
+    @Test func presentingKeepsSessionsForTheBlurOverlayAndPreventsCreatingOrFocusingShells()
+        async throws
+    {
         let engine = TerminalTestFixture.engine()
         defer { engine.stop() }
         _ = try await engine.execute("terminal.open", payload: Data())
@@ -76,7 +78,8 @@ import Testing
             try await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "terminal")),
             providerID: "terminal")
-        #expect(snapshot.rows.isEmpty && snapshot.sources.isEmpty && snapshot.actions.isEmpty)
+        #expect(snapshot.rows.count == 1 && snapshot.sources.count == 1)
+        #expect(snapshot.message == nil)
         await #expect(throws: ExtensionPeerError.self) {
             try await surface.execute(
                 "surface.perform",

@@ -59,19 +59,19 @@ import Testing
                 "surface.snapshot", payload: request.encoded(providerID: "plugins"))
         }
     }
-    @Test func presentingMasksAgentStateBeforeDiscoveryAndEncoding() async throws {
-        let model = SkillsModel(detectAgents: { [] })
+    @Test func presentingKeepsAgentStateForTheBlurOverlay() async throws {
+        let model = SkillsModel(detectAgents: {
+            [SkillAgent("synthetic", "Synthetic agent", "/synthetic/agent", [])]
+        })
         let surface = PluginsSurface(model: model, hidden: { true })
         let request = SurfaceSnapshotRequest(target: .notch, tile: SurfaceTile(.ability("plugins")))
         let result = try SurfaceSnapshot.decode(
             try await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "plugins")),
             providerID: "plugins")
-        #expect(result.rows.isEmpty)
-        #expect(result.sources.isEmpty)
-        #expect(result.metrics.isEmpty)
-        #expect(result.actions.isEmpty)
-        #expect(!model.agentsLoaded)
+        #expect(result.rows.map(\.title) == ["Synthetic agent"])
+        #expect(result.metrics.map(\.title) == ["Detected agents", "Available skills"])
+        #expect(result.message == nil)
         await model.shutdown()
     }
 

@@ -40,6 +40,42 @@ import Testing
                 == parent)
     }
 
+    @Test func theInProcessHostMayRetainLidAwakeOnQuitButForeignHostsMayNot() throws {
+        let current = try #require(ExtensionProcessIdentity.current)
+        let foreign = try #require(ExtensionProcessIdentity.read(getppid()))
+        let launchdParent: (Int32) -> ExtensionProcessIdentity? = { _ in nil }
+        func policy(_ host: ExtensionProcessIdentity) throws -> HostApplicationQuitPolicy {
+            try JSONDecoder().decode(
+                HostApplicationQuitPolicy.self,
+                from: JSONSerialization.data(withJSONObject: [
+                    "reason": "applicationQuit", "restoreOnQuit": false,
+                    "host": ["pid": host.pid, "generation": host.generation],
+                ]))
+        }
+        let host = try #require(
+            HostPrivilegedCarrier.hostIdentity(
+                of: current, callerIsHost: true, parent: launchdParent))
+        #expect(
+            HostPrivilegedCarrier.authorizesQuit(
+                try policy(current), caller: current, host: host, parent: launchdParent))
+        #expect(
+            !HostPrivilegedCarrier.authorizesQuit(
+                try policy(foreign), caller: current, host: host, parent: launchdParent))
+        #expect(
+            HostPrivilegedCarrier.authorizesQuit(
+                try policy(foreign), caller: current, host: foreign
+            ) { _ in foreign })
+        #expect(
+            !HostPrivilegedCarrier.authorizesQuit(
+                try policy(foreign), caller: current, host: foreign, parent: launchdParent))
+        let stale = try JSONDecoder().decode(
+            ExtensionProcessIdentity.self,
+            from: Data(#"{"pid":\#(current.pid),"generation":"synthetic"}"#.utf8))
+        #expect(
+            !HostPrivilegedCarrier.authorizesQuit(
+                try policy(stale), caller: current, host: stale, parent: launchdParent))
+    }
+
     @Test func unauthorizedCallersNeverReserveAnOwnerOrCopyTheirPayload() async throws {
         let fixture = try Fixture(mode: "normal")
         defer { fixture.clean() }
@@ -146,6 +182,24 @@ import Testing
         fixture.authorized = true
         try await release(session)
         #expect(fixture.ended)
+    }
+
+    @Test func helperRefusalsKeepTheirMessageAcrossTheConnection() throws {
+        func received(_ error: any Error) throws -> String {
+            let data = try NSKeyedArchiver.archivedData(
+                withRootObject: HostPrivilegedSession.wire(error), requiringSecureCoding: true)
+            return try #require(
+                try NSKeyedUnarchiver.unarchivedObject(ofClass: NSError.self, from: data)
+            ).localizedDescription
+        }
+        #expect(
+            try received(ExtensionPeerError.rejected("Synthetic refusal.")) == "Synthetic refusal.")
+        #expect(
+            try received(HostWorkerError.disableRejected("Synthetic worker refusal."))
+                == "Synthetic worker refusal.")
+        #expect(
+            try received(HostWorkerError.timedOut)
+                == "The extension process did not answer in time.")
     }
 
     @Test(arguments: ["stop-without-response", "late-stop", "stop-after-response-crash"])

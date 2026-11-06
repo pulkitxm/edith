@@ -7,14 +7,7 @@
   "commands": [
     "music"
   ],
-  "pages": [
-    {
-      "id": "music",
-      "title": "Music",
-      "icon": "music",
-      "order": 5
-    }
-  ],
+  "page": true,
   "homeCards": [
     "music",
     "media",

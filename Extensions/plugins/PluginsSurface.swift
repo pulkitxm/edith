@@ -32,16 +32,15 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         let request = try Self.request(command, payload: payload)
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
-        if hidden() { return try snapshot(request.tile).encoded() }
-        if command == "surface.perform" || !model.agentsLoaded { await model.discoverAgents() }
+        let refresh = command == "surface.perform" && !hidden()
+        if refresh || !model.agentsLoaded { await model.discoverAgents() }
         try Task.checkCancellation()
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
         return try snapshot(request.tile).encoded()
     }
 
     func snapshot(_ tile: SurfaceTile) -> SurfaceSnapshot {
-        if hidden() { return .init(providerID: "plugins", message: "Hidden while presenting") }
-        return .init(
+        .init(
             providerID: "plugins",
             metrics: [
                 .init("agents", "Detected agents", "\(model.agents.count)"),

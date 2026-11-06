@@ -1,7 +1,7 @@
 {
   "id": "focusDim",
   "title": "Focus Dim",
-  "icon": "contrast",
+  "icon": "focusDim",
   "category": "desk",
   "background": false,
   "commands": [],

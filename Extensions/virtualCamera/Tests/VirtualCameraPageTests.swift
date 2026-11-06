@@ -720,6 +720,25 @@ import Testing
 
 @MainActor
 @Suite struct VirtualCameraPreviewViewTests {
+    @Test func presentingKeepsTheLivePreviewVisibleUnderTheLayerBlur() throws {
+        let display = VirtualCameraPreviewDisplay()
+        let view = VirtualCameraPreviewNSView(frame: CGRect(x: 0, y: 0, width: 320, height: 180))
+        display.attach(view)
+        let frame = try #require(VirtualCameraFixtures.quadrants())
+        display.push(frame)
+        display.flush()
+        let content = try #require(view.layer?.sublayers?.first)
+        view.covered = true
+        #expect(!content.isHidden)
+        #expect(content.contents != nil)
+        #expect(PresenterLayerCover.covers(content))
+        let blur = try #require((content.filters as? [CIFilter])?.first)
+        #expect(blur.value(forKey: kCIInputRadiusKey) as? Double == UIScale.pt(28))
+        view.covered = false
+        #expect(!PresenterLayerCover.covers(content) && content.filters == nil)
+        display.detach(view)
+    }
+
     @Test func previewSubscribersReceiveFramesAndDetachIndependently() throws {
         let display = VirtualCameraPreviewDisplay()
         let first = VirtualCameraPreviewNSView(frame: CGRect(x: 0, y: 0, width: 320, height: 180))

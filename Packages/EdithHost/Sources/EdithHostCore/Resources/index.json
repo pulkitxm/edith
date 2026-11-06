@@ -8,15 +8,9 @@
     "commands": [
       "usage"
     ],
-    "pages": [
-      {
-        "id": "dashboard",
-        "title": "Usage",
-        "icon": "usage",
-        "order": 1,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "activity",
       "usage",
@@ -63,28 +57,20 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "herdr",
     "title": "Agents",
-    "icon": "columns",
+    "icon": "herdr",
     "category": "agents",
     "background": true,
     "commands": [
       "herdr"
     ],
-    "pages": [
-      {
-        "id": "herdr",
-        "title": "Agents",
-        "icon": "columns",
-        "order": 2,
-        "logoName": "herdr",
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "agents",
       "extension:herdr"
@@ -127,7 +113,6 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -139,15 +124,9 @@
     "commands": [
       "quinjet"
     ],
-    "pages": [
-      {
-        "id": "quinjet",
-        "title": "Code Review",
-        "icon": "quinjet",
-        "order": 3,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "github",
       "extension:quinjet"
@@ -189,7 +168,6 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -201,15 +179,9 @@
     "commands": [
       "companion"
     ],
-    "pages": [
-      {
-        "id": "companion",
-        "title": "Memory",
-        "icon": "companion",
-        "order": 4,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:companion"
     ],
@@ -249,27 +221,20 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "plugins",
     "title": "Plugins",
-    "icon": "layers",
+    "icon": "plugins",
     "category": "agents",
     "background": false,
     "commands": [
       "skills"
     ],
-    "pages": [
-      {
-        "id": "plugins",
-        "title": "Plugins",
-        "icon": "layers",
-        "order": 5,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:plugins"
     ],
@@ -304,27 +269,20 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "machines",
     "title": "Machines",
-    "icon": "display",
+    "icon": "machines",
     "category": "agents",
     "background": true,
     "commands": [
       "machines"
     ],
-    "pages": [
-      {
-        "id": "machines",
-        "title": "Machines",
-        "icon": "server",
-        "order": 6,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "machines",
       "extension:machines"
@@ -367,7 +325,6 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -407,8 +364,6 @@
       "examples": []
     },
     "launchWhen": [],
-    "pages": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -420,15 +375,9 @@
     "commands": [
       "docs"
     ],
-    "pages": [
-      {
-        "id": "docs",
-        "title": "Docs",
-        "icon": "docs",
-        "order": 7,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:docs"
     ],
@@ -468,7 +417,6 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -480,32 +428,9 @@
     "commands": [
       "maintenance"
     ],
-    "sections": [
-      {
-        "page": "appMaintenance",
-        "id": "Updates",
-        "title": "Updates",
-        "icon": "arrowUp",
-        "summary": "Review and run available application updates.",
-        "order": 1
-      },
-      {
-        "page": "appMaintenance",
-        "id": "Remove",
-        "title": "Remove",
-        "icon": "trash",
-        "summary": "Review applications and their related files before removal.",
-        "order": 3
-      },
-      {
-        "page": "appMaintenance",
-        "id": "History",
-        "title": "History",
-        "icon": "history",
-        "summary": "Review completed maintenance operations.",
-        "order": 5
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:appMaintenance"
     ],
@@ -541,28 +466,20 @@
       ]
     },
     "launchWhen": [],
-    "pages": [],
     "hotkeys": []
   },
   {
     "id": "homebrew",
     "title": "Homebrew",
-    "icon": "box",
+    "icon": "homebrew",
     "category": "utilities",
     "background": false,
     "commands": [
       "brew"
     ],
-    "sections": [
-      {
-        "page": "appMaintenance",
-        "id": "Packages",
-        "title": "Packages",
-        "icon": "box",
-        "summary": "Manage installed and discoverable Homebrew packages.",
-        "order": 2
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:homebrew"
     ],
@@ -598,28 +515,20 @@
       ]
     },
     "launchWhen": [],
-    "pages": [],
     "hotkeys": []
   },
   {
     "id": "cleaner",
     "title": "Cleaner",
-    "icon": "broom",
+    "icon": "cleaner",
     "category": "utilities",
     "background": false,
     "commands": [
       "cleaner"
     ],
-    "sections": [
-      {
-        "page": "appMaintenance",
-        "id": "Cleaner",
-        "title": "Cleaner",
-        "icon": "broom",
-        "summary": "Find build caches, downloads and old worktrees you can safely remove. Nothing is deleted until you confirm.",
-        "order": 4
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:cleaner"
     ],
@@ -655,7 +564,6 @@
       ]
     },
     "launchWhen": [],
-    "pages": [],
     "hotkeys": []
   },
   {
@@ -665,15 +573,9 @@
     "category": "utilities",
     "background": false,
     "commands": [],
-    "pages": [
-      {
-        "id": "blitztree",
-        "title": "Disk Map",
-        "icon": "blitztree",
-        "order": 2,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:blitztree"
     ],
@@ -704,13 +606,12 @@
       "examples": []
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "system",
     "title": "Running Apps",
-    "icon": "toolbox",
+    "icon": "system",
     "category": "utilities",
     "background": false,
     "commands": [
@@ -718,15 +619,9 @@
       "apps",
       "tools"
     ],
-    "pages": [
-      {
-        "id": "runningApps",
-        "title": "Running Apps",
-        "icon": "cpu",
-        "order": 1,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "actions",
       "extension:system"
@@ -763,13 +658,12 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "keepAwake",
     "title": "Keep Awake",
-    "icon": "moon",
+    "icon": "keepAwake",
     "category": "utilities",
     "background": false,
     "commands": [],
@@ -810,14 +704,12 @@
       ],
       "examples": []
     },
-    "pages": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "lidAwake",
     "title": "Lid Awake",
-    "icon": "laptop",
+    "icon": "lidAwake",
     "category": "utilities",
     "background": false,
     "commands": [
@@ -864,14 +756,12 @@
         "ed lid-awake off"
       ]
     },
-    "pages": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "systemStats",
     "title": "Menu Bar Stats",
-    "icon": "gauge",
+    "icon": "systemStats",
     "category": "utilities",
     "background": true,
     "commands": [
@@ -910,8 +800,6 @@
       ]
     },
     "launchWhen": [],
-    "pages": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -963,9 +851,7 @@
       ],
       "examples": []
     },
-    "launchWhen": [],
-    "pages": [],
-    "sections": []
+    "launchWhen": []
   },
   {
     "id": "presenter",
@@ -1022,9 +908,7 @@
         "ed presenter stop"
       ]
     },
-    "launchWhen": [],
-    "pages": [],
-    "sections": []
+    "launchWhen": []
   },
   {
     "id": "calendar",
@@ -1035,15 +919,9 @@
     "commands": [
       "calendar"
     ],
-    "pages": [
-      {
-        "id": "calendar",
-        "title": "Calendar",
-        "icon": "calendar",
-        "order": 3,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "calendar",
       "extension:calendar"
@@ -1080,7 +958,6 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -1142,9 +1019,7 @@
         "ed bifrost ls"
       ]
     },
-    "launchWhen": [],
-    "pages": [],
-    "sections": []
+    "launchWhen": []
   },
   {
     "id": "clipboard",
@@ -1209,9 +1084,7 @@
         "ed clipboard stats"
       ]
     },
-    "launchWhen": [],
-    "pages": [],
-    "sections": []
+    "launchWhen": []
   },
   {
     "id": "emoji",
@@ -1274,14 +1147,12 @@
         "ed emoji tone medium"
       ]
     },
-    "launchWhen": [],
-    "pages": [],
-    "sections": []
+    "launchWhen": []
   },
   {
     "id": "colorPicker",
     "title": "Color Picker",
-    "icon": "eyedropper",
+    "icon": "colorPicker",
     "category": "desk",
     "background": false,
     "commands": [
@@ -1339,9 +1210,7 @@
         "ed color copy 1 --format rgb"
       ]
     },
-    "launchWhen": [],
-    "pages": [],
-    "sections": []
+    "launchWhen": []
   },
   {
     "id": "keystrokeHighlight",
@@ -1397,14 +1266,12 @@
       ],
       "examples": []
     },
-    "launchWhen": [],
-    "pages": [],
-    "sections": []
+    "launchWhen": []
   },
   {
     "id": "focusDim",
     "title": "Focus Dim",
-    "icon": "contrast",
+    "icon": "focusDim",
     "category": "desk",
     "background": false,
     "commands": [],
@@ -1458,14 +1325,12 @@
         }
       ],
       "examples": []
-    },
-    "pages": [],
-    "sections": []
+    }
   },
   {
     "id": "notchShelf",
     "title": "Notch Shelf",
-    "icon": "tray",
+    "icon": "notchShelf",
     "category": "desk",
     "background": true,
     "commands": [
@@ -1516,14 +1381,12 @@
       ]
     },
     "launchWhen": [],
-    "pages": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "audioMixer",
     "title": "Audio Mixer",
-    "icon": "adjust",
+    "icon": "audioMixer",
     "category": "desk",
     "background": false,
     "commands": [
@@ -1566,8 +1429,6 @@
       ]
     },
     "launchWhen": [],
-    "pages": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -1579,15 +1440,9 @@
     "commands": [
       "studio"
     ],
-    "pages": [
-      {
-        "id": "studio",
-        "title": "Studio",
-        "icon": "studio",
-        "order": 1,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "media",
       "extension:studio"
@@ -1629,25 +1484,18 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "timeLapse",
     "title": "Screen Recorder",
-    "icon": "record",
+    "icon": "timeLapse",
     "category": "media",
     "background": false,
     "commands": [],
-    "pages": [
-      {
-        "id": "timeLapse",
-        "title": "Screen Recorder",
-        "icon": "record",
-        "order": 3,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "media",
       "extension:timeLapse"
@@ -1680,7 +1528,6 @@
       "examples": []
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -1703,15 +1550,9 @@
         "label": "⌃⌥⌘V"
       }
     ],
-    "pages": [
-      {
-        "id": "virtualCamera",
-        "title": "Virtual Camera",
-        "icon": "virtualCamera",
-        "order": 6,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "media",
       "extension:virtualCamera"
@@ -1753,8 +1594,7 @@
         "ed camera pause --style card"
       ]
     },
-    "launchWhen": [],
-    "sections": []
+    "launchWhen": []
   },
   {
     "id": "music",
@@ -1765,15 +1605,9 @@
     "commands": [
       "music"
     ],
-    "pages": [
-      {
-        "id": "music",
-        "title": "Music",
-        "icon": "music",
-        "order": 5,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "music",
       "media",
@@ -1813,13 +1647,12 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "downloads",
     "title": "Downloads",
-    "icon": "arrowDown",
+    "icon": "downloads",
     "category": "media",
     "background": true,
     "commands": [
@@ -1827,15 +1660,9 @@
       "downloads",
       "dl"
     ],
-    "pages": [
-      {
-        "id": "downloads",
-        "title": "Downloads",
-        "icon": "arrowDown",
-        "order": 4,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "media",
       "extension:downloads"
@@ -1873,25 +1700,18 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "socialManager",
     "title": "Social Manager",
-    "icon": "people",
+    "icon": "socialManager",
     "category": "media",
     "background": false,
     "commands": [],
-    "pages": [
-      {
-        "id": "socialManager",
-        "title": "Social Manager",
-        "icon": "people",
-        "order": 2,
-        "detachable": false
-      }
-    ],
+    "page": {
+      "detachable": false
+    },
     "homeCards": [
       "extension:socialManager"
     ],
@@ -1922,7 +1742,6 @@
       "examples": []
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -1934,15 +1753,9 @@
     "commands": [
       "database"
     ],
-    "pages": [
-      {
-        "id": "database",
-        "title": "Database",
-        "icon": "database",
-        "order": 1,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "databases",
       "extension:database"
@@ -1984,27 +1797,20 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "codeStats",
     "title": "Code Stats",
-    "icon": "chartLine",
+    "icon": "codeStats",
     "category": "developer",
     "background": true,
     "commands": [
       "code-stats"
     ],
-    "pages": [
-      {
-        "id": "codeStats",
-        "title": "Code Stats",
-        "icon": "chartLine",
-        "order": 2,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "codeStats",
       "extension:codeStats"
@@ -2047,7 +1853,6 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -2059,15 +1864,9 @@
     "commands": [
       "seo"
     ],
-    "pages": [
-      {
-        "id": "seoAudit",
-        "title": "Site Audit",
-        "icon": "seoAudit",
-        "order": 3,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:seoAudit"
     ],
@@ -2108,27 +1907,20 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "latex",
     "title": "LaTeX",
-    "icon": "docText",
+    "icon": "latex",
     "category": "developer",
     "background": false,
     "commands": [
       "latex"
     ],
-    "pages": [
-      {
-        "id": "latex",
-        "title": "LaTeX",
-        "icon": "docText",
-        "order": 4,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "extension:latex"
     ],
@@ -2169,27 +1961,20 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "attention",
     "title": "Attention",
-    "icon": "hourglass",
+    "icon": "attention",
     "category": "developer",
     "background": true,
     "commands": [
       "attention"
     ],
-    "pages": [
-      {
-        "id": "attention",
-        "title": "Attention",
-        "icon": "hourglass",
-        "order": 5,
-        "detachable": true
-      }
-    ],
+    "page": {
+      "detachable": true
+    },
     "homeCards": [
       "focus",
       "extension:attention"
@@ -2232,13 +2017,12 @@
       ]
     },
     "launchWhen": [],
-    "sections": [],
     "hotkeys": []
   },
   {
     "id": "hinge",
     "title": "Hinge",
-    "icon": "lidAwake",
+    "icon": "hinge",
     "category": "labs",
     "background": false,
     "commands": [],
@@ -2287,14 +2071,12 @@
         }
       ],
       "examples": []
-    },
-    "pages": [],
-    "sections": []
+    }
   },
   {
     "id": "windowSweaters",
     "title": "Window Sweaters",
-    "icon": "selection",
+    "icon": "windowSweaters",
     "category": "labs",
     "background": false,
     "commands": [],
@@ -2338,8 +2120,6 @@
       ],
       "examples": []
     },
-    "pages": [],
-    "sections": [],
     "hotkeys": []
   },
   {
@@ -2385,8 +2165,6 @@
       ]
     },
     "launchWhen": [],
-    "pages": [],
-    "sections": [],
     "hotkeys": []
   }
 ]

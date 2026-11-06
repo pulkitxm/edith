@@ -19,6 +19,10 @@ let package = Package(
             name: "QuinjetExtensionTests", dependencies: ["QuinjetUI"], path: "Tests/Core",
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
-            name: "QuinjetUITests", dependencies: ["QuinjetUI"], path: "Tests/UI",
+            name: "QuinjetUITests",
+            dependencies: [
+                "QuinjetUI",
+                .product(name: "EdithExtensionTestSupport", package: "ExtensionSupport"),
+            ], path: "Tests/UI",
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ])

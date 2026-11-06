@@ -46,10 +46,12 @@ struct StudioSurfaceTests {
                 return StudioSurface.snapshot(model, files: [], projects: [], tile: tile)
             },
             perform: { _ in executed = true }, privacyValues: { privacy })
-        #expect(!inspected)
-        #expect(
-            try SurfaceSnapshot.decode(hidden, providerID: "studio").message
-                == "Hidden while presenting.")
+        #expect(inspected)
+        let presented = try SurfaceSnapshot.decode(hidden, providerID: "studio")
+        let visible = SurfaceCommandService.project(
+            StudioSurface.snapshot(model, files: [], projects: [], tile: tile), tile: tile)
+        #expect(presented.metrics == visible.metrics && presented.rows == visible.rows)
+        #expect(presented.message == visible.message)
         let action = SurfaceActionRequest(snapshot: snapshot, actionID: "open:stale")
         await #expect(throws: ExtensionPeerError.self) {
             _ = try await SurfaceCommandService.execute(

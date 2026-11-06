@@ -524,24 +524,16 @@ function delayedMutations(value, effect = () => {}) {
         workflowUrl: "https://github.com/synthetic/control/actions/runs/123",
       });
     }
-    if (command === "gh" && args[0] === "run" && args[1] === "watch") {
-      expect(args).toEqual([
-        "run",
-        "watch",
-        "123",
-        "--repo",
-        "synthetic/control",
-        "--exit-status",
-        "--interval",
-        "20",
-      ]);
+    if (command === "gh" && args[1]?.includes("/actions/runs/")) {
+      expect(args).toEqual(["api", "repos/synthetic/control/actions/runs/123"]);
       expect(options.timeout).toBeGreaterThan(0);
-      expect(options.timeout).toBeLessThanOrEqual(30 * 60_000);
+      expect(options.timeout).toBeLessThanOrEqual(60_000);
       expect(options.maxBuffer).toBe(2 * 1024 ** 2);
       expect(options.killSignal).toBe("SIGKILL");
       events.push(`completed:${pending[1]}`);
-      effect(pending[1]);
-      return value.execute("pukbot", pending, options);
+      const conclusion = effect(pending[1]) ?? "success";
+      if (conclusion === "success") value.execute("pukbot", pending, options);
+      return JSON.stringify({ status: "completed", conclusion });
     }
     return value.execute(command, args, options);
   };
@@ -573,16 +565,15 @@ test("failed release control workflows never report completed publication", asyn
   for (const operation of ["create", "edit"]) {
     const value = fixture();
     try {
-      const delayed = delayedMutations(value, (current) => {
-        if (current === operation)
-          throw new Error(`${operation} workflow failed`);
-      });
+      const delayed = delayedMutations(value, (current) =>
+        current === operation ? "failure" : undefined,
+      );
       await expect(
         publish(value, {
           execute: delayed.execute,
           retry: { sleep: () => {} },
         }),
-      ).rejects.toThrow(`${operation} workflow failed`);
+      ).rejects.toThrow("Pukbot workflow failed");
       expect(
         delayed.events.filter((event) => event === `completed:${operation}`),
       ).toHaveLength(6);
@@ -612,7 +603,9 @@ test("release control timeouts propagate for both request and workflow wait", as
           (stage === "request" &&
             command === "pukbot" &&
             args[1] === "create") ||
-          (stage === "watch" && command === "gh" && args[0] === "run")
+          (stage === "watch" &&
+            command === "gh" &&
+            args[1]?.includes("/actions/runs/"))
         ) {
           expect(options.timeout).toBeLessThanOrEqual(30 * 60_000);
           expect(options.maxBuffer).toBe(2 * 1024 ** 2);

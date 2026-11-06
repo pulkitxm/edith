@@ -281,7 +281,7 @@ import Testing
             HostPageContent(
                 marketplace: fixture.marketplace, updater: HostUpdater(startingUpdater: false),
                 permissions: permissions, destination: HostNavigationCatalog.page(page),
-                settings: .constant("general"), maintenanceSection: .constant("Updates"),
+                settings: .constant("general"),
                 showWelcome: {},
                 additionalSettings: { id in
                     guard setup, id == "home-setup" else { return nil }

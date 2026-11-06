@@ -7,32 +7,7 @@
   "commands": [
     "maintenance"
   ],
-  "sections": [
-    {
-      "page": "appMaintenance",
-      "id": "Updates",
-      "title": "Updates",
-      "icon": "arrowUp",
-      "summary": "Review and run available application updates.",
-      "order": 1
-    },
-    {
-      "page": "appMaintenance",
-      "id": "Remove",
-      "title": "Remove",
-      "icon": "trash",
-      "summary": "Review applications and their related files before removal.",
-      "order": 3
-    },
-    {
-      "page": "appMaintenance",
-      "id": "History",
-      "title": "History",
-      "icon": "history",
-      "summary": "Review completed maintenance operations.",
-      "order": 5
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:appMaintenance"
   ],

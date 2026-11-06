@@ -67,6 +67,8 @@ export function validateCatalog(catalog) {
       !integer(entry.installedBytes, 1, 1024 ** 3) ||
       !digest(entry.sha256) ||
       !digest(entry.sourceFingerprint) ||
+      (entry.minimumHostBuild !== undefined &&
+        !integer(entry.minimumHostBuild, 1, 999_999_999)) ||
       !Array.isArray(entry.dependencies) ||
       entry.dependencies.length > 1000 ||
       !entry.dependencies.every(component) ||

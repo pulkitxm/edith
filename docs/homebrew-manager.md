@@ -1,12 +1,12 @@
 # Homebrew Packages
 
-The Packages section in App Maintenance provides a native, reviewable interface for formulae and casks. Enable App Maintenance in Edith's Extensions pane, verify the optional local Homebrew tool, then open App Maintenance from the main sidebar and choose Packages.
+The Homebrew page provides a native, reviewable interface for formulae and casks. Enable Homebrew in Edith's Extensions pane, verify the optional local Homebrew tool, then open **Mac Utilities > Homebrew** in the main sidebar.
 
 ## Browse and discover packages
 
 Installed shows the selected package kind with installed versions and available updates. Packages with an update are sorted first. Discover searches Homebrew metadata and shows up to 40 exact results with descriptions, versions, homepages, and installed state.
 
-The Formulae and Casks control changes both the installed inventory and search domain. The selected kind is saved with App Maintenance settings. Refresh re-reads installed and outdated metadata without changing any package.
+The Formulae and Casks control changes both the installed inventory and search domain. The selected kind is saved with Homebrew settings. Refresh re-reads installed and outdated metadata without changing any package.
 
 ## Install, upgrade, and uninstall
 
@@ -20,4 +20,4 @@ Some casks need administrator authentication or interactive input. Edith reports
 
 Enable Homebrew and open its page to load the installed inventory. The active worker exposes the same cached inventory as a typed Home surface snapshot through `ed invoke homebrew surface.snapshot --json -`. Supply a complete `SurfaceSnapshotRequest` with target `home` and an `extension:homebrew` tile; the request follows the shared surface contract.
 
-Package searches and mutations remain in the Homebrew and App Maintenance pages, with their confirmation and cancellation controls. The optional local `brew` tool remains available directly in Terminal. See the [public invocation reference](./cli/invoke/README.md) for the gateway's worker availability and JSON limits.
+Package searches and mutations remain on the Homebrew page, with their confirmation and cancellation controls. The optional local `brew` tool remains available directly in Terminal. See the [public invocation reference](./cli/invoke/README.md) for the gateway's worker availability and JSON limits.

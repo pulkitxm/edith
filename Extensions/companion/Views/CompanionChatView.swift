@@ -564,7 +564,7 @@ struct CompanionChatScreen: View {
             .shadow(color: .black.opacity(0.25), radius: UIScale.pt(8), y: 3)
             .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Capsule(), filled: true))
         .padding(.bottom, UIScale.pt(10))
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
@@ -1104,6 +1104,12 @@ private struct CitationChip: View {
     }
 }
 
+private enum ConversationRowMetrics {
+    static let horizontal = 10.0
+    static let labelHorizontal = 1.0
+    static let labelVertical = -1.0
+}
+
 private struct ConversationRow: View {
     let conversation: CompanionConversation
     let active: Bool
@@ -1113,8 +1119,8 @@ private struct ConversationRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: UIScale.pt(4)) {
-            Button(action: open) {
+        Button(action: open) {
+            HStack(spacing: UIScale.pt(4)) {
                 VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                     Text(conversation.title.isEmpty ? "Untitled" : conversation.title)
                         .font(.edithText(.callout).weight(.semibold))
@@ -1127,30 +1133,38 @@ private struct ConversationRow: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.edith(.borderless))
-            if hovering {
-                Button(action: delete) {
-                    EdithIconView(.close)
-                        .font(.system(size: UIScale.pt(9), weight: .bold))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .contentShape(Rectangle())
+                if hovering {
+                    deleteButton.hidden().accessibilityHidden(true)
                 }
-                .buttonStyle(.edith(.borderless))
-                .help("Delete conversation")
+            }
+            .padding(.horizontal, UIScale.pt(ConversationRowMetrics.labelHorizontal))
+            .padding(.vertical, UIScale.pt(ConversationRowMetrics.labelVertical))
+        }
+        .buttonStyle(.edith(.row))
+        .overlay(alignment: .trailing) {
+            if hovering {
+                deleteButton.padding(.trailing, UIScale.pt(ConversationRowMetrics.horizontal))
             }
         }
-        .padding(.horizontal, UIScale.pt(10))
-        .padding(.vertical, UIScale.pt(6))
         .background(
-            active || hovering ? DashSkin.accent(dark).opacity(0.13) : .clear,
+            active ? DashSkin.accent(dark).opacity(0.13) : .clear,
             in: RoundedRectangle(cornerRadius: UIScale.pt(9))
         )
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Delete conversation", role: .destructive, action: delete)
         }
+    }
+
+    private var deleteButton: some View {
+        Button(action: delete) {
+            EdithIconView(.close)
+                .font(.system(size: UIScale.pt(9), weight: .bold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .help("Delete conversation")
     }
 }
 

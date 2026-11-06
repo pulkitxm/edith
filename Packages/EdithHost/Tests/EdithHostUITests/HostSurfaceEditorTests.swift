@@ -58,6 +58,66 @@ import HostWorkerFixtureSupport
         #expect(await fixture.requests.count == 0)
         #expect(!TestWindowHost.isExposedOnDesktop(window))
     }
+    @Test func presentingKeepsTheHomeWidgetCardContentAndSizeUnderTheBlurOverlay()
+        async throws
+    {
+        let fixture = try Fixture(activeIDs: ["codeStats"])
+        defer { fixture.clean() }
+        await fixture.marketplace.enable(id: "codeStats")
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let identity = fixture.marketplace.identity
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: identity.identifier, owner: "codeStats",
+            directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
+        let snapshot = SurfaceSnapshot(
+            providerID: "codeStats",
+            metrics: [.init("lines", "Lines changed", "1,284")],
+            rows: [
+                .init(
+                    "repository", sourceID: "synthetic", title: "Synthetic repository",
+                    detail: "Synthetic branch", value: "42 commits", icon: .code)
+            ])
+        let server = ExtensionPeerServer(endpoint: endpoint) { _, command, payload in
+            try await SurfaceCommandService.execute(
+                providerID: "codeStats", command: command, payload: payload,
+                snapshot: { _ in snapshot }, perform: { _ in },
+                privacyValues: { ["active": "1", "blurUsage": "1"] })
+        }
+        try server.start()
+        defer { server.shutdown() }
+        let host = NSHostingView(
+            rootView: HostSurfaceCard(
+                marketplace: fixture.marketplace, target: .home, tile: SurfaceTile(.codeStats)
+            )
+            .environment(\.windowVisible, true).frame(width: 420))
+        host.frame = CGRect(x: 0, y: 0, width: 420, height: 400)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        for _ in 0..<50 where find(host, label: "Synthetic repository") == nil {
+            await settle(window, host: host)
+        }
+        let visible = try #require(find(host, label: "Synthetic repository"))
+        let visibleFrame = try #require((visible as AnyObject).accessibilityFrame?())
+        let visibleSize = host.fittingSize
+        let privacy = ExtensionSharedState(
+            root: identity.root.appendingPathComponent("ExtensionState"),
+            namespace: identity.identifier, owner: "presenter")
+        try privacy.publish(["active": "1", "blurUsage": "1"])
+        fixture.marketplace.surfaces.privacy.refresh()
+        #expect(fixture.marketplace.surfaces.privacy.hides(.codeStats))
+        await settle(window, host: host)
+        await settle(window, host: host)
+        #expect(find(host, label: "Hidden while presenting") == nil)
+        let covered = try #require(find(host, label: "Synthetic repository"))
+        let coveredFrame = try #require((covered as AnyObject).accessibilityFrame?())
+        #expect(find(host, label: "1,284") != nil)
+        #expect(host.fittingSize == visibleSize)
+        #expect(coveredFrame == visibleFrame)
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
     @Test func marketplaceRestoresSuiteGroupsSearchAndOriginalArtworkWithoutStartingWorkers()
         async throws
     {
@@ -115,7 +175,9 @@ import HostWorkerFixtureSupport
             find(host, label: "Search extensions") != nil
                 || find(host, label: "Find extensions") != nil)
         let usage = try #require(fixture.marketplace.entries.first { $0.id == "usage" })
-        #expect(find(host, label: HostMarketplaceCatalog.tagline(usage)) != nil)
+        let row = try #require(find(host, label: usage.title))
+        let hint = (row as AnyObject).accessibilityHelp?() as? String
+        #expect(hint?.contains(HostMarketplaceCatalog.tagline(usage)) == true)
         #expect(find(host, label: "Get Usage") != nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
@@ -497,23 +559,19 @@ import HostWorkerFixtureSupport
     @Test func mainNavigationPreservesEstablishedDestinationOrderAndSections() {
         #expect(
             HostNavigationCatalog.pages.map(\.id) == [
-                "home", "agents", "dashboard", "herdr", "quinjet", "companion", "plugins",
-                "machines", "docs", "system", "runningApps", "blitztree", "calendar",
-                "appMaintenance", "desk", "media", "studio", "socialManager", "timeLapse",
-                "downloads", "music", "virtualCamera", "data", "database", "codeStats", "seoAudit",
-                "latex", "attention", "extensions", "settings", "about",
+                "home", "agents", "usage", "herdr", "quinjet", "companion", "plugins",
+                "machines", "docs", "utilities", "appMaintenance", "homebrew", "cleaner",
+                "blitztree", "system", "calendar", "desk", "media", "studio", "timeLapse",
+                "virtualCamera", "music", "downloads", "socialManager", "developer", "database",
+                "codeStats", "seoAudit", "latex", "attention", "extensions", "settings", "about",
             ])
         #expect(
             HostNavigationCatalog.settings.map(\.id) == [
                 "general", "surfaces", "agentActivity", "permissions", "agent", "jev", "data",
                 "storage", "shortcuts", "terminal", "mcp", "icloud", "updates",
             ])
-        #expect(
-            HostNavigationCatalog.maintenance.map(\.id) == [
-                "Updates", "Packages", "Remove", "Cleaner", "History",
-            ])
-        #expect(HostNavigationCatalog.page("dashboard").extensionID == "usage")
-        #expect(HostNavigationCatalog.page("runningApps").extensionID == "system")
+        #expect(HostNavigationCatalog.page("usage").extensionID == "usage")
+        #expect(HostNavigationCatalog.page("system").extensionID == "system")
     }
 
     @Test func mainNavigationHonorsExplicitSuiteSelectionAndFallsBackAfterDisable() throws {
@@ -1110,6 +1168,47 @@ import HostWorkerFixtureSupport
         #expect(row.tone == .attention)
     }
 
+    @Test func anUpdateThatFinishesOnRestartOffersARestartOnItsRowAndThePage() async throws {
+        let fixture = try Fixture(packageState: "restart", activeIDs: ["calendar"])
+        defer { fixture.clean() }
+        await fixture.marketplace.loadCachedCatalog()
+        #expect(await fixture.marketplace.enable(id: "calendar") == nil)
+        #expect(fixture.marketplace.updatableIDs == ["calendar"])
+        #expect(await fixture.marketplace.download(id: "calendar") == nil)
+        #expect(fixture.marketplace.sessions.versions["calendar"] == "1.0.0")
+        #expect(fixture.marketplace.updatableIDs.isEmpty)
+        let entry = try #require(fixture.marketplace.entries.first { $0.id == "calendar" })
+        let row = HostExtensionRowState(entry, marketplace: fixture.marketplace)
+        #expect(row.stage == .restartRequired)
+        #expect(row.status == "Restart to finish updating · 1.1.0")
+        #expect(row.action == .restart)
+        #expect(row.action?.title == "Restart Edith")
+        #expect(row.tone == .attention)
+        #expect(row.progress == nil)
+        let notice = try #require(HostMarketplaceRestartNotice(marketplace: fixture.marketplace))
+        #expect(notice.title == "Restart to finish updating")
+        #expect(
+            notice.message
+                == "\(entry.title) is updated and keeps running its current version until Edith restarts."
+        )
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: MarketplacePage(marketplace: fixture.marketplace)
+                .environment(\.automaticViewActionsEnabled, false)
+                .transaction { $0.animation = nil })
+        host.frame = CGRect(x: 0, y: 0, width: 1100, height: 760)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: notice.message) != nil)
+        #expect(find(host, label: "Restart Edith to finish updating \(entry.title)") != nil)
+        #expect(find(host, label: "Update All (1)") == nil)
+        #expect(await fixture.marketplace.sessions.shutdown())
+    }
+
     @Test func extensionsPageRendersCompactRegularZoomedLightAndDark() async throws {
         let fixture = try Fixture(packageState: "abi")
         defer { fixture.clean() }
@@ -1347,12 +1446,11 @@ import HostWorkerFixtureSupport
         #expect((button as AnyObject).accessibilityPerformPress?() == true)
         #expect(opened == ["keepAwake"])
         #expect(fixture.worker("keepAwake") === worker)
-        #expect(HostNavigationCatalog.route(extensionID: "usage")?.page == "dashboard")
-        #expect(HostNavigationCatalog.route(extensionID: "system")?.page == "runningApps")
-        #expect(HostNavigationCatalog.route(extensionID: "music")?.page == "music")
-        #expect(HostNavigationCatalog.route(extensionID: "homebrew")?.page == "appMaintenance")
-        #expect(HostNavigationCatalog.route(extensionID: "homebrew")?.section == "Packages")
-        #expect(HostNavigationCatalog.route(extensionID: "cleaner")?.section == "Cleaner")
+        #expect(HostNavigationCatalog.route(extensionID: "usage") == "usage")
+        #expect(HostNavigationCatalog.route(extensionID: "system") == "system")
+        #expect(HostNavigationCatalog.route(extensionID: "music") == "music")
+        #expect(HostNavigationCatalog.route(extensionID: "homebrew") == "homebrew")
+        #expect(HostNavigationCatalog.route(extensionID: "cleaner") == "cleaner")
         #expect(HostNavigationCatalog.route(extensionID: "keepAwake") == nil)
         #expect(await fixture.marketplace.sessions.shutdown())
     }
@@ -1576,6 +1674,19 @@ import HostWorkerFixtureSupport
                 try Data(repeating: 1, count: 128).write(
                     to: store.directory(for: package).appendingPathComponent("synthetic-payload"))
                 try store.commit([package])
+                if packageState == "restart" {
+                    let staged = ExtensionPackage(
+                        id: id, version: "1.1.0", hostABI: HostContract.compatibility,
+                        downloadURL: URL(
+                            string:
+                                "https://github.com/pulkitxm/edith/releases/download/synthetic/\(id).zip"
+                        )!, sha256: String(repeating: "a", count: 64), downloadBytes: 128,
+                        installedBytes: 128)
+                    try FileManager.default.createDirectory(
+                        at: store.directory(for: staged), withIntermediateDirectories: true)
+                    try store.commit([package, staged])
+                    try store.select(package)
+                }
                 if packageState == "removal" {
                     lease = try store.lease(package)
                     #expect(try store.requestRemoval(id: id) == false)
@@ -1608,21 +1719,23 @@ import HostWorkerFixtureSupport
                 ExtensionCatalog(revision: 1, packages: packages))
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
-            try JSONEncoder().encode(
-                SignedExtensionCatalog(payload: payload, signature: key.signature(for: payload))
-            ).write(to: cache)
+            let envelope = try JSONEncoder().encode(
+                SignedExtensionCatalog(payload: payload, signature: key.signature(for: payload)))
+            try envelope.write(to: cache)
+            let restart = packageState == "restart"
             let client = ExtensionCatalogClient(
                 url: URL(string: "https://github.com/pulkitxm/edith/catalog")!,
                 publicKey: key.publicKey.rawRepresentation,
                 repository: MarketplaceConfiguration.repository, cache: cache,
-                fetch: { [requests] _ in try await requests.reject() })
+                fetch: { [requests] _ in restart ? envelope : try await requests.reject() })
             let installer = ExtensionPackageInstaller(
                 store: store, download: { _, _ in throw MarketplaceError.downloadFailed },
-                verify: { _ in throw MarketplaceError.invalidSignature })
+                verify: { _ in if !restart { throw MarketplaceError.invalidSignature } })
             marketplace = try HostMarketplace(
                 identity: identity,
                 entries: entries, store: store,
-                catalogClient: client, installer: installer, sessions: sessions)
+                catalogClient: client, installer: installer, sessions: sessions,
+                needsRestart: { restart && $0.version == "1.1.0" })
         }
 
         func clean() {

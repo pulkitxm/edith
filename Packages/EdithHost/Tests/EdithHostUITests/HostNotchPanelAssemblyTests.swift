@@ -151,15 +151,16 @@ struct HostNotchPanelAssemblyTests {
         try await assembly.stop()
     }
 
-    @Test func privacyDisableAndOcclusionWithdrawAllNativeWorkImmediately() async throws {
+    @Test func disableAndOcclusionWithdrawAllNativeWorkImmediately() async throws {
         let fixture = HostNotchStateFixture()
         let owner = NotchTestScenes()
         let assembly = HostNotchPanelAssembly(create: owner.create, present: { _ in })
         let first = fixture.state()
         try assembly.accept(first, admission: fixture.admission())
         await settle { assembly.attachedCount == 2 }
-        assembly.synchronize(
-            activeVersions: ["notchShelf": "1.0.0", "music": "1.0.0"], hiddenWidgets: [.music])
+        assembly.synchronize(activeVersions: ["notchShelf": "1.0.0", "music": "1.0.0"])
+        #expect(assembly.attachedCount == 2)
+        assembly.synchronize(activeVersions: ["notchShelf": "1.0.0"])
         #expect(assembly.attachedCount == 1)
         await settle { owner.leases.first { $0.request.extensionID == "music" }?.closed == true }
         let hidden = try advanced(first, revision: 2, visible: false, slots: [])

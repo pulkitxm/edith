@@ -134,7 +134,7 @@ struct BifrostPanelView: View {
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(.white.opacity(0.10)))
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(.edithShaped(Circle()))
             }
             TextField(store.mode.placeholder, text: queryBinding)
                 .textFieldStyle(.plain)
@@ -285,7 +285,12 @@ struct BifrostPanelView: View {
                     showsAccessory: store.mode == .launcher)
             }
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            BifrostRowStyle(
+                vertical: result.answer == nil ? 0 : BifrostAnswerCard.verticalInset,
+                cornerRadius: result.answer == nil
+                    ? BifrostResultRow.cornerRadius : BifrostAnswerCard.cornerRadius)
+        )
         .id(result.id)
         .onContinuousHover { phase in
             guard case .active = phase else { return }
@@ -453,6 +458,8 @@ struct BifrostSectionHeader: View {
 }
 
 struct BifrostResultRow: View {
+    static let cornerRadius: CGFloat = 8
+
     let result: BifrostResult
     let isSelected: Bool
     var shortcut: Int?
@@ -498,14 +505,36 @@ struct BifrostResultRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .fill(isSelected ? BifrostPanelMetrics.selection : Color.clear)
         )
         .padding(.horizontal, BifrostPanelMetrics.rowInset)
     }
 }
 
+private struct BifrostRowStyle: ButtonStyle {
+    let vertical: CGFloat
+    let cornerRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay {
+                Rectangle().fill(Color.clear)
+                    .edithHoverHighlight(
+                        tone: .neutral, cornerRadius: cornerRadius,
+                        pressed: configuration.isPressed
+                    )
+                    .padding(.horizontal, BifrostPanelMetrics.rowInset)
+                    .padding(.vertical, vertical)
+                    .allowsHitTesting(false)
+            }
+    }
+}
+
 struct BifrostAnswerCard: View {
+    static let cornerRadius: CGFloat = 10
+    static let verticalInset: CGFloat = 6
+
     let answer: BifrostAnswer
     let isSelected: Bool
 
@@ -530,17 +559,17 @@ struct BifrostAnswerCard: View {
         .frame(height: BifrostPanelMetrics.answerHeight - 12)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .fill(isSelected ? BifrostPanelMetrics.selection : Color.white.opacity(0.05))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .strokeBorder(
                     isSelected ? DashSkin.accent(true).opacity(0.6) : Color.white.opacity(0.07),
                     lineWidth: 1)
         )
         .padding(.horizontal, BifrostPanelMetrics.rowInset)
-        .padding(.vertical, 6)
+        .padding(.vertical, Self.verticalInset)
     }
 
     private func side(_ value: String, caption: String) -> some View {

@@ -120,8 +120,10 @@ struct MachineToolsTab: View {
                         .accessibilityLabel("Reconnecting disk")
                     }
                     Button("Reveal") { session.revealMount() }
+                        .buttonStyle(.edithDefault)
                         .disabled(session.mountHealth != .mounted)
                     Button("Unmount") { unmountDisk() }
+                        .buttonStyle(.edithDefault)
                         .disabled(mounting || session.isRemounting)
                 } else {
                     Text(
@@ -144,6 +146,7 @@ struct MachineToolsTab: View {
                         .accessibilityLabel("Mounting disk")
                     }
                     Button("Mount") { mountDisk() }
+                        .buttonStyle(.edithDefault)
                         .disabled(
                             mounting || !session.mountsAvailable || !session.state.isConnected
                         )
@@ -228,6 +231,7 @@ struct MachineToolsTab: View {
                             Button("Open") {
                                 session.openForward(forward)
                             }
+                            .buttonStyle(.edithDefault)
                             .font(.edithText(.subheadline))
                         }
                         Toggle(
@@ -269,6 +273,7 @@ struct MachineToolsTab: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: compact ? .infinity : UIScale.pt(90))
                     Button("Add") { addForward() }
+                        .buttonStyle(.edithDefault)
                         .disabled(Int(newForwardLocal) == nil || Int(newForwardRemote) == nil)
                 }
             }
@@ -291,6 +296,7 @@ struct MachineToolsTab: View {
                         }
                         Spacer(minLength: 0)
                         Button("Run") { run(snippet) }
+                            .buttonStyle(.edithDefault)
                             .disabled(runningSnippet || !session.state.isConnected)
                             .font(.edithText(.subheadline))
                         Button {
@@ -309,6 +315,7 @@ struct MachineToolsTab: View {
                     TextField("Command", text: $snippetCommand)
                         .textFieldStyle(.roundedBorder)
                     Button("Save") { Task { await saveSnippet() } }
+                        .buttonStyle(.edithDefault)
                         .disabled(
                             snippetTitle.trimmingCharacters(in: .whitespaces).isEmpty
                                 || snippetCommand.trimmingCharacters(in: .whitespaces).isEmpty
@@ -376,10 +383,12 @@ struct MachineToolsTab: View {
                         .lineLimit(1)
                     Spacer(minLength: 0)
                     Button("Restart") { runService("restart", unit: service.unit) }
+                        .buttonStyle(.edithDefault)
                         .font(.edithText(.subheadline))
                     Button(service.isRunning ? "Stop" : "Start") {
                         runService(service.isRunning ? "stop" : "start", unit: service.unit)
                     }
+                    .buttonStyle(.edithDefault)
                     .font(.edithText(.subheadline))
                 }
             }

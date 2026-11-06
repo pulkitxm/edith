@@ -51,6 +51,7 @@ struct SocialPicturePicker: View {
                 }
             }
         }
+        .buttonStyle(.edithDefault)
         .fileImporter(isPresented: $choosingPicture, allowedContentTypes: [.image]) { result in
             do {
                 let url = try result.get()

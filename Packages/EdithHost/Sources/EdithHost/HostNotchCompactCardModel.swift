@@ -31,6 +31,7 @@ final class HostNotchCompactCardModel {
     @ObservationIgnored private let admission: Admission
     @ObservationIgnored private let navigate: Navigate
     @ObservationIgnored private let postNavigation: Navigate?
+    @ObservationIgnored private let covered: @MainActor (SurfaceWidget) -> Bool
     @ObservationIgnored private var jobs: [UUID: Task<Void, any Error>] = [:]
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var stopped = false
@@ -39,12 +40,15 @@ final class HostNotchCompactCardModel {
     init(
         origin: HostNotchCompactOrigin, requests: SurfaceSnapshotClient,
         admission: @escaping Admission, navigate: @escaping Navigate,
-        postNavigation: Navigate? = nil
+        postNavigation: Navigate? = nil,
+        covered: @escaping @MainActor (SurfaceWidget) -> Bool = { _ in false }
     ) {
         self.origin = origin; self.requests = requests
         self.admission = admission; self.navigate = navigate
-        self.postNavigation = postNavigation
+        self.postNavigation = postNavigation; self.covered = covered
     }
+
+    var presenting: Bool { covered(origin.tile.widget) }
 
     nonisolated static func supports(_ widget: SurfaceWidget) -> Bool {
         switch widget {
@@ -109,7 +113,7 @@ final class HostNotchCompactCardModel {
 
     func perform(providerID: String, actionID: String, value: Double? = nil) async throws {
         let versions = try admitted()
-        guard !acting, let provider = providers.first(where: { $0.id == providerID }),
+        guard !acting, !presenting, let provider = providers.first(where: { $0.id == providerID }),
             versions[providerID] == provider.version
         else { throw HostNotchPanelError.staleState }
         acting = true

@@ -6,7 +6,7 @@ import Testing
 @testable import EdithExtensionUI
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .exclusiveScale)
 struct ButtonHoverRenderingTests {
     enum Control: String, CaseIterable, CustomStringConvertible {
         case primary, secondary, borderless, toolbar, destructive, row, iconOnly, selection

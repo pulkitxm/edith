@@ -6,15 +6,25 @@ public struct SurfaceSnapshotContent: View {
     let snapshot: SurfaceSnapshot
     let perform: (SurfaceAction) -> Void
     let adjust: ((SurfaceSlider, Double) -> Void)?
+    let presenting: Bool
+    @Environment(\.colorScheme) private var scheme
 
     public init(
-        tile: SurfaceTile, snapshot: SurfaceSnapshot, perform: @escaping (SurfaceAction) -> Void,
+        tile: SurfaceTile, snapshot: SurfaceSnapshot, presenting: Bool = false,
+        perform: @escaping (SurfaceAction) -> Void,
         adjust: ((SurfaceSlider, Double) -> Void)? = nil
     ) {
-        self.tile = tile; self.snapshot = snapshot; self.perform = perform; self.adjust = adjust
+        self.tile = tile; self.snapshot = snapshot; self.presenting = presenting
+        self.perform = perform; self.adjust = adjust
     }
 
     public var body: some View {
+        content
+            .disabled(presenting)
+            .presenterCover(presenting, dark: scheme == .dark)
+    }
+
+    @ViewBuilder private var content: some View {
         let visible = SurfaceCommandService.project(snapshot, tile: tile)
         VStack(alignment: .leading, spacing: UIScale.pt(tile.dense ? 8 : 12)) {
             let metrics = visible.metrics.filter { tile.shows($0.id) }

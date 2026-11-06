@@ -75,26 +75,33 @@ import Testing
         await service.stop()
     }
 
-    @Test func presentingMasksBeforeReadingAndRejectsActions() async throws {
-        var reads = 0
-        let hidden = ClipboardSurface(
-            client: .init(send: { _, _ in throw CocoaError(.featureUnsupported) }),
-            privacyValues: { ["active": "1"] }, copy: { _ in reads += 1 })
+    @Test func presentingKeepsRealRowsForTheBlurOverlayAndRejectsActions() async throws {
+        let (service, defaults, suite, root) = try fixture()
+        defer {
+            defaults.removePersistentDomain(forName: suite);
+            try? FileManager.default.removeItem(at: root)
+        }
+        let client = ClipboardClient(service: service)
+        let id = try await seed(client, "mock presented note")
+        var copies = 0
+        let presenting = ClipboardSurface(
+            client: client, privacyValues: { ["active": "1"] }, copy: { _ in copies += 1 })
         let request = SurfaceSnapshotRequest(
             target: .home, tile: SurfaceTile(.ability("clipboard")))
-        let masked = try SurfaceSnapshot.decode(
-            try await hidden.execute(
+        let presented = try SurfaceSnapshot.decode(
+            try await presenting.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "clipboard")),
             providerID: "clipboard")
-        #expect(masked.rows.isEmpty && masked.sources.isEmpty && masked.metrics.isEmpty)
-        #expect(reads == 0)
+        #expect(presented.rows.map(\.id) == [id])
+        #expect(presented.message == nil)
         await #expect(throws: ExtensionPeerError.self) {
-            try await hidden.execute(
+            try await presenting.execute(
                 "surface.perform",
-                payload: SurfaceActionRequest(
-                    snapshot: request, actionID: "copy/" + UUID().uuidString
-                ).encoded(providerID: "clipboard"))
+                payload: SurfaceActionRequest(snapshot: request, actionID: "copy/" + id).encoded(
+                    providerID: "clipboard"))
         }
+        #expect(copies == 0)
+        await service.stop()
     }
 
     @Test func privacyBecomingActiveDuringCopyPreventsPasteboardWrites() async throws {

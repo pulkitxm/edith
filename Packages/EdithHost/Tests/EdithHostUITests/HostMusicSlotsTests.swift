@@ -23,21 +23,20 @@ struct HostMusicSlotsTests {
         }
     }
 
-    @Test func noReadStartsForHiddenUninstalledDisabledSuiteOrPresenterMaskedMusic() async throws {
+    @Test func noReadStartsForHiddenUninstalledOrDisabledSuiteMusic() async throws {
         let fixture = MusicSlotsFixture()
         let slots = fixture.slots()
         let window = UUID()
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
         slots.invalidate()
         #expect(fixture.calls == 0)
         slots.setVisible(window, visible: true)
-        slots.synchronize(version: nil, mediaEnabled: true, hidden: false)
-        slots.synchronize(version: "1.0.0", mediaEnabled: false, hidden: false)
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: true)
+        slots.synchronize(version: nil, mediaEnabled: true)
+        slots.synchronize(version: "1.0.0", mediaEnabled: false)
         await settle { slots.pendingTaskCount == 0 }
         #expect(fixture.calls == 0)
         #expect(!slots.footer && !slots.sidebar)
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
         await settle { slots.footer }
         #expect(fixture.calls == 1)
         #expect(fixture.payloads == [Data("{}".utf8)])
@@ -48,7 +47,7 @@ struct HostMusicSlotsTests {
         let fixture = MusicSlotsFixture()
         let slots = fixture.slots()
         let first = UUID(); let second = UUID()
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
         slots.setVisible(first, visible: true)
         slots.setVisible(second, visible: true)
         await settle { slots.footer && slots.pendingTaskCount == 0 }
@@ -68,7 +67,7 @@ struct HostMusicSlotsTests {
         let gate = MusicSlotsGate()
         fixture.gate = gate
         let slots = fixture.slots()
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
         slots.setVisible(UUID(), visible: true)
         await settle { gate.waiting }
         for _ in 0..<100 { slots.invalidate() }
@@ -92,10 +91,10 @@ struct HostMusicSlotsTests {
         let gate = MusicSlotsGate()
         fixture.gate = gate
         let slots = fixture.slots()
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
         slots.setVisible(UUID(), visible: true)
         await settle { gate.waiting }
-        slots.synchronize(version: "2.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "2.0.0", mediaEnabled: true)
         #expect(!slots.footer && !slots.sidebar)
         #expect(slots.pendingTaskCount == 1)
         #expect(fixture.calls == 1)
@@ -113,7 +112,7 @@ struct HostMusicSlotsTests {
         fixture.gate = gate
         let slots = fixture.slots()
         let window = UUID()
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
         slots.setVisible(window, visible: true)
         await settle { gate.waiting }
         slots.setVisible(window, visible: false)
@@ -133,17 +132,21 @@ struct HostMusicSlotsTests {
         #expect(fixture.activeReads == 0)
     }
 
-    @Test func refreshFailureKeepsOnlyCurrentOwnedCacheUntilPrivacyWithdrawsIt() async throws {
+    @Test func refreshFailureKeepsTheCurrentOwnedCacheWhilePresentingUntilMediaIsDisabled()
+        async throws
+    {
         let fixture = MusicSlotsFixture()
         let slots = fixture.slots()
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
         slots.setVisible(UUID(), visible: true)
         await settle { slots.footer && slots.pendingTaskCount == 0 }
         fixture.responses = [Data("{}".utf8)]
         slots.invalidate()
         await settle { slots.failure != nil }
         #expect(slots.footer)
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: true)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
+        #expect(slots.footer)
+        slots.synchronize(version: "1.0.0", mediaEnabled: false)
         #expect(!slots.footer && !slots.sidebar)
         #expect(slots.state == nil)
         #expect(slots.failure == nil)
@@ -154,7 +157,7 @@ struct HostMusicSlotsTests {
         let fixture = MusicSlotsFixture()
         let slots = fixture.slots()
         let window = UUID()
-        slots.synchronize(version: "1.0.0", mediaEnabled: true, hidden: false)
+        slots.synchronize(version: "1.0.0", mediaEnabled: true)
         slots.setVisible(window, visible: true)
         await settle { slots.footer && slots.pendingTaskCount == 0 }
         DistributedNotificationCenter.default().postNotificationName(

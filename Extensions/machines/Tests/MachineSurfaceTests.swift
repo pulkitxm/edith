@@ -41,12 +41,13 @@ import Testing
             ).encoded(providerID: "machines"))
         #expect(opened == [first])
         privacy = ["active": "1", "blurFleet": "1"]
-        let hidden = try SurfaceSnapshot.decode(
+        let presented = try SurfaceSnapshot.decode(
             await surface.execute(
                 "surface.snapshot",
                 payload: request.encoded(providerID: "machines")), providerID: "machines")
-        #expect(hidden.rows.isEmpty); #expect(hidden.sources.isEmpty);
-        #expect(hidden.metrics.isEmpty)
+        #expect(presented.rows.map(\.id) == snapshot.rows.map(\.id))
+        #expect(presented.sources == snapshot.sources)
+        #expect(presented.metrics == snapshot.metrics)
         await #expect(throws: ExtensionPeerError.self) {
             try await surface.execute(
                 "surface.perform",

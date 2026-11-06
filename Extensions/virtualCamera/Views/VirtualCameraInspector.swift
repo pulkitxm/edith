@@ -374,7 +374,10 @@ struct VirtualCameraLookTile: View {
                     .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
             }
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous), filled: true)
+        )
         .accessibilityLabel(preset.title)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -465,15 +468,17 @@ struct VirtualCameraImageRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
-            Button(path == nil ? "Choose…" : "Replace…", action: choose)
-                .buttonStyle(.edith(.secondary))
-            if path != nil {
-                Button(action: remove) {
-                    EdithIconView(.trash)
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+                Button(path == nil ? "Choose…" : "Replace…", action: choose)
+                    .buttonStyle(.edith(.secondary))
+                if path != nil {
+                    Button(action: remove) {
+                        EdithIconView(.trash)
+                    }
+                    .buttonStyle(.edith(.iconOnly))
+                    .help("Remove the image")
+                    .accessibilityLabel("Remove the image")
                 }
-                .buttonStyle(.edith(.iconOnly))
-                .help("Remove the image")
-                .accessibilityLabel("Remove the image")
             }
         }
     }

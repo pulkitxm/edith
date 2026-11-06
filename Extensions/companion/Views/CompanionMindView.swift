@@ -447,7 +447,6 @@ private struct MindRow<Content: View>: View {
     let dark: Bool
     let action: () -> Void
     @ViewBuilder let content: () -> Content
-    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
@@ -455,14 +454,9 @@ private struct MindRow<Content: View>: View {
                 .padding(.horizontal, UIScale.pt(8))
                 .padding(.vertical, UIScale.pt(6))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    hovering ? DashSkin.accent(dark).opacity(0.09) : .clear,
-                    in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .onHover { hovering = $0 }
         .help("Open the full record")
     }
 }

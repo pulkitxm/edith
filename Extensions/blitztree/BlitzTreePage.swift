@@ -394,14 +394,14 @@ struct BlitzTreePage: View {
     }
 
     private func entryRow(_ entry: BlitzTreeReport.Entry) -> some View {
-        HStack(spacing: UIScale.pt(12)) {
-            EdithIconView(entry.isDirectory ? .folder : .doc)
-                .font(.system(size: UIScale.pt(14)))
-                .foregroundStyle(entry.isDirectory ? DashSkin.accent(dark) : Color.secondary)
-                .frame(width: UIScale.pt(20))
-            Button {
-                activate(entry)
-            } label: {
+        Button {
+            activate(entry)
+        } label: {
+            HStack(spacing: UIScale.pt(12)) {
+                EdithIconView(entry.isDirectory ? .folder : .doc)
+                    .font(.system(size: UIScale.pt(14)))
+                    .foregroundStyle(entry.isDirectory ? DashSkin.accent(dark) : Color.secondary)
+                    .frame(width: UIScale.pt(20))
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text(entry.name).font(.edithText(.body)).fontWeight(.medium).lineLimit(1)
                     Text(entry.reason ?? entry.path)
@@ -411,44 +411,52 @@ struct BlitzTreePage: View {
                         .truncationMode(.middle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.edith(.borderless))
-            .help(entry.isDirectory ? "Open this folder" : "Show in Finder")
-            if !entry.complete {
-                EdithIconView(.warning)
-                    .foregroundStyle(.orange)
-                    .help("This entry was only partially scanned")
-            }
-            Text(bytes(entry.allocatedBytes))
-                .font(.edithText(.callout)).fontWeight(.medium).monospacedDigit()
-                .frame(minWidth: UIScale.pt(80), alignment: .trailing)
-                .fixedSize()
-            HStack(spacing: UIScale.pt(4)) {
-                Button {
-                    reveal(entry)
-                } label: {
-                    EdithIconView(.search)
+                if !entry.complete {
+                    EdithIconView(.warning)
+                        .foregroundStyle(.orange)
+                        .help("This entry was only partially scanned")
                 }
-                .buttonStyle(.edith(.iconOnly))
-                .help("Show in Finder")
-                .accessibilityLabel("Show \(entry.name) in Finder")
-                Button {
-                    pendingRemoval = entry
-                } label: {
-                    EdithIconView(.trash)
-                }
-                .buttonStyle(.edith(.iconOnly))
-                .help(
-                    model.removing
-                        ? "Wait for the current move to finish."
-                        : "Move to the Trash. You can put it back."
-                )
-                .accessibilityLabel("Move \(entry.name) to the Trash")
-                .disabled(model.removing)
+                Text(bytes(entry.allocatedBytes))
+                    .font(.edithText(.callout)).fontWeight(.medium).monospacedDigit()
+                    .frame(minWidth: UIScale.pt(80), alignment: .trailing)
+                    .fixedSize()
+                entryActions(entry).hidden().accessibilityHidden(true)
             }
         }
-        .padding(.vertical, UIScale.pt(8))
+        .buttonStyle(.edith(.row))
+        .help(entry.isDirectory ? "Open this folder" : "Show in Finder")
+        .overlay(alignment: .trailing) {
+            entryActions(entry)
+                .padding(.trailing, UIScale.pt(9))
+        }
+        .padding(.horizontal, -UIScale.pt(9))
+        .padding(.vertical, UIScale.pt(1))
+    }
+
+    private func entryActions(_ entry: BlitzTreeReport.Entry) -> some View {
+        HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
+            Button {
+                reveal(entry)
+            } label: {
+                EdithIconView(.search)
+            }
+            .buttonStyle(.edith(.iconOnly))
+            .help("Show in Finder")
+            .accessibilityLabel("Show \(entry.name) in Finder")
+            Button {
+                pendingRemoval = entry
+            } label: {
+                EdithIconView(.trash)
+            }
+            .buttonStyle(.edith(.iconOnly))
+            .help(
+                model.removing
+                    ? "Wait for the current move to finish."
+                    : "Move to the Trash. You can put it back."
+            )
+            .accessibilityLabel("Move \(entry.name) to the Trash")
+            .disabled(model.removing)
+        }
     }
 
     private func chooseFolder() { model.chooseFolder() }

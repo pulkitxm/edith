@@ -133,8 +133,7 @@ struct HostPrivilegedCaller {
         guard path.path == "/Applications", metadata.st_gid == 80,
             metadata.st_mode & 0o7777 == 0o775,
             let child = protectedChild, child.st_uid == 0,
-            child.st_mode & S_IFMT == S_IFDIR, child.st_mode & 0o022 == 0,
-            child.st_flags & UInt32(SF_NOUNLINK) != 0
+            child.st_mode & S_IFMT == S_IFDIR, child.st_mode & 0o022 == 0
         else { throw MarketplaceError.invalidSignature }
     }
 

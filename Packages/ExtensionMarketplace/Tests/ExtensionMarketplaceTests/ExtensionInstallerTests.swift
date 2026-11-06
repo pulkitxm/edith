@@ -22,9 +22,10 @@ struct PackageFixture {
     func archive(
         _ version: String = "1.0.0", hostABI: String = "host-1", id: String = "keepAwake",
         unsafePath: String? = nil, symlink: Bool = false, carrier: Bool = false,
-        runtime: String? = nil
+        runtime: String? = nil, minimumHostBuild: Int? = nil
     ) throws -> (ExtensionPackage, URL) {
-        let placeholder = fixturePackage(id, version: version, hostABI: hostABI)
+        let placeholder = fixturePackage(
+            id, version: version, hostABI: hostABI, minimumHostBuild: minimumHostBuild)
         let manifest = try JSONEncoder().encode(ExtensionPayloadManifest(package: placeholder))
         let source = directory.appendingPathComponent(
             "\(id)-\(hostABI)-\(version)-\(UUID().uuidString).zip")
@@ -53,7 +54,8 @@ struct PackageFixture {
         }
         let data = try Data(contentsOf: source)
         let package = ExtensionPackage(
-            id: id, version: version, hostABI: hostABI, downloadURL: placeholder.downloadURL,
+            id: id, version: version, hostABI: hostABI, minimumHostBuild: minimumHostBuild,
+            downloadURL: placeholder.downloadURL,
             sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
             downloadBytes: Int64(data.count),
             installedBytes: Int64(entries.reduce(0) { $0 + $1.1.count }))
@@ -147,6 +149,35 @@ struct PackageFixture {
     #expect(
         try fixture.store.installedPackage(id: new.id, hostABI: "host-2", architecture: "arm64")
             == new)
+}
+
+@Test func installedBuildsNeedingANewerHostLeaveTheWorkingVersionSelectedAndPruned()
+    async throws
+{
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let builds = try [
+        fixture.archive("1.0.0"), fixture.archive("1.1.0"),
+        fixture.archive("1.2.0", minimumHostBuild: 396),
+        fixture.archive("1.3.0", minimumHostBuild: 396),
+    ]
+    let installer = fixture.installer(
+        archives: Dictionary(uniqueKeysWithValues: builds.map { ($0.0.downloadURL, $0.1) }))
+    for (package, _) in builds {
+        _ = try await installer.install([package], repository: "example/app")
+    }
+    let packages = builds.map(\.0)
+    #expect(
+        try fixture.store.installedPackage(
+            id: "keepAwake", hostABI: "host-1", architecture: "arm64", hostBuild: 395)
+            == packages[1])
+    #expect(
+        try fixture.store.installedPackage(
+            id: "keepAwake", hostABI: "host-1", architecture: "arm64", hostBuild: 396)
+            == packages[3])
+    try fixture.store.prune(hostABI: "host-1", hostBuild: 395)
+    #expect(Set(try fixture.store.installedPackages().map(\.version)) == ["1.0.0", "1.1.0"])
+    #expect(FileManager.default.fileExists(atPath: fixture.store.directory(for: packages[1]).path))
 }
 
 @Test func offlineInstalledPackagesDoNotDownloadAgain() async throws {
