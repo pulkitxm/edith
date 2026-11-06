@@ -33,11 +33,6 @@ struct HostPageContent: View {
 
     var body: some View {
         page.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .overlayPreferenceValue(HostIntroductionReopenKey.self, alignment: .topTrailing) {
-                if showsIntroductionButton, let reopen = $0 {
-                    HostIntroductionReopenButton(reopen: reopen)
-                }
-            }
     }
 
     @ViewBuilder private var page: some View {

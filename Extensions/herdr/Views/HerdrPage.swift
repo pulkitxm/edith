@@ -313,7 +313,7 @@ struct HerdrPage: View {
             EdithIconView(icon)
                 .font(.edithText(.headline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                .frame(width: UIScale.pt(20), height: UIScale.pt(24))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.toolbar))
