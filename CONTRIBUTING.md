@@ -87,8 +87,9 @@ The source tree is organized by package:
 | `Extensions/<id>` | One extension: its runtime, views, CLI commands and tests. `Extensions/manifest.json` lists them all. |
 
 The app icon is drawn in `Resources/AppIcon.svg`. `make icon` renders it with
-Chrome and derives the checked-in `AppIcon.icns`, the site icons and the promo
-video logo from that. Run it after changing the SVG.
+Chrome and derives the checked-in `AppIcon.icns`, the site icons, the promo
+video logo and the usage share card icon from that. Run it after changing the
+SVG.
 
 The Spotify player in `apps/music-player` is a Rust crate. Run
 `cargo test --locked` and `cargo clippy --locked --all-targets -- -D warnings`

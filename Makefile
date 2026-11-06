@@ -112,6 +112,7 @@ icon:
 	cp "$$ARTWORK" apps/promo-video/public/logo.png; \
 	sips -z 512 512 "$$ARTWORK" --out apps/site/app-icon-512.png >/dev/null; \
 	sips -z 180 180 "$$ARTWORK" --out apps/site/favicon-180.png >/dev/null; \
+	sips -z 128 128 "$$ARTWORK" --out Extensions/usage/Resources/share-icon.png >/dev/null; \
 	rm -rf "$$(dirname "$$ARTWORK")"
 
 wiki:
