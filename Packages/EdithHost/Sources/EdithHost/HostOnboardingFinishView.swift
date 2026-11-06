@@ -173,12 +173,7 @@ struct HostOnboardingFinishView: View {
                 }
             }
             .hostOnboardingTile()
-            Label(
-                "Agents can use these tools too, through the ed command line and MCP.",
-                edith: .terminal
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+            agents
             HostOnboardingFooter(
                 primary: PageAction("Start using Edith", identifier: "onboarding.finish") {
                     model.dismiss()
@@ -191,6 +186,51 @@ struct HostOnboardingFinishView: View {
                     .accessibilityIdentifier("onboarding.storage")
             }
         }
+    }
+
+    private var agents: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: UIScale.pt(12)) {
+                agentsText
+                Spacer(minLength: UIScale.pt(8))
+                agentsButton
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                agentsText
+                agentsButton
+            }
+        }
+        .padding(.horizontal, UIScale.pt(HostOnboardingFinishRow.inset))
+        .padding(.vertical, UIScale.pt(HostOnboardingFinishRow.inset))
+        .hostOnboardingTile()
+    }
+
+    private var agentsText: some View {
+        HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            EdithIconView(.link)
+                .font(.system(size: UIScale.pt(18), weight: .medium))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .frame(
+                    width: UIScale.pt(HostOnboardingFinishRow.icon),
+                    height: UIScale.pt(HostOnboardingFinishRow.icon))
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text("Connect your coding agents").font(.edithText(.headline))
+                Text("Claude Code, Codex, Cursor and VS Code can use these tools too.")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Or run " + HostGetStarted.agentCommand)
+                    .font(.edithText(.caption, design: .monospaced)).foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var agentsButton: some View {
+        Button("Connect agents") { model.openAgents() }
+            .buttonStyle(.edith(.secondary))
+            .fixedSize()
+            .accessibilityIdentifier("onboarding.agents")
     }
 
     private var finishButton: some View {

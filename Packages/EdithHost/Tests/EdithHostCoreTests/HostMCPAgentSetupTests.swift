@@ -793,7 +793,7 @@ private struct AgentFixture: Sendable {
     }
 }
 
-private final class ToolRecorder: @unchecked Sendable {
+final class ToolRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [[String]] = []
     private let available: Set<String>

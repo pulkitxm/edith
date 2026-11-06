@@ -60,7 +60,7 @@ import Testing
                     #expect(find(host, label: "Add widgets") == nil)
                 } else {
                     try expectInside(
-                        host, labels: variant.zoom == 1 ? ["Copy setup command", "Hide"] : ["Hide"])
+                        host, labels: variant.zoom == 1 ? ["Connect agents", "Hide"] : ["Hide"])
                     #expect(find(host, label: "Browse extensions") == nil)
                     #expect(find(host, label: "Continue setup") == nil)
                 }
@@ -93,8 +93,9 @@ import Testing
         }
     }
 
-    @Test func connectingAnAgentCopiesTheCommandForEveryClient() {
+    @Test func connectingAnAgentOpensAgentsSettingsAndKeepsTheCommandAsAHint() {
         #expect(HostGetStarted.agentCommand == "ed mcp install --client all")
+        #expect(HostNavigationCatalog.settings.contains { $0.id == "mcp" && $0.extensionID == nil })
     }
 
     @Test func dismissedGetStartedLeavesAnOrientedEmptyHome() async throws {

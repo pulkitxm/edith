@@ -23,7 +23,7 @@ import Testing
         #expect(
             HostNavigationCatalog.settings.map(\.id) == [
                 "general", "surfaces", "agentActivity", "permissions", "agent", "jev", "data",
-                "storage", "shortcuts", "terminal", "icloud", "updates",
+                "storage", "shortcuts", "terminal", "mcp", "icloud", "updates",
             ])
         for id in owners { #expect(HostNavigationCatalog.route(extensionID: id) == nil) }
         #expect(HostNavigationCatalog.route(extensionID: "jev") == nil)

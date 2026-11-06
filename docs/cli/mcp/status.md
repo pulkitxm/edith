@@ -2,7 +2,9 @@
 
 [CLI reference](../README.md) | [MCP](./README.md)
 
-Show which agent clients have Edith's MCP server registered.
+Show which agent clients have Edith's MCP server registered. Settings > Agents
+shows the same report as Connected, Points at another Edith, Not connected or
+Needs manual setup.
 
 ```sh
 ed mcp status [--command <path>] [--json]
@@ -21,4 +23,5 @@ not found` (neither its command nor its settings folder is on this Mac), or
 ## Related
 
 - [`ed mcp install`](./install.md)
+- [`ed mcp uninstall`](./uninstall.md)
 - [`ed mcp`](./README.md)

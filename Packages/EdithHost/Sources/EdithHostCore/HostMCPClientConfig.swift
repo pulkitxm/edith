@@ -19,7 +19,7 @@ public enum HostMCPClient: String, CaseIterable, Sendable {
 
     var containerKey: String { self == .vscode ? "servers" : "mcpServers" }
 
-    var registrationTool: String? {
+    public var registrationTool: String? {
         switch self {
         case .claude: "claude"
         case .codex: "codex"
@@ -27,7 +27,7 @@ public enum HostMCPClient: String, CaseIterable, Sendable {
         }
     }
 
-    var editsFileWithoutTool: Bool { self != .claude }
+    public var editsFileWithoutTool: Bool { self != .claude }
 
     func registerArguments(command: String) -> [String] {
         switch self {
@@ -38,8 +38,14 @@ public enum HostMCPClient: String, CaseIterable, Sendable {
         }
     }
 
-    var unregisterArguments: [String]? {
-        self == .claude ? ["mcp", "remove", "--scope", "user", Self.serverName] : nil
+    var unregisterArguments: [String]? { self == .claude ? removeArguments : nil }
+
+    var removeArguments: [String]? {
+        switch self {
+        case .claude: ["mcp", "remove", "--scope", "user", Self.serverName]
+        case .codex: ["mcp", "remove", Self.serverName]
+        case .cursor, .vscode: nil
+        }
     }
 
     func codexDirectory(home: URL, codexHome: String?) -> URL {
@@ -185,18 +191,33 @@ public struct HostMCPInstaller: Sendable {
         case registered, outdated, notRegistered, unreadable
     }
 
-    public struct Report: Sendable {
+    public enum Connection: String, Sendable, CaseIterable {
+        case connected, notConnected, otherEdith, manual
+    }
+
+    public struct Report: Sendable, Equatable {
         public let client: HostMCPClient
         public let path: String
         public let exists: Bool
         public let clientFound: Bool
         public let state: State
         public let command: String?
+        public let toolFound: Bool
+
+        public var connection: Connection {
+            switch state {
+            case .registered: .connected
+            case .outdated: .otherEdith
+            case .unreadable: .manual
+            case .notRegistered:
+                client.editsFileWithoutTool || toolFound ? .notConnected : .manual
+            }
+        }
     }
 
-    public struct Outcome: Sendable {
+    public struct Outcome: Sendable, Equatable {
         public enum Action: String, Sendable {
-            case created, updated, unchanged, skipped, manual, notFound
+            case created, updated, removed, unchanged, skipped, manual, notFound
         }
         public let client: HostMCPClient
         public let path: String
@@ -207,11 +228,20 @@ public struct HostMCPInstaller: Sendable {
         public let note: String?
         public let backup: String?
 
+        public init(
+            client: HostMCPClient, path: String, action: Action, applied: Bool, snippet: String,
+            run: [String]?, note: String?, backup: String?
+        ) {
+            self.client = client; self.path = path; self.action = action
+            self.applied = applied; self.snippet = snippet; self.run = run; self.note = note
+            self.backup = backup
+        }
+
         public var runLine: String? { run.map(HostMCPClient.shellLine) }
     }
 
-    private let home: URL
-    private let command: String
+    public let home: URL
+    public let command: String
     private let codexHome: String?
     private let tools: HostMCPToolRunner
 
@@ -236,11 +266,12 @@ public struct HostMCPInstaller: Sendable {
         let file = url(client)
         let text = try? String(contentsOf: file, encoding: .utf8)
         let exists = FileManager.default.fileExists(atPath: file.path)
+        let toolFound = client.registrationTool.flatMap(tools.locate) != nil
         let found = isPresent(client)
         func report(_ state: State, _ registered: String? = nil) -> Report {
             Report(
                 client: client, path: file.path, exists: exists, clientFound: found, state: state,
-                command: registered)
+                command: registered, toolFound: toolFound)
         }
         guard exists else { return report(.notRegistered) }
         guard let text else { return report(.unreadable) }
@@ -266,6 +297,146 @@ public struct HostMCPInstaller: Sendable {
     }
 
     public func status() -> [Report] { HostMCPClient.allCases.map(inspect) }
+
+    public func manualStep(_ client: HostMCPClient) -> String {
+        guard let tool = client.registrationTool, !client.editsFileWithoutTool else {
+            return client.snippet(command: command)
+        }
+        return HostMCPClient.shellLine([tool] + client.registerArguments(command: command))
+    }
+
+    public func install(_ clients: [HostMCPClient]?, dryRun: Bool) -> [Outcome] {
+        (clients ?? HostMCPClient.allCases).map {
+            install($0, dryRun: dryRun, onlyIfPresent: clients == nil)
+        }
+    }
+
+    public func uninstall(_ clients: [HostMCPClient]?, dryRun: Bool) -> [Outcome] {
+        (clients ?? HostMCPClient.allCases).map { uninstall($0, dryRun: dryRun) }
+    }
+
+    public func uninstall(_ client: HostMCPClient, dryRun: Bool) -> Outcome {
+        let file = url(client)
+        let snippet = client.snippet(command: command)
+        func outcome(
+            _ action: Outcome.Action, applied: Bool = false, run: [String]? = nil,
+            note: String? = nil, backup: String? = nil
+        ) -> Outcome {
+            Outcome(
+                client: client, path: file.path, action: action, applied: applied,
+                snippet: snippet, run: run, note: note, backup: backup)
+        }
+        let report = inspect(client)
+        if report.state == .notRegistered { return outcome(.unchanged) }
+        if let tool = client.registrationTool, let remove = client.removeArguments {
+            let line = [tool] + remove
+            if let executable = tools.locate(tool) {
+                if dryRun { return outcome(.removed, run: line) }
+                let result = tools.run(executable, remove)
+                if result.status == 0 { return outcome(.removed, applied: true, run: line) }
+                if !client.editsFileWithoutTool {
+                    let detail = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return outcome(
+                        .skipped, run: line,
+                        note: "\(HostMCPClient.shellLine(line)) exited with status \(result.status)"
+                            + (detail.isEmpty ? "." : ": " + String(detail.prefix(400))))
+                }
+            } else if !client.editsFileWithoutTool {
+                return outcome(
+                    .manual, run: line, note: "The \(tool) command was not found on this Mac.")
+            }
+        }
+        let edit = uninstallFile(client, file: file, dryRun: dryRun)
+        return outcome(edit.action, applied: edit.applied, note: edit.note, backup: edit.backup)
+    }
+
+    private func uninstallFile(_ client: HostMCPClient, file: URL, dryRun: Bool) -> (
+        action: Outcome.Action, applied: Bool, note: String?, backup: String?
+    ) {
+        guard let original = try? String(contentsOf: file, encoding: .utf8) else {
+            return (.skipped, false, "The existing file could not be read as UTF-8.", nil)
+        }
+        let updated: String?
+        do {
+            updated =
+                client.isTOML
+                ? Self.removedTOML(original) : try Self.removedJSON(original, client: client)
+        } catch let failure as Failure {
+            return (.skipped, false, failure.message, nil)
+        } catch { return (.skipped, false, error.localizedDescription, nil) }
+        guard let updated else { return (.unchanged, false, nil, nil) }
+        if dryRun { return (.removed, false, nil, nil) }
+        do {
+            let backup = try write(updated, to: file)
+            return (.removed, true, nil, backup)
+        } catch {
+            return (.skipped, false, "Could not write the file: \(error.localizedDescription)", nil)
+        }
+    }
+
+    private func write(_ text: String, to file: URL) throws -> String? {
+        var backup: String?
+        if FileManager.default.fileExists(atPath: file.path) {
+            let copy = file.deletingLastPathComponent().appendingPathComponent(
+                file.lastPathComponent + ".edith-backup")
+            try? FileManager.default.removeItem(at: copy)
+            try FileManager.default.copyItem(at: file, to: copy)
+            backup = copy.path
+        } else {
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        let permissions = (try? FileManager.default.attributesOfItem(atPath: file.path))?[
+            .posixPermissions]
+        try Data(text.utf8).write(to: file, options: .atomic)
+        if let permissions {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: permissions], ofItemAtPath: file.path)
+        }
+        return backup
+    }
+
+    private static func removedJSON(_ text: String, client: HostMCPClient) throws -> String? {
+        guard var root = parseJSON(text) else {
+            throw Failure(
+                message: "The existing file is not plain JSON, so it was left untouched.")
+        }
+        guard let existing = root[client.containerKey] else { return nil }
+        guard var container = existing as? [String: Any] else {
+            throw Failure(
+                message:
+                    "The existing \"\(client.containerKey)\" value is not an object, so the file was left untouched."
+            )
+        }
+        guard container.removeValue(forKey: HostMCPClient.serverName) != nil else { return nil }
+        root[client.containerKey] = container
+        return HostMCPClient.render(root)
+    }
+
+    private static func removedTOML(_ text: String) -> String? {
+        var all = lines(text)
+        guard let range = tomlBlockRange(in: all) else { return nil }
+        let nested = "[mcp_servers.\(HostMCPClient.serverName)."
+        var end = range.upperBound
+        while end < all.count {
+            let header = all[end].trimmingCharacters(in: .whitespaces)
+            guard header.hasPrefix(nested) else { break }
+            end =
+                all[(end + 1)...].firstIndex {
+                    $0.trimmingCharacters(in: .whitespaces).hasPrefix("[")
+                } ?? all.count
+        }
+        var start = range.lowerBound
+        if end < all.count {
+            all.removeSubrange(start..<end)
+        } else {
+            while start > 0, all[start - 1].trimmingCharacters(in: .whitespaces).isEmpty {
+                start -= 1
+            }
+            all.replaceSubrange(start..<end, with: start > 0 && text.hasSuffix("\n") ? [""] : [])
+        }
+        return all.joined(separator: "\n")
+    }
 
     public func install(_ client: HostMCPClient, dryRun: Bool, onlyIfPresent: Bool = false)
         -> Outcome
@@ -340,25 +511,7 @@ public struct HostMCPInstaller: Sendable {
         let action: Outcome.Action = exists ? .updated : .created
         if dryRun { return (action, false, nil, nil) }
         do {
-            var backup: String?
-            if exists {
-                let copy = file.deletingLastPathComponent().appendingPathComponent(
-                    file.lastPathComponent + ".edith-backup")
-                try? FileManager.default.removeItem(at: copy)
-                try FileManager.default.copyItem(at: file, to: copy)
-                backup = copy.path
-            } else {
-                try FileManager.default.createDirectory(
-                    at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            }
-            let permissions = (try? FileManager.default.attributesOfItem(atPath: file.path))?[
-                .posixPermissions]
-            try Data(updated.utf8).write(to: file, options: .atomic)
-            if let permissions {
-                try FileManager.default.setAttributes(
-                    [.posixPermissions: permissions], ofItemAtPath: file.path)
-            }
-            return (action, true, nil, backup)
+            return (action, true, nil, try write(updated, to: file))
         } catch {
             return (.skipped, false, "Could not write the file: \(error.localizedDescription)", nil)
         }
