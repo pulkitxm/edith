@@ -122,6 +122,11 @@ if args[:2] == ['commit', 'create']:
 elif args[:2] == ['tag', 'create']:
     if os.environ.get('FIXTURE_FAIL_TAG'):
         sys.exit(1)
+    limited = os.environ.get('FIXTURE_RATE_LIMIT_TAG_ONCE')
+    if limited and not os.path.exists(limited):
+        open(limited, 'w').close()
+        print(json.dumps({'ok': False, 'error': {'message': 'API rate limit exceeded for user ID 1'}}))
+        sys.exit(1)
     target = args[args.index('--target') + 1]
     tag = args[2]
     git('tag', '-a', tag, '-m', message, target)
@@ -411,5 +416,27 @@ test("a release cut recovers a committed version after tag failure", () => {
   expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(committed);
   expect(git(fixture.remote, "rev-parse", "refs/tags/v0.0.80^{commit}")).toBe(
     committed,
+  );
+});
+
+test("a rate limited tag request waits the shared rate limit backoff before retrying", () => {
+  const fixture = createFixture();
+  const sleeps = join(fixture.root, "sleeps");
+  writeFileSync(
+    join(fixture.bin, "sleep"),
+    `#!/bin/sh\nprintf '%s\\n' "$1" >> "${sleeps}"\n`,
+    { mode: 0o755 },
+  );
+  const cut = command(fixture.checkout, "bash", [script, "cut"], {
+    ...releaseEnvironment(fixture),
+    FIXTURE_RATE_LIMIT_TAG_ONCE: join(fixture.root, "limited"),
+    RELEASE_RATE_LIMIT_SECONDS: "7",
+  });
+  expect(cut.exitCode, cut.stderr).toBe(0);
+  expect(cut.stderr).toContain("API rate limit exceeded");
+  expect(readFileSync(sleeps, "utf8")).toBe("7\n");
+  const main = git(fixture.remote, "rev-parse", "refs/heads/main");
+  expect(git(fixture.remote, "rev-parse", "refs/tags/v0.0.80^{commit}")).toBe(
+    main,
   );
 });

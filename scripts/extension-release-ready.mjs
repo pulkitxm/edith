@@ -195,28 +195,43 @@ export async function waitForPackages({
   }
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
-  const fetchMetadata = (url, options = {}) =>
-    fetch(url, {
+export function readinessRequest({
+  environment = process.env,
+  fetch_ = fetch,
+} = {}) {
+  const token = environment.GITHUB_TOKEN || environment.GH_TOKEN;
+  return (url, options = {}) =>
+    fetch_(url, {
       ...options,
       signal: AbortSignal.timeout(15_000),
       headers: {
         "Cache-Control": "no-cache",
-        ...(new URL(url).origin === "https://api.github.com" &&
-        process.env.GH_TOKEN
-          ? { Authorization: `Bearer ${process.env.GH_TOKEN}` }
+        ...(new URL(url).origin === "https://api.github.com" && token
+          ? { Authorization: `Bearer ${token}` }
           : {}),
       },
     });
+}
+
+export function readinessFetch({
+  request = readinessRequest(),
+  retry = {},
+} = {}) {
+  return (url, options = {}) =>
+    readGitHubResponse(request, url, () => options, retry);
+}
+
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  const fetchMetadata = readinessRequest();
   const target = process.env.REBUILD ? undefined : process.env.BUILT_SHA;
   const revision = await waitForPackages({
     expected: await expectedPackages(process.argv[2] ?? process.cwd()),
     publicKey: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=",
     timeout: 0,
-    fetchCatalog: fetchMetadata,
+    fetchCatalog: readinessFetch({ request: fetchMetadata }),
     verifySource:
       target === undefined
         ? async () => {}
