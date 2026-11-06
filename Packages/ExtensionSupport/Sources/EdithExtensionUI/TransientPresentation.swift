@@ -120,9 +120,11 @@ extension View {
         sheet(isPresented: isPresented, onDismiss: onDismiss) {
             if let dismissible {
                 content().transientPresentation(
-                    dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+                    dismissible: dismissible, dismissOnEscape: dismissOnEscape
+                )
+                .environment(\.pageGuide, nil)
             } else {
-                content()
+                content().environment(\.pageGuide, nil)
             }
         }
     }
@@ -134,9 +136,11 @@ extension View {
         sheet(item: item, onDismiss: onDismiss) { item in
             if let dismissible {
                 content(item).transientPresentation(
-                    dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+                    dismissible: dismissible, dismissOnEscape: dismissOnEscape
+                )
+                .environment(\.pageGuide, nil)
             } else {
-                content(item)
+                content(item).environment(\.pageGuide, nil)
             }
         }
     }
