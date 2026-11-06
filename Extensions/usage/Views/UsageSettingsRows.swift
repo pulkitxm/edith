@@ -18,6 +18,7 @@ private struct ClaudeStatusLineRow: View {
                 Text(connected == true ? "Connected" : "Not connected")
                     .foregroundStyle(.secondary)
                 Button(connected == true ? "Disconnect" : "Connect") { toggle() }
+                    .buttonStyle(.edithDefault)
                     .disabled(connected == nil)
                     .help(
                         connected == nil
@@ -440,6 +441,7 @@ struct UsageSettingsRows: View {
                         notificationTest = nil
                     }
                 }
+                .buttonStyle(.edithDefault)
                 if testSent {
                     Text(testMessage ?? "Sending test notification")
                         .settingsCaption()

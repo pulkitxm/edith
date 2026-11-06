@@ -206,13 +206,18 @@ struct VideoCaptionEditor: View {
                 model.isTranscribing ? "Transcribing…" : "Generate from speech",
                 action: model.generateCaptions
             )
+            .buttonStyle(.edithDefault)
             .disabled(model.isTranscribing || model.selectedClipID == nil)
             HStack {
                 Button("Import…", action: model.importCaptions)
+                    .buttonStyle(.edithDefault)
                 Menu("Export") {
                     Button("SubRip (.srt)") { model.exportCaptions(vtt: false) }
                     Button("WebVTT (.vtt)") { model.exportCaptions(vtt: true) }
                 }
+                .menuStyle(.button)
+                .buttonStyle(.edithDefault)
+                .fixedSize()
             }
             Text(
                 "Select a caption to position it on the canvas. Drag its timeline edges to adjust timing."
@@ -242,6 +247,7 @@ private struct VideoCaptionRow: View {
             ) {
                 model.select(.annotation(caption.id))
             }
+            .buttonStyle(.edithDefault)
             TextField("Caption text", text: field("text"), axis: .vertical)
                 .lineLimit(1...5).onSubmit { draft.apply("text") }
             HStack {
@@ -252,6 +258,7 @@ private struct VideoCaptionRow: View {
                     .accessibilityLabel("Caption end")
             }.onSubmit { draft.apply("time") }
             Button("Discard caption drafts") { draft.refresh(discard: true) }
+                .buttonStyle(.edithDefault)
             if let failure = draft.failure {
                 Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
             }
@@ -287,6 +294,7 @@ private struct VideoCaptionRow: View {
                     model.mutate { $0.mergeCaption(caption.id) }; model.rebuild()
                 }
             }
+            .buttonStyle(.edithDefault)
             DisclosureGroup("Style & position") {
                 VideoCaptionStyleEditor(caption: caption, model: model)
             }

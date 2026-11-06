@@ -147,12 +147,14 @@ struct SocialAccountListRow: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
+    private var padding: CGFloat { UIScale.pt(compactRow ? 8 : compact ? 10 : 14) }
+
     var body: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            Button {
-                model.open(account)
-                onOpen?()
-            } label: {
+        Button {
+            model.open(account)
+            onOpen?()
+        } label: {
+            HStack(spacing: UIScale.pt(12)) {
                 HStack(spacing: UIScale.pt(8)) {
                     SocialAvatar(
                         image: model.avatars[account.id], initials: account.initials,
@@ -168,10 +170,28 @@ struct SocialAccountListRow: View {
                         .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(2)
                     }
                     Spacer(minLength: 0)
-                }.contentShape(Rectangle())
+                }
+                accessory.hidden().accessibilityHidden(true)
             }
-            .buttonStyle(.edith(.borderless))
-            .accessibilityLabel("Open \(model.accountTitle(account))")
+            .padding(padding)
+            .background(
+                model.focusedAccount?.id == account.id
+                    ? DashSkin.accent(scheme == .dark).opacity(0.12)
+                    : DashSkin.paper2(scheme == .dark),
+                in: RoundedRectangle(cornerRadius: UIScale.pt(10))
+            )
+        }
+        .buttonStyle(SocialCardButtonStyle(cornerRadius: 10))
+        .accessibilityLabel("Open \(model.accountTitle(account))")
+        .overlay(alignment: .trailing) {
+            accessory.padding(.trailing, padding)
+        }
+        .contextMenu { SocialAccountActions(model: model, account: account) }
+        .herdrDraggable(.pane(account.id.uuidString), simultaneous: true)
+    }
+
+    private var accessory: some View {
+        HStack(spacing: UIScale.pt(12)) {
             if model.paneIsOpen(account.id.uuidString) {
                 EdithIconView(.dot, size: UIScale.pt(16))
                     .frame(width: UIScale.pt(6), height: UIScale.pt(6))
@@ -185,13 +205,5 @@ struct SocialAccountListRow: View {
             .borderlessMenu().fixedSize()
             .accessibilityLabel("Manage \(model.accountTitle(account))")
         }
-        .padding(UIScale.pt(compactRow ? 8 : compact ? 10 : 14))
-        .background(
-            model.focusedAccount?.id == account.id
-                ? DashSkin.accent(scheme == .dark).opacity(0.12) : DashSkin.paper2(scheme == .dark),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(10))
-        )
-        .contextMenu { SocialAccountActions(model: model, account: account) }
-        .herdrDraggable(.pane(account.id.uuidString), simultaneous: true)
     }
 }

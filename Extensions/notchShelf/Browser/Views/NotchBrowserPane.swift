@@ -244,7 +244,7 @@ struct NotchBrowserDialogView: View {
                 )
                 .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Capsule(), filled: primary))
         .keyboardShortcut(primary ? .defaultAction : .cancelAction)
     }
 }

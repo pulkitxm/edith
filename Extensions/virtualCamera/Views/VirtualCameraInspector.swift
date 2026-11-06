@@ -374,7 +374,10 @@ struct VirtualCameraLookTile: View {
                     .foregroundStyle(selected ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
             }
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous), filled: true)
+        )
         .accessibilityLabel(preset.title)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

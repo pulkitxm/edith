@@ -15,7 +15,8 @@ struct QuinjetProjectListSkeleton: View {
                         if index > 0 {
                             Divider()
                                 .padding(
-                                    .leading, UIScale.pt(QuinjetProjectRowMetrics.dividerInset))
+                                    .horizontal,
+                                    UIScale.pt(QuinjetProjectRowMetrics.dividerInset))
                         }
                         HStack(spacing: UIScale.pt(QuinjetProjectRowMetrics.spacing)) {
                             HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
@@ -45,7 +46,7 @@ struct QuinjetProjectListSkeleton: View {
                             }
                         }
                         .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
-                        .padding(.vertical, UIScale.pt(10))
+                        .padding(.vertical, UIScale.pt(QuinjetProjectRowMetrics.verticalPadding))
                     }
                 }
                 .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)

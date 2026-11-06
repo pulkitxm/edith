@@ -224,7 +224,11 @@ struct StudioImageFilterPanel: View {
                     }
                     .edithButtonTarget(.borderless)
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(
+                    .edithShaped(
+                        RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous),
+                        filled: true)
+                )
                 .accessibilityLabel(preset.title)
             }
         }
@@ -565,10 +569,8 @@ struct StudioImageLayerList: View {
                                     weight: editor.selectedLayer == layer.id ? .semibold : .regular)
                             )
                             .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .edithButtonTarget(.borderless)
                     }
-                    .buttonStyle(.edith(.borderless))
+                    .buttonStyle(.edith(.row, selected: editor.selectedLayer == layer.id))
                     Button {
                         editor.edit { $0.updateLayer(layer.id) { $0.isHidden.toggle() } }
                     } label: {

@@ -337,7 +337,6 @@ private struct ProjectRow: View {
     let expanded: Bool
     let onToggle: () -> Void
     let actions: UsageProjectActionModel
-    @State private var hovering = false
 
     private var hasChildren: Bool { node.children?.isEmpty == false }
 
@@ -348,11 +347,9 @@ private struct ProjectRow: View {
             content
                 .padding(.horizontal, UIScale.pt(8))
                 .frame(height: UIScale.pt(27))
-                .background(hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
-        .onHover { hovering = $0 }
+        .buttonStyle(UsageRowButtonStyle())
     }
 
     @ViewBuilder private var content: some View {

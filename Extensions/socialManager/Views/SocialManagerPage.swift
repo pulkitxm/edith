@@ -50,6 +50,7 @@ struct SocialManagerPage: View {
                     } label: {
                         Label("Add", edith: .plus)
                     }
+                    .menuStyle(.button)
                     .fixedSize()
                     .disabled(!model.load.hasContent || model.busy)
                     .help(
@@ -68,6 +69,7 @@ struct SocialManagerPage: View {
                     } label: {
                         EdithIconView(.close)
                     }
+                    .buttonStyle(.edith(.iconOnly))
                     .accessibilityLabel("Dismiss message")
                 }
                 .padding(UIScale.pt(10)).pageGutter(compact)
@@ -313,6 +315,7 @@ struct SocialManagerPage: View {
                             Button("All profiles", edith: .chevronLeft) {
                                 model.profileID = nil
                             }
+                            .buttonStyle(.edithDefault)
                             accounts(for: profile)
                         } else {
                             PageSectionHeader(
@@ -427,7 +430,7 @@ struct SocialManagerPage: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
                     DashSkin.line(dark)))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(SocialCardButtonStyle(cornerRadius: 12))
         .contextMenu { profileActions(profile) }
         .herdrDropFrame("profileCard:" + profile.id.uuidString)
         .draggable("social-profile:\(profile.id)")
@@ -485,6 +488,7 @@ struct SocialManagerPage: View {
                 Text("No accounts match these filters.").font(.edithText(.body)).foregroundStyle(
                     .secondary)
                 Button("Reset filters") { model.resetAccountFilters() }
+                    .buttonStyle(.edithDefault)
             } else if accounts.isEmpty {
                 PageEmptyState(
                     icon: .plus, title: "Add accounts to \(profile.name)",
@@ -586,6 +590,7 @@ struct SocialManagerPage: View {
                     .help("Open beside the focused account, including accounts on another platform")
                 }
             }
+            .buttonStyle(.edithDefault)
         }
         .padding(UIScale.pt(18)).frame(
             maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading
@@ -649,6 +654,7 @@ struct SocialManagerPage: View {
                 Button("Reset filters") {
                     model.resetAccountFilters()
                 }
+                .buttonStyle(.edithDefault)
             } else if model.libraryView == .list {
                 LazyVStack(spacing: UIScale.pt(8)) {
                     ForEach(model.filteredAccounts) {

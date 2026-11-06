@@ -123,7 +123,6 @@ struct PresenterPrivacySettingToggle: View {
 struct PresenterPrivacyQuickToggle: View {
     let category: PresenterPrivacy
     @AppStorage private var stored: Bool
-    @State private var hovering = false
 
     init(category: PresenterPrivacy) {
         self.category = category
@@ -146,14 +145,11 @@ struct PresenterPrivacyQuickToggle: View {
                     .allowsHitTesting(false)
             }
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, UIScale.pt(8))
-            .padding(.vertical, UIScale.pt(8))
-            .background(hovering ? Color.primary.opacity(0.06) : Color.clear)
+            .padding(.vertical, UIScale.pt(1))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edith(.row))
         .accessibilityLabel(category.title)
-        .onHover { hovering = $0 }
     }
 
     private var storedBinding: Binding<Bool> {

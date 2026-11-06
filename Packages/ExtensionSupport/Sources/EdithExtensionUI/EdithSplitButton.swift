@@ -221,7 +221,7 @@ private struct EdithSplitSegmentBody<Label: View>: View {
                 .accessibilityHidden(true)
             }
             .contentShape(shape)
-            .onHover { hovering = $0 }
+            .edithHoverTracking($hovering)
             .animation(
                 Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: interaction)
     }

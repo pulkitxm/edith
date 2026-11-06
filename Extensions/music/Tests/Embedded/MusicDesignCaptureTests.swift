@@ -216,6 +216,30 @@ import Testing
             directories: [:])
     }
 
+    @Test func footerTrackBlockAndPlayButtonRenderAtRestHoveredAndPressed() async throws {
+        try await withSession { session in
+            try await configure(.populated)
+            let states: [(String, EdithInteractionPreview?)] = [
+                ("rest", nil), ("hovered", .hovered), ("pressed", .pressed),
+            ]
+            for (name, preview) in states {
+                for scheme in [ColorScheme.light, .dark] {
+                    let view = try await session.render(
+                        width: 1100, height: nil, scheme: scheme,
+                        name: "footer-\(name)-\(scheme)"
+                    ) {
+                        EmbeddedMusicFooter()
+                            .environment(\.edithInteractionPreview, preview)
+                            .environment(\.musicLiquidGlass, false)
+                            .environment(\.colorScheme, scheme)
+                            .background(DashSkin.paper(scheme == .dark))
+                    }
+                    #expect(view.bounds.height >= UIScale.pt(EmbeddedMusicFooter.expandedHeight))
+                }
+            }
+        }
+    }
+
     @Test func footerAndSidebarReportTheHeightTheyDraw() async throws {
         try await withSession { session in
             for library in [Library.populated, .nothingPlaying] {

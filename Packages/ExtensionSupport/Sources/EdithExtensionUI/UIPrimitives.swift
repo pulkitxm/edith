@@ -134,9 +134,13 @@ private struct EdithButtonBody<Label: View>: View {
     @Environment(\.isFocused) private var focused
     @Environment(\.font) private var font
     @Environment(\.edithInteractionPreview) private var preview
+    @Environment(\.edithRowSlot) private var rowSlot
     @State private var hovering = false
 
-    private var metrics: EdithButtonMetrics { .metrics(for: role) }
+    private var listed: Bool { fillsWidth && rowSlot != nil }
+    private var metrics: EdithButtonMetrics {
+        listed ? EdithRowMetrics.buttonMetrics : .metrics(for: role)
+    }
     private var cornerRadius: CGFloat { UIScale.pt(metrics.cornerRadius) }
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -164,7 +168,7 @@ private struct EdithButtonBody<Label: View>: View {
                 }
                 .contentShape(Rectangle())
                 .opacity(enabled ? 1 : EdithInteractionMetrics.disabledOpacity)
-                .onHover { hovering = $0 }
+                .edithHoverTracking($hovering)
                 .animation(
                     Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
                     value: interaction
@@ -191,11 +195,17 @@ private struct EdithButtonBody<Label: View>: View {
                     }
                 }
                 .overlay(shape.strokeBorder(border, lineWidth: borderWidth))
+                .padding(listed ? UIScale.pt(EdithRowMetrics.plateInset) : 0)
                 .contentShape(Rectangle())
                 .opacity(
-                    enabled ? (inactive ? 0.72 : 1) : EdithInteractionMetrics.disabledOpacity
+                    enabled
+                        ? (inactive && !fillsWidth ? 0.72 : 1)
+                        : EdithInteractionMetrics.disabledOpacity
                 )
-                .onHover { hovering = $0 }
+                .edithHoverTracking($hovering)
+                .onChange(of: showsPlate || (fillsWidth && selected), initial: true) { _, lit in
+                    rowSlot?.report(lit)
+                }
                 .animation(
                     Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
                     value: interaction

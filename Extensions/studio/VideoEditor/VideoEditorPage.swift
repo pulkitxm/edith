@@ -257,6 +257,8 @@ struct VideoEditorPage: View {
         } label: {
             EdithIcon.more.image()
         }
+        .menuStyle(.button)
+        .buttonStyle(.edith(.iconOnly))
         .help("Editor actions").accessibilityLabel("Editor actions")
         Button {
             if compact { showingInspectorPopover.toggle() } else { showingInspector.toggle() }
@@ -278,6 +280,8 @@ struct VideoEditorPage: View {
         } label: {
             Label("Projects", edith: .folder)
         }
+        .menuStyle(.button)
+        .buttonStyle(.edith(.iconOnly))
         .labelStyle(.iconOnly)
         .help("Projects")
         Button(
@@ -492,14 +496,14 @@ struct VideoEditorPage: View {
                                     }
                                     Spacer()
                                 }
-                                .padding(UIScale.pt(9))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    model.selectedClipID == clip.id
-                                        ? Color.themeAccent.opacity(0.2) : Color.gray.opacity(0.1),
-                                    in: RoundedRectangle(cornerRadius: 9))
+                                .padding(.vertical, UIScale.pt(2))
                             }
-                            .buttonStyle(.edith(.borderless))
+                            .buttonStyle(.edith(.row, selected: model.selectedClipID == clip.id))
+                            .background(
+                                model.selectedClipID == clip.id
+                                    ? Color.clear : Color.gray.opacity(0.1),
+                                in: RoundedRectangle(
+                                    cornerRadius: UIScale.pt(8), style: .continuous))
                         }
                     }
                 }
@@ -526,9 +530,11 @@ struct VideoEditorPage: View {
                     }
                     Spacer(minLength: 0)
                     Button("Undo", edith: .undo, action: model.undo)
+                        .buttonStyle(.edithDefault)
                         .disabled(!model.canUndo)
                         .keyboardShortcut("z", modifiers: .command)
                     Button("Redo", edith: .redo, action: model.redo)
+                        .buttonStyle(.edithDefault)
                         .disabled(!model.canRedo)
                         .keyboardShortcut("z", modifiers: [.command, .shift])
                 }
@@ -594,6 +600,7 @@ struct VideoEditorPage: View {
                     } label: {
                         EdithIconView(.trash)
                     }
+                    .buttonStyle(.edith(.iconOnly))
                     .accessibilityLabel("Remove zoom")
                     .help("Remove selected zoom")
                 }
@@ -772,7 +779,7 @@ struct ZoomTimelineRegion: View {
                     .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))

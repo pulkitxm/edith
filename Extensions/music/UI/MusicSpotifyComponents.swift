@@ -60,33 +60,11 @@ private struct EmbeddedSpotifyCollectionCard: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            Button {
-                onOpen(item)
-            } label: {
+        Button {
+            onOpen(item)
+        } label: {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 EmbeddedSpotifyCollectionArtwork(item: item)
-            }
-            .buttonStyle(.edith(.borderless))
-            .accessibilityLabel("Open \(item.title)")
-            .overlay(alignment: .bottomTrailing) {
-                if item.playable {
-                    Button {
-                        onPlay(item)
-                    } label: {
-                        EdithIconView(.play)
-                            .font(.edithText(.body)).foregroundStyle(Color.themeOnAccent)
-                            .frame(width: UIScale.pt(38), height: UIScale.pt(38))
-                            .background(DashSkin.accent(scheme == .dark), in: Circle())
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .padding(UIScale.pt(8))
-                    .opacity(hovering ? 1 : 0.85)
-                    .accessibilityLabel("Play \(item.title)")
-                }
-            }
-            Button {
-                onOpen(item)
-            } label: {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                     Text(item.title).font(.edithText(.headline))
                         .foregroundStyle(.primary).lineLimit(2)
@@ -96,14 +74,35 @@ private struct EmbeddedSpotifyCollectionCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
             }
-            .buttonStyle(.edith(.borderless))
+            .frame(width: UIScale.pt(150), alignment: .leading)
+            .padding(UIScale.pt(8))
+            .contentShape(Rectangle())
         }
-        .frame(width: UIScale.pt(150), alignment: .leading)
-        .padding(UIScale.pt(8))
-        .background(
-            Color.primary.opacity(hovering ? 0.06 : 0),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
         )
+        .accessibilityLabel("Open \(item.title)")
+        .overlay(alignment: .topLeading) {
+            if item.playable {
+                Button {
+                    onPlay(item)
+                } label: {
+                    EdithIconView(.play)
+                        .font(.edithText(.body)).foregroundStyle(Color.themeOnAccent)
+                        .frame(width: UIScale.pt(38), height: UIScale.pt(38))
+                        .background(DashSkin.accent(scheme == .dark), in: Circle())
+                }
+                .buttonStyle(.edithShaped(Circle(), filled: true))
+                .padding(UIScale.pt(8))
+                .opacity(hovering ? 1 : 0.85)
+                .accessibilityLabel("Play \(item.title)")
+                .frame(
+                    width: UIScale.pt(150), height: UIScale.pt(150), alignment: .bottomTrailing
+                )
+                .padding(UIScale.pt(8))
+            }
+        }
         .onHover { hovering = $0 }
     }
 }
@@ -177,7 +176,54 @@ private struct EmbeddedSpotifySongRow: View {
     }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(12)) {
+        EdithRowButton {
+            onSelect()
+            if NSApp.currentEvent?.clickCount == 2 && item.playable { onPlay() }
+        } label: {
+            HStack(spacing: UIScale.pt(12)) {
+                Color.clear.frame(width: UIScale.pt(24), height: UIScale.pt(32))
+                HStack(spacing: UIScale.pt(10)) {
+                    EmbeddedSpotifyCollectionArtwork(item: item, size: 36)
+                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                        Text(item.title).font(.edithText(.body)).fontWeight(.medium)
+                            .foregroundStyle(current ? accent : .primary).lineLimit(1)
+                        Text(item.subtitle).font(.edithText(.caption))
+                            .foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if albumVisible {
+                    Text(item.album ?? "").font(.edithText(.caption))
+                        .foregroundStyle(.secondary).lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
+                }
+                Text(duration).font(.edithText(.caption)).monospacedDigit()
+                    .foregroundStyle(.secondary).frame(width: UIScale.pt(44), alignment: .trailing)
+            }
+            .padding(.leading, UIScale.pt(Self.contentInset))
+            .padding(.vertical, UIScale.pt(Self.verticalInset))
+        } accessory: {
+            HStack(spacing: UIScale.pt(12)) {
+                Button(action: onSave) {
+                    EdithIconView(.heart, tone: saved ? .duotone : .muted).foregroundStyle(
+                        saved ? accent : .secondary)
+                }
+                .buttonStyle(.edith(.borderless)).opacity(hovering || saved ? 1 : 0)
+                .accessibilityLabel(saved ? "Remove from library" : "Save to library")
+                Menu {
+                    actions
+                } label: {
+                    EdithIcon.more.image()
+                }
+                .borderlessMenu().fixedSize()
+                .accessibilityLabel("Actions for \(item.title)")
+            }
+            .padding(.trailing, UIScale.pt(Self.contentInset))
+        }
+        .overlay(alignment: .leading) {
             Button(action: onPlay) {
                 Group {
                     if hovering {
@@ -194,60 +240,23 @@ private struct EmbeddedSpotifySongRow: View {
             }
             .buttonStyle(.edith(.borderless)).disabled(!item.playable)
             .accessibilityLabel("Play \(item.title)")
-            Button {
-                onSelect()
-                if NSApp.currentEvent?.clickCount == 2 && item.playable { onPlay() }
-            } label: {
-                HStack(spacing: UIScale.pt(10)) {
-                    EmbeddedSpotifyCollectionArtwork(item: item, size: 36)
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        Text(item.title).font(.edithText(.body)).fontWeight(.medium)
-                            .foregroundStyle(current ? accent : .primary).lineLimit(1)
-                        Text(item.subtitle).font(.edithText(.caption))
-                            .foregroundStyle(.secondary).lineLimit(1)
-                    }
-                    .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.edith(.borderless))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if albumVisible {
-                Text(item.album ?? "").font(.edithText(.caption))
-                    .foregroundStyle(.secondary).lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
-            }
-            Text(duration).font(.edithText(.caption)).monospacedDigit()
-                .foregroundStyle(.secondary).frame(width: UIScale.pt(44), alignment: .trailing)
-            Button(action: onSave) {
-                EdithIconView(.heart, tone: saved ? .duotone : .muted).foregroundStyle(
-                    saved ? accent : .secondary)
-            }
-            .buttonStyle(.edith(.borderless)).opacity(hovering || saved ? 1 : 0)
-            .accessibilityLabel(saved ? "Remove from library" : "Save to library")
-            Menu {
-                actions
-            } label: {
-                EdithIcon.more.image()
-            }
-            .borderlessMenu().fixedSize()
-            .accessibilityLabel("Actions for \(item.title)")
+            .padding(.leading, UIScale.pt(Self.rowInset + Self.contentInset))
         }
-        .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(8))
-        .frame(minHeight: UIScale.pt(52))
         .background(
-            current || selected ? accent.opacity(0.1) : Color.primary.opacity(hovering ? 0.05 : 0),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+            current || selected ? accent.opacity(0.1) : .clear,
+            in: RoundedRectangle(cornerRadius: UIScale.pt(Self.cornerRadius))
         )
-        .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .contextMenu { actions }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(selected || current ? .isSelected : AccessibilityTraits())
         .accessibilityAction(named: Text("Play")) { if item.playable { onPlay() } }
     }
+
+    private static let rowInset = 9.0
+    private static let contentInset = 3.0
+    private static let verticalInset = 1.0
+    private static let cornerRadius = 8.0
 
     @ViewBuilder private var actions: some View {
         Button("Play", edith: .play, action: onPlay).disabled(!item.playable)

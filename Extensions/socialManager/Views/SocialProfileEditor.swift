@@ -42,6 +42,7 @@ struct SocialProfileEditor: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                    .buttonStyle(.edithDefault)
                 Button(profile == nil ? "Create profile" : "Save") {
                     do {
                         try model.saveProfile(
@@ -52,6 +53,7 @@ struct SocialProfileEditor: View {
                     } catch { self.error = error.localizedDescription }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.edith(.primary))
                 .disabled(
                     name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
             }

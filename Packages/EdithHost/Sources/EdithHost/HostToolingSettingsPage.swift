@@ -38,7 +38,9 @@ struct HostToolingSettingsPage: View {
             if let error = model.error {
                 Section {
                     Text(error).foregroundStyle(.red).textSelection(.enabled)
-                    Button("Retry") { Task { await model.refresh() } }.disabled(model.refreshing)
+                    Button("Retry") { Task { await model.refresh() } }
+                        .buttonStyle(.edithDefault)
+                        .disabled(model.refreshing)
                 }
             }
         }
@@ -231,6 +233,7 @@ private struct HostToolingActionButton: View {
                 Text(title)
             }
         }
+        .buttonStyle(.edithDefault)
         .disabled(!enabled || phase == .running)
         .animation(.easeInOut(duration: 0.18), value: phase)
     }

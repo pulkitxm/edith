@@ -48,12 +48,11 @@ private struct EdithSwitchBody: View {
             configuration.isOn.toggle()
         } label: {
             EdithSwitchTrack(isOn: configuration.isOn)
-                .edithHoverHighlight(outset: true)
                 .background {
                     configuration.label.foregroundStyle(.clear).frame(width: 1, height: 1).clipped()
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edithControl)
         .focusEffectDisabled()
         .accessibilityAddTraits(.isToggle)
         .accessibilityValue(configuration.isOn ? "On" : "Off")

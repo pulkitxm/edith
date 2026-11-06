@@ -106,7 +106,7 @@ struct UsageMachinesPicker: View {
             .padding(.vertical, UIScale.pt(7))
             .contentShape(Rectangle())
         }
-        .buttonStyle(MachineRowStyle())
+        .buttonStyle(UsageRowButtonStyle(fillsTarget: true))
         .padding(.horizontal, UIScale.pt(2))
     }
 
@@ -116,15 +116,5 @@ struct UsageMachinesPicker: View {
 
     private func freshness(_ group: MachineGroup, now: Date) -> MachineUsageFreshness? {
         model.machineFreshness(group, now: now)
-    }
-}
-
-private struct MachineRowStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .edithHoverHighlight(
-                tone: .neutral, cornerRadius: UIScale.pt(6), pressed: configuration.isPressed
-            )
-            .edithButtonTarget(.row)
     }
 }

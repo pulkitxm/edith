@@ -212,7 +212,7 @@ struct EmbeddedHomeMusicCard: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithBlock(inset: 4))
         .allowsHitTesting(presentation?.tile.showActions != false)
     }
 }

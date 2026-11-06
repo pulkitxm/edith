@@ -115,12 +115,13 @@ struct SocialWorkspaceLayout: View {
                                 EdithIconView(.plus).font(
                                     .edithText(.caption))
                             }
-                            .padding(.horizontal, UIScale.pt(8)).padding(.vertical, UIScale.pt(6))
-                            .widgetBar(
-                                cornerRadius: 7, fill: DashSkin.paper2(scheme == .dark),
-                                stroke: DashSkin.line(scheme == .dark))
-                        }.buttonStyle(.edith(.borderless))
-                            .help("Bring this tab in beside the current accounts")
+                        }
+                        .buttonStyle(.edith(.row))
+                        .widgetBar(
+                            cornerRadius: 7, fill: DashSkin.paper2(scheme == .dark),
+                            stroke: DashSkin.line(scheme == .dark)
+                        )
+                        .help("Bring this tab in beside the current accounts")
                     }
                     HStack(spacing: UIScale.pt(8)) {
                         if model.tabs.count > 1 {
