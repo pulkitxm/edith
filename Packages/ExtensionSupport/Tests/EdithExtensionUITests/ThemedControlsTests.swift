@@ -10,7 +10,7 @@ private struct ThemedRow: Identifiable {
     let id: Int
 }
 
-@MainActor @Suite(.serialized) struct ThemedControlsTests {
+@MainActor @Suite(.serialized, .exclusiveScale) struct ThemedControlsTests {
     private func withTheme(_ theme: AppTheme, _ body: () async throws -> Void) async throws {
         let defaults = ExtensionScope.process.defaults()
         let stored = defaults.string(forKey: AppStorageKeys.General.theme)
@@ -224,26 +224,6 @@ private struct ThemedRow: Identifiable {
             }
             let reference = pixel(bitmap, 40, bitmap.pixelsHigh - 20)
             #expect(contains(reference, in: bitmap, above: bitmap.pixelsHigh / 2))
-        }
-    }
-
-    @Test func exclusiveScaleKeepsConcurrentHoldersFromInterleaving() async {
-        var log: [String] = []
-        await withTaskGroup(of: Void.self) { group in
-            for name in ["first", "second", "third"] {
-                group.addTask { @MainActor in
-                    await RenderCapture.exclusiveScale {
-                        log.append(name + " in")
-                        try? await Task.sleep(for: .milliseconds(30))
-                        await RenderCapture.exclusiveScale { await Task.yield() }
-                        log.append(name + " out")
-                    }
-                }
-            }
-        }
-        #expect(log.count == 6)
-        for index in stride(from: 0, to: log.count, by: 2) {
-            #expect(log[index].dropLast(3) == log[index + 1].dropLast(4))
         }
     }
 

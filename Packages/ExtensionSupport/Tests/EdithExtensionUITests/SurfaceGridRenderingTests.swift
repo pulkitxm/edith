@@ -5,7 +5,7 @@ import EdithExtensionUI
 import SwiftUI
 import Testing
 
-@MainActor @Suite(.serialized) struct SurfaceGridRenderingTests {
+@MainActor @Suite(.serialized, .exclusiveScale) struct SurfaceGridRenderingTests {
     @MainActor final class Frames {
         var values: [String: CGRect] = [:]
         var shelfHeight = 0.0

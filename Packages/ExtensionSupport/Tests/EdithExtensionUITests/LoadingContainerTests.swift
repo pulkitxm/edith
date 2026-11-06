@@ -1,10 +1,11 @@
 import AppKit
+import EdithExtensionTestSupport
 import SwiftUI
 import Testing
 @testable import EdithExtensionUI
 
 @MainActor
-@Suite struct LoadingContainerTests {
+@Suite(.exclusiveScale) struct LoadingContainerTests {
     @Test func placeholdersWaitLongerThanFastLoadsAndRefreshHintsDoNotFlash() {
         #expect(ContentActivityTiming.placeholderDelay >= .milliseconds(200))
         #expect(ContentActivityTiming.revealDelay >= .milliseconds(150))

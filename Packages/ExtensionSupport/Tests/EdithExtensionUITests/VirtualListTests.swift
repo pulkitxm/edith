@@ -1,11 +1,12 @@
 import AppKit
+import EdithExtensionTestSupport
 import Observation
 import SwiftUI
 import Testing
 
 @testable import EdithExtensionUI
 
-@Suite(.serialized) @MainActor struct VirtualListTests {
+@Suite(.serialized, .exclusiveScale) @MainActor struct VirtualListTests {
     @Test func scrollingThousandsOfRowsReusesAHandfulOfCells() async throws {
         let (window, host) = ScrollFrameHarness.host(
             list(ScrollFixtureRows.rows), size: CGSize(width: 900, height: 700))

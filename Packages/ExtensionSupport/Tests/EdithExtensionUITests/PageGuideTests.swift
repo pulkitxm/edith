@@ -6,7 +6,7 @@ import Testing
 @testable import EdithExtensionUI
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .exclusiveScale)
 struct PageGuideTests {
     static let variants = [
         RenderCapture.Variant(

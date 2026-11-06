@@ -1,10 +1,11 @@
 import AppKit
+import EdithExtensionTestSupport
 import SwiftUI
 import Testing
 
 @testable import EdithExtensionUI
 
-@Suite(.serialized) @MainActor struct PageScrollPerformanceTests {
+@Suite(.serialized, .exclusiveScale) @MainActor struct PageScrollPerformanceTests {
     static let benchmark = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
 
     @Test(.enabled(if: benchmark)) func longPagesScrollWithinTheFrameBudget() async {

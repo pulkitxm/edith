@@ -57,8 +57,8 @@ public struct SurfaceFittedGrid<Content: View>: View {
     }
 
     public var body: some View {
-        let columns = min(
-            max(1, count), max(1, Int((width + UIScale.pt(gap)) / UIScale.pt(minimum + gap))))
+        let columns = PageMetrics.fittedColumns(
+            count: count, width: width, minimum: UIScale.pt(minimum), spacing: UIScale.pt(gap))
         LazyVGrid(
             columns: Array(
                 repeating: GridItem(.flexible(minimum: 0), spacing: UIScale.pt(gap)), count: columns
