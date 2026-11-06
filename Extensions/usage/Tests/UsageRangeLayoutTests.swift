@@ -24,6 +24,7 @@ extension UsageDashboardCaptureTests {
 
     struct ActivityProbe {
         var card: CGRect?
+        var limits: CGRect?
         var cells: [CGRect] = []
     }
 
@@ -35,6 +36,9 @@ extension UsageDashboardCaptureTests {
             let label = object.accessibilityLabel?() ?? ""
             if object.accessibilityIdentifier?() == "usage-activity" {
                 probe.card = object.accessibilityFrame?()
+            }
+            if object.accessibilityIdentifier?() == "usage-rate-limits" {
+                probe.limits = object.accessibilityFrame?()
             }
             if label.hasPrefix("Activity "), label != "Activity calendar",
                 let frame = object.accessibilityFrame?()
@@ -97,10 +101,43 @@ extension UsageDashboardCaptureTests {
         }
     }
 
+    @Test func activityCardStaysInsideAPageNarrowedByTheSidebar() async throws {
+        try await Self.withManualAccessibility {
+            let scene = try await Self.scene(.populated, days: 800)
+            for range in Self.rangeSelections where ["90d", "1y", "all"].contains(range.name) {
+                scene.model.range = range.selection
+                await scene.model.awaitPendingComputation()
+                for width in [420.0, 540, 660, 780, 900] {
+                    let variant = Variant(
+                        name: "sidebar-\(Int(width))", size: CGSize(width: width, height: 1400),
+                        scheme: .dark)
+                    let (probe, page) = try await Self.probeActivityFrame(
+                        scene, variant: variant, compact: false,
+                        name: "range-\(range.name)-\(variant.name)")
+                    let label = "\(variant.name) \(range.name)"
+                    let card = try #require(probe.card, "\(label) lost the activity card")
+                    let limits = try #require(probe.limits, "\(label) lost the rate limits")
+                    for (name, frame) in [("activity card", card), ("rate limits", limits)] {
+                        #expect(
+                            frame.minX >= page.minX - 1 && frame.maxX <= page.maxX + 1,
+                            "\(label) \(name) \(frame) leaves the page \(page)")
+                    }
+                }
+            }
+        }
+    }
+
     static func probeActivity(_ scene: Scene, variant: Variant, name: String) async throws
         -> ActivityProbe
     {
-        let compact = variant.size.width < UIScale.pt(720)
+        try await probeActivityFrame(
+            scene, variant: variant, compact: variant.size.width < UIScale.pt(720), name: name
+        ).probe
+    }
+
+    static func probeActivityFrame(
+        _ scene: Scene, variant: Variant, compact: Bool, name: String
+    ) async throws -> (probe: ActivityProbe, page: CGRect) {
         let view = DashboardView(model: scene.model, client: scene.client)
             .environment(\.usageUIClient, scene.client)
             .environment(\.automaticViewActionsEnabled, false)
@@ -123,6 +160,6 @@ extension UsageDashboardCaptureTests {
                 at: directory, withIntermediateDirectories: true)
             try png.write(to: directory.appendingPathComponent("usage-\(name).png"))
         }
-        return probe
+        return (probe, window.frame)
     }
 }
