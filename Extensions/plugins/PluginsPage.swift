@@ -104,7 +104,7 @@ struct PluginsPage: View {
     }
 }
 
-private struct SkillCatalogRow: View {
+struct SkillCatalogRow: View {
     let skill: EdithSkill
     let agents: [SkillAgent]
     let installed: Bool
@@ -166,49 +166,41 @@ private struct SkillCatalogRow: View {
     }
 
     private var installActions: some View {
-        HStack(spacing: UIScale.pt(2)) {
-            Button {
-                install(nil)
-            } label: {
-                if installed {
-                    Label("Installed", edith: .check)
-                } else {
-                    Text("Install")
-                }
+        EdithSplitButton(
+            actionAccessibilityLabel: installed
+                ? "Reinstall \(skill.name)" : "Install \(skill.name)",
+            menuAccessibilityLabel: "Choose an agent for \(skill.name)",
+            actionHelp: unavailableReason
+                ?? (installed
+                    ? "Already installed. Click to reinstall or update."
+                    : "Choose agents and install this skill"),
+            menuHelp: "Install for one agent"
+        ) {
+            install(nil)
+        } label: {
+            if installed {
+                Label("Installed", edith: .check)
+            } else {
+                Text("Install")
             }
-            .buttonStyle(.edith(.secondary))
-            .help(
-                unavailableReason
-                    ?? (installed
-                        ? "Already installed. Click to reinstall or update."
-                        : "Choose agents and install this skill"))
-            Menu {
-                if agents.isEmpty { Text("No agents found on this Mac") }
-                ForEach(agents) { agent in
-                    Button {
-                        install(agent.id)
-                    } label: {
-                        Label {
-                            Text("Install for \(agent.name)\u{2026}")
-                        } icon: {
-                            if let image = SkillBrand.menuImage(for: agent.id) {
-                                Image(nsImage: image)
-                                    .renderingMode(image.isTemplate ? .template : .original)
-                            } else {
-                                EdithIcon.terminal.image()
-                            }
+        } menu: {
+            if agents.isEmpty { Text("No agents found on this Mac") }
+            ForEach(agents) { agent in
+                Button {
+                    install(agent.id)
+                } label: {
+                    Label {
+                        Text("Install for \(agent.name)\u{2026}")
+                    } icon: {
+                        if let image = SkillBrand.menuImage(for: agent.id) {
+                            Image(nsImage: image)
+                                .renderingMode(image.isTemplate ? .template : .original)
+                        } else {
+                            EdithIcon.terminal.image()
                         }
                     }
                 }
-            } label: {
-                EdithIcon.chevronDown.image(size: 12)
             }
-            .menuStyle(.button)
-            .buttonStyle(.edith(.secondary))
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Install for one agent")
-            .accessibilityLabel("Choose an agent for \(skill.name)")
         }
         .disabled(disabled)
     }

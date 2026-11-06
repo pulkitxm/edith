@@ -109,7 +109,7 @@ struct SEOAuditPageAccordion: View {
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            WrapHStack(spacing: UIScale.pt(10)) {
+            WrapHStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 if let url = URL(string: page.url) {
                     Link(destination: url) {
                         Label("Open page", edith: .arrowUpRight)

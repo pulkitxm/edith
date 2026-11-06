@@ -234,7 +234,7 @@ struct StudioFileCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            HStack(spacing: UIScale.pt(4)) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 ForEach(StudioQuickAction.allCases, id: \.self) { action in
                     if let tool = StudioCatalog.quickTool(action, for: item.kind) {
                         StudioQuickButton(title: action.title, primary: action == .edit) {

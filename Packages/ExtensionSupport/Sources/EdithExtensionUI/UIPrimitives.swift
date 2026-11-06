@@ -143,17 +143,11 @@ private struct EdithButtonBody<Label: View>: View {
     }
     private var fillsWidth: Bool { role == .row || role == .selection }
     private var inactive: Bool { activeState == .inactive }
-    private var resolvedTint: Color { tint ?? themeColor(themeName) }
     private var interaction: EdithInteractionState {
         EdithInteractionState.resolve(
             hovering: hovering, pressed: pressed, enabled: enabled, preview: preview)
     }
-    private var plateTone: EdithHoverTone {
-        switch role {
-        case .row, .selection, .primary, .destructive: .neutral
-        case .secondary, .toolbar, .iconOnly, .borderless: .tinted
-        }
-    }
+    private var plateTone: EdithHoverTone { palette.plateTone }
     private var showsPlate: Bool {
         guard fillsWidth, selected else { return interaction.active }
         return interaction.pressed
@@ -210,10 +204,41 @@ private struct EdithButtonBody<Label: View>: View {
         }
     }
 
-    private var foreground: Color {
+    private var palette: EdithButtonPalette {
+        EdithButtonPalette(
+            role: role, selected: selected, tint: tint, themeName: themeName,
+            dark: scheme == .dark, increasedContrast: contrast == .increased,
+            differentiateWithoutColor: differentiateWithoutColor)
+    }
+
+    private var foreground: Color { palette.foreground }
+    private var background: Color { palette.background }
+    private var border: Color { palette.border(focused: focused && enabled) }
+    private var borderWidth: Double { palette.borderWidth(focused: focused && enabled) }
+}
+
+struct EdithButtonPalette {
+    let role: EdithButtonRole
+    let selected: Bool
+    let tint: Color?
+    let themeName: String
+    let dark: Bool
+    let increasedContrast: Bool
+    let differentiateWithoutColor: Bool
+
+    var resolvedTint: Color { tint ?? themeColor(themeName) }
+
+    var plateTone: EdithHoverTone {
+        switch role {
+        case .row, .selection, .primary, .destructive: .neutral
+        case .secondary, .toolbar, .iconOnly, .borderless: .tinted
+        }
+    }
+
+    var foreground: Color {
         switch role {
         case .primary:
-            return tint.map { OnAccent.foreground(on: $0, dark: scheme == .dark) }
+            return tint.map { OnAccent.foreground(on: $0, dark: dark) }
                 ?? themeOnAccentColor(themeName)
         case .destructive:
             return .white
@@ -224,9 +249,9 @@ private struct EdithButtonBody<Label: View>: View {
         }
     }
 
-    private var background: Color {
+    var background: Color {
         guard !role.usesFeatureAppearance else { return .clear }
-        let boost = contrast == .increased ? 0.05 : 0
+        let boost = increasedContrast ? 0.05 : 0
         switch role {
         case .primary:
             return resolvedTint.opacity(0.9)
@@ -244,23 +269,23 @@ private struct EdithButtonBody<Label: View>: View {
         }
     }
 
-    private var border: Color {
+    func border(focused: Bool) -> Color {
         guard !role.usesFeatureAppearance else { return .clear }
-        if focused, enabled { return resolvedTint.opacity(0.95) }
+        if focused { return resolvedTint.opacity(0.95) }
         if selected, differentiateWithoutColor { return Color.primary.opacity(0.75) }
         switch role {
         case .secondary:
-            return Color.primary.opacity(contrast == .increased ? 0.34 : 0.18)
+            return Color.primary.opacity(increasedContrast ? 0.34 : 0.18)
         case .primary, .destructive:
-            return Color.white.opacity(contrast == .increased ? 0.7 : 0.2)
+            return Color.white.opacity(increasedContrast ? 0.7 : 0.2)
         case .row, .selection, .borderless, .toolbar, .iconOnly:
             return .clear
         }
     }
 
-    private var borderWidth: Double {
-        if (focused && enabled) || (selected && differentiateWithoutColor) { return 2 }
-        return contrast == .increased ? 1 : 0.75
+    func borderWidth(focused: Bool) -> Double {
+        if focused || (selected && differentiateWithoutColor) { return 2 }
+        return increasedContrast ? 1 : 0.75
     }
 }
 
