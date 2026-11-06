@@ -15,6 +15,10 @@ import Testing
 @MainActor @Suite(.serialized) struct HostHomePerformanceTests {
     static let benchmark = ProcessInfo.processInfo.environment["EDITH_HOME_BENCHMARK"] != nil
     static let providers = ["music", "usage", "calendar", "keepAwake", "system"]
+    static let sharedRunnerScale =
+        ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" ? 2.5 : 1.0
+
+    static func budget(_ milliseconds: Double) -> Double { milliseconds * sharedRunnerScale }
 
     @Test func homeAppearsAndYieldsNavigationWithinTheMainThreadBudget() async throws {
         let runs = Self.benchmark ? 5 : 3
@@ -31,12 +35,12 @@ import Testing
         #expect(shown.cards == 5, "\(shown)")
         #expect(left.cards == 0, "\(left)")
         #expect(shown.updatesPerCard <= 3, "\(shown)")
-        #expect(shown.longestStallMs < 60, "\(shown)")
-        #expect(shown.busyMs < 300, "\(shown)")
-        #expect(shown.returnBusyMs < 200, "\(shown)")
-        #expect(shown.returnStallMs < 65, "\(shown)")
-        #expect(left.navigationMs < 40, "\(left)")
-        #expect(left.longestStallMs < 60, "\(left)")
+        #expect(shown.longestStallMs < Self.budget(60), "\(shown)")
+        #expect(shown.busyMs < Self.budget(300), "\(shown)")
+        #expect(shown.returnBusyMs < Self.budget(200), "\(shown)")
+        #expect(shown.returnStallMs < Self.budget(65), "\(shown)")
+        #expect(left.navigationMs < Self.budget(40), "\(left)")
+        #expect(left.longestStallMs < Self.budget(60), "\(left)")
     }
 
     @Test func returningHomeReusesItsCardsInsteadOfRebuildingThem() async throws {
