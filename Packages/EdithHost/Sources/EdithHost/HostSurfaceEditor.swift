@@ -132,7 +132,8 @@ struct HostSurfaceEditor: View {
                 HStack {
                     Text(panel.title).font(.edithText(.title2))
                     Spacer()
-                    Button("Done") { editorPanel = nil }.keyboardShortcut(.defaultAction)
+                    Button("Done") { editorPanel = nil }.buttonStyle(.edith(.primary))
+                        .keyboardShortcut(.defaultAction)
                 }
                 Divider()
                 ScrollView {
@@ -357,8 +358,11 @@ struct HostSurfaceEditor: View {
                                             }
                                             Button("Delete") { store.removeProfile(profile.id) }
                                         } label: {
-                                            EdithIconView(.more)
+                                            menuLabel { EdithIconView(.more) }
                                         }
+                                        .menuStyle(.button)
+                                        .buttonStyle(.edithDefault)
+                                        .menuIndicator(.hidden)
                                         .help("Manage " + profile.name)
                                     }
                                 }
@@ -376,7 +380,9 @@ struct HostSurfaceEditor: View {
                 }
                 Text("Home and Notch have separate saved layouts. Applying a layout can be undone.")
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
-            }.padding(.top, UIScale.pt(8))
+            }
+            .buttonStyle(.edithDefault)
+            .padding(.top, UIScale.pt(8))
         }.font(.edithText(.callout))
     }
 
@@ -512,8 +518,10 @@ struct HostSurfaceEditor: View {
                     layoutError = nil
                 }
             } label: {
-                EdithIconView(.sidebarLeft)
+                menuLabel { EdithIconView(.sidebarLeft) }
             }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
             .help("Workspace panels and layout sharing")
             Button {
                 editorPanel = .geometry
@@ -525,7 +533,7 @@ struct HostSurfaceEditor: View {
             } label: {
                 Label("Layouts", edith: .layers)
             }
-            Menu("Presets") {
+            Menu {
                 ForEach(SurfacePreset.allCases) { preset in
                     Button {
                         store.update(target) { $0 = preset.layout(for: target) }
@@ -536,7 +544,11 @@ struct HostSurfaceEditor: View {
                 }
                 Divider()
                 Button("Empty canvas") { store.update(target) { $0.tiles = [] } }
+            } label: {
+                menuLabel { Text("Presets") }
             }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
         }.buttonStyle(.edith(.secondary))
     }
 
@@ -876,7 +888,10 @@ struct HostSurfaceEditor: View {
                             previewCompact = width == 420
                         }
                     }
-                }.help("Preview the actual canvas width")
+                }
+                .borderlessMenu()
+                .fixedSize()
+                .help("Preview the actual canvas width")
             }
             if target != .notch || !layout.notchHorizontal {
                 Toggle("Single column", isOn: $previewCompact)
@@ -1165,6 +1180,7 @@ struct HostSurfaceEditor: View {
                     HStack { widgetActions(tile) }
                     VStack(alignment: .leading) { widgetActions(tile) }
                 }
+                .buttonStyle(.edithDefault)
             } else {
                 Text("Select Configure on a widget to change its title, size, and behavior.")
                     .font(.edithText(.callout)).foregroundStyle(.secondary)
@@ -1331,6 +1347,15 @@ struct HostSurfaceEditor: View {
                 }
             }
             Toggle("Include subagents", isOn: setting(tile.id, \.includeSubagents, fallback: true))
+        }
+    }
+
+    private func menuLabel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: UIScale.pt(4)) {
+            content()
+            EdithIconView(.chevronDown, size: UIScale.pt(10))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
     }
 

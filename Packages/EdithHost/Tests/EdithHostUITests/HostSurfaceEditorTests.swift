@@ -175,7 +175,9 @@ import HostWorkerFixtureSupport
             find(host, label: "Search extensions") != nil
                 || find(host, label: "Find extensions") != nil)
         let usage = try #require(fixture.marketplace.entries.first { $0.id == "usage" })
-        #expect(find(host, label: HostMarketplaceCatalog.tagline(usage)) != nil)
+        let row = try #require(find(host, label: usage.title))
+        let hint = (row as AnyObject).accessibilityHelp?() as? String
+        #expect(hint?.contains(HostMarketplaceCatalog.tagline(usage)) == true)
         #expect(find(host, label: "Get Usage") != nil)
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
