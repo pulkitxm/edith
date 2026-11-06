@@ -106,6 +106,7 @@ icon:
 	  sips -z $$s $$s "$$ARTWORK" --out "AppIcon.iconset/icon_$${s}x$${s}.png" >/dev/null; \
 	  sips -z $$((s*2)) $$((s*2)) "$$ARTWORK" --out "AppIcon.iconset/icon_$${s}x$${s}@2x.png" >/dev/null; \
 	done; \
+	iconutil -c icns AppIcon.iconset -o Resources/AppIcon.icns; \
 	pngquant --force --ext .png --speed 1 --strip 256 AppIcon.iconset/*.png; \
 	python3 -B scripts/write-icns.py AppIcon.iconset Resources/AppIcon.icns; \
 	rm -rf AppIcon.iconset; \
