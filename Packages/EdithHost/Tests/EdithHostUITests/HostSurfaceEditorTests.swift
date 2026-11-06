@@ -58,6 +58,66 @@ import HostWorkerFixtureSupport
         #expect(await fixture.requests.count == 0)
         #expect(!TestWindowHost.isExposedOnDesktop(window))
     }
+    @Test func presentingKeepsTheHomeWidgetCardContentAndSizeUnderTheBlurOverlay()
+        async throws
+    {
+        let fixture = try Fixture(activeIDs: ["codeStats"])
+        defer { fixture.clean() }
+        await fixture.marketplace.enable(id: "codeStats")
+        let restore = try enableAccessibility()
+        defer { restore() }
+        let identity = fixture.marketplace.identity
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: identity.identifier, owner: "codeStats",
+            directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
+        let snapshot = SurfaceSnapshot(
+            providerID: "codeStats",
+            metrics: [.init("lines", "Lines changed", "1,284")],
+            rows: [
+                .init(
+                    "repository", sourceID: "synthetic", title: "Synthetic repository",
+                    detail: "Synthetic branch", value: "42 commits", icon: .code)
+            ])
+        let server = ExtensionPeerServer(endpoint: endpoint) { _, command, payload in
+            try await SurfaceCommandService.execute(
+                providerID: "codeStats", command: command, payload: payload,
+                snapshot: { _ in snapshot }, perform: { _ in },
+                privacyValues: { ["active": "1", "blurUsage": "1"] })
+        }
+        try server.start()
+        defer { server.shutdown() }
+        let host = NSHostingView(
+            rootView: HostSurfaceCard(
+                marketplace: fixture.marketplace, target: .home, tile: SurfaceTile(.codeStats)
+            )
+            .environment(\.windowVisible, true).frame(width: 420))
+        host.frame = CGRect(x: 0, y: 0, width: 420, height: 400)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        for _ in 0..<50 where find(host, label: "Synthetic repository") == nil {
+            await settle(window, host: host)
+        }
+        let visible = try #require(find(host, label: "Synthetic repository"))
+        let visibleFrame = try #require((visible as AnyObject).accessibilityFrame?())
+        let visibleSize = host.fittingSize
+        let privacy = ExtensionSharedState(
+            root: identity.root.appendingPathComponent("ExtensionState"),
+            namespace: identity.identifier, owner: "presenter")
+        try privacy.publish(["active": "1", "blurUsage": "1"])
+        fixture.marketplace.surfaces.privacy.refresh()
+        #expect(fixture.marketplace.surfaces.privacy.hides(.codeStats))
+        await settle(window, host: host)
+        await settle(window, host: host)
+        #expect(find(host, label: "Hidden while presenting") == nil)
+        let covered = try #require(find(host, label: "Synthetic repository"))
+        let coveredFrame = try #require((covered as AnyObject).accessibilityFrame?())
+        #expect(find(host, label: "1,284") != nil)
+        #expect(host.fittingSize == visibleSize)
+        #expect(coveredFrame == visibleFrame)
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
     @Test func marketplaceRestoresSuiteGroupsSearchAndOriginalArtworkWithoutStartingWorkers()
         async throws
     {

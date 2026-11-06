@@ -149,7 +149,6 @@ struct HostSurfaceEditor: View {
             id: sourceRequestID,
             active: selection.map {
                 $0.widget.supportsSourceFilters && $0.widget != .agents
-                    && !marketplace.surfaces.privacy.hides($0.widget)
             } ?? false,
             cancel: {
                 sourceLoad.reset(); sourceChoices = []
@@ -186,8 +185,7 @@ struct HostSurfaceEditor: View {
         .pageTask(
             id: "agent-providers:" + sourceRequestID + ":" + String(glancesExpanded),
             active: (selection?.widget == .agents || (target == .notch && glancesExpanded))
-                && availability.activeIDs.contains("herdr")
-                && !marketplace.surfaces.privacy.hides(.agents),
+                && availability.activeIDs.contains("herdr"),
             cancel: { agentSourceChoices = [] }
         ) {
             agentSourceChoices = []
@@ -1213,42 +1211,54 @@ struct HostSurfaceEditor: View {
                 isOn: Binding(
                     get: { selection?.sourceIDs == nil },
                     set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
-            if marketplace.surfaces.privacy.hides(tile.widget) {
-                Text("Sources are hidden while presenting.").font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-            } else if tile.sourceIDs != nil {
-                let available =
-                    sourceChoices
-                let known = Set(available.map(\.id))
-                let choices =
-                    available
-                    + (tile.sourceIDs ?? []).subtracting(known).sorted().map {
-                        SurfaceSourceChoice($0, $0 + " (unavailable)")
-                    }
-                ForEach(choices) { choice in
-                    Toggle(
-                        choice.title,
-                        isOn: Binding(
-                            get: { selection?.sourceIDs?.contains(choice.id) == true },
-                            set: { enabled in
-                                edit(tile.id) {
-                                    if enabled {
-                                        $0.sourceIDs?.insert(choice.id)
-                                    } else {
-                                        $0.sourceIDs?.remove(choice.id)
-                                    }
-                                }
-                            }))
-                }
-                if choices.isEmpty {
-                    Text(sourceLoad.errorMessage ?? "No sources available yet.")
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
-                }
-                if tile.sourceIDs?.isEmpty == true {
-                    Text("Select sources to show data in this widget.")
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+            if tile.sourceIDs != nil {
+                presentedSources(tile) {
+                    sourceToggles(tile)
                 }
             }
+        }
+    }
+
+    private func presentedSources<Content: View>(
+        _ tile: SurfaceTile, @ViewBuilder content: () -> Content
+    ) -> some View {
+        let presenting = marketplace.surfaces.privacy.hides(tile.widget)
+        return VStack(alignment: .leading, spacing: UIScale.pt(8)) { content() }
+            .disabled(presenting)
+            .presenterCover(presenting, dark: scheme == .dark)
+    }
+
+    @ViewBuilder private func sourceToggles(_ tile: SurfaceTile) -> some View {
+        let available =
+            sourceChoices
+        let known = Set(available.map(\.id))
+        let choices =
+            available
+            + (tile.sourceIDs ?? []).subtracting(known).sorted().map {
+                SurfaceSourceChoice($0, $0 + " (unavailable)")
+            }
+        ForEach(choices) { choice in
+            Toggle(
+                choice.title,
+                isOn: Binding(
+                    get: { selection?.sourceIDs?.contains(choice.id) == true },
+                    set: { enabled in
+                        edit(tile.id) {
+                            if enabled {
+                                $0.sourceIDs?.insert(choice.id)
+                            } else {
+                                $0.sourceIDs?.remove(choice.id)
+                            }
+                        }
+                    }))
+        }
+        if choices.isEmpty {
+            Text(sourceLoad.errorMessage ?? "No sources available yet.")
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+        }
+        if tile.sourceIDs?.isEmpty == true {
+            Text("Select sources to show data in this widget.")
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -1271,24 +1281,23 @@ struct HostSurfaceEditor: View {
                 isOn: Binding(
                     get: { selection?.sourceIDs == nil },
                     set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
-            if marketplace.surfaces.privacy.hides(tile.widget) {
-                Text("Providers are hidden while presenting.").font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-            } else if tile.sourceIDs != nil {
-                ForEach(agentProviderChoices, id: \.id) { provider in
-                    Toggle(
-                        provider.title,
-                        isOn: Binding(
-                            get: { selection?.sourceIDs?.contains(provider.id) == true },
-                            set: { enabled in
-                                edit(tile.id) {
-                                    if enabled {
-                                        $0.sourceIDs?.insert(provider.id)
-                                    } else {
-                                        $0.sourceIDs?.remove(provider.id)
+            if tile.sourceIDs != nil {
+                presentedSources(tile) {
+                    ForEach(agentProviderChoices, id: \.id) { provider in
+                        Toggle(
+                            provider.title,
+                            isOn: Binding(
+                                get: { selection?.sourceIDs?.contains(provider.id) == true },
+                                set: { enabled in
+                                    edit(tile.id) {
+                                        if enabled {
+                                            $0.sourceIDs?.insert(provider.id)
+                                        } else {
+                                            $0.sourceIDs?.remove(provider.id)
+                                        }
                                     }
-                                }
-                            }))
+                                }))
+                    }
                 }
             }
             Text("Session states").font(.edithText(.headline))

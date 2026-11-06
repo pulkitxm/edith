@@ -232,12 +232,10 @@ private struct NotchProviderCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            if hidden {
-                Label("Hidden while presenting", edith: .eyeOff).font(
-                    .edithText(.caption))
-            } else if let snapshot {
+            if let snapshot {
                 SurfaceSnapshotContent(
-                    tile: tile, snapshot: snapshot, perform: perform, adjust: adjust
+                    tile: tile, snapshot: snapshot, presenting: hidden, perform: perform,
+                    adjust: adjust
                 )
                 .disabled(actionTask != nil)
             } else if load.isRunning {
@@ -249,7 +247,7 @@ private struct NotchProviderCard: View {
             }
         }.pageTask(
             id: Request(tile: tile, version: version, retry: retry),
-            active: version != nil && !hidden && controller.isExpanded,
+            active: version != nil && controller.isExpanded,
             cancel: clear
         ) {
             repeat {
@@ -260,7 +258,7 @@ private struct NotchProviderCard: View {
                     }, apply: { snapshot = $0 })
                 do { try await Task.sleep(for: .seconds(15)) } catch { return }
             } while !Task.isCancelled
-        }.onChange(of: hidden) { clear() }
+        }.onChange(of: hidden) { cancelAction() }
             .onChange(of: version) { clear() }
             .onDisappear(perform: clear)
     }
@@ -272,8 +270,11 @@ private struct NotchProviderCard: View {
     }
 
     private func clear() {
-        actionTask?.cancel(); actionTask = nil; actionToken = nil
-        load.reset(); snapshot = nil; actionError = nil
+        cancelAction(); load.reset(); snapshot = nil
+    }
+
+    private func cancelAction() {
+        actionTask?.cancel(); actionTask = nil; actionToken = nil; actionError = nil
     }
 
     private func perform(_ action: SurfaceAction) {

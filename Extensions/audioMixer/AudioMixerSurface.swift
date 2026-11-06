@@ -29,9 +29,6 @@ final class AudioMixerSurface {
     }
 
     func snapshot(_ tile: SurfaceTile) -> SurfaceSnapshot {
-        guard !SurfacePrivacyState.hides(tile.widget, values: privacyValues()) else {
-            return .init(providerID: "audioMixer", message: "Hidden while presenting.")
-        }
         engine.refresh()
         let apps = Array(engine.apps.prefix(100))
         let sources = Dictionary(grouping: apps, by: \.bundleID).compactMap { id, group in

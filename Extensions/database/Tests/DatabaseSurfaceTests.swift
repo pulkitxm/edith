@@ -45,8 +45,11 @@ import Testing
         }
     }
 
-    @Test func presenterPrivacyAvoidsOpeningMetadataAndRejectsActions() async throws {
-        let sender = DatabaseSurfaceSender([])
+    @Test func presentingKeepsRealConnectionsForTheBlurOverlayAndRejectsActions() async throws {
+        let connection = try DatabaseConnectionDraft(
+            displayName: "Synthetic presented", product: .sqlite, path: ":memory:"
+        ).definition()
+        let sender = DatabaseSurfaceSender([connection])
         let surface = DatabaseSurface(
             session: DatabasePageSession(), sender: sender,
             privacyValues: { ["active": "1", "blurDatabase": "1"] })
@@ -55,17 +58,17 @@ import Testing
             await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "database")),
             providerID: "database")
-        #expect(result.rows.isEmpty)
-        #expect(result.sources.isEmpty)
-        #expect(await sender.calls == 0)
+        #expect(result.rows.map(\.title) == [connection.displayName])
+        #expect(result.sources.count == 1)
+        let calls = await sender.calls
+        let action = try #require(result.rows.first?.actions.first)
         await #expect(throws: ExtensionPeerError.self) {
             try await surface.execute(
                 "surface.perform",
-                payload: SurfaceActionRequest(
-                    snapshot: request, actionID: "open/" + UUID().uuidString
-                ).encoded(providerID: "database"))
+                payload: SurfaceActionRequest(snapshot: request, actionID: action.id).encoded(
+                    providerID: "database"))
         }
-        #expect(await sender.calls == 0)
+        #expect(await sender.calls == calls)
     }
 }
 

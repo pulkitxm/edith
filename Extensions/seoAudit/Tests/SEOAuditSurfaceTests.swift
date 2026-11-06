@@ -48,8 +48,9 @@ import Testing
         }
         fixture.tile.sourceIDs = nil
         fixture.privacy = ["active": "1", "blurSiteAudit": "1", "blurShelf": "0"]
-        let hidden = try await fixture.snapshot()
-        #expect(hidden.rows.isEmpty && hidden.metrics.isEmpty && hidden.sources.isEmpty)
+        let presented = try await fixture.snapshot()
+        #expect(presented.rows.count == 2 && presented.sources.count == 2)
+        #expect(presented.message == nil)
         fixture.privacy = ["active": "1", "blurSiteAudit": "0"]
         #expect(try await fixture.snapshot().rows.count == 2)
         await fixture.service.shutdown()

@@ -44,6 +44,7 @@ public final class SurfacePrivacyState {
         case .focus: categories = ["Attention"]
         case .databases: categories = ["Database"]
         case .machines: categories = ["Fleet"]
+        case .ability("usage"): categories = ["Usage", "Money"]
         case .github: categories = ["Review"]
         case .media: categories = ["Studio"]
         case .ability(let id):

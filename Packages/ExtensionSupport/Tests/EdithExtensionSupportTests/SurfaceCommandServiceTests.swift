@@ -97,7 +97,7 @@ struct SurfaceCommandServiceTests {
         await #expect(throws: CancellationError.self) { try await task.value }
         #expect(!performed)
     }
-    @Test func privacyStopsCollectionAndRejectsActionsBeforeDataCrossesTheBoundary() async throws {
+    @Test func presentingKeepsRealContentForTheBlurOverlayAndRejectsActions() async throws {
         let tile = SurfaceTile(.ability("colorPicker"))
         var reads = 0
         var actions = 0
@@ -107,12 +107,14 @@ struct SurfaceCommandServiceTests {
             payload: request.encoded(providerID: "colorPicker"),
             snapshot: { _ in
                 reads += 1
-                return .init(providerID: "colorPicker", message: "Private data")
+                return .init(
+                    providerID: "colorPicker", rows: [.init("swatch", title: "Synthetic swatch")])
             }, perform: { _ in actions += 1 }, privacyValues: { ["active": "1", "blurShelf": "1"] })
-        let masked = try SurfaceSnapshot.decode(data, providerID: "colorPicker")
-        #expect(masked.rows.isEmpty && masked.metrics.isEmpty && masked.actions.isEmpty)
-        #expect(masked.message == "Hidden while presenting.")
-        #expect(reads == 0)
+        let presented = try SurfaceSnapshot.decode(data, providerID: "colorPicker")
+        #expect(presented.rows.map(\.title) == ["Synthetic swatch"])
+        #expect(presented.message == nil)
+        #expect(reads == 1)
+        reads = 0
         let action = SurfaceActionRequest(snapshot: request, actionID: "pick")
         await #expect(throws: ExtensionPeerError.self) {
             _ = try await SurfaceCommandService.execute(
@@ -127,21 +129,21 @@ struct SurfaceCommandServiceTests {
         #expect(reads == 0 && actions == 0)
     }
 
-    @Test func privacyChangingDuringRefreshNeverReturnsPrivateData() async throws {
+    @Test func privacyChangingDuringRefreshStillReturnsTheRealContent() async throws {
         let tile = SurfaceTile(.ability("homebrew"))
-        var privateContent = false
+        var presenting = false
         let data = try await SurfaceCommandService.execute(
             providerID: "homebrew", command: "surface.snapshot",
             payload: SurfaceSnapshotRequest(target: .notch, tile: tile).encoded(
                 providerID: "homebrew"),
             snapshot: { _ in
-                privateContent = true
+                presenting = true
                 return .init(
-                    providerID: "homebrew", rows: [.init("secret", title: "Private package")])
-            }, perform: { _ in }, privacyValues: { ["active": privateContent ? "1" : "0"] })
-        let masked = try SurfaceSnapshot.decode(data, providerID: "homebrew")
-        #expect(masked.rows.isEmpty)
-        #expect(masked.message == "Hidden while presenting.")
+                    providerID: "homebrew", rows: [.init("package", title: "Synthetic package")])
+            }, perform: { _ in }, privacyValues: { ["active": presenting ? "1" : "0"] })
+        let presented = try SurfaceSnapshot.decode(data, providerID: "homebrew")
+        #expect(presented.rows.map(\.title) == ["Synthetic package"])
+        #expect(presented.message == nil)
     }
 
     @Test(arguments: ["contract", "duplicates", "size"])

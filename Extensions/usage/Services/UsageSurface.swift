@@ -60,12 +60,6 @@ final class UsageSurface {
     }
 
     func snapshot(_ tile: SurfaceTile) async throws -> SurfaceSnapshot {
-        if SurfacePrivacyState.hides(tile.widget, values: privacy())
-            || (tile.widget == .ability("usage") && privacy()["active"] == "1"
-                && privacy()["blurMoney"] != "0")
-        {
-            return .init(providerID: "usage", message: "Hidden while presenting.")
-        }
         if tile.widget == .limits { return try await limitsSnapshot(tile) }
         controller.demandIndex()
         let value: SurfaceUsageSnapshot

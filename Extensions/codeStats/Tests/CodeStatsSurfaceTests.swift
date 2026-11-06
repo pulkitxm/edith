@@ -41,7 +41,9 @@ import Testing
         #expect(try await fixture.snapshot().rows.isEmpty)
     }
 
-    @Test func opaqueDayActionsAreRevalidatedAndPrivacyClearsEveryDetail() async throws {
+    @Test func opaqueDayActionsAreRevalidatedAndPresentingKeepsEveryDetailForTheBlurOverlay()
+        async throws
+    {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let value = try await fixture.snapshot()
@@ -54,9 +56,11 @@ import Testing
             await #expect(throws: ExtensionPeerError.self) { _ = try await fixture.action(forged) }
         }
         fixture.privacy = ["active": "1", "blurUsage": "1"]
-        let hidden = try await fixture.snapshot()
-        #expect(hidden.rows.isEmpty && hidden.metrics.isEmpty && hidden.sources.isEmpty)
-        #expect(hidden.charts == nil && hidden.calendars == nil)
+        let presented = try await fixture.snapshot()
+        #expect(presented.rows.map(\.id) == value.rows.map(\.id))
+        #expect(presented.metrics == value.metrics && presented.sources == value.sources)
+        #expect(presented.calendars?.first?.days.count == value.calendars?.first?.days.count)
+        #expect(presented.message == value.message)
         await #expect(throws: ExtensionPeerError.self) { _ = try await fixture.action(action.id) }
         #expect(fixture.opened == 1)
     }
