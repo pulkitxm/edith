@@ -34,7 +34,11 @@ import Security
             let connection = box.connection
             guard sessions.count < 8 else { connection.invalidate(); return }
             guard let callerIdentity = ExtensionProcessIdentity.read(connection.processIdentifier),
-                let hostIdentity = Self.parentIdentity(of: callerIdentity.pid)
+                let caller = try? HostPrivilegedCaller.read(
+                    processIdentifier: connection.processIdentifier,
+                    hostIdentifier: identifier, team: team),
+                let hostIdentity = Self.hostIdentity(
+                    of: callerIdentity, callerIsHost: caller.container == nil)
             else { connection.invalidate(); return }
             let id = UUID()
             let admission = HostPrivilegedAdmission(
@@ -51,7 +55,8 @@ import Security
                 authorizeQuit: { [team] policy in
                     guard callerIdentity.isAlive, hostIdentity.isAlive,
                         policy.host == hostIdentity,
-                        Self.parentIdentity(of: callerIdentity.pid) == hostIdentity
+                        callerIdentity == hostIdentity
+                            || Self.parentIdentity(of: callerIdentity.pid) == hostIdentity
                     else { throw MarketplaceError.invalidSignature }
                     let host = try HostPrivilegedCaller.read(
                         processIdentifier: hostIdentity.pid, hostIdentifier: identifier, team: team)
@@ -78,7 +83,14 @@ import Security
         return true
     }
 
-    private static func parentIdentity(of pid: Int32) -> ExtensionProcessIdentity? {
+    nonisolated static func hostIdentity(
+        of caller: ExtensionProcessIdentity, callerIsHost: Bool,
+        parent: (Int32) -> ExtensionProcessIdentity? = parentIdentity(of:)
+    ) -> ExtensionProcessIdentity? {
+        callerIsHost ? caller : parent(caller.pid)
+    }
+
+    nonisolated static func parentIdentity(of pid: Int32) -> ExtensionProcessIdentity? {
         var info = proc_bsdinfo()
         let size = MemoryLayout<proc_bsdinfo>.size
         guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(size)) == size else { return nil }
