@@ -158,7 +158,7 @@ was drawn from that concept on these grids.
 
 | Icon | Concept |
 | --- | --- |
-| `brand` | A round-backed E whose middle stroke is a free pill, the shape of the notch where Edith lives |
+| `brand` | A ring around the notch where Edith lives, with blades fanning out of it |
 
 ### Extensions
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import {Img, staticFile} from 'remotion';
 import {colors, fontFamily} from '../tokens';
 import {TabPill} from './TabPill';
 
@@ -28,14 +29,9 @@ export const AppFrame: React.FC<{
         }}
       >
         <div style={{display: 'flex', alignItems: 'center', gap: 14}}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              background:
-                'linear-gradient(135deg, #2b3a3d 0%, #16211f 100%)',
-            }}
+          <Img
+            src={staticFile('logo.png')}
+            style={{width: 42, height: 42, margin: -4}}
           />
           <span
             style={{
