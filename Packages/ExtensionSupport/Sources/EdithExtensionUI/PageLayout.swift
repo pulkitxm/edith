@@ -19,6 +19,8 @@ public enum PageMetrics {
     public static let cardCornerRadius = 14.0
     public static let controlSpacing = 8.0
     public static let controlHeight = 32.0
+    static let guideSpacing = 4.0
+    static let guideRowTop = 8.0
     public static let chipHeight = 26.0
     public static let chipCornerRadius = 8.0
     public static let filterRowSpacing = 12.0
@@ -439,6 +441,7 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.pageColumnWidth) private var columnWidth
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.pageGuide) private var guide
 
     private let title: () -> Title
     private let subtitle: String?
@@ -471,7 +474,7 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
                         }
                         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                             heading
-                            if Trailing.self != EmptyView.self {
+                            if Trailing.self != EmptyView.self || guide != nil {
                                 ScrollView(.horizontal) {
                                     HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                                         actions
@@ -486,7 +489,7 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
                             .frame(maxWidth: UIScale.pt(720), alignment: .leading)
                     }
                 }
-                accessory()
+                accessory().environment(\.pageGuide, nil)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .pageGutter(compact)
@@ -495,11 +498,20 @@ public struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
             .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
             if divider { PageHeaderDivider() }
         }
+        .preference(key: PageGuidePlacedKey.self, value: guide != nil)
     }
 
-    private var actions: some View {
-        trailing()
+    @ViewBuilder private var actions: some View {
+        if let guide {
+            HStack(spacing: UIScale.pt(PageMetrics.guideSpacing)) {
+                trailing()
+                PageGuideButton(guide)
+            }
             .buttonStyle(.edith(.secondary))
+        } else {
+            trailing()
+                .buttonStyle(.edith(.secondary))
+        }
     }
 
     private var heading: some View {

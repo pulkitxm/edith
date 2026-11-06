@@ -92,7 +92,7 @@ struct HerdrMessageMenu: View {
             EdithIconView(.send)
                 .font(.edithText(.headline))
                 .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(28), height: UIScale.pt(28))
+                .frame(width: UIScale.pt(20), height: UIScale.pt(24))
         }
         .menuStyle(.button)
         .buttonStyle(.edith(.toolbar))
