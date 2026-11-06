@@ -26,6 +26,7 @@ public struct SurfaceCalendarContent: View {
                                             perform(action)
                                         } label: {
                                             cell(day)
+                                                .edithHoverHighlight(cornerRadius: UIScale.pt(2))
                                         }
                                         .buttonStyle(.plain)
                                     } else {

@@ -309,7 +309,7 @@ struct QuinjetWorktreePicker: View {
                     .frame(minHeight: UIScale.pt(44))
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(QuinjetWorktreeRowStyle(dark: dark))
+                .buttonStyle(QuinjetWorktreeRowStyle())
             }
         }
     }
@@ -322,49 +322,30 @@ struct QuinjetWorktreePicker: View {
 
 struct QuinjetWorktreeCountButtonStyle: ButtonStyle {
     let dark: Bool
-    @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(hovering ? DashSkin.accent(dark) : DashSkin.ink(dark))
-            .background(
-                hovering
-                    ? DashSkin.accent(dark).opacity(dark ? 0.2 : 0.13)
-                    : Color.clear,
-                in: RoundedRectangle(
-                    cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius), style: .continuous)
-            )
+            .foregroundStyle(DashSkin.ink(dark))
             .overlay {
                 RoundedRectangle(
                     cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius), style: .continuous
                 )
-                .strokeBorder(
-                    hovering ? DashSkin.accent(dark).opacity(0.65) : DashSkin.lineStrong(dark))
+                .strokeBorder(DashSkin.lineStrong(dark))
             }
+            .edithHoverHighlight(
+                cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius),
+                pressed: configuration.isPressed
+            )
             .edithButtonTarget(.toolbar)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .onHover { hovering = $0 }
     }
 }
 
 private struct QuinjetWorktreeRowStyle: ButtonStyle {
-    let dark: Bool
-    @State private var hovering = false
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(
-                hovering
-                    ? DashSkin.accent(dark).opacity(dark ? 0.14 : 0.1)
-                    : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+            .edithHoverHighlight(
+                cornerRadius: UIScale.pt(7), pressed: configuration.isPressed
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(7))
-                    .strokeBorder(
-                        hovering ? DashSkin.accent(dark).opacity(0.3) : Color.clear)
-            }
             .edithButtonTarget(.row)
-            .onHover { hovering = $0 }
     }
 }

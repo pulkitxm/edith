@@ -140,8 +140,9 @@ ci-duplicate-keys:
 	bun run check-duplicate-keys
 
 ci-icons:
-	bun test scripts/check-icons.test.js
+	bun test scripts/check-icons.test.js scripts/check-button-styles.test.js
 	bun scripts/check-icons.mjs
+	bun scripts/check-button-styles.mjs
 
 ci-lint:
 	bun run lint

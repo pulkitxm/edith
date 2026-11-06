@@ -159,7 +159,7 @@ struct HostOnboardingToolsView: View {
                     }
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.edith(.borderless))
                 .accessibilityLabel(title)
                 .accessibilityValue(isOpen ? "Expanded" : "Collapsed")
                 .accessibilityIdentifier("onboarding.group.\(category)")
@@ -291,8 +291,6 @@ struct HostOnboardingCheckRowStyle: ToggleStyle {
 private struct HostOnboardingCheckRow: View {
     let configuration: ToggleStyle.Configuration
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.isEnabled) private var enabled
-    @State private var hovering = false
 
     var body: some View {
         let dark = scheme == .dark
@@ -312,15 +310,9 @@ private struct HostOnboardingCheckRow: View {
             .padding(.horizontal, UIScale.pt(8))
             .padding(.vertical, UIScale.pt(8))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Color.primary.opacity(hovering ? 0.04 : 0),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous)
-            )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .opacity(enabled ? 1 : 0.5)
-        .onHover { hovering = enabled && $0 }
+        .buttonStyle(.edith(.borderless))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
         .accessibilityValue(configuration.isOn ? "Selected" : "Not selected")
@@ -336,7 +328,6 @@ struct HostOnboardingCheckboxStyle: ToggleStyle {
 private struct HostOnboardingCheckbox: View {
     let configuration: ToggleStyle.Configuration
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
         let dark = scheme == .dark
@@ -354,8 +345,7 @@ private struct HostOnboardingCheckbox: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .opacity(enabled ? 1 : 0.5)
+        .buttonStyle(.edith(.borderless))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
         .accessibilityValue(configuration.isOn ? "On" : "Off")

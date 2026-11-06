@@ -12,7 +12,6 @@ enum BorderlessMenuMetrics {
     static let indicatorSpacing: CGFloat = 1
     static let indicatorSize: CGFloat = 12
     static let disabledOpacity = 0.5
-    static let pressedOpacity = 0.7
 }
 
 private struct BorderlessMenuButtonStyle: ButtonStyle {
@@ -26,7 +25,16 @@ private struct BorderlessMenuLabel<Label: View>: View {
     let pressed: Bool
 
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.isFocused) private var focused
     @Environment(\.menuIndicatorVisibility) private var indicator
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.edithInteractionPreview) private var preview
+    @State private var hovering = false
+
+    private var interaction: EdithInteractionState {
+        EdithInteractionState.resolve(
+            hovering: hovering, pressed: pressed, enabled: enabled, preview: preview)
+    }
 
     var body: some View {
         HStack(spacing: UIScale.pt(BorderlessMenuMetrics.indicatorSpacing)) {
@@ -38,12 +46,15 @@ private struct BorderlessMenuLabel<Label: View>: View {
         }
         .padding(.horizontal, UIScale.pt(BorderlessMenuMetrics.horizontalPadding))
         .foregroundStyle(.tint, .secondary, .tertiary)
-        .opacity(opacity)
+        .overlay {
+            EdithOutsetHoverPlate(
+                state: interaction, focused: focused && enabled, tint: nil, tone: .tinted,
+                cornerRadius: nil, outset: true)
+        }
+        .opacity(enabled ? 1 : BorderlessMenuMetrics.disabledOpacity)
         .contentShape(Rectangle())
-    }
-
-    private var opacity: Double {
-        if !enabled { return BorderlessMenuMetrics.disabledOpacity }
-        return pressed ? BorderlessMenuMetrics.pressedOpacity : 1
+        .onHover { hovering = $0 }
+        .animation(
+            Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: interaction)
     }
 }

@@ -20,15 +20,26 @@ private struct EdithLinkBody<Label: View>: View {
     private var themeName = "accent"
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.edithInteractionPreview) private var preview
     @State private var hovering = false
 
     var body: some View {
+        let interaction = EdithInteractionState.resolve(
+            hovering: hovering, pressed: pressed, enabled: enabled, preview: preview)
         label
             .foregroundStyle(themeColor(themeName))
-            .underline(hovering || focused)
-            .opacity(enabled ? (pressed ? 0.7 : 1) : 0.42)
+            .underline(interaction.hovered || (focused && enabled))
+            .overlay {
+                EdithOutsetHoverPlate(
+                    state: interaction, focused: focused && enabled, tint: nil, tone: .tinted,
+                    cornerRadius: nil, outset: true)
+            }
+            .opacity(enabled ? 1 : EdithInteractionMetrics.disabledOpacity)
             .contentShape(Rectangle())
-            .onHover { hovering = enabled && $0 }
+            .onHover { hovering = $0 }
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: interaction)
     }
 }
 

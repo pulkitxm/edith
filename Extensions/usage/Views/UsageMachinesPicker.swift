@@ -106,7 +106,7 @@ struct UsageMachinesPicker: View {
             .padding(.vertical, UIScale.pt(7))
             .contentShape(Rectangle())
         }
-        .buttonStyle(MachineRowStyle(dark: dark))
+        .buttonStyle(MachineRowStyle())
         .padding(.horizontal, UIScale.pt(2))
     }
 
@@ -120,16 +120,11 @@ struct UsageMachinesPicker: View {
 }
 
 private struct MachineRowStyle: ButtonStyle {
-    let dark: Bool
-    @State private var hovering = false
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(
-                hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+            .edithHoverHighlight(
+                tone: .neutral, cornerRadius: UIScale.pt(6), pressed: configuration.isPressed
             )
             .edithButtonTarget(.row)
-            .onHover { hovering = $0 }
     }
 }

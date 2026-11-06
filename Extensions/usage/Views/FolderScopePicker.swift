@@ -116,7 +116,7 @@ struct FolderScopePicker: View {
             .padding(.vertical, UIScale.pt(4))
             .contentShape(Rectangle())
         }
-        .buttonStyle(HoverRowStyle(dark: dark))
+        .buttonStyle(HoverRowStyle())
     }
 
     private func chooseFolder() {
@@ -132,16 +132,11 @@ struct FolderScopePicker: View {
 }
 
 private struct HoverRowStyle: ButtonStyle {
-    let dark: Bool
-    @State private var hovering = false
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(
-                hovering ? DashSkin.inkFaint(dark).opacity(0.14) : Color.clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(6))
+            .edithHoverHighlight(
+                tone: .neutral, cornerRadius: UIScale.pt(6), pressed: configuration.isPressed
             )
             .edithButtonTarget(.row)
-            .onHover { hovering = $0 }
     }
 }

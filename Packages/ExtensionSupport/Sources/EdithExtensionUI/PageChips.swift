@@ -80,10 +80,13 @@ struct PageChipChrome: ViewModifier {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.edithInteractionPreview) private var preview
     @State private var hovering = false
 
     func body(content: Content) -> some View {
         let dark = scheme == .dark
+        let interaction = EdithInteractionState.resolve(
+            hovering: hovering, pressed: pressed, enabled: enabled, preview: preview)
         let accent = tint ?? DashSkin.accent(dark)
         let shape = RoundedRectangle(
             cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius), style: .continuous)
@@ -100,9 +103,9 @@ struct PageChipChrome: ViewModifier {
                     active
                         ? AnyShapeStyle(accent.opacity(dark ? 0.24 : 0.14))
                         : AnyShapeStyle(DashSkin.paper2(dark)))
-                if hovering || pressed {
-                    shape.fill(Color.primary.opacity(pressed ? 0.1 : 0.05))
-                }
+                EdithHoverPlate(
+                    hovered: interaction.hovered, pressed: interaction.pressed, tint: tint,
+                    cornerRadius: UIScale.pt(PageMetrics.chipCornerRadius))
             }
             .overlay {
                 shape.strokeBorder(
@@ -110,10 +113,10 @@ struct PageChipChrome: ViewModifier {
                     lineWidth: focused ? 2 : contrast == .increased ? 1 : UIScale.pt(0.75))
             }
             .contentShape(shape)
-            .opacity(enabled ? 1 : 0.42)
-            .onHover { hovering = enabled && $0 }
+            .opacity(enabled ? 1 : EdithInteractionMetrics.disabledOpacity)
+            .onHover { hovering = $0 }
             .animation(
-                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: hovering
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: interaction
             )
             .accessibilityAddTraits(active ? .isSelected : AccessibilityTraits())
     }
