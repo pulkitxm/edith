@@ -101,10 +101,11 @@ struct UsageUILimits: Codable, Sendable {
             controller.demandIndex()
             let directory = directory
             let read = Task.detached(priority: .utility) {
-                try UsageDataFiles.readRegularFile(
+                let data = try UsageDataFiles.readRegularFile(
                     at: directory.appendingPathComponent("usage.json"), maximumBytes: 67_108_864)
+                return (data, data.map(UsageHistory.isValidDocument) ?? false)
             }
-            let data = try await withTaskCancellationHandler {
+            let (data, valid) = try await withTaskCancellationHandler {
                 try await read.value
             } onCancel: {
                 read.cancel()
@@ -117,7 +118,7 @@ struct UsageUILimits: Codable, Sendable {
                     controller.failure
                         ?? "Usage has not collected any data yet. Refresh to try again.")
             }
-            guard UsageHistory.isValidDocument(data) else {
+            guard valid else {
                 throw ExtensionPeerError.rejected(
                     "The saved usage data could not be read. Refresh to collect it again.")
             }

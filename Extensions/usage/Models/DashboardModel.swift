@@ -590,8 +590,12 @@ final class DashboardModel {
         guard extensionEnabled else { return }
         if let client = remoteClient {
             await restoreCachedHomeUsage()
-            await contentLoad.perform(operation: { try await client.document() }) { parsed in
-                self.ingest(parsed)
+            let calendar = cal
+            await contentLoad.perform(operation: {
+                let parsed = try await client.document()
+                return (parsed, DashboardComputation.digest(parsed, calendar: calendar))
+            }) { loaded in
+                self.ingest(loaded.0, digest: loaded.1)
             }
             if !Task.isCancelled { loadAttempted = true }
             return
@@ -656,8 +660,12 @@ final class DashboardModel {
     }
 
     func ingest(_ parsed: DashUsage) {
+        ingest(parsed, digest: DashboardComputation.digest(parsed, calendar: cal))
+    }
+
+    private func ingest(_ parsed: DashUsage, digest: DashboardIngestDigest) {
         let request = ingestion.begin()
-        apply(DashboardComputation.digest(parsed, calendar: cal), parsed: parsed)
+        apply(digest, parsed: parsed)
         recompute()
         contentLoad.setContent()
         ingestion.complete(request)
