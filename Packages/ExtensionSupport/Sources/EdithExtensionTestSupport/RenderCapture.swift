@@ -175,6 +175,45 @@ public enum RenderCapture {
         return Rendered(bitmap: bitmap, host: host)
     }
 
+    public struct InkBounds: Equatable, Sendable, CustomStringConvertible {
+        public let leading: Int
+        public let trailing: Int
+        public let top: Int
+
+        public var description: String { "x \(leading)...\(trailing) top \(top)" }
+
+        public func matches(_ other: InkBounds, tolerance: Int = 2) -> Bool {
+            abs(leading - other.leading) <= tolerance && abs(trailing - other.trailing) <= tolerance
+                && abs(top - other.top) <= tolerance
+        }
+    }
+
+    public static func inkBounds(
+        _ bitmap: NSBitmapImageRep, below floor: Int = 0, threshold: Double = 0.008
+    ) -> InkBounds? {
+        let scale = max(1, bitmap.pixelsWide / max(1, Int(bitmap.size.width)))
+        let luminance = { (x: Int, y: Int) -> Double in
+            guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                return 0
+            }
+            return (color.redComponent + color.greenComponent + color.blueComponent) / 3
+        }
+        let background = luminance(1, bitmap.pixelsHigh - 2)
+        var leading = Int.max
+        var trailing = Int.min
+        var top = Int.max
+        for y in stride(from: floor * scale, to: bitmap.pixelsHigh, by: scale) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: scale)
+            where abs(luminance(x, y) - background) > threshold {
+                leading = min(leading, x / scale)
+                trailing = max(trailing, x / scale)
+                top = min(top, y / scale)
+            }
+        }
+        guard top != .max else { return nil }
+        return InkBounds(leading: leading, trailing: trailing, top: top)
+    }
+
     public static func distinctColors(_ bitmap: NSBitmapImageRep) -> Int {
         var colors: Set<UInt32> = []
         for x in stride(from: 0, to: bitmap.pixelsWide, by: 6) {

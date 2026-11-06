@@ -105,7 +105,8 @@ struct ScreenCaptureSourcePicker: View {
                     state: loadsSources && sources.sourceLoad.errorMessage == nil
                         ? sources.sourceLoad.state : .content,
                     message: sources.sourceLoad.errorMessage ?? "Choose displays or windows.",
-                    layout: .cards, refreshing: sources.sourceLoad.isRefreshing,
+                    layout: .cards, showsSkeletonControls: false,
+                    refreshing: sources.sourceLoad.isRefreshing,
                     retry: { refresh += 1 }
                 ) {
                     if choices.isEmpty && sources.sourceLoad.errorMessage == nil {

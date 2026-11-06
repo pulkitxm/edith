@@ -5,11 +5,16 @@ import SwiftUI
 struct MachineProcessRowsSkeleton: View {
     var rows = 8
     var showsActions = true
+    var showsHeader = false
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
         SkeletonGroup {
             VStack(spacing: 0) {
+                if showsHeader {
+                    columnHeader
+                    Divider().opacity(0.5)
+                }
                 ForEach(0..<rows, id: \.self) { index in
                     HStack(spacing: UIScale.pt(10)) {
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -40,6 +45,26 @@ struct MachineProcessRowsSkeleton: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading processes")
+    }
+
+    private var columnHeader: some View {
+        HStack(spacing: UIScale.pt(10)) {
+            SkeletonBlock(width: 52, height: 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !compact {
+                SkeletonBlock(width: 30, height: 8)
+                    .frame(width: UIScale.pt(100), alignment: .leading)
+            }
+            SkeletonBlock(width: 26, height: 8)
+                .frame(width: UIScale.pt(64), alignment: .trailing)
+            SkeletonBlock(width: 44, height: 8)
+                .frame(width: UIScale.pt(90), alignment: .trailing)
+            if showsActions {
+                SkeletonBlock(width: 22, height: 8).frame(width: UIScale.pt(44))
+            }
+        }
+        .padding(.vertical, UIScale.pt(7))
+        .padding(.horizontal, UIScale.pt(4))
     }
 }
 

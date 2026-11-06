@@ -83,7 +83,8 @@ struct MachineProcessesTab: View {
                     if model.rows.isEmpty { ContentUnavailableView.search(text: model.query) }
                 }
             } placeholder: {
-                MachineProcessRowsSkeleton(showsActions: !session.isLocal)
+                MachineProcessRowsSkeleton(showsActions: !session.isLocal, showsHeader: true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .padding(.horizontal, PageMetrics.gutter(compact))
             .padding(.bottom, UIScale.pt(12))

@@ -184,7 +184,8 @@ struct CompanionDeskScreen: View {
                 state: model.loading.state,
                 message: model.loading.errorMessage
                     ?? "The desk could not be loaded.",
-                layout: .cards, refreshing: model.loading.isRefreshing,
+                layout: .cards, showsSkeletonControls: false,
+                refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.refresh() } }
             ) {
                 questionCard

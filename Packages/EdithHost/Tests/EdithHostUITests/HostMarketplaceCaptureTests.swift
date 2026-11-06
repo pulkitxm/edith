@@ -365,9 +365,8 @@ import Testing
                 let frame = try #require((skeleton as AnyObject).accessibilityFrame?())
                 let window = try #require(host.window)
                 let bounds = window.convertToScreen(host.convert(host.bounds, to: nil))
-                let inset = UIScale.pt(PageMetrics.groupedFormInset)
-                #expect(frame.minX - bounds.minX >= inset - 1)
-                #expect(bounds.maxX - frame.maxX >= inset - 1)
+                #expect(abs(frame.minX - bounds.minX) <= 1)
+                #expect(abs(bounds.maxX - frame.maxX) <= 1)
                 try expectVisible(host, labels: ["Close"])
             }
         }

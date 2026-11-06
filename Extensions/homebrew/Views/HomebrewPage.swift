@@ -60,7 +60,7 @@ struct HomebrewMaintenanceView: View {
                             listingEmptyState.scrollIndicators(.never)
                         }
                     } placeholder: {
-                        PageSkeleton(layout: .list)
+                        PageSkeleton(layout: .list, showsControls: false)
                     }
                     .frame(maxHeight: .infinity, alignment: .top)
                 }

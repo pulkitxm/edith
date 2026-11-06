@@ -76,12 +76,22 @@ struct HostExtensionContent: View {
         marketplace.entries.first { $0.id == extensionID }?.title ?? extensionID
     }
     private var inSettings: Bool { location == "settings" }
-    private func loading(_ title: String) -> some View {
-        PageLoading(state: .loading, title: title, layout: inSettings ? .form : .list) {
-            EmptyView()
+    @ViewBuilder private func loading(_ title: String) -> some View {
+        if inSettings {
+            PageLoading(state: .loading, title: title, layout: .form) { EmptyView() }
+        } else if location == "main", surface == nil {
+            PageScaffold {
+                PageHeader { Text(self.title).skeletonized() }
+            } content: {
+                PageLoading(
+                    state: .loading, title: title, layout: .list, showsSkeletonControls: false
+                ) {
+                    EmptyView()
+                }
+            }
+        } else {
+            PageLoading(state: .loading, title: title, layout: .list) { EmptyView() }
         }
-        .padding(.horizontal, inSettings ? UIScale.pt(PageMetrics.groupedFormInset) : 0)
-        .padding(.vertical, inSettings ? UIScale.pt(PageMetrics.pinnedContentTop) : 0)
     }
 
     var body: some View {

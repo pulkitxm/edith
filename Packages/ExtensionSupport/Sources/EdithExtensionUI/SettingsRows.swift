@@ -269,9 +269,6 @@ public struct ControlSettingsHost<Presentation: ControlSettingsPresenting, Conte
         ) {
             content()
         }
-        .padding(
-            presentation.load.state == .loading ? UIScale.pt(PageMetrics.groupedFormInset) : 0
-        )
         .environment(
             \.settingsIssue,
             presentation.ready

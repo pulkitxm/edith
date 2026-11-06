@@ -148,7 +148,7 @@ struct DashboardView: View {
                     state: model.contentLoad.state, title: "No usage data yet",
                     errorTitle: "Usage could not be read",
                     message: model.contentLoad.errorMessage ?? "Collect usage to fill this page.",
-                    layout: .analytics,
+                    layout: .analytics, showsSkeletonControls: false,
                     refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
                     retry: refresh.requestRefresh
                 ) {

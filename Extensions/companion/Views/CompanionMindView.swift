@@ -139,7 +139,8 @@ struct CompanionMindScreen: View {
                 state: model.loading.state,
                 message: model.loading.errorMessage
                     ?? "Mind could not be loaded.",
-                layout: .cards, refreshing: model.loading.isRefreshing,
+                layout: .cards, showsSkeletonControls: false,
+                refreshing: model.loading.isRefreshing,
                 retry: { Task { await model.refresh() } }
             ) {
                 PageGrid {
