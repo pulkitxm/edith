@@ -31,7 +31,7 @@ enum CodeStatsRenderCapture {
     @discardableResult
     static func render<Content: View>(
         _ name: String, variant: Variant, settle: Duration = .milliseconds(300),
-        @ViewBuilder content: () -> Content
+        inspect: ((NSView) -> Void)? = nil, @ViewBuilder content: () -> Content
     ) async throws -> NSBitmapImageRep {
         let previousAppearance = application.appearance
         application.appearance = NSAppearance(named: variant.scheme == .dark ? .darkAqua : .aqua)
@@ -72,11 +72,13 @@ enum CodeStatsRenderCapture {
         repeat {
             window.layoutIfNeeded()
             host.layoutSubtreeIfNeeded()
+            if inspect != nil { _ = host.accessibilityChildren() }
             try await Task.sleep(for: .milliseconds(30))
         } while ContinuousClock.now < deadline
         #expect(abs(host.bounds.width - variant.width) < 1)
         #expect(
             !(window.isVisible && NSScreen.screens.contains { $0.frame.intersects(window.frame) }))
+        inspect?(host)
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
         #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)

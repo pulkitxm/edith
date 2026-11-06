@@ -121,16 +121,16 @@ import Testing
         #expect(!projection.showsStackedTrend)
     }
 
-    @Test func cardsThatNeedHistoryStepAsideOnShortRanges() {
+    @Test func everyRangeKeepsItsContributionWeeks() {
         let day = CodeStatsProjection(report: report(.preset(.today)), calendar: Self.calendar)
         #expect(day.isSingleDay)
-        #expect(!day.showsContributions)
+        #expect(day.heatWeeks.count == 1)
         let week = CodeStatsProjection(report: report(.preset(.last7)), calendar: Self.calendar)
         #expect(!week.isSingleDay)
-        #expect(!week.showsContributions)
+        #expect((1...2).contains(week.heatWeeks.count))
         let quarter = CodeStatsProjection(
             report: report(.preset(.last90)), calendar: Self.calendar)
-        #expect(quarter.showsContributions)
+        #expect(quarter.heatWeeks.count >= 13)
     }
 
     @Test func oneWeekChartsUseDays() {

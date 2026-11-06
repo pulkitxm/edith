@@ -37,7 +37,7 @@ struct CodeStatsTrendCard: View {
     }
 
     var body: some View {
-        PageCard(title: "Output over time", note: note) {
+        PageCard(title: "Output over time", note: note, fill: true) {
             HStack(spacing: UIScale.pt(10)) {
                 EdithSegmentedPicker(
                     "Metric", selection: $metric, options: CodeStatsTrendMetric.allCases,

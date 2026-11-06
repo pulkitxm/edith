@@ -230,10 +230,12 @@ struct AttentionDailyStack: View {
             }
         }
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: days.count > 10 ? 5 : 1)) { _ in
-                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                    .font(.edithText(.caption))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+            AxisMarks(values: .automatic(desiredCount: min(max(days.count, 2), 8))) { _ in
+                AxisValueLabel(
+                    format: .dateTime.month(.abbreviated).day(), collisionResolution: .greedy
+                )
+                .font(.edithText(.caption))
+                .foregroundStyle(DashSkin.inkFaint(dark))
             }
         }
         .chartXSelection(value: $selected)
@@ -272,7 +274,12 @@ private struct AttentionHourValue: Identifiable {
     var id: String { "\(hour)|\(level.key)" }
     var hour: Int
     var level: AttentionProductivity
+    var floor: Double
     var minutes: Double
+
+    var start: Double { Double(hour) - 0.35 }
+    var end: Double { Double(hour) + 0.35 }
+    var top: Double { floor + minutes }
 }
 
 struct AttentionHourBars: View {
@@ -280,6 +287,19 @@ struct AttentionHourBars: View {
     var height: CGFloat = 160
     @State private var selected: Int?
     @Environment(\.colorScheme) private var scheme
+
+    private func bar(_ value: AttentionHourValue, dark: Bool) -> some ChartContent {
+        let emphasized = selected == nil || selected == value.hour
+        let color: Color = AttentionPalette.level(value.level, dark: dark)
+        let mark = RectangleMark(
+            xStart: PlottableValue.value("Hour", value.start),
+            xEnd: PlottableValue.value("Hour", value.end),
+            yStart: PlottableValue.value("Minutes", value.floor),
+            yEnd: PlottableValue.value("Minutes", value.top))
+        return mark.foregroundStyle(color)
+            .cornerRadius(2)
+            .opacity(emphasized ? 1 : 0.5)
+    }
 
     private var byHour: [Int: [String: TimeInterval]] {
         var result: [Int: [String: TimeInterval]] = [:]
@@ -295,23 +315,20 @@ struct AttentionHourBars: View {
         let dark = scheme == .dark
         let byHour = byHour
         let values = byHour.flatMap { hour, levels in
-            AttentionPalette.levels.compactMap { level -> AttentionHourValue? in
+            var floor = 0.0
+            return AttentionPalette.levels.compactMap { level -> AttentionHourValue? in
                 guard let seconds = levels[level.key], seconds > 0 else { return nil }
-                return AttentionHourValue(hour: hour, level: level, minutes: seconds / 60)
+                defer { floor += seconds / 60 }
+                return AttentionHourValue(
+                    hour: hour, level: level, floor: floor, minutes: seconds / 60)
             }
         }
         Chart {
             ForEach(values) { value in
-                BarMark(
-                    x: .value("Hour", value.hour), y: .value("Minutes", value.minutes),
-                    width: .ratio(0.7)
-                )
-                .foregroundStyle(AttentionPalette.level(value.level, dark: dark))
-                .cornerRadius(2)
-                .opacity(selected == nil || selected == value.hour ? 1 : 0.5)
+                bar(value, dark: dark)
             }
             if let selected, let levels = byHour[selected] {
-                RuleMark(x: .value("Hour", selected))
+                RuleMark(x: .value("Hour", Double(selected)))
                     .foregroundStyle(.clear)
                     .annotation(
                         position: .top, spacing: UIScale.pt(4),
@@ -359,12 +376,21 @@ struct AttentionHourBars: View {
                 }
             }
         }
-        .chartXSelection(value: $selected)
+        .chartXSelection(
+            value: Binding(
+                get: { selected.map(Double.init) },
+                set: { selected = $0.map { min(23, max(0, Int($0.rounded()))) } })
+        )
         .frame(height: UIScale.pt(height))
     }
 }
 
 struct AttentionWeekHeatmap: View {
+    static let minimumSide = 10.0
+    static let maximumSide = 32.0
+    static let gap = 3.0
+    static let labelWidth = 28.0
+
     let cells: [AttentionHourCell]
     @Environment(\.colorScheme) private var scheme
 
@@ -375,13 +401,13 @@ struct AttentionWeekHeatmap: View {
         let order =
             Array(Calendar.current.firstWeekday...7) + Array(1..<Calendar.current.firstWeekday)
         let symbols = Calendar.current.shortWeekdaySymbols
-        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+        VStack(alignment: .leading, spacing: UIScale.pt(Self.gap)) {
             ForEach(order, id: \.self) { weekday in
-                HStack(spacing: UIScale.pt(3)) {
+                HStack(spacing: UIScale.pt(Self.gap)) {
                     Text(symbols[weekday - 1])
                         .font(.edithText(.caption))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: UIScale.pt(28), alignment: .leading)
+                        .frame(width: UIScale.pt(Self.labelWidth), alignment: .leading)
                     ForEach(0..<24, id: \.self) { hour in
                         let cell = byKey[weekday * 24 + hour]
                         let active = cell?.active ?? 0
@@ -393,24 +419,31 @@ struct AttentionWeekHeatmap: View {
                                         .opacity(0.15 + 0.85 * active / peak)
                                     : DashSkin.grid(dark)
                             )
-                            .frame(maxWidth: .infinity)
-                            .frame(height: UIScale.pt(16))
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(
+                                minWidth: UIScale.pt(Self.minimumSide),
+                                maxWidth: UIScale.pt(Self.maximumSide)
+                            )
                             .help(
                                 "\(symbols[weekday - 1]) \(String(format: "%02d:00", hour)) · \(AttentionFormat.duration(active)) active, \(AttentionFormat.duration(focus)) productive"
                             )
                     }
                 }
             }
-            HStack(spacing: UIScale.pt(3)) {
-                Color.clear.frame(width: UIScale.pt(28), height: UIScale.pt(1))
+            HStack(spacing: UIScale.pt(Self.gap)) {
+                Color.clear.frame(width: UIScale.pt(Self.labelWidth), height: UIScale.pt(1))
                 ForEach(0..<24, id: \.self) { hour in
                     Text(hour % 3 == 0 ? String(format: "%02d", hour) : "")
                         .font(.system(size: UIScale.pt(8.5)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity)
+                        .fixedSize()
+                        .frame(
+                            minWidth: UIScale.pt(Self.minimumSide),
+                            maxWidth: UIScale.pt(Self.maximumSide))
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityLabel("Active time by weekday and hour")
     }
 }

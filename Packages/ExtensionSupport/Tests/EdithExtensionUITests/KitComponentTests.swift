@@ -175,26 +175,47 @@ struct KitComponentTests {
         #expect(abs(grid.height - tallest.height) <= 1)
     }
 
-    @Test func calendarFillMatchesTheAvailableWidthExactly() throws {
-        for weeks in [53, 26, 13] {
-            let layout = try #require(
-                ActivityCalendarLayout.filling(
-                    width: 900, weekCount: weeks, minimumSide: 8, maximumSide: 28, gap: 3,
-                    labelHeight: 12, pixelScale: 2))
-            let last = layout.origin(week: weeks - 1, row: 0).x + layout.cellWidth
-            #expect(abs(last - 900) < 0.001)
-            #expect(abs(layout.contentWidth(weekCount: weeks) - 900) < 0.001)
-            #expect(layout.side <= 28)
-            #expect(layout.side <= layout.cellWidth)
-            #expect(layout.columnGap >= 3)
+    @Test func calendarFillKeepsSquareCellsWithinTheirBounds() throws {
+        for width in [300.0, 600, 900, 1400, 2000, 3000] {
+            for weeks in [1, 2, 5, 7, 13, 26, 54] {
+                guard
+                    let layout = ActivityCalendarLayout.filling(
+                        width: width, weekCount: weeks, minimumSide: 8, maximumSide: 28, gap: 3,
+                        labelHeight: 12, pixelScale: 2)
+                else {
+                    #expect((width + 3) / Double(weeks) - 3 < 8)
+                    continue
+                }
+                #expect(layout.cellWidth == layout.side)
+                #expect(layout.side >= 8 && layout.side <= 28)
+                #expect(layout.columnGap >= 3)
+                #expect(layout.contentWidth(weekCount: weeks) <= width + 0.001)
+                if (width + 3) / Double(weeks) - 3 > 28 {
+                    #expect(layout.side == 28)
+                    #expect(layout.columnGap == 3)
+                } else {
+                    #expect(abs(layout.contentWidth(weekCount: weeks) - width) < 0.001)
+                }
+            }
         }
         #expect(
             ActivityCalendarLayout.filling(
                 width: 200, weekCount: 53, minimumSide: 14, maximumSide: 28, gap: 3,
                 labelHeight: 12) == nil)
+        for available in [200.0, 600, 1400, 2400] {
+            for weeks in [1, 2, 6, 7, 14, 54] {
+                let fitted = ActivityCalendarLayout.fittedWidth(
+                    available: available, weekCount: weeks)
+                #expect(fitted <= available + 0.001)
+                let columns = weeks <= ActivityCalendarLayout.shortWeeks ? 7.0 : Double(weeks)
+                let gutter = weeks <= ActivityCalendarLayout.shortWeeks ? 24.0 : 16.0
+                let side = (fitted - gutter + 3) / columns - 3
+                #expect(fitted == available || (side >= 14 - 0.001 && side <= 28.001))
+            }
+        }
     }
 
-    @Test func calendarHitTestingFollowsStretchedCells() throws {
+    @Test func calendarHitTestingFollowsFilledCells() throws {
         let layout = try #require(
             ActivityCalendarLayout.filling(
                 width: 300, weekCount: 5, minimumSide: 14, maximumSide: 28, gap: 3, labelHeight: 12)
@@ -210,23 +231,76 @@ struct KitComponentTests {
                 rowCount: 7) == nil)
     }
 
-    @Test func calendarFillDrawsToTheTrailingEdgeOfItsContainer() async throws {
-        let weeks = DesignSystemGallery.calendarWeeks(13)
-        let rendered = try await render(
-            ActivityCalendarGrid(
-                weeks: weeks.map { week in
-                    ActivityCalendarWeek(
-                        id: week.id, monthLabel: "",
-                        cells: week.cells.map {
-                            ActivityCalendarDay(id: $0.id, date: $0.date, value: 1, level: 6)
-                        })
-                }, dark: false, fillsWidth: true
-            ) { _ in EmptyView() }
-            .frame(width: 800), width: 800)
-        let scale = rendered.bitmap.pixelsWide / 800
-        let background = luminance(rendered.bitmap, x: 2, y: 2)
-        let y = 60 * scale
-        #expect(abs(luminance(rendered.bitmap, x: 796 * scale, y: y) - background) > 0.1)
+    private func calendarWeeks(_ count: Int) -> [ActivityCalendarWeek] {
+        DesignSystemGallery.calendarWeeks(count).map { week in
+            ActivityCalendarWeek(
+                id: week.id, monthLabel: "",
+                cells: week.cells.map {
+                    ActivityCalendarDay(id: $0.id, date: $0.date, value: 1, level: 6)
+                })
+        }
+    }
+
+    private func inkRun(
+        _ bitmap: NSBitmapImageRep, from start: (x: Int, y: Int), horizontal: Bool,
+        background: Double
+    ) -> Int {
+        var length = 0
+        var x = start.x
+        var y = start.y
+        while x < bitmap.pixelsWide, y < bitmap.pixelsHigh,
+            abs(luminance(bitmap, x: x, y: y) - background) > 0.1
+        {
+            length += 1
+            if horizontal { x += 1 } else { y += 1 }
+        }
+        return length
+    }
+
+    @Test func calendarFillDrawsSquareCellsAndOnlyAFullYearReachesTheTrailingEdge() async throws {
+        let width = 1400.0
+        for count in [2, 13, 54] {
+            let rendered = try await render(
+                ActivityCalendarGrid(weeks: calendarWeeks(count), dark: false, fillsWidth: true) {
+                    _ in EmptyView()
+                }
+                .frame(width: width), width: width)
+            let scale = rendered.bitmap.pixelsWide / Int(width)
+            let background = luminance(rendered.bitmap, x: 2, y: 2)
+            var found: (x: Int, y: Int)?
+            for row in stride(from: 16 * scale, to: rendered.bitmap.pixelsHigh, by: 4 * scale) {
+                var left = 0
+                while left < rendered.bitmap.pixelsWide,
+                    inkRun(
+                        rendered.bitmap, from: (left, row), horizontal: true,
+                        background: background) < 10 * scale
+                {
+                    left += 1
+                }
+                if left < rendered.bitmap.pixelsWide {
+                    found = (left + 4 * scale, row)
+                    break
+                }
+            }
+            let probe = try #require(found)
+            var top = probe.y
+            while top > 0,
+                abs(luminance(rendered.bitmap, x: probe.x, y: top - 1) - background) > 0.1
+            {
+                top -= 1
+            }
+            let cellWidth = inkRun(
+                rendered.bitmap, from: (probe.x - 4 * scale, probe.y), horizontal: true,
+                background: background)
+            let cellHeight = inkRun(
+                rendered.bitmap, from: (probe.x, top), horizontal: false, background: background)
+            #expect(cellWidth > 10 * scale)
+            #expect(abs(cellWidth - cellHeight) <= scale)
+            let trailing = luminance(rendered.bitmap, x: Int(width - 4) * scale, y: probe.y)
+            #expect(
+                (abs(trailing - background) > 0.1)
+                    == (count == 54))
+        }
     }
 
     @Test func singleClosureHeaderBindsToTrailingActions() {
