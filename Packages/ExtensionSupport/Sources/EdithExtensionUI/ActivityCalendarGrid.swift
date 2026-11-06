@@ -135,7 +135,7 @@ public struct ActivityCalendarGrid<Detail: View>: View {
                     Text("More")
                 }
                 .fixedSize()
-                .frame(minWidth: min(availableWidth, gridWidth), alignment: .trailing)
+                .frame(maxWidth: gridWidth, alignment: .trailing)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Color scale from less to more activity")
             }

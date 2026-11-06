@@ -1398,7 +1398,9 @@ private struct DashboardFilterComputer {
         var out: [KPI] = [
             KPI(
                 label: "Total tokens", value: DashFmt.tokens(totalTokens),
-                sub: "\(DashFmt.usd(totalCost)) · \(active.count) active days", hot: true,
+                sub: "\(DashFmt.usd(totalCost)) · "
+                    + (active.count == 1 ? "1 active day" : "\(active.count) active days"),
+                hot: true,
                 sensitiveSub: true, usageValue: true),
             KPI(
                 label: "Total cost", value: DashFmt.usd(totalCost),
