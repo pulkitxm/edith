@@ -121,6 +121,13 @@ import Security
 }
 
 @MainActor final class HostPrivilegedSession: NSObject, ExtensionPrivilegedProtocol {
+    nonisolated static func wire(_ error: any Error) -> NSError {
+        let bridged = error as NSError
+        return NSError(
+            domain: bridged.domain, code: bridged.code,
+            userInfo: [NSLocalizedDescriptionKey: error.localizedDescription])
+    }
+
     private let admission: HostPrivilegedAdmission
     private let ended: @MainActor () -> Void
     private var worker: HostPrivilegedProcess?
@@ -166,16 +173,17 @@ import Security
     ) {
         Task { @MainActor in
             guard self.worker == nil, !self.releasing, !self.finished else {
-                reply(MarketplaceError.invalidBundle as NSError); return
+                reply(Self.wire(MarketplaceError.invalidBundle)); return
             }
             do {
                 try self.authorize(URL(fileURLWithPath: source), owner, version)
-            } catch { reply(error as NSError); return }
+            } catch { reply(Self.wire(error)); return }
             guard self.reserveOwner(owner) else {
                 reply(
-                    ExtensionPeerError.rejected(
-                        "This extension already owns a privileged worker. Wait for restoration, then try again."
-                    ) as NSError);
+                    Self.wire(
+                        ExtensionPeerError.rejected(
+                            "This extension already owns a privileged worker. Wait for restoration, then try again."
+                        )))
                 return
             }
             self.owner = owner
@@ -187,7 +195,7 @@ import Security
                 self.payload = payload
                 try await self.startWorker(payload)
                 reply(nil)
-            } catch { reply(error as NSError); self.finish() }
+            } catch { reply(Self.wire(error)); self.finish() }
         }
     }
 
@@ -197,13 +205,13 @@ import Security
         Task { @MainActor in
             guard !self.releasing, let worker = self.worker, !command.isEmpty,
                 command.utf8.count <= 256, !command.utf8.contains(0), payload.count <= 32_768
-            else { reply(nil, MarketplaceError.invalidBundle as NSError); return }
+            else { reply(nil, Self.wire(MarketplaceError.invalidBundle)); return }
             if command == HostApplicationQuitPolicy.command {
                 await self.releaseForApplicationQuit(payload: payload, reply: reply)
                 return
             }
             do { reply(try await worker.invoke(command, payload: payload), nil) } catch {
-                reply(nil, error as NSError)
+                reply(nil, Self.wire(error))
             }
         }
     }
@@ -235,22 +243,22 @@ import Security
                 ended()
             } catch {
                 connectionLost()
-                reply(nil, error as NSError)
+                reply(nil, Self.wire(error))
             }
-        } catch { reply(nil, error as NSError) }
+        } catch { reply(nil, Self.wire(error)) }
     }
 
     nonisolated func release(reply: @escaping @Sendable (NSError?) -> Void) {
         Task { @MainActor in
             guard !self.releasing else {
                 reply(
-                    ExtensionPeerError.rejected("System settings are still being restored.")
-                        as NSError);
+                    Self.wire(
+                        ExtensionPeerError.rejected("System settings are still being restored.")))
                 return
             }
             self.releasing = true
             do { try await self.prepare(); reply(nil); self.finish() } catch {
-                self.releasing = false; reply(error as NSError)
+                self.releasing = false; reply(Self.wire(error))
             }
         }
     }

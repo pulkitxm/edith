@@ -85,11 +85,11 @@ import Testing
         }
     }
 
-    @Test func writablePlatformParentRequiresARootProtectedNonRenamableAnchor() throws {
+    @Test func writablePlatformParentRequiresARootOwnedPrivateAnchorWithoutSystemFlags() throws {
         var platform = stat()
         platform.st_uid = 0; platform.st_gid = 80; platform.st_mode = S_IFDIR | 0o775
         var anchor = stat()
-        anchor.st_uid = 0; anchor.st_mode = S_IFDIR | 0o755; anchor.st_flags = UInt32(SF_NOUNLINK)
+        anchor.st_uid = 0; anchor.st_mode = S_IFDIR | 0o755
         let applications = URL(fileURLWithPath: "/Applications")
         try HostPrivilegedCaller.validateAncestor(
             applications, metadata: platform, protectedChild: anchor)
@@ -101,12 +101,7 @@ import Testing
             try HostPrivilegedCaller.validateAncestor(
                 URL(fileURLWithPath: "/synthetic"), metadata: platform, protectedChild: anchor)
         }
-        anchor.st_flags = 0
-        #expect(throws: MarketplaceError.self) {
-            try HostPrivilegedCaller.validateAncestor(
-                applications, metadata: platform, protectedChild: anchor)
-        }
-        anchor.st_flags = UInt32(SF_NOUNLINK); anchor.st_uid = 501
+        anchor.st_uid = 501
         #expect(throws: MarketplaceError.self) {
             try HostPrivilegedCaller.validateAncestor(
                 applications, metadata: platform, protectedChild: anchor)

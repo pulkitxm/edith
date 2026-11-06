@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import ServiceManagement
 import Testing
@@ -314,6 +315,31 @@ private final class CameraControlProbe: CameraCarrierControlling {
         #expect(steps(.notRegistered) == ["approve"])
         #expect(steps(.requiresApproval) == ["approve"])
         #expect(steps(.enabled).isEmpty)
+    }
+
+    @Test func failedCarrierInstallReleasesThePrivilegedWorker() async throws {
+        let host = "com.pulkit.edith"
+        let installed = "/Applications/Edith Extensions/com.pulkit.edith.cameraCarrier.app"
+        func steps(_ run: () async throws -> Data) async -> ([String], URL?) {
+            var steps: [String] = []
+            let url = try? await CameraAppWorker.installCarrier(
+                host: host, run: run, release: { steps.append("release") },
+                abandon: { steps.append("abandon") })
+            return (steps, url)
+        }
+        let success = await steps {
+            try JSONSerialization.data(withJSONObject: ["path": installed])
+        }
+        #expect(success.0 == ["release"])
+        #expect(success.1?.path == installed)
+        let rejected = await steps { throw ExtensionPeerError.rejected("synthetic failure") }
+        #expect(rejected.0 == ["release", "abandon"])
+        #expect(rejected.1 == nil)
+        let foreign = await steps {
+            try JSONSerialization.data(withJSONObject: ["path": "/Applications/Other.app"])
+        }
+        #expect(foreign.0 == ["release", "abandon"])
+        #expect(foreign.1 == nil)
     }
 
     @Test func closedManagerIgnoresLateCarrierPublication() async {
