@@ -87,12 +87,8 @@ final class HostNotchLifecycleAdapter {
             }
             if !owningWorkspaceAvailable() { versions["notchShelf"] = nil }
             let layout = marketplace.surfaceLayouts.notch
-            let hidden = Set(
-                SurfaceWidget.library(extensionIDs: marketplace.entries.map(\.id)).filter {
-                    marketplace.surfaces.privacy.hides($0)
-                })
             return .init(
-                activeVersions: versions, layout: layout, hiddenWidgets: hidden,
+                activeVersions: versions, layout: layout,
                 reservedProviderScenes: manager.presentationCounts(
                     excluding: adapter?.coordinator?.presentationIDs ?? []))
         }
@@ -109,7 +105,9 @@ final class HostNotchLifecycleAdapter {
                             origin: origin,
                             requests: marketplace.surfaces.requests,
                             admission: { [weak coordinator] in coordinator?.compactVersions($0) },
-                            navigate: compactNavigate, postNavigation: compactNavigationAcknowledged
+                            navigate: compactNavigate,
+                            postNavigation: compactNavigationAcknowledged,
+                            covered: { marketplace.surfaces.privacy.hides($0) }
                         )
                         return HostNotchCompactController.lease(
                             request: request, model: model, layout: environment().layout)

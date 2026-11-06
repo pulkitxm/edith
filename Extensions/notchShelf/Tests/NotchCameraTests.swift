@@ -70,7 +70,9 @@ import Testing
         #expect(hardware.starts == ["rear"])
     }
 
-    @Test func checkedPanelRejectsHiddenInactiveAndStaleCameraAndCollapseStopsCapture() async throws
+    @Test
+    func checkedPanelRejectsInactiveAndStaleCameraKeepsItWhilePresentingAndCollapseStopsCapture()
+        async throws
     {
         let hardware = CameraFixtureHardware()
         hardware.authorization = AVAuthorizationStatus.authorized.rawValue
@@ -94,11 +96,11 @@ import Testing
             root: fixture.root, namespace: fixture.id, owner: "presenter")
         try presenter.publish(["active": "1", "blurCamera": "1"])
         controller.synchronize()
-        #expect(try fixture.engine.cameraEngine?.state().frame == nil)
         let valid = NotchCameraRequest(
             identity: try #require(fixture.engine.identity), displayID: 42,
             presentationID: fixture.presentation, operation: .start)
-        await #expect(throws: (any Error).self) { try await fixture.engine.camera(valid) }
+        _ = try await fixture.engine.camera(valid)
+        #expect(hardware.starts.first == "front")
         try presenter.publish(["active": "0"])
         controller.synchronize()
         _ = try await fixture.engine.camera(valid)
@@ -109,7 +111,7 @@ import Testing
         #expect(try fixture.engine.cameraEngine?.state().frame == nil)
         controller.collapseNow()
         await fixture.engine.cameraEngine?.shutdownAndWait()
-        #expect(hardware.stops == 2)
+        #expect(hardware.stops == 3)
     }
 
     @Test func switchActionWaitsForOwnedFrameReadAndIsNotDropped() async throws {

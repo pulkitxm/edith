@@ -19,7 +19,7 @@ import Testing
         ])
         state.refresh()
         #expect(state.hides(.agents))
-        #expect(!state.hides(.calendar))
+        #expect(state.hides(.calendar))
         #expect(!state.hides(.music))
         #expect(!state.hides(.clocks) && !state.hides(.actions))
         #expect(!state.hides(.usage) && !state.hides(.limits))

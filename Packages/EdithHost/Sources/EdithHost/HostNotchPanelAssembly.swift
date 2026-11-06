@@ -111,7 +111,7 @@ final class HostNotchPanelAssembly {
         if next.visible { present(panel) } else { panel.orderOut(nil) }
     }
 
-    func synchronize(activeVersions: [String: String], hiddenWidgets: Set<SurfaceWidget>) {
+    func synchronize(activeVersions: [String: String]) {
         guard !stopped, let state else { return }
         if activeVersions["notchShelf"] != state.version {
             hide()
@@ -119,11 +119,7 @@ final class HostNotchPanelAssembly {
         }
         for (id, record) in Array(records) {
             guard let slot = record.slot else { continue }
-            if activeVersions[slot.providerID] != slot.providerVersion
-                || hiddenWidgets.contains(slot.tile.widget)
-            {
-                remove(id)
-            }
+            if activeVersions[slot.providerID] != slot.providerVersion { remove(id) }
         }
     }
 

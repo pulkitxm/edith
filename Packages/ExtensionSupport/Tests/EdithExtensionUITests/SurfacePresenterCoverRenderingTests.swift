@@ -1,6 +1,7 @@
 import EdithExtensionTestSupport
 import AppKit
 import CoreGraphics
+import CoreImage
 import EdithExtensionCore
 import SwiftUI
 import Testing
@@ -90,6 +91,32 @@ import Testing
             #expect(!label(host, "Hidden while presenting"))
         }
         #expect(sizes[0] == sizes[1])
+    }
+
+    @Test func layerCoverMatchesTheSwiftUICoverAndKeepsTheLayerVisible() throws {
+        let view = NSView(frame: CGRect(x: 0, y: 0, width: 320, height: 180))
+        view.wantsLayer = true
+        let content = CALayer()
+        content.frame = view.bounds
+        content.contents = NSImage(size: NSSize(width: 8, height: 8))
+        try #require(view.layer).addSublayer(content)
+        for dark in [true, false] {
+            PresenterLayerCover.apply(true, to: content, in: view, dark: dark)
+            #expect(!content.isHidden && content.contents != nil)
+            #expect(view.layerUsesCoreImageFilters)
+            #expect(PresenterLayerCover.covers(content))
+            let blur = try #require((content.filters as? [CIFilter])?.first)
+            #expect(blur.value(forKey: kCIInputRadiusKey) as? Double == UIScale.pt(28))
+            let dim = try #require(
+                content.sublayers?.first { $0.name == PresenterLayerCover.dimName })
+            #expect(dim.opacity == 0.45 && dim.frame == content.bounds)
+            #expect(
+                dim.backgroundColor == (dark ? NSColor.black : NSColor.white).cgColor)
+            #expect(content.sublayers?.count == 1)
+        }
+        PresenterLayerCover.apply(false, to: content, in: view)
+        #expect(!PresenterLayerCover.covers(content))
+        #expect(content.filters == nil && (content.sublayers ?? []).isEmpty)
     }
 
     private func label(_ node: NSObject, _ text: String, depth: Int = 0) -> Bool {

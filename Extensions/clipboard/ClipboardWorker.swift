@@ -34,10 +34,7 @@ import Foundation
 
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
-        if [
-            "clipboard.ui.snapshot", "clipboard.ui.thumbnail", "clipboard.ui.mutate",
-            "clipboard.ui.copy", "clipboard.ui.palette",
-        ].contains(command) {
+        if ["clipboard.ui.mutate", "clipboard.ui.copy", "clipboard.ui.palette"].contains(command) {
             guard
                 !SurfacePrivacyState.hides(
                     .ability("clipboard"),

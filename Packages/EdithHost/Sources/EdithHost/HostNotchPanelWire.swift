@@ -66,7 +66,6 @@ struct HostNotchPanelPointer: Codable, Sendable {
 struct HostNotchPanelEnvironment {
     var activeVersions: [String: String]
     var layout: SurfaceLayout
-    var hiddenWidgets: Set<SurfaceWidget> = []
     var reservedProviderScenes: [String: Int] = [:]
 }
 
