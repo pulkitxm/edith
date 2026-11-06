@@ -19,6 +19,21 @@ struct HerdrRemoteScene: View {
         }
     }
 
+    private var keysActive: Bool { automaticActions && location != "herdr.files" }
+
+    private func performKey(_ event: NSEvent, store: HerdrStore, in window: NSWindow?) -> Bool {
+        if location == "herdr.space",
+            store.performSpaceKey(
+                characters: event.charactersIgnoringModifiers, keyCode: event.keyCode,
+                modifiers: event.modifierFlags, in: window, spaceID: target)
+        {
+            return true
+        }
+        return store.performSceneKey(
+            characters: event.charactersIgnoringModifiers, modifiers: event.modifierFlags,
+            repeats: event.isARepeat, in: window, surface: detailSurface)
+    }
+
     var body: some View {
         Group {
             if !store.uiPresentations.contains(where: {
@@ -48,29 +63,24 @@ struct HerdrRemoteScene: View {
                 ) { EmptyView() }
             }
         }
-        .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
+        .background(
+            HerdrWindowReader(
+                onWindow: { store.movePage(from: $0, to: $1) },
+                onKey: { event in
+                    keysActive && performKey(event, store: store, in: event.window)
+                })
+        )
         .onAppear {
-            keyMonitor.active = automaticActions && location != "herdr.files"
-            keyMonitor.install(store: store) { [location, target] store, event, window in
-                if location == "herdr.space",
-                    store.performSpaceKey(
-                        characters: event.charactersIgnoringModifiers, keyCode: event.keyCode,
-                        modifiers: event.modifierFlags, in: window, spaceID: target)
-                {
-                    return true
-                }
-                return store.performSceneKey(
-                    characters: event.charactersIgnoringModifiers, modifiers: event.modifierFlags,
-                    repeats: event.isARepeat, in: window, surface: detailSurface)
+            keyMonitor.active = keysActive
+            keyMonitor.install(store: store) { store, event, window in
+                performKey(event, store: store, in: window)
             }
         }
         .onDisappear {
             keyMonitor.active = false
             keyMonitor.remove()
         }
-        .onChange(of: automaticActions) {
-            keyMonitor.active = automaticActions && location != "herdr.files"
-        }
+        .onChange(of: automaticActions) { keyMonitor.active = keysActive }
         .task(id: automaticActions) {
             if automaticActions { await store.watch() } else { store.stopWatching() }
         }

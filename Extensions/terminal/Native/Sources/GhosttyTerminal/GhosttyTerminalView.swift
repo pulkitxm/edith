@@ -9,6 +9,7 @@ public final class GhosttyTerminalView: NSView {
     public var onFocus: (() -> Void)?
     public var onFocusChange: ((Bool) -> Void)?
     public var onPaneAction: ((GhosttyPaneAction) -> Void)?
+    public var onKeyEquivalent: ((NSEvent) -> Bool)?
     public var onTitleChange: ((String) -> Void)?
     public var onWorkingDirectoryChange: ((String) -> Void)?
     public var onReady: (() -> Void)?
