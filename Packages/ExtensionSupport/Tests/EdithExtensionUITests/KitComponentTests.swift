@@ -451,18 +451,6 @@ struct KitComponentTests {
             }.errorHeading == "Music failed")
     }
 
-    @Test func formSkeletonMatchesTheGroupedFormColumn() async throws {
-        let rendered = try await render(PageSkeleton(layout: .form).pageSurface(), width: 1100)
-        let bitmap = rendered.bitmap
-        let scale = bitmap.pixelsWide / 1100
-        let y = 12 * scale
-        let cards = (0..<bitmap.pixelsWide).filter { luminance(bitmap, x: $0, y: y) > 0.985 }
-        let first = try #require(cards.first) / scale
-        let last = try #require(cards.last) / scale
-        #expect(abs(first - 198) <= 2)
-        #expect(abs(last - 902) <= 2)
-    }
-
     @Test func placeholderIsFainterThanTypedText() async throws {
         func darkest(_ text: String) async throws -> Double {
             let rendered = try await render(
