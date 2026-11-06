@@ -159,7 +159,6 @@ final class CameraPreviewView: NSView {
     private let queue = DispatchQueue(label: "com.pulkit.edith.notch.camera")
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var currentDeviceID: String?
-    private var covered = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -187,16 +186,7 @@ final class CameraPreviewView: NSView {
     }
 
     func setCovered(_ covered: Bool) {
-        previewLayer?.isHidden = covered
-        queue.async { [weak self] in
-            guard let self else { return }
-            self.covered = covered
-            if covered {
-                self.session.stopRunning()
-            } else if !self.session.inputs.isEmpty {
-                self.session.startRunning()
-            }
-        }
+        if let previewLayer { PresenterLayerCover.apply(covered, to: previewLayer, in: self) }
     }
 
     func setDevice(_ id: String?) {
@@ -217,7 +207,7 @@ final class CameraPreviewView: NSView {
                 self.session.addInput(input)
             }
             self.session.commitConfiguration()
-            if !self.covered { self.session.startRunning() }
+            self.session.startRunning()
             DispatchQueue.main.async {
                 if let connection = preview?.connection, connection.isVideoMirroringSupported {
                     connection.automaticallyAdjustsVideoMirroring = false

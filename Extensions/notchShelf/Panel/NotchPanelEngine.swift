@@ -626,12 +626,10 @@ import Foundation
     }
 
     private func cameraAllowed(on displayID: UInt32) -> Bool {
-        let privacy = controller?.privacy.values ?? [:]
-        return context.activeVersions["notchShelf"] == version
+        context.activeVersions["notchShelf"] == version
             && controller?.activeTab == .camera
             && controller?.isExpanded(on: displayID) == true
             && (try? state(for: displayID).visible) == true
-            && (privacy["active"] != "1" || privacy["blurCamera"] == "0")
     }
 
     func stopScene(_ request: NotchPanelSceneStop) throws {
@@ -756,8 +754,7 @@ import Foundation
             slot.providerID
                 == NotchPanelSlot.anchorProvider(
                     tile: slot.tile, kind: slot.kind, activeVersions: context.activeVersions),
-            context.activeVersions[slot.providerID] == slot.providerVersion,
-            !controller.privacy.hides(slot.tile.widget)
+            context.activeVersions[slot.providerID] == slot.providerVersion
         else { return false }
         switch slot.kind {
         case .card:

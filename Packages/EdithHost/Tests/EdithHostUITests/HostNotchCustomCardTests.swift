@@ -59,11 +59,6 @@ import Testing
                     fixture.admission(
                         active: admission.activeVersions, layout: .init(tiles: [changed])))
             }
-            var hidden = admission
-            hidden.hiddenWidgets = [widget]
-            #expect(throws: HostNotchPanelError.unavailableProvider) {
-                try decoded.validate(hidden)
-            }
             #expect(throws: HostNotchPanelError.invalidState) {
                 try fixture.state(phase: .collapsed, slots: [slot]).validate(admission)
             }

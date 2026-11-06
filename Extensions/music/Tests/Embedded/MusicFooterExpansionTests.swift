@@ -16,6 +16,7 @@ import Testing
     var page = "Home"
     var footerHeight: CGFloat = 0
     var reads = 0
+    let privacy = EmbeddedMusicPrivacyState()
     @ObservationIgnored var service: MusicUIService?
 
     func refresh() async {
@@ -38,13 +39,15 @@ private struct FooterWindowFixture: View {
             HStack(spacing: 0) {
                 VStack {
                     Spacer(minLength: 0)
-                    if slots.sidebar { EmbeddedMusicSidebarScene(remote: remote) }
+                    if slots.sidebar {
+                        EmbeddedMusicSidebarScene(remote: remote, privacy: slots.privacy)
+                    }
                 }
                 .frame(width: 220)
                 Text(slots.page).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if slots.footer {
-                EmbeddedMusicFooterScene(remote: remote)
+                EmbeddedMusicFooterScene(remote: remote, privacy: slots.privacy)
                     .background {
                         GeometryReader { geometry in
                             Color.clear
@@ -135,6 +138,13 @@ private struct FooterWindowFixture: View {
         let expanded = UIScale.pt(EmbeddedMusicFooter.expandedHeight)
         try await settle(host) { abs(slots.footerHeight - expanded) < 0.5 }
         try expectExpanded(host, slots: slots, height: expanded)
+
+        slots.privacy.active = true
+        try await settle(host) { slots.privacy.hides(.music) }
+        try expectExpanded(host, slots: slots, height: expanded)
+        #expect(slots.footer && !slots.sidebar)
+        slots.privacy.active = false
+        try await settle(host) { !slots.privacy.hides(.music) }
 
         try press(host, label: "Collapse the player bar")
         try await settle(host) { slots.sidebar && !slots.footer }

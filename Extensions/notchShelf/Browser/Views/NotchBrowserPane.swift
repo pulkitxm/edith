@@ -117,8 +117,6 @@ final class BrowserWebContainerView: NSView {
     static let cornerRadius: CGFloat =
         NotchGeometry.expandedBottomRadius - NotchBrowserGeometry.contentInset
 
-    private let cover = BrowserPresenterCover()
-
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -126,8 +124,6 @@ final class BrowserWebContainerView: NSView {
         layer?.cornerRadius = Self.cornerRadius
         layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         layer?.masksToBounds = true
-        cover.isHidden = true
-        addSubview(cover)
     }
 
     @available(*, unavailable)
@@ -136,50 +132,34 @@ final class BrowserWebContainerView: NSView {
     }
 
     func show(_ webView: WKWebView?) {
-        if let webView, hostedWebView === webView {
-            placeCover()
-            return
-        }
-        for view in subviews where view !== webView && view !== cover {
+        if let webView, hostedWebView === webView { return }
+        for view in subviews where view !== webView {
             view.removeFromSuperview()
         }
-        guard let webView else {
-            placeCover()
-            return
-        }
+        guard let webView else { return }
         webView.removeFromSuperview()
         webView.autoresizingMask = []
         layer?.backgroundColor = webView.underPageBackgroundColor.cgColor
         addSubview(webView)
         fitWebView()
-        placeCover()
     }
 
     func setCovered(_ covered: Bool) {
-        hostedWebView?.alphaValue = covered ? 0 : 1
-        cover.isHidden = !covered
-        if covered { placeCover() }
+        if let layer { PresenterLayerCover.apply(covered, to: layer, in: self) }
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         fitWebView()
-        cover.frame = bounds
     }
 
     override func layout() {
         super.layout()
         fitWebView()
-        cover.frame = bounds
     }
 
     private var hostedWebView: WKWebView? {
         subviews.compactMap { $0 as? WKWebView }.first
-    }
-
-    private func placeCover() {
-        cover.frame = bounds
-        addSubview(cover)
     }
 
     private func fitWebView() {
@@ -188,21 +168,6 @@ final class BrowserWebContainerView: NSView {
         }
         webView.frame = bounds
     }
-}
-
-private final class BrowserPresenterCover: NSView {
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor(white: 0.08, alpha: 1).cgColor
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 struct NotchBrowserDialogView: View {

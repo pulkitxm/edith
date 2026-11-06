@@ -116,7 +116,6 @@ final class HostNotchPanelCoordinator {
             let assembly = assemblies[origin.displayID], let state = assembly.state,
             state.presentationID == origin.panelPresentationID, state.visible,
             current.layout.visible.contains(origin.tile),
-            !current.hiddenWidgets.contains(origin.tile.widget),
             let slot = state.slots.first(where: { slot in
                 slot.tile == origin.tile && slot.section == "surface.card"
                     && (try? slot.request(presentationID: origin.cardPresentationID)).flatMap {
@@ -145,8 +144,7 @@ final class HostNotchPanelCoordinator {
             else { continue }
             for slot in state.slots {
                 guard let request = try? slot.request(presentationID: presentationID),
-                    assembly.slot(for: request) == slot,
-                    !current.hiddenWidgets.contains(slot.tile.widget)
+                    assembly.slot(for: request) == slot
                 else { continue }
                 let versions: [String: String]
                 if slot.section == "surface.card" {
@@ -289,11 +287,9 @@ final class HostNotchPanelCoordinator {
                 return false
             }
             return current.activeVersions[slot.providerID] == slot.providerVersion
-                && !current.hiddenWidgets.contains(slot.tile.widget)
         }
         for assembly in assemblies.values {
-            assembly.synchronize(
-                activeVersions: current.activeVersions, hiddenWidgets: current.hiddenWidgets)
+            assembly.synchronize(activeVersions: current.activeVersions)
         }
     }
 
@@ -404,7 +400,7 @@ final class HostNotchPanelCoordinator {
                 ownershipID: ownershipID, notchVersion: attachRequest.version,
                 presentationID: screen.presentationID, display: screen.display,
                 previousRevision: batch?.revision, activeVersions: current.activeVersions,
-                layout: current.layout, hiddenWidgets: current.hiddenWidgets,
+                layout: current.layout,
                 reservedProviderScenes: reserved)
             try state.validate(admission)
             admissions[state.displayID] = admission

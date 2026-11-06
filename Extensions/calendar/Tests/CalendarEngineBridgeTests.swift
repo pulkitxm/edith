@@ -22,8 +22,8 @@ import Testing
         #expect(fixture.grants == 1)
         try fixture.channel.publish(["active": "1", "blurCalendar": "1"])
         await facade.refreshAndWait()
-        #expect(facade.blurEvents && facade.events.first?.title == "Meeting")
-        #expect(facade.events.first?.notes == "Private notes")
+        #expect(facade.blurEvents && facade.events.first?.title == "Synthetic owned event")
+        #expect(facade.events.first?.notes == "Synthetic notes")
         fixture.allowed = false
         await facade.refreshAndWait()
         #expect(!facade.authorized && facade.events.map(\.id) == ["owned"])

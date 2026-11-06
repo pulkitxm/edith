@@ -268,8 +268,7 @@ final class NotchShelfController {
         layouts.reload()
         activeTab = NotchTab.validSelection(activeTab, visible: visibleTabs)
         surfaceSnapshots = surfaceSnapshots.filter {
-            activeIDs.contains($0.key) && !privacy.hides(Self.glancePrivacyWidget($0.key))
-                && ($0.key != "music" || musicGlancesEnabled)
+            activeIDs.contains($0.key) && ($0.key != "music" || musicGlancesEnabled)
         }
         let browserEnabled = context.defaults.bool(forKey: AppStorageKeys.Notch.browserEnabled)
         if browserEnabled, browser == nil, browserEngine == nil {
@@ -292,8 +291,7 @@ final class NotchShelfController {
 
     func recordSurfaceSnapshot(_ snapshot: SurfaceSnapshot) {
         guard activeIDs.contains(snapshot.providerID),
-            snapshot.providerID != "music" || musicGlancesEnabled,
-            !privacy.hides(Self.glancePrivacyWidget(snapshot.providerID))
+            snapshot.providerID != "music" || musicGlancesEnabled
         else { return }
         let previousPending = pendingPermissions
         surfaceSnapshots[snapshot.providerID] = snapshot
@@ -354,9 +352,7 @@ final class NotchShelfController {
 
     func refreshGlance(_ id: String) async -> Bool {
         let widget = Self.glanceWidget(id)
-        guard !stopped, activeIDs.contains(id), !privacy.hides(Self.glancePrivacyWidget(id)) else {
-            return true
-        }
+        guard !stopped, activeIDs.contains(id) else { return true }
         var tile = SurfaceTile(widget)
         tile.itemLimit = 1
         tile.hiddenFields = []
@@ -367,8 +363,7 @@ final class NotchShelfController {
         }
         do {
             let snapshot = try await requests.snapshot(providerID: id, target: .notch, tile: tile)
-            guard !stopped, !Task.isCancelled, activeIDs.contains(id), !privacy.hides(widget)
-            else { return true }
+            guard !stopped, !Task.isCancelled, activeIDs.contains(id) else { return true }
             recordSurfaceSnapshot(snapshot)
             glanceNow = Date()
             syncGlanceWidth()
