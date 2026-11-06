@@ -67,7 +67,7 @@ extension DownloadsExtensionTests {
             }
             await worker.shutdown()
         }
-        @Test func presentingSuppressesQueueAndRejectsAllActions() async throws {
+        @Test func presentingKeepsTheQueueForTheBlurOverlay() async throws {
             let root = FileManager.default.temporaryDirectory.appendingPathComponent(
                 "downloads-privacy-\(UUID().uuidString)")
             defer { try? FileManager.default.removeItem(at: root) }
@@ -78,8 +78,10 @@ extension DownloadsExtensionTests {
                 worker: worker, privacyValues: { ["active": "1", "blurStudio": "1"] })
             let tile = SurfaceTile(.ability("downloads"))
             let snapshot = try await read(surface, tile)
-            #expect(snapshot.rows.isEmpty && snapshot.metrics.isEmpty && snapshot.actions.isEmpty)
-            #expect(snapshot.message == "Hidden while presenting.")
+            let visible = try await read(
+                DownloadsSurface(worker: worker, privacyValues: { [:] }), tile)
+            #expect(snapshot.metrics == visible.metrics && snapshot.rows == visible.rows)
+            #expect(snapshot.message == visible.message)
             await worker.shutdown()
             await #expect(throws: ExtensionPeerError.self) { _ = try await read(surface, tile) }
         }

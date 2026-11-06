@@ -35,18 +35,14 @@ extension NotchShelfController {
     }
 
     private func snapshot(_ request: SurfaceSnapshotRequest) -> SurfaceSnapshot {
-        let hidden = privacy.hides(.ability("notchShelf"))
-        return SurfaceSnapshot(
+        SurfaceSnapshot(
             providerID: "notchShelf",
             metrics: [.init("files", "Files", String(items.count))],
-            rows: hidden
-                ? []
-                : items.prefix(request.tile.itemLimit).map {
-                    .init($0.id.uuidString, title: $0.name, icon: .doc)
-                },
+            rows: items.prefix(request.tile.itemLimit).map {
+                .init($0.id.uuidString, title: $0.name, icon: .doc)
+            },
             actions: request.tile.showActions
-                ? [.init("customize", "Customize", .adjust)] : [],
-            message: hidden ? "Hidden while presenting" : nil
+                ? [.init("customize", "Customize", .adjust)] : []
         )
     }
 }

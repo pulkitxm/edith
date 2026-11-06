@@ -65,18 +65,17 @@ import Testing
                 payload: SurfaceSnapshotRequest(target: .home, tile: tile).encoded(
                     providerID: "bifrost")), providerID: "bifrost")
         #expect(filtered.rows.isEmpty)
-        let masked = BifrostSurface(
+        let presenting = BifrostSurface(
             store: store, open: { _ in Issue.record("Hidden launcher opened") },
             privacy: { ["active": "1"] })
         let privateResult = try SurfaceSnapshot.decode(
-            try await masked.execute(
+            try await presenting.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "bifrost")),
             providerID: "bifrost")
-        #expect(
-            privateResult.rows.isEmpty && privateResult.actions.isEmpty
-                && privateResult.metrics.isEmpty)
+        #expect(privateResult.rows.first?.title == "Fixture Notes")
+        #expect(privateResult.metrics.map(\.id) == ["apps"])
         await #expect(throws: ExtensionPeerError.self) {
-            try await masked.execute("bifrost.open", payload: Data())
+            try await presenting.execute("bifrost.open", payload: Data())
         }
     }
 }

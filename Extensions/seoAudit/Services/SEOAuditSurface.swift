@@ -24,9 +24,6 @@ import Foundation
     }
 
     func snapshot(_ tile: SurfaceTile) async throws -> SurfaceSnapshot {
-        guard !SurfacePrivacyState.hides(tile.widget, values: privacy()) else {
-            return .init(providerID: "seoAudit", message: "Hidden while presenting.")
-        }
         let summaries = try await service.list()
 
         let selected = summaries.filter { tile.sourceIDs?.contains($0.id.uuidString) ?? true }

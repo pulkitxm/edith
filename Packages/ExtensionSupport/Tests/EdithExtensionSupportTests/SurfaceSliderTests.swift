@@ -122,7 +122,7 @@ struct SurfaceSliderTests {
         #expect(try SurfaceActionRequest.decode(encoded, providerID: "music").value == 0.8)
     }
 
-    @Test func privacyNeverPublishesControlsOrAcceptsTheirValues() async throws {
+    @Test func presentingKeepsControlsVisibleButNeverAcceptsTheirValues() async throws {
         let snapshot = SurfaceSnapshot(
             providerID: "music", sliders: [.init("volume", "Volume", .speaker, value: 0.7)])
         let request = SurfaceSnapshotRequest(target: .home, tile: .init(.music))
@@ -130,7 +130,7 @@ struct SurfaceSliderTests {
             providerID: "music", command: "surface.snapshot",
             payload: request.encoded(providerID: "music"), snapshot: { _ in snapshot },
             perform: { _ in }, privacyValues: { ["active": "1", "blurMusic": "1"] })
-        #expect(try SurfaceSnapshot.decode(data, providerID: "music").sliders == nil)
+        #expect(try SurfaceSnapshot.decode(data, providerID: "music").sliders == snapshot.sliders)
         let action = SurfaceActionRequest(snapshot: request, actionID: "volume", value: 0.3)
         await #expect(throws: ExtensionPeerError.self) {
             _ = try await SurfaceCommandService.execute(

@@ -139,7 +139,7 @@ struct SurfaceChartTests {
         #expect(one.yDomain.lowerBound < one.yDomain.upperBound)
     }
 
-    @Test func chartsRespectDetailsFieldsSourceSelectionAndPresenterPrivacy() async throws {
+    @Test func chartsRespectDetailsFieldsAndSourceSelectionWhilePresenting() async throws {
         let charts = [
             SurfaceChart(
                 "daily", "Daily cost",
@@ -171,7 +171,9 @@ struct SurfaceChartTests {
                 reads += 1; return snapshot
             },
             perform: { _ in }, privacyValues: { ["active": "1", "blurUsage": "1"] })
-        #expect(reads == 0)
-        #expect(try SurfaceSnapshot.decode(data, providerID: "usage").charts == nil)
+        #expect(reads == 1)
+        #expect(
+            try SurfaceSnapshot.decode(data, providerID: "usage").charts
+                == SurfaceCommandService.project(snapshot, tile: tile).charts)
     }
 }

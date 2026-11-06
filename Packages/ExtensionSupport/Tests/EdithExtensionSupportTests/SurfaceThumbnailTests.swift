@@ -62,7 +62,7 @@ struct SurfaceThumbnailTests {
         #expect(try bounded.encoded().count < 524_288)
     }
 
-    @Test func imageFieldsAndPresenterPrivacyAreAppliedBeforePublication() async throws {
+    @Test func imageFieldsApplyBeforePublicationAndSurviveTheBlurOverlay() async throws {
         let thumbnail = SurfaceThumbnail(data: try fixture(width: 80, height: 80), field: "artwork")
         let snapshot = SurfaceSnapshot(
             providerID: "music", rows: [.init("track", title: "Track", thumbnail: thumbnail)])
@@ -79,8 +79,10 @@ struct SurfaceThumbnailTests {
                 reads += 1; return snapshot
             },
             perform: { _ in }, privacyValues: { ["active": "1", "blurMusic": "1"] })
-        #expect(reads == 0)
-        #expect(try SurfaceSnapshot.decode(data, providerID: "music").rows.isEmpty)
+        #expect(reads == 1)
+        #expect(
+            try SurfaceSnapshot.decode(data, providerID: "music").rows.first?.thumbnail
+                == thumbnail)
     }
 
     private func fixture(

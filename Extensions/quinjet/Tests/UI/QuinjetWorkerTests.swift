@@ -160,13 +160,14 @@ import Testing
                 payload: SurfaceActionRequest(snapshot: request, actionID: "open/unknown").encoded(
                     providerID: "quinjet"))
         }
-        let hidden = QuinjetSurface(
+        let presenting = QuinjetSurface(
             worker: worker, github: github, privacyValues: { ["active": "1"] })
         let covered = try SurfaceSnapshot.decode(
-            await hidden.execute(
+            await presenting.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "quinjet")),
             providerID: "quinjet")
-        #expect(covered.rows.isEmpty && covered.message == "Hidden while presenting.")
+        #expect(covered.rows.map(\.id) == snapshot.rows.map(\.id))
+        #expect(covered.message == snapshot.message)
         await worker.shutdown()
     }
     @Test func gitHubFailuresSurfaceReadableErrors() async throws {

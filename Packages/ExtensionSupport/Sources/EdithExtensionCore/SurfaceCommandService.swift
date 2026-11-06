@@ -53,17 +53,9 @@ public enum SurfaceCommandService {
             throw ExtensionPeerError.invalidRequest
         }
         try Task.checkCancellation()
-        if SurfacePrivacyState.hides(request.tile.widget, values: privacyValues()) {
-            return try SurfaceSnapshot(providerID: providerID, message: "Hidden while presenting.")
-                .encoded()
-        }
         let current = project(try await snapshot(request.tile), tile: request.tile)
         try Task.checkCancellation()
         guard current.providerID == providerID else { throw ExtensionPeerError.invalidRequest }
-        if SurfacePrivacyState.hides(request.tile.widget, values: privacyValues()) {
-            return try SurfaceSnapshot(providerID: providerID, message: "Hidden while presenting.")
-                .encoded()
-        }
         return try current.encoded()
     }
 

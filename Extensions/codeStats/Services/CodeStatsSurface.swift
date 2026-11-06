@@ -43,9 +43,6 @@ import Foundation
     }
 
     func snapshot(_ tile: SurfaceTile) async throws -> SurfaceSnapshot {
-        if SurfacePrivacyState.hides(tile.widget, values: privacy()) {
-            return .init(providerID: "codeStats", message: "Hidden while presenting.")
-        }
         let store = store; let now = now(); let calendar = calendar
         let value = await BlockingWork.value {
             () -> (CodeStatsFactTable, CodeStatsReport, CodeStatsReport)? in

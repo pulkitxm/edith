@@ -17,6 +17,7 @@ struct MusicNotchState: Codable, Equatable {
     var snapshot: SurfaceSnapshot
     var playback: [MusicNotchPlayback]
     var controlError: String? = nil
+    var presenting = false
 
     func encoded() throws -> Data {
         _ = try snapshot.encoded()

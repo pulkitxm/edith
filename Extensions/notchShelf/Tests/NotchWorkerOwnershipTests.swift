@@ -131,8 +131,9 @@ struct NotchWorkerOwnershipTests {
         let data = try await controller.execute(
             "surface.snapshot", payload: request.encoded(providerID: "notchShelf"))
         let result = try SurfaceSnapshot.decode(data, providerID: "notchShelf")
-        #expect(result.rows.isEmpty)
-        #expect(result.message == "Hidden while presenting")
+        #expect(
+            result.rows.map(\.title) == controller.items.prefix(request.tile.itemLimit).map(\.name))
+        #expect(result.message == nil)
         #expect(controller.leadingGlance == nil)
     }
 }

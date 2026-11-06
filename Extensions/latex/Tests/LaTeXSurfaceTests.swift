@@ -45,10 +45,9 @@ import Testing
         await model.shutdown()
     }
 
-    @Test func presenterMasksTheLibraryBeforeAnyStorageOrToolWork() async throws {
+    @Test func presentingKeepsTheLibraryForTheBlurOverlayWithoutToolWork() async throws {
         let fixture = try LaTeXSurfaceFixture()
         defer { fixture.cleanup() }
-        try Data("invalid synthetic library".utf8).write(to: fixture.store.url)
         let calls = LaTeXSurfaceCalls()
         let model = fixture.model(
             service: .init { tool, _, _, _ in
@@ -60,8 +59,8 @@ import Testing
             try await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "latex")),
             providerID: "latex")
-        #expect(snapshot.rows.isEmpty && snapshot.metrics.isEmpty && snapshot.sources.isEmpty)
-        #expect(!model.load.hasContent && model.load.errorMessage == nil)
+        #expect(Set(snapshot.rows.map(\.title)) == Set(fixture.projects.map(\.name)))
+        #expect(snapshot.message == nil)
         #expect(await calls.tools.isEmpty)
         await model.shutdown()
     }

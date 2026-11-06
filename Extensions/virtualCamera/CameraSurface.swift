@@ -28,9 +28,6 @@ final class CameraSurface {
     }
 
     func snapshot(_ tile: SurfaceTile) -> SurfaceSnapshot {
-        guard !SurfacePrivacyState.hides(tile.widget, values: privacyValues()) else {
-            return .init(providerID: "virtualCamera", message: "Hidden while presenting.")
-        }
         let current = engine.snapshot()
         let cameras = Array(current.sources.prefix(100))
         let scenes = Array(current.state.scenes.prefix(100))

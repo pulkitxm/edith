@@ -83,7 +83,7 @@ struct EmbeddedNotchNowPlaying: Equatable {
         state?.snapshot.rows.first { $0.sourceID == selectedSource && $0.field == nil }
     }
     var playback: EmbeddedMusicNotchPlayback? { state?.playback.first { $0.rowID == row?.id } }
-    var hidden: Bool { state?.snapshot.message == "Hidden while presenting." }
+    var hidden: Bool { state?.presenting ?? false }
     var nowPlaying: EmbeddedNotchNowPlaying? {
         guard let row, let playback else { return nil }
         return .init(
@@ -347,13 +347,13 @@ private struct EmbeddedNotchNowPlayingCard: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(track.title).font(.edithText(.headline)).foregroundStyle(.white)
-                            .lineLimit(2).presenterBlur(controller.hidden)
+                            .lineLimit(2)
                         if tile.showDetails, tile.shows("artist") {
                             Text(sourceLabel).font(.edithText(.caption)).foregroundStyle(.secondary)
-                                .lineLimit(2).presenterBlur(
-                                    controller.hidden)
+                                .lineLimit(2)
                         }
-                    }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    }.presenterCover(controller.hidden)
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.edith(.borderless)).disabled(!tile.showActions)
                     .help(isLocal ? "Show this track in Music" : "Open the app playing this")
             }

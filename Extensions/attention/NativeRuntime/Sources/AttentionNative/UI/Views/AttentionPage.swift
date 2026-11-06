@@ -79,11 +79,7 @@ struct AttentionPage: View {
             .overlay(alignment: .top) {
                 ContentActivityBadge(model.activity).padding(.top, UIScale.pt(8))
             }
-            .overlay {
-                if presenterHidden {
-                    AttentionPresenterCover()
-                }
-            }
+            .presenterCover(presenterHidden, dark: scheme == .dark)
     }
 
     var body: some View {
@@ -163,19 +159,6 @@ struct AttentionPage: View {
                     }
                 }
             }
-        }
-    }
-}
-
-private struct AttentionPresenterCover: View {
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        ZStack {
-            DashSkin.paper(scheme == .dark)
-            Label("Hidden while presenting", edith: .eyeOff)
-                .font(.edithText(.callout))
-                .foregroundStyle(.secondary)
         }
     }
 }

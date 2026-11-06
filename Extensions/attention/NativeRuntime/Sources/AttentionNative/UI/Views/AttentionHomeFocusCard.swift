@@ -16,6 +16,7 @@ import SwiftUI
     let tile: SurfaceTile
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.windowVisible) private var visible
+    @Environment(\.colorScheme) private var scheme
     let open: (String) -> Void
     @State private var load = ContentLoad()
     @State private var focus: AttentionFocusSession?
@@ -29,6 +30,9 @@ import SwiftUI
     }
     private let repository: AttentionRepository
     private let uiClient: AttentionUIClient?
+    @State private var privacy = ExtensionSharedState.current.map(
+        SurfacePrivacyState.init(channel:))
+    private var presenting: Bool { privacy?.hides(.focus) ?? false }
 
     init(
         tile: SurfaceTile, repository: AttentionRepository, uiClient: AttentionUIClient? = nil,
@@ -72,6 +76,8 @@ import SwiftUI
             }
             if load.hasContent || error == nil, !loading {
                 content
+                    .disabled(presenting)
+                    .presenterCover(presenting, dark: scheme == .dark)
             } else if loading {
                 SkeletonBlock(height: 22, corner: 6)
             }
