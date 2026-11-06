@@ -23,6 +23,23 @@ import Testing
         #expect(main)
     }
 
+    @Test func theHostAppIsItsOwnHostWhileCarriersNeedALivingParent() throws {
+        let caller = try #require(ExtensionProcessIdentity.current)
+        let launchdParent: (Int32) -> ExtensionProcessIdentity? = { _ in nil }
+        #expect(
+            HostPrivilegedCarrier.hostIdentity(
+                of: caller, callerIsHost: true, parent: launchdParent) == caller)
+        #expect(
+            HostPrivilegedCarrier.hostIdentity(
+                of: caller, callerIsHost: false, parent: launchdParent) == nil)
+        let parent = try JSONDecoder().decode(
+            ExtensionProcessIdentity.self,
+            from: Data(#"{"pid":4242,"generation":"synthetic"}"#.utf8))
+        #expect(
+            HostPrivilegedCarrier.hostIdentity(of: caller, callerIsHost: false) { _ in parent }
+                == parent)
+    }
+
     @Test func unauthorizedCallersNeverReserveAnOwnerOrCopyTheirPayload() async throws {
         let fixture = try Fixture(mode: "normal")
         defer { fixture.clean() }
