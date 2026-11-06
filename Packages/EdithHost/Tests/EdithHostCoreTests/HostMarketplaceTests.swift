@@ -1,5 +1,6 @@
 import Carbon.HIToolbox
 import CryptoKit
+import Darwin
 import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
@@ -1131,6 +1132,119 @@ import HostWorkerFixtureSupport
         #expect(await marketplace.sessions.shutdown())
     }
 
+    @Test func updatingAnExtensionWhoseNativeLibraryIsLoadedKeepsItRunningUntilTheNextLaunch()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let old = fixture.package("1.0.0")
+        try fixture.install([old])
+        let name = "libHostNative\(UUID().uuidString.prefix(8)).dylib"
+        let loaded = try fixture.nativeLibrary(
+            name, source: "int host_native_one(void) { return 1; }",
+            in: fixture.store.roleBundle(for: old, role: .app)
+                .appendingPathComponent("Contents/Frameworks"))
+        let handle = try #require(dlopen(loaded.path, RTLD_NOW | RTLD_LOCAL))
+        defer { dlclose(handle) }
+        let replacement = try fixture.nativeLibrary(
+            name, source: "int host_native_two(void) { return 2; }",
+            in: fixture.directory.appendingPathComponent("replacement-\(UUID().uuidString)"))
+        let update = try fixture.build("1.1.0", libraries: [replacement])
+        await fixture.network.set(data: try fixture.envelope(packages: [update.package]))
+        let marketplace = try fixture.marketplace(
+            workerMode: { $0.version == old.version ? "normal" : "reject" },
+            serving: [update.package.downloadURL: update.archive])
+        #expect(await marketplace.enable(id: "sample") == nil)
+        #expect(await marketplace.download(id: "sample") == nil)
+        #expect(marketplace.error == nil)
+        #expect(marketplace.failures["sample"] == nil)
+        #expect(marketplace.sessions.activeIDs == ["sample"])
+        #expect(marketplace.sessions.versions["sample"] == old.version)
+        #expect(marketplace.installed["sample"] == old)
+        #expect(marketplace.installedVersions["sample"]?.contains(update.package) == true)
+        #expect(!marketplace.updateAvailable(id: "sample"))
+        #expect(await marketplace.updateAll().isEmpty)
+        #expect(marketplace.sessions.versions["sample"] == old.version)
+        #expect(await marketplace.sessions.shutdown())
+
+        let relaunched = try fixture.marketplace(workerMode: { _ in "normal" })
+        #expect(relaunched.installed["sample"] == update.package)
+        await relaunched.restoreEnabledExtensions()
+        #expect(relaunched.sessions.versions["sample"] == update.package.version)
+        #expect(relaunched.error == nil)
+        #expect(await relaunched.sessions.shutdown())
+    }
+
+    @Test func updatesStagedForRestartAreReportedSkippedAndSelectedOnTheNextLaunch() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let ids = ["sample", "second"]
+        try fixture.install(ids.map { fixture.package("1.0.0", id: $0) })
+        let sample = try fixture.build("1.1.0", id: "sample")
+        let second = try fixture.build("1.1.0", id: "second")
+        await fixture.network.set(
+            data: try fixture.envelope(packages: [sample.package, second.package]))
+        let serving = [
+            sample.package.downloadURL: sample.archive, second.package.downloadURL: second.archive,
+        ]
+        let blocked: @MainActor (ExtensionPackage) -> Bool = { $0 == sample.package }
+        let marketplace = try fixture.marketplace(
+            ids: ids, workerMode: { _ in "normal" }, serving: serving, needsRestart: blocked)
+        for id in ids { #expect(await marketplace.enable(id: id) == nil) }
+        await marketplace.checkForUpdates()
+        #expect(marketplace.updatableIDs == ids)
+        let reply = try await HostCLIGateway(marketplace: marketplace)
+            .execute(HostCLIRequest(action: .updateAll))
+        let summary = try #require(try JSONSerialization.jsonObject(with: reply) as? [String: Any])
+        #expect(summary["updated"] as? [String] == ["second"])
+        #expect(summary["restartRequired"] as? [String] == ["sample"])
+        #expect((summary["failed"] as? [String: String])?.isEmpty == true)
+        #expect(marketplace.restartPending == ["sample": sample.package])
+        #expect(marketplace.sessions.versions == ["sample": "1.0.0", "second": "1.1.0"])
+        #expect(marketplace.updatableIDs.isEmpty)
+        var info = try await report(marketplace)
+        #expect(info["restartRequired"] as? Bool == true)
+        #expect(info["pendingVersion"] as? String == "1.1.0")
+        #expect(info["version"] as? String == "1.0.0")
+        #expect(info["updateAvailable"] as? Bool == false)
+        #expect(await marketplace.disable(id: "sample") == nil)
+        #expect(await marketplace.enable(id: "sample") == nil)
+        #expect(marketplace.sessions.versions["sample"] == "1.0.0")
+        #expect(marketplace.restartPending == ["sample": sample.package])
+        #expect(await marketplace.sessions.shutdown())
+
+        let relaunched = try fixture.marketplace(
+            ids: ids, workerMode: { _ in "normal" }, serving: serving, needsRestart: blocked)
+        #expect(relaunched.restartPending.isEmpty)
+        #expect(relaunched.installed["sample"] == sample.package)
+        await relaunched.restoreEnabledExtensions()
+        #expect(relaunched.sessions.versions == ["sample": "1.1.0", "second": "1.1.0"])
+        info = try await report(relaunched)
+        #expect(info["restartRequired"] as? Bool == false)
+        #expect(await relaunched.sessions.shutdown())
+        let again = try fixture.marketplace(ids: ids)
+        #expect(again.installed["sample"] == sample.package)
+    }
+
+    @Test func removingAnExtensionDiscardsItsUpdateStagedForRestart() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.install([fixture.package("1.0.0")])
+        let update = try fixture.build("1.1.0")
+        await fixture.network.set(data: try fixture.envelope(packages: [update.package]))
+        let marketplace = try fixture.marketplace(
+            workerMode: { _ in "normal" }, serving: [update.package.downloadURL: update.archive],
+            needsRestart: { _ in true })
+        #expect(await marketplace.enable(id: "sample") == nil)
+        #expect(await marketplace.download(id: "sample") == nil)
+        #expect(marketplace.restartPending["sample"] == update.package)
+        #expect(await marketplace.remove(id: "sample") == nil)
+        #expect(marketplace.restartPending.isEmpty)
+        let relaunched = try fixture.marketplace()
+        #expect(relaunched.installed["sample"] == nil)
+        #expect(relaunched.restartPending.isEmpty)
+    }
+
     @Test func updateAllUpdatesOnlyOutdatedExtensionsIsolatesFailuresAndKeepsEnabledState()
         async throws
     {
@@ -1501,7 +1615,8 @@ import HostWorkerFixtureSupport
             verificationReceipts: HostBundleVerificationReceipts? = nil,
             verifyInstalledBundle: ExtensionPackageInstaller.Verify? = nil,
             archiveGate: Network? = nil,
-            transferProgress: HostTransferProgress = HostTransferProgress()
+            transferProgress: HostTransferProgress = HostTransferProgress(),
+            needsRestart: (@MainActor (ExtensionPackage) -> Bool)? = nil
         ) throws
             -> HostMarketplace
         {
@@ -1539,7 +1654,8 @@ import HostWorkerFixtureSupport
                     }, store: store, catalogClient: client, installer: installer,
                 sessions: sessions,
                 verificationReceipts: verificationReceipts,
-                verifyInstalledBundle: verifyInstalledBundle, transferProgress: transferProgress)
+                verifyInstalledBundle: verifyInstalledBundle, transferProgress: transferProgress,
+                needsRestart: needsRestart)
         }
 
         func package(
@@ -1573,9 +1689,28 @@ import HostWorkerFixtureSupport
                 SignedExtensionCatalog(payload: payload, signature: key.signature(for: payload)))
         }
 
+        func nativeLibrary(_ name: String, source: String, in directory: URL) throws -> URL {
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent("\(UUID().uuidString).c")
+            try source.write(to: file, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: file) }
+            let output = directory.appendingPathComponent(name)
+            let compiler = Process()
+            compiler.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+            compiler.arguments = [
+                "clang", "-dynamiclib", "-install_name", "@rpath/\(name)", file.path, "-o",
+                output.path,
+            ]
+            try compiler.run()
+            compiler.waitUntilExit()
+            try #require(compiler.terminationStatus == 0)
+            return output
+        }
+
         func build(
             _ version: String, abi: String = HostContract.compatibility, id: String = "sample",
-            dependencies: [String] = []
+            dependencies: [String] = [], libraries: [URL] = []
         ) throws
             -> ExtensionSideload
         {
@@ -1585,6 +1720,13 @@ import HostWorkerFixtureSupport
             try FileManager.default.createDirectory(
                 at: runtime.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("local runtime \(version)".utf8).write(to: runtime)
+            let frameworks = payload.appendingPathComponent("app.bundle/Contents/Frameworks")
+            for library in libraries {
+                try FileManager.default.createDirectory(
+                    at: frameworks, withIntermediateDirectories: true)
+                try FileManager.default.copyItem(
+                    at: library, to: frameworks.appendingPathComponent(library.lastPathComponent))
+            }
             let placeholder = package(version, abi: abi, id: id, dependencies: dependencies)
             try JSONEncoder().encode(ExtensionPayloadManifest(package: placeholder)).write(
                 to: payload.appendingPathComponent("package.json"))

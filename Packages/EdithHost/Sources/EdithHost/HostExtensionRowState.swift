@@ -8,17 +8,18 @@ struct HostExtensionRowState: Equatable {
 
     enum Stage: Equatable {
         case notInstalled, downloading, verifying, starting, ready, installed, updateAvailable,
-            failed, pending, unavailable
+            restartRequired, failed, pending, unavailable
     }
 
     enum Action: Equatable {
-        case open, download, update, retry, retryDisable, remove
+        case open, download, update, restart, retry, retryDisable, remove
 
         var title: String {
             switch self {
             case .open: "Open"
             case .download: "Get"
             case .update: "Update"
+            case .restart: "Restart Edith"
             case .retry: "Retry"
             case .retryDisable: "Retry disable"
             case .remove: "Remove"
@@ -52,11 +53,17 @@ struct HostExtensionRowState: Equatable {
         canToggle = progress == nil && !removing && (installed != nil || available != nil)
         let pendingDisable = marketplace.sessions.pendingDisableIDs.contains(id)
         let ready = marketplace.readyIDs.contains(id)
-        stage = Self.resolveStage(
-            removing: removing, pendingDisable: pendingDisable, operation: operation,
-            starting: starting, installed: installed != nil, downloaded: downloaded,
-            available: available != nil, updateAvailable: marketplace.updateAvailable(id: id),
-            failed: state == .failed || failure != nil, on: on, ready: ready)
+        let staged = marketplace.restartPending[id]
+        let restarting =
+            staged != nil && !removing && operation == nil && !starting && !pendingDisable
+        stage =
+            restarting
+            ? .restartRequired
+            : Self.resolveStage(
+                removing: removing, pendingDisable: pendingDisable, operation: operation,
+                starting: starting, installed: installed != nil, downloaded: downloaded,
+                available: available != nil, updateAvailable: marketplace.updateAvailable(id: id),
+                failed: state == .failed || failure != nil, on: on, ready: ready)
         if removing {
             (status, tone, action) = ("Removal pending", .attention, .remove)
         } else if let operation {
@@ -67,6 +74,10 @@ struct HostExtensionRowState: Equatable {
             (status, tone, action) = (
                 "Disable pending · \(installed?.version ?? "Update required")", .attention,
                 .retryDisable
+            )
+        } else if restarting, let staged {
+            (status, tone, action) = (
+                "Restart to finish updating · \(staged.version)", .attention, .restart
             )
         } else if let installed {
             let update = marketplace.updateAvailable(id: id)
@@ -132,5 +143,22 @@ struct HostExtensionRowState: Equatable {
         if downloaded { return available ? (failed ? .failed : .updateAvailable) : .unavailable }
         if available { return failed ? .failed : .notInstalled }
         return .unavailable
+    }
+}
+
+struct HostMarketplaceRestartNotice: Equatable {
+    let title: String
+    let message: String
+
+    @MainActor init?(marketplace: HostMarketplace) {
+        let titles = marketplace.restartPending.keys.sorted().map { id in
+            marketplace.entries.first { $0.id == id }?.title ?? id
+        }
+        guard let first = titles.first else { return nil }
+        title = "Restart to finish updating"
+        message =
+            titles.count == 1
+            ? "\(first) is updated and keeps running its current version until Edith restarts."
+            : "\(titles.count) extensions are updated and keep running their current versions until Edith restarts."
     }
 }

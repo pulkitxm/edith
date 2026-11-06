@@ -64,6 +64,7 @@ struct HostInstallControl: View {
     private func accessibilityLabel(_ action: HostExtensionRowState.Action) -> String {
         switch action {
         case .download, .update, .retry, .open: "\(action.title) \(title)"
+        case .restart: "Restart Edith to finish updating \(title)"
         default: action.title
         }
     }
