@@ -119,17 +119,20 @@ public enum RenderCapture {
     public static func render<Content: View>(
         _ name: String, variant: Variant, settle: Duration = .milliseconds(450),
         inspect: (NSView) throws -> Void = { _ in },
+        ready: (NSBitmapImageRep) -> Bool = { _ in true },
         @ViewBuilder content: () -> Content
     ) async throws -> Rendered {
         try await withScale(variant.zoom) {
             try await renderHoldingScale(
-                name, variant: variant, settle: settle, inspect: inspect, content: content)
+                name, variant: variant, settle: settle, inspect: inspect, ready: ready,
+                content: content)
         }
     }
 
     private static func renderHoldingScale<Content: View>(
         _ name: String, variant: Variant, settle: Duration,
         inspect: (NSView) throws -> Void,
+        ready: (NSBitmapImageRep) -> Bool,
         @ViewBuilder content: () -> Content
     ) async throws -> Rendered {
         let label = "\(name)-\(variant.name)"
@@ -181,7 +184,7 @@ public enum RenderCapture {
         }
         var bitmap = try capture()
         let deadline = ContinuousClock.now + blankGrace
-        while isUniform(bitmap), ContinuousClock.now < deadline {
+        while isUniform(bitmap) || !ready(bitmap), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(100))
             bitmap = try capture()
         }
