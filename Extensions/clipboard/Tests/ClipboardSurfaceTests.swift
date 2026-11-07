@@ -14,11 +14,13 @@ import Testing
         )
     }
 
-    private func seed(_ client: ClipboardClient, _ title: String) async throws -> String {
+    private func seed(
+        _ client: ClipboardClient, _ title: String, at capturedAt: Date = Date()
+    ) async throws -> String {
         let capture = ClipboardCapture(
             payload: .init(
                 data: Data(title.utf8), types: ["public.text"], ext: "txt", preview: title),
-            sourceApp: "Mock Notes", sourceBundleID: "example.mock.notes")
+            sourceApp: "Mock Notes", sourceBundleID: "example.mock.notes", capturedAt: capturedAt)
         _ = try await client.capture(capture)
         return capture.id
     }
@@ -31,7 +33,8 @@ import Testing
         }
         let client = ClipboardClient(service: service)
         let textID = try await seed(client, "mock note")
-        let linkID = try await seed(client, "https://example.com")
+        let linkID = try await seed(
+            client, "https://example.com", at: Date().addingTimeInterval(-60))
         var copied: [String] = []
         let surface = ClipboardSurface(
             client: client, privacyValues: { [:] }, copy: { copied.append($0.entry.id) })

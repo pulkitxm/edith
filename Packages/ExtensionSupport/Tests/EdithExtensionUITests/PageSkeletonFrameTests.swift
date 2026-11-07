@@ -149,7 +149,8 @@ struct PageSkeletonFrameTests {
         loading: () -> some View, content: () -> some View
     ) async throws {
         let skeleton = try await RenderCapture.render(
-            "\(name)-loading", variant: variant, settle: settle
+            "\(name)-loading", variant: variant, settle: settle,
+            ready: { RenderCapture.inkBounds($0, below: floor) != nil }
         ) {
             loading()
         }

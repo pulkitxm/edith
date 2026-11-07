@@ -65,14 +65,25 @@ import Testing
         }
     }
 
-    private func menuTitles(in host: NSView) -> [String] {
-        let selector = NSSelectorFromString("accessibilityTitle")
-        return (host.accessibilityChildren() as? [NSObject] ?? []).compactMap { node in
-            guard node.responds(to: selector),
-                let title = node.perform(selector)?.takeUnretainedValue()
-            else { return nil }
-            return (title as? NSAttributedString)?.string ?? title as? String
+    private func accessibleNames(in node: NSObject, depth: Int = 0) -> [String] {
+        guard depth < 64 else { return [] }
+        var names: [String] = []
+        if let label = (node as AnyObject).accessibilityLabel?(), !label.isEmpty {
+            names.append(label)
         }
+        let selector = NSSelectorFromString("accessibilityTitle")
+        if node.responds(to: selector), let title = node.perform(selector)?.takeUnretainedValue(),
+            let text = (title as? NSAttributedString)?.string ?? title as? String, !text.isEmpty
+        {
+            names.append(text)
+        }
+        for child in (node as AnyObject).accessibilityChildren?() as? [NSObject] ?? [] {
+            names += accessibleNames(in: child, depth: depth + 1)
+        }
+        for child in (node as? NSView)?.subviews ?? [] {
+            names += accessibleNames(in: child, depth: depth + 1)
+        }
+        return names
     }
 
     private func withTheme<T>(_ theme: AppTheme, _ body: () async throws -> T) async rethrows -> T {
@@ -230,7 +241,8 @@ import Testing
             let other = try #require(RenderCapture.find(rendered.host, label: "Last 30 days"))
             #expect(other.value(forKey: "isAccessibilitySelected") as? Bool == false)
             #expect(RenderCapture.find(rendered.host, label: "7 days") == nil)
-            #expect(menuTitles(in: rendered.host).contains("More date ranges"))
+            let names = accessibleNames(in: rendered.host)
+            #expect(names.contains("More date ranges"), "\(names)")
             #expect(RenderCapture.find(rendered.host, label: "Previous period") != nil)
             #expect(RenderCapture.find(rendered.host, label: "Next period") != nil)
             #expect(
@@ -249,7 +261,8 @@ import Testing
                         calendar: Self.calendar)
                 }
             }
-            #expect(menuTitles(in: rendered.host).contains("Date range, Last month"))
+            let names = accessibleNames(in: rendered.host)
+            #expect(names.contains("Date range, Last month"), "\(names)")
         }
     }
 

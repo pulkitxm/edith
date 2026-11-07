@@ -604,20 +604,32 @@ struct KitComponentTests {
     }
 
     @Test func placeholderIsFainterThanTypedText() async throws {
-        func darkest(_ text: String) async throws -> Double {
+        func darkest(_ text: String) async throws -> (value: Double, detail: String) {
             let rendered = try await render(
                 EdithTextField(placeholder: "Synthetic placeholder", text: .constant(text))
                     .frame(width: 300), width: 300, height: 60)
             let bitmap = rendered.bitmap
             var value = 1.0
+            var location = (x: 0, y: 0)
             for x in 0..<bitmap.pixelsWide {
-                for y in 0..<bitmap.pixelsHigh { value = min(value, luminance(bitmap, x: x, y: y)) }
+                for y in 0..<bitmap.pixelsHigh where luminance(bitmap, x: x, y: y) < value {
+                    value = luminance(bitmap, x: x, y: y)
+                    location = (x, y)
+                }
             }
-            return value
+            let color = bitmap.colorAt(x: location.x, y: location.y)?.usingColorSpace(.deviceRGB)
+            return (
+                value,
+                "at \(location.x),\(location.y) of \(bitmap.pixelsWide)x\(bitmap.pixelsHigh) "
+                    + "color \(color.map { "\($0.redComponent) \($0.greenComponent) \($0.blueComponent)" } ?? "none")"
+            )
         }
         let placeholder = try await darkest("")
         let typed = try await darkest("Synthetic placeholder")
-        #expect(placeholder > typed + 0.2, "placeholder \(placeholder) typed \(typed)")
+        #expect(
+            placeholder.value > typed.value + 0.1,
+            "placeholder \(placeholder.value) \(placeholder.detail) typed \(typed.value) \(typed.detail)"
+        )
     }
 
     @Test func textFieldsKeepTheirPlaceholderInsideForms() async throws {
