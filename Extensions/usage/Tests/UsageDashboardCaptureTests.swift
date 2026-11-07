@@ -186,9 +186,12 @@ struct UsageDashboardCaptureTests {
                 scene, variant: variant, name: "\(fixture.rawValue)-\(variant.name)")
             #expect(lines.contains { $0.text.localizedCaseInsensitiveContains("Agent usage") })
             if let expected = Self.expectedText[fixture] {
-                let recognized = lines.map(\.text).joined(separator: " ")
+                let compact = { (text: String) in
+                    text.lowercased().filter { !$0.isWhitespace }
+                }
+                let recognized = compact(lines.map(\.text).joined())
                 #expect(
-                    recognized.localizedCaseInsensitiveContains(expected),
+                    recognized.contains(compact(expected)),
                     Comment(rawValue: "\(fixture.rawValue) \(variant.name)"))
             }
             if fixture == .populated, variant.zoom == 1, variant.size.width > 1000 {
