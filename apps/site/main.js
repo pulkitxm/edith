@@ -22,7 +22,10 @@ for (const button of document.querySelectorAll("[data-theme-toggle]")) {
       root.dataset.theme = next;
       storedTheme(next);
     };
-    if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (
+      document.startViewTransition &&
+      !matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
       document.startViewTransition(apply);
     } else {
       apply();
@@ -192,7 +195,9 @@ if (player) {
     const canvas = document.createElement("canvas");
     canvas.width = player.videoWidth;
     canvas.height = player.videoHeight;
-    canvas.getContext("2d").drawImage(player, 0, 0, canvas.width, canvas.height);
+    canvas
+      .getContext("2d")
+      .drawImage(player, 0, 0, canvas.width, canvas.height);
     canvas.className = "film-freeze";
     (player.parentElement ?? player).appendChild(canvas);
     return canvas;
@@ -219,15 +224,22 @@ if (player) {
     player.src = film.src;
     player.load();
     await once(player, "loadedmetadata");
-    const elapsed = wasPlaying ? ((performance.now() - leftAt) / 1000) * rate : 0;
-    player.currentTime = Math.min(time + elapsed, Math.max(0, player.duration - 0.05));
+    const elapsed = wasPlaying
+      ? ((performance.now() - leftAt) / 1000) * rate
+      : 0;
+    player.currentTime = Math.min(
+      time + elapsed,
+      Math.max(0, player.duration - 0.05),
+    );
     player.playbackRate = rate;
     player.volume = volume;
     player.muted = muted;
     await once(player, "seeked");
     if (wasPlaying) await player.play().catch(() => {});
     if (freeze) {
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
       freeze.classList.add("fade");
       setTimeout(() => freeze.remove(), 600);
     }
@@ -235,7 +247,10 @@ if (player) {
   const sync = () => {
     switching = switching.then(swap, swap);
   };
-  new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  new MutationObserver(sync).observe(root, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", sync);
   player.addEventListener("play", warmOther, { once: true });
   const start = async () => {
@@ -243,7 +258,16 @@ if (player) {
     plyr = new Plyr(player, {
       iconUrl: "/lib/plyr/edith-controls.svg",
       blankVideo: "",
-      controls: ["play-large", "play", "progress", "current-time", "duration", "mute", "volume", "fullscreen"],
+      controls: [
+        "play-large",
+        "play",
+        "progress",
+        "current-time",
+        "duration",
+        "mute",
+        "volume",
+        "fullscreen",
+      ],
       ratio: "16:9",
       tooltips: { controls: false, seek: true },
     });
