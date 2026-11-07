@@ -87,6 +87,34 @@ public struct PageToolbarMenu<Content: View>: View {
     }
 }
 
+public struct PageToolbarMenuButton: View {
+    let icon: EdithIcon
+    let helperText: String
+    var label: String?
+    var tint: Color?
+    var font: Font?
+    let items: @MainActor () -> [EdithMenuItem]
+
+    public init(
+        icon: EdithIcon, helperText: String, accessibilityLabel: String? = nil,
+        tint: Color? = nil, font: Font? = nil,
+        items: @escaping @MainActor () -> [EdithMenuItem]
+    ) {
+        self.icon = icon; self.helperText = helperText; self.label = accessibilityLabel
+        self.tint = tint; self.font = font; self.items = items
+    }
+
+    public var body: some View {
+        EdithMenuButton(items: items) {
+            EdithIconView(icon)
+        }
+        .buttonStyle(PageToolbarIconStyle(tint: tint, font: font))
+        .fixedSize()
+        .help(helperText)
+        .accessibilityLabel(label ?? helperText)
+    }
+}
+
 public struct PageColumns<Content: View>: View {
     var spacing = PageMetrics.sectionSpacing
     @ViewBuilder let content: () -> Content
