@@ -388,7 +388,7 @@ struct HerdrSpaceView: View {
         )
         .herdrAgentContextMenu(
             agents: tab.agentTab.map { [$0.agent] } ?? [], store: store
-        ) { EmptyView() }
+        )
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

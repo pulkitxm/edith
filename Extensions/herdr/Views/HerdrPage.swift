@@ -774,10 +774,13 @@ struct HerdrPage: View {
     }
 
     private func spaceMessageMenu(_ space: HerdrAgentSpace, accessibleTitle: String) -> some View {
-        Menu {
-            HerdrBroadcastMenuItems(
-                agents: space.agents, store: store, scopeTitle: space.title, redactScope: true)
-        } label: {
+        let store = store
+        let agents = space.agents
+        let title = space.title
+        return EdithMenuButton(items: {
+            HerdrBroadcastMenu.items(
+                agents: agents, store: store, scopeTitle: title, redactScope: true)
+        }) {
             EdithIcon.send.image(size: 12)
                 .foregroundStyle(DashSkin.inkFaint(dark))
         }
@@ -841,12 +844,14 @@ struct HerdrPage: View {
             .padding(.top, UIScale.pt(7))
             .padding(.bottom, UIScale.pt(3))
         }
-        .contextMenu {
-            if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
-                Menu("Send Message") {
-                    HerdrBroadcastMenuItems(
-                        agents: space.agents, store: store, scopeTitle: space.title,
-                        redactScope: true)
+        .edithContextMenu { [store] in
+            EdithMenu.items {
+                if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
+                    EdithMenuItem.menu("Send Message") {
+                        HerdrBroadcastMenu.items(
+                            agents: space.agents, store: store, scopeTitle: space.title,
+                            redactScope: true)
+                    }
                 }
             }
         }

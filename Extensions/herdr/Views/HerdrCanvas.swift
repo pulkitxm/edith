@@ -154,6 +154,51 @@ struct HerdrPaneView: View {
     }
 }
 
+@MainActor
+enum HerdrPaneMenu {
+    static func items(
+        sessionID: String, store: HerdrStore, actions: HerdrAgentActions, launchEnabled: Bool
+    ) -> [EdithMenuItem] {
+        guard let session = store.session(sessionID), let tab = store.tab(containing: sessionID)
+        else { return [] }
+        let zoomed = tab.zoomed == sessionID
+        let tabAgents = tab.agentIDs.compactMap { store.session($0)?.agent }
+        let others = tab.agentIDs.filter { $0 != sessionID }.compactMap(store.session)
+        return EdithMenu.items {
+            HerdrAgentMenu.items(
+                for: session.agent, store: store, actions: actions, launchEnabled: launchEnabled)
+            EdithMenuItem.separator
+            if tab.isSplit, !HerdrBroadcastGroup.all.recipients(from: tabAgents).isEmpty {
+                EdithMenuItem.menu("Message This Tab") {
+                    HerdrBroadcastMenu.items(
+                        agents: tabAgents, store: store, scopeTitle: "This Tab")
+                }
+                EdithMenuItem.separator
+            }
+            EdithMenuItem.button(zoomed ? "Restore Layout" : "Zoom") {
+                withAnimation(store.layoutAnimation) {
+                    store.toggleZoom(sessionID)
+                }
+            }
+            EdithMenuItem.menu("Swap With") {
+                for other in others {
+                    EdithMenuItem.button(other.agent.title) {
+                        withAnimation(store.layoutAnimation) {
+                            store.swap(sessionID, other.id)
+                        }
+                    }
+                }
+            }
+            EdithMenuItem.separator
+            EdithMenuItem.button("Close Pane") {
+                withAnimation(store.layoutAnimation) {
+                    store.close(sessionID)
+                }
+            }
+        }
+    }
+}
+
 struct HerdrPaneHeader: View {
     var store: HerdrStore
     let session: HerdrOpenTab
@@ -162,6 +207,7 @@ struct HerdrPaneHeader: View {
     let hideAgents: Bool
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { session.agent }
@@ -169,7 +215,8 @@ struct HerdrPaneHeader: View {
     @State private var actions = HerdrAgentActions()
 
     var body: some View {
-        HStack(spacing: UIScale.pt(6)) {
+        let menuItems = paneMenuItems
+        return HStack(spacing: UIScale.pt(6)) {
             Button {
                 store.focus(session.id)
             } label: {
@@ -205,7 +252,7 @@ struct HerdrPaneHeader: View {
                     store.toggleZoom(session.id)
                 }
             }
-            menu
+            menu(menuItems)
             iconButton(.close, help: "Close \(agent.title)") {
                 withAnimation(store.layoutAnimation) {
                     store.close(session.id)
@@ -217,12 +264,22 @@ struct HerdrPaneHeader: View {
         .background(focused ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper2(dark))
         .contentShape(Rectangle())
         .herdrDraggable(.agent(agent), simultaneous: true)
-        .contextMenu {
-            HerdrAgentMenu(agent: agent, store: store, actions: actions)
-            Divider()
-            menuItems
-        }
+        .edithContextMenu(menuItems)
         .modifier(HerdrAgentActionDialogs(actions: actions, store: store))
+    }
+
+    private var paneMenuItems: @MainActor () -> [EdithMenuItem] {
+        let store = store
+        let sessionID = session.id
+        let agent = agent
+        let actions = actions
+        let launchEnabled = launchEnabled
+        return {
+            HerdrAgentMenu.refreshAccounts(for: [agent], store: store)
+            return HerdrPaneMenu.items(
+                sessionID: sessionID, store: store, actions: actions,
+                launchEnabled: launchEnabled)
+        }
     }
 
     @ViewBuilder
@@ -255,12 +312,8 @@ struct HerdrPaneHeader: View {
         }
     }
 
-    private var menu: some View {
-        Menu {
-            HerdrAgentMenu(agent: agent, store: store, actions: actions)
-            Divider()
-            menuItems
-        } label: {
+    private func menu(_ items: @escaping @MainActor () -> [EdithMenuItem]) -> some View {
+        EdithMenuButton(items: items) {
             EdithIcon.more.image(size: 12)
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
@@ -268,42 +321,7 @@ struct HerdrPaneHeader: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("More for this agent")
-    }
-
-    @ViewBuilder
-    private var menuItems: some View {
-        if tab.isSplit {
-            let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
-            if !HerdrBroadcastGroup.all.recipients(from: agents).isEmpty {
-                Menu("Message This Tab") {
-                    HerdrBroadcastMenuItems(agents: agents, store: store, scopeTitle: "This Tab")
-                }
-                Divider()
-            }
-        }
-        Button(zoomed ? "Restore Layout" : "Zoom") {
-            withAnimation(store.layoutAnimation) {
-                store.toggleZoom(session.id)
-            }
-        }
-        let others = tab.agentIDs.filter { $0 != session.id }.compactMap(store.session)
-        if !others.isEmpty {
-            Menu("Swap With") {
-                ForEach(others) { other in
-                    Button(other.agent.title) {
-                        withAnimation(store.layoutAnimation) {
-                            store.swap(session.id, other.id)
-                        }
-                    }
-                }
-            }
-        }
-        Divider()
-        Button("Close Pane") {
-            withAnimation(store.layoutAnimation) {
-                store.close(session.id)
-            }
-        }
+        .accessibilityLabel("More for this agent")
     }
 
     private func iconButton(_ icon: EdithIcon, help: String, action: @escaping () -> Void)

@@ -8,6 +8,7 @@ struct HerdrLayoutPopover: View {
     let hideAgents: Bool
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
     @State private var actions = HerdrAgentActions()
     @State private var naming = false
     @State private var layoutName = ""
@@ -84,10 +85,12 @@ struct HerdrLayoutPopover: View {
                     .accessibilityLabel(template.title)
                     .accessibilityAddTraits(template == current ? .isSelected : [])
                     .help("\(template.title): the focused agent takes the highlighted spot")
-                    .contextMenu {
-                        if case let .saved(saved) = template {
-                            Button("Delete Saved Layout", role: .destructive) {
-                                perform { store.deleteArrangement(saved.id) }
+                    .edithContextMenu {
+                        EdithMenu.items {
+                            if case let .saved(saved) = template {
+                                EdithMenuItem.button("Delete Saved Layout") {
+                                    perform { store.deleteArrangement(saved.id) }
+                                }
                             }
                         }
                     }
@@ -147,7 +150,7 @@ struct HerdrLayoutPopover: View {
                     .buttonStyle(.edith(.borderless))
                     .herdrAgentContextMenu(
                         agents: other.agentIDs.compactMap { store.session($0)?.agent }, store: store
-                    ) { EmptyView() }
+                    )
                     .help("Bring this tab in beside the current agents")
                 }
                 HStack(spacing: UIScale.pt(8)) {
@@ -159,17 +162,12 @@ struct HerdrLayoutPopover: View {
                         .help("Show every open tab together in this one")
                     }
                     if !candidates.isEmpty {
-                        PageMenuChip("Add Agent", icon: .plus) {
-                            ForEach(candidates) { agent in
-                                Menu(hideAgents ? agent.kind : agent.title) {
-                                    Button("Add to This Tab") {
-                                        perform { store.open(agent, beside: .right) }
-                                    }
-                                    Divider()
-                                    HerdrAgentMenu(agent: agent, store: store, actions: actions)
-                                }
-                            }
+                        EdithMenuButton(items: addAgentItems) {
+                            PageChipLabel("Add Agent", icon: .plus, menu: true)
                         }
+                        .buttonStyle(.pageChip())
+                        .fixedSize()
+                        .accessibilityLabel("Add Agent")
                         .help("Open another agent beside the focused one")
                     }
                 }
@@ -240,6 +238,32 @@ struct HerdrLayoutPopover: View {
         )
         .accessibilityLabel(title)
         .help(title)
+    }
+
+    private var addAgentItems: @MainActor () -> [EdithMenuItem] {
+        let store = store
+        let actions = actions
+        let launchEnabled = launchEnabled
+        let candidates = candidates
+        return {
+            HerdrAgentMenu.refreshAccounts(for: candidates, store: store)
+            let hideAgents = PresenterState.shared.hidesAgents
+            return EdithMenu.items {
+                for agent in candidates {
+                    EdithMenuItem.menu(hideAgents ? agent.kind : agent.title) {
+                        EdithMenuItem.button("Add to This Tab") {
+                            withAnimation(store.layoutAnimation) {
+                                store.open(agent, beside: .right)
+                            }
+                        }
+                        EdithMenuItem.separator
+                        HerdrAgentMenu.items(
+                            for: agent, store: store, actions: actions,
+                            launchEnabled: launchEnabled)
+                    }
+                }
+            }
+        }
     }
 
     private func perform(_ change: () -> Void) {

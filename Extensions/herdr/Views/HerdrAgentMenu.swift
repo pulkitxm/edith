@@ -91,164 +91,204 @@ struct HerdrAgentRestartChoice: Identifiable {
     var id: String { agent.id }
 }
 
-struct HerdrAgentRestartMenuItems: View {
-    let agent: HerdrAgent
-    let store: HerdrStore
-    let actions: HerdrAgentActions
-
-    private var accounts: [ClaudeAccount] {
-        store.claudeAccounts.launchAccounts.filter {
+@MainActor
+enum HerdrAgentRestartMenu {
+    static func items(
+        for agent: HerdrAgent, store: HerdrStore, actions: HerdrAgentActions
+    ) -> [EdithMenuItem] {
+        let accounts = store.claudeAccounts.launchAccounts.filter {
             agent.machineIsLocal
                 ? $0.remoteMachineID == nil
                 : $0.remoteMachineID == nil || $0.remoteMachineID == agent.machineID
         }
-    }
-
-    var body: some View {
-        Button("Restart Agent…") {
+        let activeAccount = store.accountSessions[agent.id]
+        func choose(accountID: String, name: String) {
             actions.pendingRestart = HerdrAgentRestartChoice(
-                agent: agent, title: "resume in \(HerdrKind.displayName(for: agent.kind))")
+                agent: agent, accountID: accountID, title: "resume in \(name)")
         }
-        if HerdrKind.displayName(for: agent.kind) == "Claude Code" {
-            Menu("Restart in Account") {
-                Button("Existing CLI Login") { choose(accountID: "cli", name: "the CLI login") }
-                ForEach(accounts) { account in
-                    Button(account.name) {
-                        choose(accountID: account.id.uuidString, name: account.name)
+        return EdithMenu.items {
+            EdithMenuItem.button("Restart Agent…") {
+                actions.pendingRestart = HerdrAgentRestartChoice(
+                    agent: agent, title: "resume in \(HerdrKind.displayName(for: agent.kind))")
+            }
+            if HerdrAgentMenu.isClaude(agent) {
+                EdithMenuItem.menu("Restart in Account") {
+                    EdithMenuItem.button("Existing CLI Login") {
+                        choose(accountID: "cli", name: "the CLI login")
                     }
-                    .disabled(store.accountSessions[agent.id] == account.id.uuidString)
+                    for account in accounts {
+                        EdithMenuItem.button(
+                            account.name, enabled: activeAccount != account.id.uuidString
+                        ) {
+                            choose(accountID: account.id.uuidString, name: account.name)
+                        }
+                    }
                 }
             }
-            .task { await store.claudeAccounts.read() }
-        }
-        Menu("Continue in Agent") {
-            ForEach(AgentResume.handoffTargets(from: agent.kind), id: \.self) { kind in
-                Button(kind) {
-                    actions.pendingRestart = HerdrAgentRestartChoice(
-                        agent: agent, kind: kind, title: "continue in \(kind)")
+            EdithMenuItem.menu("Continue in Agent") {
+                for kind in AgentResume.handoffTargets(from: agent.kind) {
+                    EdithMenuItem.button(kind) {
+                        actions.pendingRestart = HerdrAgentRestartChoice(
+                            agent: agent, kind: kind, title: "continue in \(kind)")
+                    }
                 }
             }
         }
-    }
-
-    private func choose(accountID: String, name: String) {
-        actions.pendingRestart = HerdrAgentRestartChoice(
-            agent: agent, accountID: accountID, title: "resume in \(name)")
     }
 }
 
-struct HerdrBroadcastMenuItems: View {
-    let agents: [HerdrAgent]
-    let store: HerdrStore
-    var scopeTitle: String?
-    var redactScope = false
-
-    var body: some View {
-        ForEach(HerdrBroadcastGroup.allCases) { group in
+@MainActor
+enum HerdrBroadcastMenu {
+    static func items(
+        agents: [HerdrAgent], store: HerdrStore, scopeTitle: String? = nil,
+        redactScope: Bool = false
+    ) -> [EdithMenuItem] {
+        HerdrBroadcastGroup.allCases.map { group in
             let count = group.recipients(from: agents).count
-            Button("\(group.title) (\(count))") {
+            return EdithMenuItem.button("\(group.title) (\(count))", enabled: count > 0) {
                 store.messaging.compose(
                     group, from: agents, scopeTitle: scopeTitle, redactScope: redactScope)
             }
-            .disabled(count == 0)
         }
     }
 }
 
-struct HerdrAgentMenu: View {
-    let agent: HerdrAgent
-    let store: HerdrStore
-    let actions: HerdrAgentActions
-    var onOpen: () -> Void = {}
+@MainActor
+enum HerdrAgentMenu {
+    static func isClaude(_ agent: HerdrAgent) -> Bool {
+        HerdrKind.displayName(for: agent.kind) == "Claude Code"
+    }
 
-    @Environment(\.terminalLaunchEnabled) private var launchEnabled
-    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store)
-    private var presenterBlurAgents = true
-    private var hideAgents: Bool { PresenterState.shared.hidesAgents }
+    static func refreshAccounts(for agents: [HerdrAgent], store: HerdrStore) {
+        guard agents.contains(where: isClaude) else { return }
+        Task { await store.claudeAccounts.read() }
+    }
 
-    var body: some View {
-        Button("Open") {
+    static func items(
+        for agents: [HerdrAgent], store: HerdrStore, actions: HerdrAgentActions,
+        launchEnabled: Bool, onOpen: @escaping @MainActor () -> Void = {},
+        extra: [EdithMenuItem] = []
+    ) -> [EdithMenuItem] {
+        let hideAgents = PresenterState.shared.hidesAgents
+        return EdithMenu.items {
+            if agents.count == 1, let agent = agents.first {
+                items(
+                    for: agent, store: store, actions: actions, launchEnabled: launchEnabled,
+                    onOpen: onOpen)
+            } else {
+                for agent in agents {
+                    EdithMenuItem.menu(hideAgents ? agent.kind : agent.title) {
+                        items(
+                            for: agent, store: store, actions: actions,
+                            launchEnabled: launchEnabled, onOpen: onOpen)
+                    }
+                }
+            }
+            EdithMenuItem.separator
+            extra
+        }
+    }
+
+    static func items(
+        for agent: HerdrAgent, store: HerdrStore, actions: HerdrAgentActions,
+        launchEnabled: Bool, onOpen: @escaping @MainActor () -> Void = {}
+    ) -> [EdithMenuItem] {
+        let hideAgents = PresenterState.shared.hidesAgents
+        let destinations = store.tabs.filter { !$0.layout.contains(agent.id) }
+        func openBeside(_ tab: HerdrTab, _ side: InsertSide) {
             onOpen()
-            actions.open(agent, store: store)
+            actions.openBeside(agent, store: store, tabID: tab.id, side: side)
         }
-        Menu("Open In") {
-            Button("New Tab") {
+        return EdithMenu.items {
+            EdithMenuItem.button("Open") {
                 onOpen()
-                actions.openInNewTab(agent, store: store)
+                actions.open(agent, store: store)
             }
-            Button("New Window") {
-                onOpen()
-                actions.openInNewWindow(agent, store: store, launchEnabled: launchEnabled)
-            }
-            let destinations = store.tabs.filter { !$0.layout.contains(agent.id) }
-            if !destinations.isEmpty {
-                Divider()
-                ForEach(destinations) { tab in
-                    Menu("Beside \(tabTitle(tab))") {
-                        Button("Right") { openBeside(tab, .right) }
-                        Button("Left") { openBeside(tab, .left) }
-                        Button("Below") { openBeside(tab, .bottom) }
-                        Button("Above") { openBeside(tab, .top) }
+            EdithMenuItem.menu("Open In") {
+                EdithMenuItem.button("New Tab") {
+                    onOpen()
+                    actions.openInNewTab(agent, store: store)
+                }
+                EdithMenuItem.button("New Window") {
+                    onOpen()
+                    actions.openInNewWindow(agent, store: store, launchEnabled: launchEnabled)
+                }
+                EdithMenuItem.separator
+                for tab in destinations {
+                    EdithMenuItem.menu(
+                        "Beside \(tabTitle(tab, store: store, hideAgents: hideAgents))"
+                    ) {
+                        EdithMenuItem.button("Right") { openBeside(tab, .right) }
+                        EdithMenuItem.button("Left") { openBeside(tab, .left) }
+                        EdithMenuItem.button("Below") { openBeside(tab, .bottom) }
+                        EdithMenuItem.button("Above") { openBeside(tab, .top) }
                     }
                 }
             }
-        }
-        if !agent.isTerminal {
-            Button("Open in Herdr Terminal") {
-                HerdrWorkOwnership.start {
-                    await actions.openInHerdrTerminal(agent, store: store)
-                    if actions.failure == nil { onOpen() }
+            if !agent.isTerminal {
+                EdithMenuItem.button(
+                    "Open in Herdr Terminal", enabled: !actions.openingTerminal.contains(agent.id)
+                ) {
+                    HerdrWorkOwnership.start {
+                        await actions.openInHerdrTerminal(agent, store: store)
+                        if actions.failure == nil { onOpen() }
+                    }
                 }
             }
-            .disabled(actions.openingTerminal.contains(agent.id))
-        }
-        Button(store.copiedID == agent.id ? "Copied Open Command" : "Copy Open Command") {
-            store.copyAttachCommand(for: agent)
-        }
-        if !agent.isTerminal {
-            Divider()
-            Button("Send Message…") {
-                onOpen()
-                let detached =
-                    store.raiseSpace(containingAgent: agent.id)
-                    || store.raiseAgentWindow(agent.id)
-                store.messaging.compose(to: agent, presenterID: detached ? agent.id : nil)
-                if !detached { store.revealWorkspaceWindow() }
+            EdithMenuItem.button(
+                store.copiedID == agent.id ? "Copied Open Command" : "Copy Open Command"
+            ) {
+                store.copyAttachCommand(for: agent)
             }
-            cancelWaiting
-            if AgentResume.profile(for: agent.kind) != nil {
-                Divider()
-                HerdrAgentRestartMenuItems(agent: agent, store: store, actions: actions)
-                    .disabled(actions.restarting.contains(agent.id))
+            if !agent.isTerminal {
+                EdithMenuItem.separator
+                EdithMenuItem.button("Send Message…") {
+                    onOpen()
+                    let detached =
+                        store.raiseSpace(containingAgent: agent.id)
+                        || store.raiseAgentWindow(agent.id)
+                    store.messaging.compose(to: agent, presenterID: detached ? agent.id : nil)
+                    if !detached { store.revealWorkspaceWindow() }
+                }
+                cancelWaiting(agent, store: store)
+                if AgentResume.profile(for: agent.kind) != nil {
+                    EdithMenuItem.separator
+                    HerdrAgentRestartMenu.items(for: agent, store: store, actions: actions)
+                        .disabled(actions.restarting.contains(agent.id))
+                }
+                EdithMenuItem.separator
+                EdithMenuItem.button(
+                    "Delete Agent…", enabled: !actions.deleting.contains(agent.id)
+                ) {
+                    actions.agentToDelete = agent
+                }
             }
-            Divider()
-            Button("Delete Agent…", role: .destructive) { actions.agentToDelete = agent }
-                .disabled(actions.deleting.contains(agent.id))
         }
     }
 
-    @ViewBuilder
-    private var cancelWaiting: some View {
+    private static func cancelWaiting(_ agent: HerdrAgent, store: HerdrStore) -> [EdithMenuItem] {
         let waiting = store.messaging.armedHooks(for: agent.id)
-        if waiting.count == 1, let hook = waiting.first {
-            Button("Cancel Waiting Message") {
-                HerdrWorkOwnership.start { await store.messaging.remove(hook.id) }
-            }
-            .disabled(hook.phase == .sending)
-            .help(hook.schedule.sendsPhrase(now: Date()))
-        } else if waiting.count > 1 {
-            Menu("Cancel Waiting Message") {
-                ForEach(waiting) { hook in
-                    Button(cancelTitle(hook)) {
-                        HerdrWorkOwnership.start { await store.messaging.remove(hook.id) }
+        return EdithMenu.items {
+            if waiting.count == 1, let hook = waiting.first {
+                EdithMenuItem.button(
+                    "Cancel Waiting Message", enabled: hook.phase != .sending,
+                    help: hook.schedule.sendsPhrase(now: Date())
+                ) {
+                    HerdrWorkOwnership.start { await store.messaging.remove(hook.id) }
+                }
+            } else if waiting.count > 1 {
+                EdithMenuItem.menu("Cancel Waiting Message") {
+                    for hook in waiting {
+                        EdithMenuItem.button(cancelTitle(hook), enabled: hook.phase != .sending) {
+                            HerdrWorkOwnership.start { await store.messaging.remove(hook.id) }
+                        }
                     }
-                    .disabled(hook.phase == .sending)
                 }
             }
         }
     }
 
-    private func cancelTitle(_ hook: HerdrAgentHook) -> String {
+    private static func cancelTitle(_ hook: HerdrAgentHook) -> String {
         let phrase = hook.schedule.sendsPhrase(now: Date())
         let message =
             hook.message.count > 28
@@ -256,12 +296,7 @@ struct HerdrAgentMenu: View {
         return "\(phrase): \(message)"
     }
 
-    private func openBeside(_ tab: HerdrTab, _ side: InsertSide) {
-        onOpen()
-        actions.openBeside(agent, store: store, tabID: tab.id, side: side)
-    }
-
-    private func tabTitle(_ tab: HerdrTab) -> String {
+    static func tabTitle(_ tab: HerdrTab, store: HerdrStore, hideAgents: Bool) -> String {
         tab.agentIDs.compactMap { store.session($0)?.agent }
             .map { hideAgents ? $0.kind : $0.title }.joined(separator: " · ")
     }
@@ -314,33 +349,28 @@ struct HerdrAgentActionDialogs: ViewModifier {
     }
 }
 
-private struct HerdrAgentContextMenu<Extra: View>: ViewModifier {
+private struct HerdrAgentContextMenu: ViewModifier {
     let agents: [HerdrAgent]
     let store: HerdrStore
-    let extra: Extra
-    var onOpen: () -> Void = {}
+    let extra: @MainActor () -> [EdithMenuItem]
+    var onOpen: @MainActor () -> Void = {}
     @State private var actions = HerdrAgentActions()
-    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store)
-    private var presenterBlurAgents = true
+    @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     func body(content: Content) -> some View {
-        content
-            .contextMenu {
-                if agents.count == 1, let agent = agents.first {
-                    HerdrAgentMenu(agent: agent, store: store, actions: actions, onOpen: onOpen)
-                } else {
-                    ForEach(agents) { agent in
-                        Menu(
-                            PresenterState.shared.hidesAgents
-                                ? agent.kind : agent.title
-                        ) {
-                            HerdrAgentMenu(
-                                agent: agent, store: store, actions: actions, onOpen: onOpen)
-                        }
-                    }
-                }
-                if !agents.isEmpty, Extra.self != EmptyView.self { Divider() }
-                extra
+        let agents = agents
+        let store = store
+        let extra = extra
+        let onOpen = onOpen
+        let actions = actions
+        let launchEnabled = launchEnabled
+        return
+            content
+            .edithContextMenu {
+                HerdrAgentMenu.refreshAccounts(for: agents, store: store)
+                return HerdrAgentMenu.items(
+                    for: agents, store: store, actions: actions, launchEnabled: launchEnabled,
+                    onOpen: onOpen, extra: extra())
             }
             .modifier(HerdrAgentActionDialogs(actions: actions, store: store))
     }
@@ -348,16 +378,16 @@ private struct HerdrAgentContextMenu<Extra: View>: ViewModifier {
 
 extension View {
     func herdrAgentContextMenu(
-        _ agent: HerdrAgent, store: HerdrStore, onOpen: @escaping () -> Void = {}
+        _ agent: HerdrAgent, store: HerdrStore, onOpen: @escaping @MainActor () -> Void = {}
     ) -> some View {
         modifier(
-            HerdrAgentContextMenu(agents: [agent], store: store, extra: EmptyView(), onOpen: onOpen)
-        )
+            HerdrAgentContextMenu(agents: [agent], store: store, extra: { [] }, onOpen: onOpen))
     }
 
-    func herdrAgentContextMenu<Extra: View>(
-        agents: [HerdrAgent], store: HerdrStore, @ViewBuilder extra: () -> Extra
+    func herdrAgentContextMenu(
+        agents: [HerdrAgent], store: HerdrStore,
+        extra: @escaping @MainActor () -> [EdithMenuItem] = { [] }
     ) -> some View {
-        modifier(HerdrAgentContextMenu(agents: agents, store: store, extra: extra()))
+        modifier(HerdrAgentContextMenu(agents: agents, store: store, extra: extra))
     }
 }
