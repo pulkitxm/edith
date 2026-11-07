@@ -148,7 +148,7 @@ extension View {
     public func edithContextMenu(
         _ items: @escaping @MainActor () -> [EdithMenuItem]
     ) -> some View {
-        overlay(EdithContextMenuRegion(items: items))
+        overlay(EdithContextMenuRegion(items: items).accessibilityHidden(true))
     }
 }
 
@@ -293,6 +293,6 @@ public struct EdithMenuButton<Label: View>: View {
         } label: {
             label
         }
-        .background(EdithMenuAnchorRegion(anchor: anchor))
+        .background(EdithMenuAnchorRegion(anchor: anchor).accessibilityHidden(true))
     }
 }
