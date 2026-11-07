@@ -3,6 +3,7 @@ import {Main} from './Main';
 import {OneApp, oneAppTotalDuration} from './OneApp';
 import {Announcement, announcementDuration} from './Announcement';
 import {totalDuration, fps} from './tokens';
+import {Launch, launchDuration} from './launch/Launch';
 
 export const Root: React.FC = () => {
   return (
@@ -21,6 +22,22 @@ export const Root: React.FC = () => {
         durationInFrames={announcementDuration}
         fps={fps}
         width={1920}
+        height={1080}
+      />
+      <Composition
+        id="V1-launch-youtube"
+        component={Launch}
+        durationInFrames={launchDuration}
+        fps={fps}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="V1-launch-x"
+        component={Launch}
+        durationInFrames={launchDuration}
+        fps={fps}
+        width={1080}
         height={1080}
       />
       <Composition
