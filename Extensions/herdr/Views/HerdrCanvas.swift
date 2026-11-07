@@ -170,7 +170,8 @@ enum HerdrPaneMenu {
             EdithMenuItem.separator
             if tab.isSplit, !HerdrBroadcastGroup.all.recipients(from: tabAgents).isEmpty {
                 EdithMenuItem.menu("Message This Tab") {
-                    HerdrBroadcastMenu.items(agents: tabAgents, store: store, scopeTitle: "This Tab")
+                    HerdrBroadcastMenu.items(
+                        agents: tabAgents, store: store, scopeTitle: "This Tab")
                 }
                 EdithMenuItem.separator
             }
