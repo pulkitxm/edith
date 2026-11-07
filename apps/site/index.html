@@ -3,1188 +3,325 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0e0f11" />
-    <title>Edith: native macOS control center</title>
-    <meta
-      name="description"
-      content="Edith is a free, open source native macOS control center with usage analytics, local music, clipboard tools, and system utilities."
-    />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#070a12" />
+    <title>Edith: every tool your Mac is missing</title>
+    <meta name="description" content="Edith is a native macOS control center with 41 extensions, an MCP server for coding agents, and everything kept on your Mac. Free and open source." />
     <link rel="canonical" href="https://edith.pulkit.page/" />
     <link rel="icon" type="image/png" href="/favicon-180.png" />
     <link rel="apple-touch-icon" href="/favicon-180.png" />
-    <link
-      rel="preload"
-      href="/fonts/comfortaa-latin.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/lib/plyr/plyr.css" />
+    <script>try{var t=localStorage.getItem("edith-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Edith" />
-    <meta
-      property="og:title"
-      content="Edith: native macOS control center"
-    />
-    <meta
-      property="og:description"
-      content="A free and open source native macOS control center. One app instead of twelve."
-    />
+    <meta property="og:title" content="Edith: every tool your Mac is missing" />
+    <meta property="og:description" content="Edith is a native macOS control center with 41 extensions, an MCP server for coding agents, and everything kept on your Mac. Free and open source." />
     <meta property="og:url" content="https://edith.pulkit.page/" />
-    <meta property="og:image" content="https://edith.pulkit.page/og-home.png" />
-    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image" content="https://edith.pulkit.page/og/home.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta
-      property="og:image:alt"
-      content="Edith: one native macOS control center instead of twelve."
-    />
-    <meta property="og:video" content="https://edith.pulkit.page/announcement.mp4" />
+    <meta property="og:image:alt" content="Every tool your Mac is missing.. One app." />
+    <meta property="og:video" content="https://edith.pulkit.page/media/edith-launch.mp4" />
     <meta property="og:video:type" content="video/mp4" />
     <meta property="og:video:width" content="1920" />
     <meta property="og:video:height" content="1080" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta
-      name="twitter:title"
-      content="Edith: native macOS control center"
-    />
-    <meta
-      name="twitter:description"
-      content="A free and open source native macOS control center. One app instead of twelve."
-    />
-    <meta name="twitter:image" content="https://edith.pulkit.page/og-home.png" />
-    <meta
-      name="twitter:image:alt"
-      content="Edith: one native macOS control center instead of twelve."
-    />
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@graph": [
-          {
-            "@type": "SoftwareApplication",
-            "name": "Edith",
-            "url": "https://edith.pulkit.page/",
-            "image": "https://edith.pulkit.page/app-icon-512.png",
-            "applicationCategory": "UtilitiesApplication",
-            "operatingSystem": "macOS 14+",
-            "downloadUrl": "https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg",
-            "license": "https://www.gnu.org/licenses/gpl-3.0.html",
-            "isAccessibleForFree": true,
-            "offers": {
-              "@type": "Offer",
-              "price": "0",
-              "priceCurrency": "USD"
-            },
-            "description": "A free, open source native macOS control center with usage analytics, local music, and system tools.",
-            "featureList": [
-              "Claude and Codex rate-limit tracking with live countdowns",
-              "Selectable Claude and Codex limit windows in the menu bar",
-              "Usage alerts and notifications",
-              "Usage analytics dashboard with per-model charts",
-              "Daily spend heatmap",
-              "Self-hosted Companion memory and evidence-backed chat",
-              "SSH machine monitoring, terminals, files, containers, power, and cooling",
-              "Closed-lid operation on battery with timed safety policies",
-              "Local music player with Spotify and Apple Music control",
-              "Clipboard history with instant paste",
-              "Color picker",
-              "Focus dim, prevent sleep, keyboard-clean lock",
-              "Notch file shelf, alerts, and camera check",
-              "Mic mute and per-app volume mixer",
-              "Disk junk cleaner and running-apps monitor"
-            ]
-          },
-          {
-            "@type": "VideoObject",
-            "name": "Edith announcement film",
-            "description": "A two-minute tour of Edith's native macOS app.",
-            "contentUrl": "https://edith.pulkit.page/announcement.mp4",
-            "thumbnailUrl": "https://edith.pulkit.page/announcement-poster.jpg",
-            "uploadDate": "2026-07-16"
-          },
-          {
-            "@type": "FAQPage",
-            "mainEntity": [
-              {
-                "@type": "Question",
-                "name": "How much does Edith cost?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Nothing. Edith is free and open source under the GPL-3.0 licence. Every feature is in the one app, with no paid tier, no licence key, and no account."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "How does macOS verify Edith downloads?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "New releases require Developer ID signing, Apple notarization, and Gatekeeper verification before publication. macOS may still ask you to confirm the first launch and grant permissions such as screen recording or microphone access. Always download Edith from the official GitHub release."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Does Edith send my usage data anywhere?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "No. Usage stays on your device, with no account and no telemetry. Optional iCloud backup merges history across your own Macs."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Which systems does Edith support?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Edith runs on macOS 14 and later on Apple Silicon."
-                }
-              }
-            ]
-          }
-        ]
-      }
-    </script>
-  </head>
-  <body>
-    <header class="site-header">
-      <div class="header-inner">
-        <a href="#top" class="brand">
-          <img src="/app-icon-512.png" alt="Edith app icon" width="28" height="28" />
-          <span>Edith</span>
-        </a>
-        <nav class="nav">
-          <a href="#features">Features</a>
-          <a href="#performance">Performance</a>
-          <a href="#faq">FAQ</a>
-        </nav>
-        <a
-          class="btn btn-solid btn-sm"
-          href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
-          aria-label="Download Edith for macOS"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M12 3a1.2 1.2 0 0 1 1.2 1.2v8.9l3.05-3.05a1.2 1.2 0 1 1 1.7 1.7l-5.1 5.1a1.2 1.2 0 0 1-1.7 0l-5.1-5.1a1.2 1.2 0 1 1 1.7-1.7l3.05 3.05V4.2A1.2 1.2 0 0 1 12 3zM5.2 18.6h13.6a1.2 1.2 0 0 1 0 2.4H5.2a1.2 1.2 0 0 1 0-2.4z"
-            />
-          </svg>
-          Download
-        </a>
-      </div>
-    </header>
-
-    <main id="top">
-      <section class="hero">
-        <div class="hero-inner">
-          <p class="eyebrow hero-eyebrow">Native on macOS</p>
-          <h1>One control center<br />instead of twelve.</h1>
-          <p class="hero-lede">
-            Get the complete native Mac app with Edith's full extension catalog and efficient
-            desktop tools.
-          </p>
-          <div class="hero-cta">
-            <a
-              class="btn btn-solid"
-              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"
-                />
-              </svg>
-              Download for macOS
-            </a>
-            <a class="btn btn-ghost" href="https://github.com/pulkitxm/edith">
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path
-                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
-                />
-              </svg>
-              Star us on GitHub
-            </a>
-          </div>
-          <p class="fineprint hero-note">
-            Free forever. Requires macOS 14+ on Apple Silicon.
-          </p>
-
-          <div class="hero-demo">
-            <div class="window">
-              <input type="checkbox" id="presenter" class="sr-only" />
-              <div class="window-bar">
-                <span class="traffic"><i></i><i></i><i></i></span>
-                <span class="window-title">Edith</span>
-                <span class="window-spacer"></span>
-                <span class="window-clock">11:59 PM</span>
-              </div>
-              <div class="window-body">
-                <aside class="window-sidebar">
-                  <span>Home</span>
-                  <span>Agent Usage</span>
-                  <span>Music</span>
-                  <span>Calendar</span>
-                  <span class="sidebar-last">Settings</span>
-                </aside>
-                <div class="window-main">
-                  <div class="greeting">
-                    <div class="greeting-title">Good evening.</div>
-                    <div class="greeting-sub">
-                      This week <span class="mono" data-sensitive>$2.1k</span>
-                    </div>
-                  </div>
-
-                  <div class="tile-grid">
-                    <div class="tile">
-                      <div class="tile-time">11:59</div>
-                      <div class="tile-meridiem">PM</div>
-                      <div class="tile-place">Local</div>
-                    </div>
-                    <div class="tile">
-                      <div class="tile-time">2:29</div>
-                      <div class="tile-meridiem">PM</div>
-                      <div class="tile-place">New York</div>
-                    </div>
-                    <div class="tile">
-                      <div class="tile-time">7:29</div>
-                      <div class="tile-meridiem">PM</div>
-                      <div class="tile-place">London</div>
-                    </div>
-                  </div>
-
-                  <div class="action-grid">
-                    <span class="action">
-                      <span class="action-icon">⌨</span>
-                      <span>Clean keys</span>
-                    </span>
-                    <span class="action is-active">
-                      <span class="action-icon">☾</span>
-                      <span>Keep awake</span>
-                    </span>
-                    <label class="action" for="presenter" data-presenter-toggle>
-                      <span class="action-icon" data-presenter-icon>◍</span>
-                      <span>Presenter</span>
-                    </label>
-                  </div>
-
-                  <div class="panel-grid">
-                    <div class="subpanel">
-                      <div class="panel-head"><span>Rate limits</span></div>
-                      <div class="rings">
-                        <div class="ring">
-                          <svg viewBox="0 0 80 80">
-                            <circle class="ring-track" cx="40" cy="40" r="32" />
-                            <circle
-                              class="ring-value sage"
-                              cx="40"
-                              cy="40"
-                              r="32"
-                              transform="rotate(-90 40 40)"
-                              style="stroke-dashoffset: 106.6"
-                            />
-                          </svg>
-                          <span class="ring-pct">47%</span>
-                          <span class="ring-label">Session</span>
-                          <span class="ring-sub">2h 47m</span>
-                        </div>
-                        <div class="ring">
-                          <svg viewBox="0 0 80 80">
-                            <circle class="ring-track" cx="40" cy="40" r="32" />
-                            <circle
-                              class="ring-value accent"
-                              cx="40"
-                              cy="40"
-                              r="32"
-                              transform="rotate(-90 40 40)"
-                              style="stroke-dashoffset: 64.3"
-                            />
-                          </svg>
-                          <span class="ring-pct">68%</span>
-                          <span class="ring-label">Week</span>
-                          <span class="ring-sub">3d 6h</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="subpanel">
-                      <div class="panel-head">
-                        <span>Activity</span>
-                        <span class="mono">May to Jul</span>
-                      </div>
-                      <div class="heatmap" data-rows="7" data-cols="16" aria-hidden="true"></div>
-                    </div>
-                  </div>
-
-                  <div class="now-playing">
-                    <span class="np-art">
-                      <img class="art" src="/music/cover-1.jpg" alt="" data-art />
-                      <span class="np-eq" aria-hidden="true"
-                        ><i></i><i></i><i></i><i></i
-                      ></span>
-                    </span>
-                    <div class="np-body">
-                      <div class="np-title" data-title data-sensitive>Weightless</div>
-                      <div class="np-artist" data-artist data-sensitive>Marconi Union</div>
-                      <div class="progress"><span data-progress></span></div>
-                    </div>
-                    <div class="np-controls">
-                      <span>⏮</span>
-                      <span class="np-play">❚❚</span>
-                      <span>⏭</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <p>The Home panel, running live. Click Presenter to blur the numbers.</p>
-          </div>
-        </div>
-      </section>
-
-      <section id="features" class="wrap features">
-        <div class="section-head" data-reveal-item>
-          <p class="eyebrow">And the rest of the shelf</p>
-          <h2>Everything else you'd otherwise install one by one.</h2>
-        </div>
-        <div class="cards" data-reveal-group>
-          <div class="card card-color">
-            <div class="card-art">
-              <span class="loupe"></span>
-              <span class="pill mono is-accent swatch">
-                <i>#E08A6A</i><i>#6A8D9E</i><i>#7A9E83</i><i>#9E6A97</i>
-              </span>
-            </div>
-            <h4>Color picker</h4>
-            <p>A system loupe on a hotkey. Sample any pixel and the hex lands on your clipboard.</p>
-          </div>
-          <div class="card card-focus">
-            <div class="card-art">
-              <span class="win-ghost back"><i></i><i></i><i></i></span>
-              <span class="win-ghost front"><i></i><i></i><i></i></span>
-            </div>
-            <h4>Focus dim</h4>
-            <p>Dims everything behind your active app so one window is all you see.</p>
-          </div>
-          <div class="card card-notch">
-            <div class="card-art stack">
-              <span class="notch"></span>
-              <span class="file-row">
-                <span class="file"></span><span class="file"></span><span class="file"></span>
-              </span>
-            </div>
-            <h4>Notch shelf</h4>
-            <p>Park files under the notch mid-drag, then drop them wherever they belong.</p>
-          </div>
-          <div class="card card-clip">
-            <div class="card-art stack">
-              <span class="clip-row">
-                <span class="ghost-line" style="width: 60%"></span>
-                <span class="key">⌘V</span>
-              </span>
-              <span class="card-row"><span class="ghost-line" style="width: 80%"></span></span>
-              <span class="card-row"><span class="ghost-line" style="width: 40%"></span></span>
-            </div>
-            <h4>Clipboard history</h4>
-            <p>Everything you copied, one shortcut away, with instant paste.</p>
-          </div>
-          <div class="card card-calendar">
-            <div class="card-art stack">
-              <span class="card-row">
-                <i class="dot accent"></i>
-                <span class="card-label">10:00 Standup</span>
-                <span class="pill is-accent">Join</span>
-              </span>
-              <span class="card-row">
-                <i class="dot sage"></i>
-                <span class="card-label">1:30 Design</span>
-                <span class="pill is-accent">Join</span>
-              </span>
-            </div>
-            <h4>Calendar</h4>
-            <p>Today's schedule in the panel and the app, with one-tap join links.</p>
-          </div>
-          <div class="card card-clocks">
-            <div class="card-art">
-              <span class="pill mono">SF 11:59</span>
-              <span class="pill mono">NY 2:29</span>
-              <span class="pill mono">LDN 7:29</span>
-            </div>
-            <h4>World clocks</h4>
-            <p>Local time plus the offices you care about, at a glance.</p>
-          </div>
-          <div class="card card-shortcut">
-            <div class="card-art">
-              <span class="key lg">⌥</span>
-              <span class="key lg">⌘</span>
-              <span class="key lg">E</span>
-            </div>
-            <h4>Global shortcut</h4>
-            <p>
-              Toggle the panel from anywhere. Defaults to Option-Command-E and re-records to taste.
-            </p>
-          </div>
-          <div class="card card-local">
-            <div class="card-art">
-              <span class="lock"></span>
-              <span class="card-label">Stays on this Mac</span>
-            </div>
-            <h4>Local first</h4>
-            <p>Usage never leaves your Mac. Optional iCloud backup merges across machines.</p>
-          </div>
-          <div class="card card-mic">
-            <div class="card-art">
-              <span class="mic"></span>
-              <span class="pill mic-state">
-                <span class="mic-lbl mic-muted"><i class="dot danger"></i>All mics muted</span>
-                <span class="mic-lbl mic-live"><i class="dot sage"></i>Mic live</span>
-              </span>
-            </div>
-            <h4>Mic mute</h4>
-            <p>
-              Every microphone muted system-wide with one hotkey. The menu bar shows when you're
-              safe.
-            </p>
-          </div>
-          <div class="card card-mixer">
-            <div class="card-art stack">
-              <span class="card-row">
-                <span class="card-label fixed">Safari</span>
-                <span class="bar"><i></i></span>
-              </span>
-              <span class="card-row">
-                <span class="card-label fixed">Music</span>
-                <span class="bar"><i></i></span>
-              </span>
-              <span class="card-row">
-                <span class="card-label fixed">Zoom</span>
-                <span class="bar"><i></i></span>
-              </span>
-            </div>
-            <h4>Audio mixer</h4>
-            <p>Per-app volume from the panel. Quiet the browser, keep the music.</p>
-          </div>
-          <div class="card card-alerts">
-            <div class="card-art stack">
-              <span class="notch"></span>
-              <span class="notch-alerts">
-                <span class="pill"><i class="dot sage"></i>AirPods connected</span>
-                <span class="pill"><i class="dot accent"></i>Charger connected</span>
-                <span class="pill"><i class="dot sage"></i>Output: Studio Display</span>
-              </span>
-            </div>
-            <h4>Notch alerts</h4>
-            <p>
-              Bluetooth, audio-output, and charger changes surface as small notices around the
-              notch.
-            </p>
-          </div>
-          <div class="card card-stats">
-            <div class="card-art">
-              <span class="stat-strip">
-                <span class="stat-cpu"></span>
-                <span class="stat-mem"></span>
-                <span class="subtle">Wed 14:22</span>
-              </span>
-            </div>
-            <h4>CPU &amp; memory readout</h4>
-            <p>Live stats in the menu bar, so a runaway process never sneaks up on you.</p>
-          </div>
-          <div class="card card-junk">
-            <div class="card-art">
-              <span class="junk-items">
-                <span class="pill mono">Caches 8.2 GB</span>
-                <span class="pill mono">Logs 2.1 GB</span>
-                <span class="pill mono">Cargo 1.4 GB</span>
-              </span>
-              <span class="bin" aria-hidden="true">
-                <i class="bin-lid"></i>
-                <i class="bin-body"></i>
-              </span>
-            </div>
-            <h4>Junk cleaner</h4>
-            <p>
-              Scan build caches, package managers, and old logs. Reclaim gigabytes, restorable from
-              the Trash.
-            </p>
-          </div>
-          <div class="card card-apps">
-            <div class="card-art stack">
-              <span class="card-row row-chrome">
-                <span class="card-label">Chrome</span>
-                <span class="pill mono app-pct"></span>
-                <span class="quit">✕</span>
-              </span>
-              <span class="card-row row-node">
-                <span class="card-label">node</span>
-                <span class="pill mono app-pct"></span>
-                <span class="quit">✕</span>
-              </span>
-            </div>
-            <h4>Running apps</h4>
-            <p>Sort every open app by CPU or memory and quit the heavy ones in a click.</p>
-          </div>
-          <div class="card card-yt">
-            <div class="card-art stack">
-              <span class="pill mono" style="align-self: flex-start; max-width: 100%"
-                >youtube.com/watch?v=dQw4…</span
-              >
-              <span class="card-row">
-                <span class="bar"><i></i></span>
-                <span class="card-label mono dl-pct"></span>
-              </span>
-            </div>
-            <h4>YouTube audio</h4>
-            <p>
-              Paste links, get tagged audio files straight into your music folder, with live
-              progress.
-            </p>
-          </div>
-          <div class="card card-drill">
-            <div class="card-art stack">
-              <span class="card-row drill-parent">
-                <span class="drill-caret" aria-hidden="true">▸</span>
-                <span class="card-label">edith</span>
-                <span class="pill mono">$412</span>
-              </span>
-              <span class="drill-children">
-                <span class="drill-inner">
-                  <span class="card-row">
-                    <span class="card-label">notch-motion</span>
-                    <span class="pill mono">$268</span>
-                  </span>
-                </span>
-              </span>
-            </div>
-            <h4>Project drilldown</h4>
-            <p>
-              Activity by project, worktree, and chat across Claude, Codex, and pi, so you know
-              which repository is consuming the budget.
-            </p>
-          </div>
-          <div class="card card-spotify">
-            <div class="card-art">
-              <span class="sp-art">
-                <img src="/music/cover-1.jpg" alt="" />
-                <img src="/music/cover-2.jpg" alt="" />
-                <img src="/music/cover-3.jpg" alt="" />
-              </span>
-              <span class="sp-body">
-                <span class="sp-track">
-                  <span><i class="dot sage"></i>Spotify · Weightless</span>
-                  <span><i class="dot accent"></i>Apple Music · Nightcall</span>
-                  <span><i class="dot sage"></i>Spotify · Teardrop</span>
-                </span>
-                <span class="bar"><i></i></span>
-                <span class="card-label mono sp-time"></span>
-              </span>
-            </div>
-            <h4>Spotify &amp; Apple Music</h4>
-            <p>
-              Whatever is already playing shows up in the player with full controls, next to your
-              local library.
-            </p>
-          </div>
-          <div class="card card-camera">
-            <div class="card-art">
-              <span class="camera">
-                <span class="camera-head"></span>
-                <span class="camera-flip">⟳</span>
-              </span>
-            </div>
-            <h4>Camera check</h4>
-            <p>
-              A quick mirror under the notch before the call, with a switcher for every connected
-              camera.
-            </p>
-          </div>
-          <div class="card card-local">
-            <div class="card-art stack">
-              <span class="card-row"><span class="card-label">Chat with citations</span></span>
-              <span class="card-row"><span class="card-label">Notes, audio, PDFs</span></span>
-            </div>
-            <h4>Private Companion</h4>
-            <p>
-              A self-hosted memory on this Mac or an SSH machine, with evidence-backed chat,
-              exports, imports, and complete erasure controls.
-            </p>
-          </div>
-          <div class="card card-stats">
-            <div class="card-art stack">
-              <span class="card-row"><span class="card-label">buildbox</span><span class="pill mono">42% CPU</span></span>
-              <span class="card-row"><span class="card-label">studio</span><span class="pill mono">6.2 GB</span></span>
-            </div>
-            <h4>Remote machines</h4>
-            <p>
-              Monitor SSH hosts, open terminals, browse files, run containers, control power,
-              and switch supported thermal profiles.
-            </p>
-          </div>
-          <div class="card card-shortcut">
-            <div class="card-art">
-              <span class="key lg">☾</span>
-              <span class="pill mono">30 min</span>
-            </div>
-            <h4>Lid Awake</h4>
-            <p>
-              Keep an unplugged Mac working with the lid shut, with timers, lid-cycle sessions,
-              battery floors, and automatic sleep restoration.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="film" class="wrap film" data-reveal-group>
-        <div class="section-head">
-          <p class="eyebrow">The film</p>
-          <h2>See Edith in two minutes.</h2>
-        </div>
-        <video
-          controls
-          playsinline
-          preload="metadata"
-          src="/announcement.mp4"
-          poster="/announcement-poster.jpg"
-          width="1920"
-          height="1080"
-          aria-label="Edith announcement film: a two-minute tour of the macOS app"
-        ></video>
-      </section>
-
-      <section class="section">
-        <div class="split" data-reveal-group>
-          <div class="split-copy">
-            <p class="eyebrow">Rate limits</p>
-            <h3>Live rings for session and week.</h3>
-            <p class="lede">
-              Second-by-second countdowns to your next 5-hour session reset and to the weekly
-              rollover, for Claude and Codex alike. A 24-hour spark shows the shape of your day
-              at a glance.
-            </p>
-          </div>
-          <div>
-            <div class="panel panel-raised panel-live">
-              <div class="panel-head">
-                <span>Rate limits</span>
-                <span class="mono">session, weekly</span>
-              </div>
-              <div class="rings rings-lg">
-                <div class="ring">
-                  <svg viewBox="0 0 96 96">
-                    <circle class="ring-track" cx="48" cy="48" r="38" />
-                    <circle
-                      class="ring-value sage"
-                      cx="48"
-                      cy="48"
-                      r="38"
-                      transform="rotate(-90 48 48)"
-                    />
-                  </svg>
-                  <span class="ring-pct"></span>
-                  <span class="ring-label">Session (5h)</span>
-                  <span class="ring-sub">resets 2h 47m</span>
-                </div>
-                <div class="ring">
-                  <svg viewBox="0 0 96 96">
-                    <circle class="ring-track" cx="48" cy="48" r="38" />
-                    <circle
-                      class="ring-value accent"
-                      cx="48"
-                      cy="48"
-                      r="38"
-                      transform="rotate(-90 48 48)"
-                    />
-                  </svg>
-                  <span class="ring-pct"></span>
-                  <span class="ring-label">Weekly</span>
-                  <span class="ring-sub">resets 3d 6h</span>
-                </div>
-              </div>
-              <div class="spark" data-spark></div>
-              <div class="spark-caption">24-hour spark</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="split reverse" data-reveal-group>
-          <div class="split-copy">
-            <p class="eyebrow">Code</p>
-            <h3>Your coding agents, attributed correctly.</h3>
-            <p class="lede">
-              Claude and Codex supply live limit windows. Their activity, plus pi usage, is
-              attributed by machine, repository, worktree, and chat so filters and project
-              drilldowns stay accurate.
-            </p>
-          </div>
-          <div>
-            <div class="panel panel-raised panel-providers">
-              <div class="panel-head">
-                <span>Providers</span>
-                <span class="mono">both tracked</span>
-              </div>
-              <div class="provider-stack">
-                <div class="provider-row row-claude">
-                  <span class="provider-name">
-                    <img src="/logo/claude.png" alt="" width="22" height="22" />
-                    Claude
-                  </span>
-                  <span class="mono stat stat-session"
-                    ><span class="subtle">session</span></span
-                  >
-                  <span class="mono stat stat-week"><span class="subtle">week</span></span>
-                </div>
-                <div class="provider-row row-codex">
-                  <span class="provider-name">
-                    <img src="/logo/codex.png" alt="" width="22" height="22" />
-                    Codex
-                  </span>
-                  <span class="mono stat stat-session"
-                    ><span class="subtle">session</span></span
-                  >
-                  <span class="mono stat stat-week"><span class="subtle">week</span></span>
-                </div>
-              </div>
-              <p class="panel-note">
-                Toggle either provider off in Settings and its polling stops entirely.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="split" data-reveal-group>
-          <div class="split-copy">
-            <p class="eyebrow">Menu bar</p>
-            <h3>The limit windows you want in your menu bar.</h3>
-            <p class="lede">
-              Choose Claude or Codex session and week, then pick a compact
-              or roomy layout. A time-aware risk tint shows when the next prompt could push you
-              over.
-            </p>
-          </div>
-          <div>
-            <div class="panel panel-raised panel-menubar">
-              <div class="menubar menubar-live">
-                <span class="menubar-stats">
-                  <span class="mb-stat mb-a"></span>
-                  <span class="subtle">·</span>
-                  <span class="mb-stat mb-b"></span>
-                </span>
-                <span class="subtle">Wed 14:22</span>
-              </div>
-              <div class="legend legend-live">
-                <span class="legend-safe"><i class="dot sage"></i>Safe</span>
-                <span class="legend-close"><i class="dot accent"></i>Close</span>
-                <span class="legend-over"><i class="dot danger"></i>Over</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="split reverse" data-reveal-group>
-          <div class="split-copy">
-            <p class="eyebrow">Notifications</p>
-            <h3>Alerts that stay out of your way.</h3>
-            <p class="lede">
-              Threshold, ahead-of-pace, burn, back-to-green, and pre-reset. All optional. A single
-              button sends a test notification and reports back exactly why it did or didn't fire.
-            </p>
-          </div>
-          <div>
-            <div class="notif-stack">
-              <div class="notif">
-                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
-                <div class="notif-body">
-                  <div class="notif-top">
-                    <b>Ahead of pace</b>
-                    <span class="mono subtle">Edith · now</span>
-                  </div>
-                  <p>You're using this session faster than usual. 72% with 2h 47m left.</p>
-                </div>
-                <i class="dot accent glow-accent"></i>
-              </div>
-              <div class="notif">
-                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
-                <div class="notif-body">
-                  <div class="notif-top">
-                    <b>Approaching weekly limit</b>
-                    <span class="mono subtle">Edith · now</span>
-                  </div>
-                  <p>Week usage at 85%. Resets Sunday 4:00 PM.</p>
-                </div>
-                <i class="dot danger glow-danger"></i>
-              </div>
-              <div class="notif">
-                <img class="notif-icon" src="/app-icon-512.png" alt="" width="36" height="36" />
-                <div class="notif-body">
-                  <div class="notif-top">
-                    <b>Back in the green</b>
-                    <span class="mono subtle">Edith · now</span>
-                  </div>
-                  <p>Session dropped below 60%. Room to keep going.</p>
-                </div>
-                <i class="dot sage glow-sage"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="split" data-reveal-group>
-          <div class="split-copy">
-            <p class="eyebrow">Heatmap</p>
-            <h3>A year of usage at a glance.</h3>
-            <p class="lede">
-              A GitHub-style calendar of daily spend across your full history. Every day is a
-              square, shaded by how much you spent. Hover any square for the exact number.
-            </p>
-          </div>
-          <div>
-            <div class="panel panel-raised panel-heat">
-              <div class="panel-head">
-                <span>Activity</span>
-                <span class="mono">$1,284 · 13 weeks</span>
-              </div>
-              <div class="heat-months">
-                <span>May</span>
-                <span style="text-align: center">Jun</span>
-                <span style="text-align: right">Jul</span>
-              </div>
-              <div class="heatmap" data-rows="7" data-cols="20" aria-hidden="true"></div>
-              <div class="heat-legend">
-                Less<i class="heat-0"></i><i class="heat-1"></i><i class="heat-2"></i><i
-                  class="heat-3"
-                ></i><i class="heat-4"></i>More
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="split reverse" data-reveal-group>
-          <div class="split-copy">
-            <p class="eyebrow">Music</p>
-            <h3>Your local music folder, done right.</h3>
-            <p class="lede">
-              Cover thumbnails, drag-to-seek, crossfades, auto-advance, and media keys. Point it
-              at a folder and press play. No cloud, no accounts, no ads.
-            </p>
-          </div>
-          <div>
-            <div class="panel panel-raised panel-music" data-player>
-              <div class="now-playing bare">
-                <span class="np-art">
-                  <img class="art" src="/music/cover-1.jpg" alt="" data-np-art />
-                  <span class="np-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-                </span>
-                <div class="np-body">
-                  <div class="np-title" data-np-title>Weightless</div>
-                  <div class="np-artist" data-np-artist>Marconi Union</div>
-                  <div class="progress"><span data-np-progress></span></div>
-                  <div class="np-times">
-                    <span data-np-elapsed>0:00</span><span data-np-remaining>-6:12</span>
-                  </div>
-                </div>
-              </div>
-              <div class="tracklist" style="margin-top: 1rem" data-queue>
-                <div>
-                  <img class="track-art" src="/music/cover-2.jpg" alt="" />
-                  <span class="track-name">Clair de Lune · Debussy</span>
-                  <span class="mono subtle">5:02</span>
-                </div>
-                <div>
-                  <img class="track-art" src="/music/cover-3.jpg" alt="" />
-                  <span class="track-name">Time · Hans Zimmer</span>
-                  <span class="mono subtle">4:35</span>
-                </div>
-                <div>
-                  <img class="track-art" src="/music/cover-4.jpg" alt="" />
-                  <span class="track-name">Intro · The xx</span>
-                  <span class="mono subtle">2:07</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="split" data-reveal-group>
-          <div class="split-copy">
-            <p class="eyebrow">Privacy</p>
-            <h3>Presenter mode for the room.</h3>
-            <p class="lede">
-              One toggle blurs spend figures and track names so you can screen-share without
-              exposing your bill. Watch it flip below. Usage stays local, with optional iCloud
-              backup that merges across your machines.
-            </p>
-          </div>
-          <div>
-            <div
-              class="panel panel-raised panel-presenter"
-              data-presenter-demo
-              data-presenter-state="off"
-            >
-              <div class="panel-head">
-                <span>Usage</span>
-                <span class="badge" data-pbadge>Presenter on</span>
-              </div>
-              <div class="kpi-grid">
-                <div class="kpi">
-                  <div class="kpi-label">Cost this cycle</div>
-                  <div class="kpi-value" data-sensitive>$3.8k</div>
-                </div>
-                <div class="kpi">
-                  <div class="kpi-label">Tokens</div>
-                  <div class="kpi-value" data-sensitive>5.19B</div>
-                </div>
-                <div class="kpi">
-                  <div class="kpi-label">Cache hit</div>
-                  <div class="kpi-value">99.5%</div>
-                </div>
-                <div class="kpi">
-                  <div class="kpi-label">Top model</div>
-                  <div class="kpi-value">Opus 4.8</div>
-                </div>
-              </div>
-              <p class="panel-note" data-pnote>Spend and track names hidden for the room.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="split reverse" data-reveal-group>
-          <div class="split-copy">
-            <p class="eyebrow">System</p>
-            <h3>Prevent sleep. Lock the keyboard.</h3>
-            <p class="lede">
-              Keep your Mac awake for a long build, even unplugged with the lid closed. Choose a
-              time limit, stop when the lid reopens, or pause at a battery floor. Lock the keyboard
-              to wipe it down without triggering shortcuts; it restores in sixty seconds.
-            </p>
-          </div>
-          <div>
-            <div class="panel panel-raised panel-system">
-              <div class="panel-head"><span>Quick actions</span></div>
-              <div class="action-grid">
-                <button
-                  type="button"
-                  class="action"
-                  data-action
-                  aria-pressed="false"
-                  data-icon="⌨"
-                  data-explain="Locks the keyboard so you can wipe it down without firing shortcuts. Restores itself after 60 seconds."
-                >
-                  <span class="action-icon">⌨</span>
-                  <span>Clean keys</span>
-                  <small>Lock the keyboard to wipe it</small>
-                </button>
-                <button
-                  type="button"
-                  class="action is-active"
-                  data-action
-                  aria-pressed="true"
-                  data-icon="☾"
-                  data-explain="Keeps this Mac running through a long build or download, even unplugged with the lid closed."
-                >
-                  <span class="action-icon">☾</span>
-                  <span>Keep awake</span>
-                  <small>Stop this Mac from sleeping</small>
-                </button>
-                <button
-                  type="button"
-                  class="action"
-                  data-action
-                  aria-pressed="false"
-                  data-icon="◍"
-                  data-explain="Blurs spend figures and track names so you can screen-share without exposing your bill."
-                >
-                  <span class="action-icon">◍</span>
-                  <span>Presenter</span>
-                  <small>Blur sensitive values</small>
-                </button>
-              </div>
-              <div class="hint" aria-live="polite">
-                <span data-action-icon>🔒</span>
-                <span data-swap="in" data-action-text
-                  >Tap any control to see what it does. Nothing here can lock you out.</span
-                >
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="performance" class="wrap perf">
-        <div class="pitch-grid perf-grid" data-reveal-group>
-          <div>
-            <p class="eyebrow">24/7, quietly</p>
-            <h2 style="margin-top: 1rem">Built to sit in your menu bar forever.</h2>
-            <p class="lede" style="margin-top: 1.5rem; max-width: 27.5rem">
-              Native SwiftUI, not Electron. Work stops when it isn't seen. Disabling a tab tears
-              down its timers and background jobs. Per-frame UI only redraws while the panel is
-              open.
-            </p>
-            <p class="fineprint" style="margin-top: 1rem">
-              Measured on Apple M4 Pro. CPU as a share of one core, memory as physical footprint.
-            </p>
-          </div>
-          <div class="table">
-            <div class="table-row table-head">
-              <span>State</span>
-              <span>CPU</span>
-              <span>Memory</span>
-            </div>
-            <div class="table-row">
-              <span>Idle, panel closed</span>
-              <span>~0%</span>
-              <span>~22 MB</span>
-            </div>
-            <div class="table-row">
-              <span>Music playing, panel closed</span>
-              <span>~1%</span>
-              <span>~40 MB</span>
-            </div>
-            <div class="table-row">
-              <span>Paused</span>
-              <span>&lt;1%</span>
-              <span>~40 MB</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="download" class="wrap download" data-reveal-group>
-        <p class="eyebrow">Download for macOS</p>
-        <h2>Native where you work.</h2>
-        <p class="download-lede">
-          One complete native Mac release with every Edith extension and system integration.
-        </p>
-        <div class="download-grid">
-          <article class="download-card">
-            <div class="download-platform">
-              <span class="download-platform-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M16.365 1.43c0 1.14-.42 2.23-1.24 3.05-.83.83-2.19 1.45-3.31 1.36-.14-1.1.43-2.24 1.2-2.98.85-.83 2.32-1.42 3.35-1.43zM20.5 17.29c-.57 1.31-.85 1.9-1.59 3.06-1.03 1.61-2.48 3.62-4.28 3.63-1.6.01-2.01-1.05-4.18-1.04-2.17.01-2.62 1.06-4.22 1.05-1.8-.02-3.18-1.83-4.21-3.44C-.36 16.72-1.02 10.6 2.87 8.4c1.4-.8 2.86-1.24 4.24-1.26 1.61-.03 3.13 1.09 4.19 1.09 1.05 0 2.87-1.35 4.85-1.15.83.03 3.16.33 4.66 2.52-.12.08-2.78 1.62-2.75 4.82.03 3.83 3.36 5.1 3.4 5.11-.03.09-.53 1.82-1.96 3.76z"
-                  />
-                </svg>
-              </span>
-              <span>
-                <strong>macOS</strong>
-                <small>Complete experience</small>
-              </span>
-            </div>
-            <p>
-              Every Edith extension, menu bar companion, and native system integration.
-            </p>
-            <a
-              class="btn btn-accent"
-              href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"
-            >
-              Download Edith.dmg
-            </a>
-            <div class="brew-install">
-              <pre><code>brew install --cask pulkitxm/tap/edith</code></pre>
-              <button
-                class="brew-copy"
-                type="button"
-                data-copy="brew install --cask pulkitxm/tap/edith"
-              >
-                Copy
-              </button>
-            </div>
-            <span class="fineprint">macOS 14+ · Apple Silicon</span>
-          </article>
-        </div>
-      </section>
-
-      <section id="faq" class="wrap faq">
-        <div class="section-head" data-reveal-item>
-          <p class="eyebrow">FAQ</p>
-          <h2>Questions, answered.</h2>
-        </div>
-        <div class="faq-list" data-reveal-group>
-          <details>
-            <summary>
-              How much does Edith cost?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              Nothing. Edith is free and open source under the
-              <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0 licence</a>. Every
-              feature is in the one app, with no paid tier, no licence key, and no account. The
-              full source is on
-              <a href="https://github.com/pulkitxm/edith">GitHub</a>.
-            </p>
-          </details>
-          <details>
-            <summary>
-              How does macOS verify Edith downloads?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              New releases require Developer ID signing, Apple notarization, and Gatekeeper
-              verification before publication. macOS may still ask you to confirm the first launch
-              and grant permissions such as screen recording or microphone access. Always download
-              Edith from the official GitHub release.
-            </p>
-          </details>
-          <details>
-            <summary>
-              Does Edith send my usage data anywhere?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              No. Usage stays on your device, with no account and no telemetry. Optional iCloud
-              backup merges your history across your own Macs.
-            </p>
-          </details>
-          <details>
-            <summary>
-              Which systems does Edith support?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              Edith runs on macOS 14 and later on Apple Silicon.
-            </p>
-          </details>
-          <details>
-            <summary>
-              Can I contribute?
-              <span aria-hidden="true">+</span>
-            </summary>
-            <p>
-              Yes. The whole app is on
-              <a href="https://github.com/pulkitxm/edith">GitHub</a>. Issues and pull requests are
-              welcome, and the contributing guide covers building Edith from source.
-            </p>
-          </details>
-        </div>
-      </section>
-
-    </main>
-
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <div class="footer-brand">
-          <img src="/app-icon-512.png" alt="Edith app icon" width="28" height="28" />
-          <span>Edith. Native on macOS.</span>
-        </div>
-        <div class="footer-links">
-          <a href="#features">Features</a>
-          <a href="#faq">FAQ</a>
-          <a href="https://github.com/pulkitxm/edith">GitHub</a>
-          <a href="https://github.com/pulkitxm/edith/blob/main/SUPPORT.md">Support</a>
-          <a href="https://github.com/pulkitxm/edith/blob/main/SECURITY.md">Security</a>
-          <a href="https://www.gnu.org/licenses/gpl-3.0.html">Licence</a>
-          <a href="/terms.html">Terms</a>
-          <a href="/privacy.html">Privacy</a>
-        </div>
-      </div>
-    </footer>
+    <meta name="twitter:title" content="Edith: every tool your Mac is missing" />
+    <meta name="twitter:description" content="Edith is a native macOS control center with 41 extensions, an MCP server for coding agents, and everything kept on your Mac. Free and open source." />
+    <meta name="twitter:image" content="https://edith.pulkit.page/og/home.jpg" />
+    <meta name="twitter:image:alt" content="Every tool your Mac is missing.. One app." />
+    <meta name="author" content="Pulkit" />
+    <meta name="application-name" content="Edith" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Edith","url":"https://edith.pulkit.page/"}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Edith","url":"https://edith.pulkit.page/","logo":"https://edith.pulkit.page/app-icon-512.png","sameAs":["https://github.com/pulkitxm/edith"]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Edith","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 14 or later","softwareVersion":"0.0.389","fileSize":"6.3 MB","downloadUrl":"https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg","url":"https://edith.pulkit.page/","image":"https://edith.pulkit.page/app-icon-512.png","license":"https://www.gnu.org/licenses/gpl-3.0.html","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"A native macOS control center with 41 extensions, an MCP server for coding agents, and everything kept on your Mac."}</script>
     <script type="module" src="/main.js"></script>
+  </head>
+  <body class="home">
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+  <div class="header-inner">
+    <a href="/" class="brand" aria-label="Edith home">
+      <img src="/app-icon-512.png" alt="" width="30" height="30" />
+      <span class="brand-name">Edith</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main"><a href="/features.html">Features</a><a href="/extensions/">Extensions</a><a href="/agents.html">Agents</a><a href="/download.html">Download</a><a href="/faq.html">FAQ</a><a class="nav-github" href="https://github.com/pulkitxm/edith">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch between light and dark"><svg class="icon icon-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 2L9 2L9 4L11 4L11 2ZM6 4L4 4L4 6L6 6L6 4ZM14 4L16 4L16 6L14 6L14 4ZM10 14C12.209 14 14 12.209 14 10C14 7.791 12.209 6 10 6C7.791 6 6 7.791 6 10C6 12.209 7.791 14 10 14ZM4 9L2 9L2 11L4 11L4 9ZM16 9L18 9L18 11L16 11L16 9ZM6 14L4 14L4 16L6 16L6 14ZM14 14L16 14L16 16L14 16L14 14ZM11 16L11 18L9 18L9 16L11 16Z"/></svg><svg class="icon icon-moon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 14C15.217 14 16.362 13.689 17.359 13.143C16.138 16 13.303 18 10 18C5.582 18 2 14.418 2 10C2 5.905 5.076 2.529 9.044 2.057C7.781 3.323 7 5.07 7 7C7 10.866 10.134 14 14 14Z"/></svg></button>
+      <a class="btn btn-gold btn-sm header-cta" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download</span></a>
+      <button class="menu-toggle" type="button" data-menu-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M17 4L3 4L3 6L17 6L17 4ZM17 9L3 9L3 11L17 11L17 9ZM3 14L17 14L17 16L3 16L3 14Z"/></svg></button>
+    </div>
+  </div>
+</header>
+    <main id="main">
+<section class="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="wrap hero-inner">
+    <a class="announce reveal" href="#film"><span class="pill pill-gold">New</span><span>Watch the launch film</span><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+    <img class="hero-mark reveal" src="/app-icon-512.png" alt="" width="132" height="132" />
+    <h1 class="reveal">Every tool your Mac is missing.<br /><span class="gold-text">One app.</span></h1>
+    <p class="hero-lead reveal">Edith is a native control center for macOS. Pick from 41 extensions, let your coding agents drive it, and keep every byte on your Mac.</p>
+    <div class="reveal"><div class="cta-row center">
+  <a class="btn btn-gold btn-lg" href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download for macOS</span></a>
+  <div class="command command-lg"><code><span class="prompt" aria-hidden="true">$</span>brew install --cask pulkitxm/tap/edith</code><button class="copy" type="button" data-copy="brew install --cask pulkitxm/tap/edith" aria-label="Copy brew install --cask pulkitxm/tap/edith"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 2L4 2C2.895 2 2 2.895 2 4L2 11C2 12.105 2.895 13 4 13L6 13L6 9Q6 8.39 6.236 7.832Q6.464 7.293 6.875 6.875Q7.293 6.464 7.832 6.236Q8.39 6 9 6L13 6L13 4C13 2.895 12.105 2 11 2Z"/><path class="primary" fill-rule="evenodd" d="M9 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L9 18C7.895 18 7 17.105 7 16L7 9C7 7.895 7.895 7 9 7Z"/></svg><span>Copy</span></button></div>
+</div>
+<p class="cta-meta center">Free and open source · macOS 14 or later on Apple silicon · <span data-dmg-size>6.3 MB</span> download</p></div>
+  </div>
+  <div class="wrap hero-shot reveal"><figure class="shot shot-hero"><div class="shot-frame"><img class="shot-dark" src="/shots/dark/usage.webp" srcset="/shots/dark/usage-1200.webp 1200w, /shots/dark/usage.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="The Usage page showing tokens, cost and a daily activity heatmap for Claude Code and Codex" width="2400" height="1500" fetchpriority="high" decoding="async" /><img class="shot-light" src="/shots/light/usage.webp" srcset="/shots/light/usage-1200.webp 1200w, /shots/light/usage.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="" aria-hidden="true" width="2400" height="1500" loading="lazy" decoding="async" /></div></figure></div>
+</section>
+<div class="wrap"><section class="stats reveal" aria-label="Edith in numbers"><div class="stat"><strong>41</strong><span>extensions to choose from</span></div><div class="stat"><strong>108</strong><span>Studio tools for your files</span></div><div class="stat"><strong><span data-dmg-size>6.3 MB</span></strong><span>download, down from 36.9 MB</span></div><div class="stat"><strong>~0%</strong><span>CPU at idle, about 22 MB of memory</span></div></section></div>
+<section class="section wrap" id="film">
+  <div class="section-head center reveal">
+    <p class="eyebrow">The launch film</p>
+    <h2>Eighty seconds of Edith.</h2>
+    <p class="lead">Real screens, real recordings. See the marketplace, agents working over MCP, Studio, Downloads and more.</p>
+  </div>
+  <div class="film reveal"><video data-player controls preload="none" playsinline poster="/media/edith-launch.jpg" width="1920" height="1080"><source src="/media/edith-launch.mp4" type="video/mp4" /></video></div>
+</section>
+<section class="section wrap">
+  <div class="section-head reveal">
+    <p class="eyebrow">Why Edith</p>
+    <h2>Replace a dock full of utilities.</h2>
+    <p class="lead">Launchers, clipboard managers, PDF tools, screen time trackers, downloaders, server dashboards. Edith brings them into one app that idles at about 22 MB.</p>
+  </div>
+  <div class="pillars"><a class="pillar reveal" href="/extensions/">
+  <span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M10.292 6C10.426 5.694 10.5 5.356 10.5 5C10.5 3.619 9.381 2.5 8 2.5C6.619 2.5 5.5 3.619 5.5 5C5.5 5.356 5.574 5.694 5.708 6L3.5 6C2.672 6 2 6.672 2 7.5L2 16.5C2 17.328 2.672 18 3.5 18L12.5 18C13.328 18 14 17.328 14 16.5L14 14.292C14.306 14.426 14.644 14.5 15 14.5C16.381 14.5 17.5 13.381 17.5 12C17.5 10.619 16.381 9.5 15 9.5C14.644 9.5 14.306 9.574 14 9.708L14 7.5C14 6.672 13.328 6 12.5 6L10.292 6Z"/></svg></span>
+  <h3>A marketplace, not a monolith</h3>
+  <p>The app ships small and you add what you use. 41 extensions install in seconds, update on their own and remove cleanly.</p>
+  <span class="link-arrow">Learn more <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></span>
+</a><a class="pillar reveal" href="/agents.html">
+  <span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 6L3.5 2.5L2 4L4 6L2 8L3.5 9.5L7 6ZM7 14L3.5 10.5L2 12L4 14L2 16L3.5 17.5L7 14Z"/><path class="primary" fill-rule="evenodd" d="M10.5 2.5L18 10L10.5 17.5L8 15L13 10L8 5L10.5 2.5Z"/></svg></span>
+  <h3>Built for coding agents</h3>
+  <p>Claude Code, Codex and Cursor can drive Edith over MCP. Every command becomes a tool, and anything destructive waits for a confirm.</p>
+  <span class="link-arrow">Learn more <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></span>
+</a><a class="pillar reveal" href="/extensions/usage.html">
+  <span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 3L6 3C6.552 3 7 3.448 7 4L7 11.267Q6.894 11.206 6.779 11.158Q6.406 11 6 11L4 11Q3.594 11 3.221 11.158Q3.106 11.206 3 11.267L3 4C3 3.448 3.448 3 4 3ZM17 5.267L17 4C17 3.448 16.552 3 16 3L14 3C13.448 3 13 3.448 13 4L13 5.267Q13.106 5.206 13.221 5.158Q13.594 5 14 5L16 5Q16.406 5 16.779 5.158Q16.894 5.206 17 5.267ZM12 7L12 4C12 3.448 11.552 3 11 3L9 3C8.448 3 8 3.448 8 4L8 8.267Q8.106 8.206 8.221 8.158Q8.594 8 9 8L11 8Q11.406 8 11.779 8.158Q11.894 8.206 12 8.267L12 7Z"/><path class="primary" fill-rule="evenodd" d="M14 6L16 6C16.552 6 17 6.448 17 7L17 16C17 16.552 16.552 17 16 17L14 17C13.448 17 13 16.552 13 16L13 7C13 6.448 13.448 6 14 6ZM11 9L9 9C8.448 9 8 9.448 8 10L8 16C8 16.552 8.448 17 9 17L11 17C11.552 17 12 16.552 12 16L12 10C12 9.448 11.552 9 11 9ZM6 12L4 12C3.448 12 3 12.448 3 13L3 16C3 16.552 3.448 17 4 17L6 17C6.552 17 7 16.552 7 16L7 13C7 12.448 6.552 12 6 12Z"/></svg></span>
+  <h3>Know what agents cost</h3>
+  <p>Tokens, cost and rate limits by day, model and project, read from files already on your Mac.</p>
+  <span class="link-arrow">Learn more <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></span>
+</a><a class="pillar reveal" href="/extensions/studio.html">
+  <span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 5L2 5L2 7L4 7L4 5ZM8 7L8 5L15 5L15 12L13 12L13 7L8 7ZM13 16L13 18L15 18L15 16L13 16Z"/><path class="primary" fill-rule="evenodd" d="M5 2L7 2L7 13L18 13L18 15L5 15L5 2Z"/></svg></span>
+  <h3>Every file tool, offline</h3>
+  <p>Studio has 108 tools for PDFs, images, video and audio. Merge, sign, redact, compress and convert without uploading anything.</p>
+  <span class="link-arrow">Learn more <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></span>
+</a><a class="pillar reveal" href="/extensions/downloads.html">
+  <span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 16C17 15.448 16.552 15 16 15L4 15C3.448 15 3 15.448 3 16L3 17C3 17.552 3.448 18 4 18L16 18C16.552 18 17 17.552 17 17L17 16Z"/><path class="primary" fill-rule="evenodd" d="M8 2L12 2L12 8L14.189 8C14.858 8 15.192 8.808 14.72 9.28L10.53 13.47C10.237 13.763 9.763 13.763 9.47 13.47L5.28 9.28C4.808 8.808 5.142 8 5.811 8L8 8L8 2Z"/></svg></span>
+  <h3>Save anything from a link</h3>
+  <p>Paste a YouTube, Instagram, TikTok, X or Reddit link and the file lands on your Mac.</p>
+  <span class="link-arrow">Learn more <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></span>
+</a><a class="pillar reveal" href="/extensions/attention.html">
+  <span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M18 9C18 5.134 14.866 2 11 2L11 9L18 9Z"/><path class="primary" fill-rule="evenodd" d="M2 11C2 7.134 5.134 4 9 4L9 11L16 11C16 14.866 12.866 18 9 18C5.134 18 2 14.866 2 11Z"/></svg></span>
+  <h3>See where your day went</h3>
+  <p>Attention tracks screen time by app and site, your focus, and how long your agents worked.</p>
+  <span class="link-arrow">Learn more <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></span>
+</a><a class="pillar reveal" href="/extensions/notchShelf.html">
+  <span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4.5 3L6 3L6 4.5C6 5.328 6.672 6 7.5 6L12.5 6C13.328 6 14 5.328 14 4.5L14 3L15.5 3C16.881 3 18 4.119 18 5.5L18 14.5C18 15.881 16.881 17 15.5 17L4.5 17C3.119 17 2 15.881 2 14.5L2 5.5C2 4.119 3.119 3 4.5 3ZM5.5 12.5L10 8L14.5 12.5L13 14L10 11L7 14L5.5 12.5Z"/></svg></span>
+  <h3>Your notch, finally useful</h3>
+  <p>Park files, glance at agents and music, and get alerts in the notch. Clipboard history is one shortcut away.</p>
+  <span class="link-arrow">Learn more <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></span>
+</a><a class="pillar reveal" href="/extensions/machines.html">
+  <span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 8L3 8C2.448 8 2 8.448 2 9L2 11C2 11.552 2.448 12 3 12L17 12C17.552 12 18 11.552 18 11L18 9C18 8.448 17.552 8 17 8ZM4 9L6 9L6 11L4 11L4 9ZM17 13L3 13C2.448 13 2 13.448 2 14L2 16C2 16.552 2.448 17 3 17L17 17C17.552 17 18 16.552 18 16L18 14C18 13.448 17.552 13 17 13ZM6 14L4 14L4 16L6 16L6 14Z"/><path class="primary" fill-rule="evenodd" d="M17 3L3 3C2.448 3 2 3.448 2 4L2 6C2 6.552 2.448 7 3 7L17 7C17.552 7 18 6.552 18 6L18 4C18 3.448 17.552 3 17 3ZM6 4L4 4L4 6L6 6L6 4Z"/></svg></span>
+  <h3>Your machines and terminals</h3>
+  <p>Watch servers and containers over SSH, open terminals, browse files, and run agents on every box.</p>
+  <span class="link-arrow">Learn more <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></span>
+</a></div>
+</section>
+<section class="spotlight" id="usage">
+  <div class="spotlight-copy reveal">
+    <p class="eyebrow">Usage</p>
+    <h2>Know exactly what your coding agents cost.</h2>
+    <p class="lead">Usage reads the history Claude Code, Codex and pi already keep on your Mac and turns it into tokens, cost and limits by day, model, project and machine.</p>
+    <ul class="checks"><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Claude Code, Codex and pi activity attributed to the right machine, repository, worktree and chat.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Claude, Codex and Cursor rate limits as live rings with countdowns and history.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>A menu bar readout with compact or roomy layouts and a time-aware risk tint.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Threshold, ahead-of-pace, burning-hot, back-to-green and pre-reset alerts, all optional.</span></li></ul>
+    <a class="link-arrow" href="/extensions/usage.html">Explore Usage <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+  </div>
+  <div class="spotlight-media reveal"><figure class="shot "><div class="shot-frame"><img class="shot-dark" src="/shots/dark/usage.webp" srcset="/shots/dark/usage-1200.webp 1200w, /shots/dark/usage.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="The Usage page showing tokens, cost and a daily activity heatmap for Claude Code and Codex" width="2400" height="1500" loading="lazy" decoding="async" /><img class="shot-light" src="/shots/light/usage.webp" srcset="/shots/light/usage-1200.webp 1200w, /shots/light/usage.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="" aria-hidden="true" width="2400" height="1500" loading="lazy" decoding="async" /></div></figure></div>
+</section>
+<section class="spotlight reverse" id="studio">
+  <div class="spotlight-copy reveal">
+    <p class="eyebrow">Studio</p>
+    <h2>Every file tool. Offline.</h2>
+    <p class="lead">Stop uploading private documents to PDF websites. Studio has 108 tools for PDFs, images, video and audio, and every one runs on your Mac.</p>
+    <ul class="checks"><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Merge, split, sign, redact, compress and convert PDFs.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Remove image backgrounds, resize, convert and compress images.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Compress and convert video and audio, or cut a video on a timeline.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Everything runs on this Mac. Nothing is uploaded.</span></li></ul>
+    <a class="link-arrow" href="/extensions/studio.html">Explore Studio <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+  </div>
+  <div class="spotlight-media reveal"><figure class="shot "><div class="shot-frame"><img class="shot-dark" src="/shots/dark/studio.webp" srcset="/shots/dark/studio-1200.webp 1200w, /shots/dark/studio.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="Studio with its tool groups for PDFs, images, video and audio" width="2400" height="1500" loading="lazy" decoding="async" /><img class="shot-light" src="/shots/light/studio.webp" srcset="/shots/light/studio-1200.webp 1200w, /shots/light/studio.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="" aria-hidden="true" width="2400" height="1500" loading="lazy" decoding="async" /></div></figure></div>
+</section>
+<section class="spotlight" id="downloads">
+  <div class="spotlight-copy reveal">
+    <p class="eyebrow">Downloads</p>
+    <h2>Paste a link. Keep the file.</h2>
+    <p class="lead">Save videos, audio, photos and posts from YouTube, Instagram, TikTok, X and Reddit. Downloads keep going in the background.</p>
+    <ul class="checks"><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>YouTube, Instagram, TikTok, X and Reddit links.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Video, audio, photos and whole posts.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Runs in the background, so you can close the window and keep working.</span></li></ul>
+    <a class="link-arrow" href="/extensions/downloads.html">Explore Downloads <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+  </div>
+  <div class="spotlight-media reveal"><figure class="shot "><div class="shot-frame"><img class="shot-dark" src="/shots/dark/downloads.webp" srcset="/shots/dark/downloads-1200.webp 1200w, /shots/dark/downloads.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="The Downloads page ready to save a link from YouTube, Instagram, TikTok, X or Reddit" width="2400" height="1500" loading="lazy" decoding="async" /><img class="shot-light" src="/shots/light/downloads.webp" srcset="/shots/light/downloads-1200.webp 1200w, /shots/light/downloads.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="" aria-hidden="true" width="2400" height="1500" loading="lazy" decoding="async" /></div></figure></div>
+</section>
+<section class="spotlight reverse" id="attention">
+  <div class="spotlight-copy reveal">
+    <p class="eyebrow">Attention</p>
+    <h2>Screen time that respects you.</h2>
+    <p class="lead">See which apps and sites get your hours, how much deep focus you had, and how long your agents worked while you did.</p>
+    <ul class="checks"><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Time by app and by website, with focus time for the day.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>How much your AI agents worked while you did.</span></li><li><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4 8L8 12L15.5 4.5L17 6L8 15L2.5 9.5L4 8Z"/></svg><span>Stays on this Mac unless you turn on iCloud backup.</span></li></ul>
+    <a class="link-arrow" href="/extensions/attention.html">Explore Attention <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+  </div>
+  <div class="spotlight-media reveal"><figure class="shot "><div class="shot-frame"><img class="shot-dark" src="/shots/dark/attention.webp" srcset="/shots/dark/attention-1200.webp 1200w, /shots/dark/attention.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="Attention showing where the day went by app, site and focus time" width="2400" height="1500" loading="lazy" decoding="async" /><img class="shot-light" src="/shots/light/attention.webp" srcset="/shots/light/attention-1200.webp 1200w, /shots/light/attention.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="" aria-hidden="true" width="2400" height="1500" loading="lazy" decoding="async" /></div></figure></div>
+</section>
+<section class="section wrap">
+  <div class="agents-band reveal">
+    <div>
+      <p class="eyebrow">Agents and MCP</p>
+      <h2>Your agents can use Edith too.</h2>
+      <p class="lead">One command connects Claude Code, Codex, Cursor and VS Code. Every <code>ed</code> command becomes an MCP tool, so an agent can check your limits, convert a file or restart a container for you.</p>
+      <a class="btn btn-ghost" href="/agents.html">How agents use Edith <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+    </div>
+    <div class="terminal" role="img" aria-label="Terminal running ed mcp install">
+      <div class="terminal-bar"><span></span><span></span><span></span></div>
+      <pre><code><span class="t-prompt">$</span> ed mcp install --client all
+<span class="t-ok">claude</span>  created   ~/.claude.json
+<span class="t-ok">codex</span>   created   ~/.codex/config.toml
+<span class="t-ok">cursor</span>  created   ~/.cursor/mcp.json
+<span class="t-dim">Restart the client, then ask it to call edith_catalog.</span></code></pre>
+    </div>
+  </div>
+</section>
+<section class="section wrap">
+  <div class="section-head reveal">
+    <p class="eyebrow">Extensions</p>
+    <h2>41 extensions. Install only what you need.</h2>
+    <p class="lead">Each one is signed, verified before it runs, and stops when you are not using it.</p>
+  </div>
+  <div class="suites"><a class="suite reveal" href="/extensions/#agents">
+  <span class="suite-head"><span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M16 2L8 2C6.895 2 6 2.895 6 4L6 5L12.5 5Q13.211 5 13.863 5.275Q14.491 5.541 14.975 6.025Q15.459 6.509 15.725 7.137Q16 7.789 16 8.5L16 13C17.105 13 18 12.105 18 11L18 4C18 2.895 17.105 2 16 2Z"/><path class="primary" fill-rule="evenodd" d="M4.5 6L12.5 6C13.881 6 15 7.119 15 8.5L15 15.5C15 16.881 13.881 18 12.5 18L4.5 18C3.119 18 2 16.881 2 15.5L2 8.5C2 7.119 3.119 6 4.5 6ZM9 11L5.5 7.5L4 9L6 11L4 13L5.5 14.5L9 11ZM13 13L9 13L9 15L13 15L13 13Z"/></svg></span><span class="suite-count">8</span></span>
+  <h3>Agents & Terminal</h3>
+  <p>Run and review coding agents, track their limits, and reach your machines.</p>
+  <span class="suite-icons"><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 14L9 14L9 18L11 18L11 14Z"/><path class="primary" fill-rule="evenodd" d="M8 2L6 2L6 7L4 7L4 10C4 11.657 5.343 13 7 13L13 13C14.657 13 16 11.657 16 10L16 7L14 7L14 2L12 2L12 7L8 7L8 2Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 5C13 3.5 15.5 3.5 18 5L18 18C15.5 16.5 13 16.5 11 18L11 5Z"/><path class="primary" fill-rule="evenodd" d="M9 5C7 3.5 4.5 3.5 2 5L2 18C4.5 16.5 7 16.5 9 18L9 5Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M15 2L11 2C10.448 2 10 2.448 10 3L10 4L5 4C4.448 4 4 4.448 4 5L4 8L16 8L16 3C16 2.448 15.552 2 15 2Z"/><path class="primary" fill-rule="evenodd" d="M18 9L2 9L2 16C2 17.105 2.895 18 4 18L16 18C17.105 18 18 17.105 18 16L18 9ZM13 12L7 12L7 14L13 14L13 12Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L15 3C16.657 3 18 4.343 18 6L18 14C18 15.657 16.657 17 15 17L5 17C3.343 17 2 15.657 2 14L2 6C2 4.343 3.343 3 5 3ZM10 10L5.5 5.5L4 7L7 10L4 13L5.5 14.5L10 10ZM15 12L10 12L10 14L15 14L15 12Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 3L6 3C6.552 3 7 3.448 7 4L7 11.267Q6.894 11.206 6.779 11.158Q6.406 11 6 11L4 11Q3.594 11 3.221 11.158Q3.106 11.206 3 11.267L3 4C3 3.448 3.448 3 4 3ZM17 5.267L17 4C17 3.448 16.552 3 16 3L14 3C13.448 3 13 3.448 13 4L13 5.267Q13.106 5.206 13.221 5.158Q13.594 5 14 5L16 5Q16.406 5 16.779 5.158Q16.894 5.206 17 5.267ZM12 7L12 4C12 3.448 11.552 3 11 3L9 3C8.448 3 8 3.448 8 4L8 8.267Q8.106 8.206 8.221 8.158Q8.594 8 9 8L11 8Q11.406 8 11.779 8.158Q11.894 8.206 12 8.267L12 7Z"/><path class="primary" fill-rule="evenodd" d="M14 6L16 6C16.552 6 17 6.448 17 7L17 16C17 16.552 16.552 17 16 17L14 17C13.448 17 13 16.552 13 16L13 7C13 6.448 13.448 6 14 6ZM11 9L9 9C8.448 9 8 9.448 8 10L8 16C8 16.552 8.448 17 9 17L11 17C11.552 17 12 16.552 12 16L12 10C12 9.448 11.552 9 11 9ZM6 12L4 12C3.448 12 3 12.448 3 13L3 16C3 16.552 3.448 17 4 17L6 17C6.552 17 7 16.552 7 16L7 13C7 12.448 6.552 12 6 12Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 8L3 8C2.448 8 2 8.448 2 9L2 11C2 11.552 2.448 12 3 12L17 12C17.552 12 18 11.552 18 11L18 9C18 8.448 17.552 8 17 8ZM4 9L6 9L6 11L4 11L4 9ZM17 13L3 13C2.448 13 2 13.448 2 14L2 16C2 16.552 2.448 17 3 17L17 17C17.552 17 18 16.552 18 16L18 14C18 13.448 17.552 13 17 13ZM6 14L4 14L4 16L6 16L6 14Z"/><path class="primary" fill-rule="evenodd" d="M17 3L3 3C2.448 3 2 3.448 2 4L2 6C2 6.552 2.448 7 3 7L17 7C17.552 7 18 6.552 18 6L18 4C18 3.448 17.552 3 17 3ZM6 4L4 4L4 6L6 6L6 4Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 6L3.5 2.5L2 4L4 6L2 8L3.5 9.5L7 6ZM7 14L3.5 10.5L2 12L4 14L2 16L3.5 17.5L7 14Z"/><path class="primary" fill-rule="evenodd" d="M10.5 2.5L18 10L10.5 17.5L8 15L13 10L8 5L10.5 2.5Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 3L3 3C2.448 3 2 3.448 2 4L2 8C2 8.552 2.448 9 3 9L17 9C17.552 9 18 8.552 18 8L18 4C18 3.448 17.552 3 17 3ZM4 5L8 5L8 7L4 7L4 5ZM14 5L10 5L10 7L14 7L14 5Z"/><path class="primary" fill-rule="evenodd" d="M3 11L17 11C17.552 11 18 11.448 18 12L18 16C18 16.552 17.552 17 17 17L3 17C2.448 17 2 16.552 2 16L2 12C2 11.448 2.448 11 3 11ZM5 12L7 12L7 13L8 13L8 15L7 15L7 16L5 16L5 15L4 15L4 13L5 13L5 12ZM16 13L10 13L10 15L16 15L16 13Z"/></svg></span></span>
+</a><a class="suite reveal" href="/extensions/#utilities">
+  <span class="suite-head"><span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M12 3L8 3C6.895 3 6 3.895 6 5L6 6L8 6L8 5L12 5L12 6L14 6L14 5C14 3.895 13.105 3 12 3Z"/><path class="primary" fill-rule="evenodd" d="M4 7L16 7C17.105 7 18 7.895 18 9L18 11L13 11Q13 10.594 12.842 10.221Q12.691 9.862 12.414 9.586Q12.138 9.309 11.779 9.158Q11.406 9 11 9L9 9Q8.594 9 8.221 9.158Q7.862 9.309 7.586 9.586Q7.309 9.862 7.158 10.221Q7 10.594 7 11L2 11L2 9C2 7.895 2.895 7 4 7ZM9 10L11 10C11.552 10 12 10.448 12 11L12 13C12 13.552 11.552 14 11 14L9 14C8.448 14 8 13.552 8 13L8 11C8 10.448 8.448 10 9 10ZM7 12L2 12L2 16C2 17.105 2.895 18 4 18L16 18C17.105 18 18 17.105 18 16L18 12L13 12L13 13Q13 13.406 12.842 13.779Q12.691 14.138 12.414 14.414Q12.138 14.691 11.779 14.842Q11.406 15 11 15L9 15Q8.594 15 8.221 14.842Q7.862 14.691 7.586 14.414Q7.309 14.138 7.158 13.779Q7 13.406 7 13L7 12Z"/></svg></span><span class="suite-count">11</span></span>
+  <h3>Mac Utilities</h3>
+  <p>Updates, disk cleanup, sleep control, menu bar stats and your calendar.</p>
+  <span class="suite-icons"><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M10 4.5C6.076 4.5 2.675 6.734 1 10C2.675 13.266 6.076 15.5 10 15.5C13.924 15.5 17.325 13.266 19 10C17.325 6.734 13.924 4.5 10 4.5ZM14 10C14 12.209 12.209 14 10 14C7.791 14 6 12.209 6 10C6 7.791 7.791 6 10 6C12.209 6 14 7.791 14 10ZM12 10C12 11.105 11.105 12 10 12C8.895 12 8 11.105 8 10C8 8.895 8.895 8 10 8C11.105 8 12 8.895 12 10Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M9.593 13.984Q8.795 13.921 8.054 13.607Q7.157 13.228 6.464 12.536Q6.21 12.282 6 12L3.674 12Q4.189 13.089 5.05 13.95Q6.019 14.918 7.275 15.449Q8.112 15.804 9 15.93L9 18L11 18L11 15.93Q11.625 15.841 12.225 15.639L10.742 14.156L9.593 13.984ZM15.607 13.193Q16.115 12.516 16.449 11.725Q17 10.423 17 9L15 9Q15 10.018 14.607 10.946Q14.426 11.375 14.172 11.758L15.607 13.193Z"/><path class="primary" fill-rule="evenodd" d="M12.952 10.538C12.984 10.363 13 10.184 13 10L13 5C13 3.343 11.657 2 10 2C8.475 2 7.216 3.138 7.025 4.611L12.952 10.538ZM3.5 2.5L17.5 16.5L16 18L2 4L3.5 2.5ZM7.033 10.447C7.227 11.75 8.25 12.773 9.553 12.967L7.033 10.447Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M16 3L4 3C3.448 3 3 3.448 3 4C3 4.552 3.448 5 4 5L16 5C16.552 5 17 4.552 17 4C17 3.448 16.552 3 16 3ZM11 15L4 15C3.448 15 3 15.448 3 16C3 16.552 3.448 17 4 17L11 17C11.552 17 12 16.552 12 16C12 15.448 11.552 15 11 15Z"/><path class="primary" fill-rule="evenodd" d="M17 7L14 7L8 13L11 13L17 7ZM13 13L17 13C17.552 13 18 12.552 18 12L18 8L13 13ZM7 7L3 7C2.448 7 2 7.448 2 8L2 12L7 7ZM9 7L12 7L6 13L3 13L9 7Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M10.238 5.505L10 3.815L10 2.5Q11.276 2.5 12.493 2.875Q13.684 3.239 14.722 3.933Q15.76 4.625 16.554 5.587Q17.365 6.569 17.853 7.75Q18.341 8.926 18.462 10.193Q18.58 11.434 18.337 12.658Q18.093 13.883 17.509 14.984Q16.912 16.108 16.01 17.01L13.889 14.889Q14.473 14.305 14.859 13.578Q15.237 12.866 15.394 12.073Q15.552 11.28 15.475 10.477Q15.413 9.827 15.202 9.212L16.664 7.75L13.75 4.836L13.043 5.543L12.49 6.096Q12.069 5.881 11.613 5.741Q10.939 5.535 10.238 5.505Z"/><path class="primary" fill-rule="evenodd" d="M3.99 17.01Q3.143 16.164 2.564 15.118Q1.995 14.091 1.726 12.948Q1.457 11.805 1.508 10.633Q1.559 9.438 1.939 8.303Q2.319 7.167 3 6.183Q3.662 5.216 4.565 4.465Q5.468 3.714 6.54 3.236Q7.631 2.75 8.817 2.583L9.235 5.554Q8.467 5.661 7.761 5.976Q7.068 6.285 6.483 6.771Q5.899 7.258 5.468 7.883Q5.03 8.52 4.784 9.255Q4.538 9.99 4.505 10.762Q4.472 11.521 4.646 12.261Q4.821 13 5.188 13.665Q5.563 14.341 6.111 14.889L3.99 17.01ZM13.75 6.25L10.823 9.177C10.572 9.063 10.294 9 10 9C8.895 9 8 9.895 8 11C8 12.105 8.895 13 10 13C11.105 13 12 12.105 12 11L12 11L15.25 7.75L13.75 6.25Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M13 2L5 2C3.895 2 3 2.895 3 4C3 5.105 3.895 6 5 6L13 6C14.105 6 15 5.105 15 4C15 2.895 14.105 2 13 2Z"/><path class="primary" fill-rule="evenodd" d="M4 7L14 7L14 9L16 9C17.105 9 18 9.895 18 11L18 14C18 15.105 17.105 16 16 16L14 16C14 17.105 13.105 18 12 18L6 18C4.895 18 4 17.105 4 16L4 7ZM6 10L8 10L8 15L6 15L6 10ZM12 10L10 10L10 15L12 15L12 10ZM14 14L14 11L16 11L16 14L14 14Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M8 4L12 4L12 6L14 6L14 4L15 4C16.105 4 17 4.895 17 6L17 8L3 8L3 6C3 4.895 3.895 4 5 4L6 4L6 6L8 6L8 4Z"/><path class="primary" fill-rule="evenodd" d="M6 2L8 2L8 6L6 6L6 2ZM12 2L14 2L14 6L12 6L12 2ZM17 9L3 9L3 16C3 17.105 3.895 18 5 18L15 18C16.105 18 17 17.105 17 16L17 9ZM14 12L11 12L11 15L14 15L14 12Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M16 4L13 4C11.895 4 11 4.895 11 6L11 9C11 10.105 11.895 11 13 11L16 11C17.105 11 18 10.105 18 9L18 6C18 4.895 17.105 4 16 4Z"/><path class="primary" fill-rule="evenodd" d="M4 4L7 4C8.105 4 9 4.895 9 6L9 9C9 10.105 8.105 11 7 11L4 11C2.895 11 2 10.105 2 9L2 6C2 4.895 2.895 4 4 4ZM5.5 13C6.328 13 7 13.672 7 14.5C7 15.328 6.328 16 5.5 16C4.672 16 4 15.328 4 14.5C4 13.672 4.672 13 5.5 13Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M19.071 2.929L17.572 1.429L11.915 7.086L13.414 8.586L19.071 2.929Z"/><path class="primary" fill-rule="evenodd" d="M14.078 10.664L9.836 6.422C9.445 6.031 8.812 6.031 8.422 6.422L7.714 7.125L1.991 11.044C1.475 11.398 1.406 12.134 1.849 12.577L3.637 14.365L7.172 10.829L8.172 11.829L4.636 15.364L5.136 15.864L8.672 12.329L9.672 13.329L6.136 16.864L7.923 18.651C8.366 19.094 9.102 19.025 9.456 18.509L13.375 12.786L14.078 12.078C14.469 11.688 14.469 11.055 14.078 10.664Z"/></svg></span></span>
+</a><a class="suite reveal" href="/extensions/#desk">
+  <span class="suite-head"><span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M10 7L17 7L17 12L10 12L10 7ZM15 9L12 9L12 10L15 10L15 9ZM10 13L17 13L17 16C17 16.552 16.552 17 16 17L11 17C10.448 17 10 16.552 10 16L10 13ZM15 14L12 14L12 15L15 15L15 14Z"/><path class="primary" fill-rule="evenodd" d="M3 3L17 3C17.552 3 18 3.448 18 4L18 5C18 5.552 17.552 6 17 6L5 6L5 17L3 17L3 6C2.448 6 2 5.552 2 5L2 4C2 3.448 2.448 3 3 3Z"/></svg></span><span class="suite-count">8</span></span>
+  <h3>Desk</h3>
+  <p>Hotkey tools: the launcher, clipboard, pickers, the notch and focus.</p>
+  <span class="suite-icons"><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 2C4.552 2 5 2.448 5 3L5 10L3 10L3 3C3 2.448 3.448 2 4 2ZM3 16L3 17C3 17.552 3.448 18 4 18C4.552 18 5 17.552 5 17L5 16L3 16ZM10 2C10.552 2 11 2.448 11 3L11 4L9 4L9 3C9 2.448 9.448 2 10 2ZM9 10L9 17C9 17.552 9.448 18 10 18C10.552 18 11 17.552 11 17L11 10L9 10ZM17 3C17 2.448 16.552 2 16 2C15.448 2 15 2.448 15 3L15 8L17 8L17 3ZM17 14L15 14L15 17C15 17.552 15.448 18 16 18C16.552 18 17 17.552 17 17L17 14Z"/><path class="primary" fill-rule="evenodd" d="M11 5L9 5C8.448 5 8 5.448 8 6L8 8C8 8.552 8.448 9 9 9L11 9C11.552 9 12 8.552 12 8L12 6C12 5.448 11.552 5 11 5ZM15 9L17 9C17.552 9 18 9.448 18 10L18 12C18 12.552 17.552 13 17 13L15 13C14.448 13 14 12.552 14 12L14 10C14 9.448 14.448 9 15 9ZM5 11L3 11C2.448 11 2 11.448 2 12L2 14C2 14.552 2.448 15 3 15L5 15C5.552 15 6 14.552 6 14L6 12C6 11.448 5.552 11 5 11Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M2 12L2 13C2 14.105 2.895 15 4 15L5 15L5 9L5 9L2 12ZM8 6L15 6L15 4C15 2.895 14.105 2 13 2L12 2L8 6ZM10 2L7 2L2 7L2 10L10 2ZM4 2L5 2L2 5L2 4C2 2.895 2.895 2 4 2Z"/><path class="primary" fill-rule="evenodd" d="M8 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L8 18C6.895 18 6 17.105 6 16L6 9C6 7.895 6.895 7 8 7Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 7.171L4 11Q4 11.61 4.236 12.168Q4.464 12.707 4.875 13.125Q5.293 13.536 5.832 13.764Q6.39 14 7 14L13 14Q13.61 14 14.168 13.764Q14.707 13.536 15.125 13.125Q15.536 12.707 15.764 12.168Q16 11.61 16 11L16 7.171C17.165 7.583 18 8.694 18 10L18 15C18 16.657 16.657 18 15 18L5 18C3.343 18 2 16.657 2 15L2 10C2 8.694 2.835 7.583 4 7.171Z"/><path class="primary" fill-rule="evenodd" d="M7 2L13 2C14.105 2 15 2.895 15 4L15 11C15 12.105 14.105 13 13 13L7 13C5.895 13 5 12.105 5 11L5 4C5 2.895 5.895 2 7 2Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11.206 11.792L8.208 8.794L3.456 13.546C3.327 13.675 3.235 13.837 3.192 14.015L2.282 17.718L5.985 16.808C6.163 16.765 6.325 16.673 6.454 16.544L11.206 11.792Z"/><path class="primary" fill-rule="evenodd" d="M16.778 3.222C17.754 4.198 17.754 5.781 16.778 6.757L16.071 7.464C15.095 8.441 13.512 8.441 12.536 7.464C11.559 6.488 11.559 4.905 12.536 3.929L13.243 3.222C14.219 2.246 15.802 2.246 16.778 3.222ZM9.707 4.636L12.536 7.464L15.364 10.293C15.754 10.683 15.754 11.317 15.364 11.707L14.657 12.414C14.266 12.805 13.633 12.805 13.243 12.414L7.586 6.757C7.195 6.367 7.195 5.734 7.586 5.343L8.293 4.636C8.683 4.246 9.317 4.246 9.707 4.636Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M10 18C14.418 18 18 14.418 18 10C18 5.582 14.418 2 10 2C5.582 2 2 5.582 2 10C2 14.418 5.582 18 10 18ZM8 8C8 7.448 7.552 7 7 7C6.448 7 6 7.448 6 8C6 8.552 6.448 9 7 9C7.552 9 8 8.552 8 8ZM12 7L14 7C14.552 7 15 7.448 15 8C15 8.552 14.552 9 14 9L12 9C11.448 9 11 8.552 11 8C11 7.448 11.448 7 12 7ZM15.638 12.052Q15.318 12.931 14.75 13.669Q14.19 14.391 13.441 14.915Q12.693 15.439 11.824 15.716Q10.935 16 10 16Q9.065 16 8.176 15.716Q7.307 15.439 6.559 14.915Q5.81 14.391 5.25 13.669Q4.682 12.931 4.362 12.052L6.241 11.368Q6.455 11.954 6.835 12.446Q7.206 12.927 7.706 13.277Q8.205 13.625 8.784 13.811Q9.375 14 10 14Q10.625 14 11.216 13.811Q11.795 13.625 12.294 13.277Q12.793 12.927 13.165 12.446Q13.545 11.954 13.759 11.368L15.638 12.052Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4.5 3L6 3L6 4.5C6 5.328 6.672 6 7.5 6L12.5 6C13.328 6 14 5.328 14 4.5L14 3L15.5 3C16.881 3 18 4.119 18 5.5L18 14.5C18 15.881 16.881 17 15.5 17L4.5 17C3.119 17 2 15.881 2 14.5L2 5.5C2 4.119 3.119 3 4.5 3ZM5.5 12.5L10 8L14.5 12.5L13 14L10 11L7 14L5.5 12.5Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M8 2L12 2C12.552 2 13 2.448 13 3L13 5C13 5.552 12.552 6 12 6L8 6C7.448 6 7 5.552 7 5L7 3C7 2.448 7.448 2 8 2Z"/><path class="primary" fill-rule="evenodd" d="M4 5C4 3.895 4.895 3 6 3L6 5Q6 5.406 6.158 5.779Q6.309 6.138 6.586 6.414Q6.862 6.691 7.221 6.842Q7.594 7 8 7L12 7Q12.406 7 12.779 6.842Q13.138 6.691 13.414 6.414Q13.691 6.138 13.842 5.779Q14 5.406 14 5L14 3C15.105 3 16 3.895 16 5L16 16C16 17.105 15.105 18 14 18L6 18C4.895 18 4 17.105 4 16L4 5ZM7 9L13 9L13 11L7 11L7 9ZM11 13L7 13L7 15L11 15L11 13Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 11L3 11C2.448 11 2 11.448 2 12C2 12.552 2.448 13 3 13L17 13C17.552 13 18 12.552 18 12C18 11.448 17.552 11 17 11ZM11 15L3 15C2.448 15 2 15.448 2 16C2 16.552 2.448 17 3 17L11 17C11.552 17 12 16.552 12 16C12 15.448 11.552 15 11 15Z"/><path class="primary" fill-rule="evenodd" d="M3.5 3L16.5 3C17.328 3 18 3.672 18 4.5L18 7.5C18 8.328 17.328 9 16.5 9L3.5 9C2.672 9 2 8.328 2 7.5L2 4.5C2 3.672 2.672 3 3.5 3ZM5 4L6 4L6 8L5 8L5 4ZM13 6L7 6L7 7L13 7L13 6Z"/></svg></span></span>
+</a><a class="suite reveal" href="/extensions/#media">
+  <span class="suite-head"><span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M5 16L5 4C5 3.448 4.552 3 4 3L3 3C2.448 3 2 3.448 2 4L2 16C2 16.552 2.448 17 3 17L4 17C4.552 17 5 16.552 5 16ZM15 4L15 16C15 16.552 15.448 17 16 17L17 17C17.552 17 18 16.552 18 16L18 4C18 3.448 17.552 3 17 3L16 3C15.448 3 15 3.448 15 4ZM3 5L4 5L4 7L3 7L3 5ZM17 5L16 5L16 7L17 7L17 5ZM4 9L3 9L3 11L4 11L4 9ZM16 9L17 9L17 11L16 11L16 9ZM3 13L4 13L4 15L3 15L3 13ZM17 13L16 13L16 15L17 15L17 13Z"/><path class="primary" fill-rule="evenodd" d="M13 3L7 3C6.448 3 6 3.448 6 4L6 16C6 16.552 6.448 17 7 17L13 17C13.552 17 14 16.552 14 16L14 4C14 3.448 13.552 3 13 3ZM8.4 7.3C8.235 7.176 8 7.294 8 7.5L8 12.5C8 12.706 8.235 12.824 8.4 12.7L11.733 10.2C11.867 10.1 11.867 9.9 11.733 9.8L8.4 7.3Z"/></svg></span><span class="suite-count">6</span></span>
+  <h3>Media</h3>
+  <p>Edit files, record your screen, style your camera, play and save media.</p>
+  <span class="suite-icons"><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 2L2 2L2 7L4 7L4 4L7 4L7 2ZM18 2L13 2L13 4L16 4L16 7L18 7L18 2ZM2 13L4 13L4 16L7 16L7 18L2 18L2 13ZM18 13L16 13L16 16L13 16L13 18L18 18L18 13Z"/><path class="primary" fill-rule="evenodd" d="M14 10C14 12.209 12.209 14 10 14C7.791 14 6 12.209 6 10C6 7.791 7.791 6 10 6C12.209 6 14 7.791 14 10Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M8 9.281L8 4.5L6 5L6 12.171C5.687 12.06 5.351 12 5 12C3.343 12 2 13.343 2 15C2 16.657 3.343 18 5 18C6.657 18 8 16.657 8 15L8 9.281Z"/><path class="primary" fill-rule="evenodd" d="M9 4L17 2L17 13C17 14.657 15.657 16 14 16C12.343 16 11 14.657 11 13C11 11.343 12.343 10 14 10C14.351 10 14.687 10.06 15 10.171L15 6.5L9 8L9 4Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 5L2 5L2 7L4 7L4 5ZM8 7L8 5L15 5L15 12L13 12L13 7L8 7ZM13 16L13 18L15 18L15 16L13 16Z"/><path class="primary" fill-rule="evenodd" d="M5 2L7 2L7 13L18 13L18 15L5 15L5 2Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 16C17 15.448 16.552 15 16 15L4 15C3.448 15 3 15.448 3 16L3 17C3 17.552 3.448 18 4 18L16 18C16.552 18 17 17.552 17 17L17 16Z"/><path class="primary" fill-rule="evenodd" d="M8 2L12 2L12 8L14.189 8C14.858 8 15.192 8.808 14.72 9.28L10.53 13.47C10.237 13.763 9.763 13.763 9.47 13.47L5.28 9.28C4.808 8.808 5.142 8 5.811 8L8 8L8 2Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 15L7 15L5.518 17.223C5.297 17.555 5.535 18 5.934 18L14.066 18C14.465 18 14.703 17.555 14.482 17.223L13 15L11 15Z"/><path class="primary" fill-rule="evenodd" d="M11 2L9 2C5.686 2 3 4.686 3 8C3 11.314 5.686 14 9 14L11 14C14.314 14 17 11.314 17 8C17 4.686 14.314 2 11 2ZM13 8C13 9.657 11.657 11 10 11C8.343 11 7 9.657 7 8C7 6.343 8.343 5 10 5C11.657 5 13 6.343 13 8ZM11 8C11 8.552 10.552 9 10 9C9.448 9 9 8.552 9 8C9 7.448 9.448 7 10 7C10.552 7 11 7.448 11 8Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M12.702 9.705Q13 8.885 13 8Q13 6.983 12.607 6.053Q12.332 5.404 11.894 4.863C12.436 4.329 13.18 4 14 4C15.657 4 17 5.343 17 7C17 8.657 15.657 10 14 10C13.535 10 13.094 9.894 12.702 9.705ZM15 18L18 18L18 16C18 13.791 16.209 12 14 12C13.175 12 12.409 12.25 11.772 12.677Q12.585 13.1 13.243 13.757Q14.073 14.587 14.528 15.664Q15 16.78 15 18Z"/><path class="primary" fill-rule="evenodd" d="M12 8C12 10.209 10.209 12 8 12C5.791 12 4 10.209 4 8C4 5.791 5.791 4 8 4C10.209 4 12 5.791 12 8ZM9 13C11.761 13 14 15.239 14 18L2 18C2 15.239 4.239 13 7 13L9 13Z"/></svg></span></span>
+</a><a class="suite reveal" href="/extensions/#developer">
+  <span class="suite-head"><span class="pillar-icon"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L9 4L9 2L5 2L5 7.086L2.086 10L5 12.914L5 18L9 18L9 16L7 16L7 12.086L4.914 10L7 7.914L7 4ZM15 2L11 2L11 4L13 4L13 7.914L15.086 10L13 12.086L13 16L11 16L11 18L15 18L15 12.914L17.914 10L15 7.086L15 2Z"/></svg></span><span class="suite-count">5</span></span>
+  <h3>Developer & Data</h3>
+  <p>Databases, code growth, site audits, LaTeX and where your time goes.</p>
+  <span class="suite-icons"><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 3L4 3L4 6L8 10L4 14L4 17L16 17L16 14L9 14L13 10L9 6L16 6L16 3Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M18 9C18 5.134 14.866 2 11 2L11 9L18 9Z"/><path class="primary" fill-rule="evenodd" d="M2 11C2 7.134 5.134 4 9 4L9 11L16 11C16 14.866 12.866 18 9 18C5.134 18 2 14.866 2 11Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 3L13 3C14.105 3 15 3.895 15 5L15 6L14.901 6Q14.869 5.986 14.836 5.972Q13.72 5.5 12.5 5.5Q11.28 5.5 10.164 5.972Q10.131 5.986 10.099 6L2 6L2 5C2 3.895 2.895 3 4 3ZM2 7L2 14C2 15.105 2.895 16 4 16L8.531 16Q8.391 15.875 8.257 15.743Q7.427 14.913 6.972 13.836Q6.5 12.72 6.5 11.5Q6.5 10.28 6.972 9.164Q7.427 8.087 8.257 7.257Q8.391 7.125 8.531 7L2 7ZM13.278 13.343Q12.908 13.5 12.5 13.5Q12.092 13.5 11.722 13.343Q11.363 13.192 11.086 12.914Q10.808 12.637 10.657 12.278Q10.5 11.908 10.5 11.5Q10.5 11.092 10.657 10.722Q10.808 10.363 11.086 10.086Q11.363 9.808 11.722 9.657Q12.092 9.5 12.5 9.5Q12.908 9.5 13.278 9.657Q13.637 9.808 13.914 10.086Q14.192 10.363 14.343 10.722Q14.5 11.092 14.5 11.5Q14.5 11.908 14.343 12.278Q14.192 12.637 13.914 12.914Q13.637 13.192 13.278 13.343Z"/><path class="primary" fill-rule="evenodd" d="M12.5 16.5C13.519 16.5 14.467 16.195 15.257 15.672L17.793 18.207L19.207 16.793L16.672 14.257C17.195 13.467 17.5 12.519 17.5 11.5C17.5 8.739 15.261 6.5 12.5 6.5C9.739 6.5 7.5 8.739 7.5 11.5C7.5 14.261 9.739 16.5 12.5 16.5ZM12.5 14.5C14.157 14.5 15.5 13.157 15.5 11.5C15.5 9.843 14.157 8.5 12.5 8.5C10.843 8.5 9.5 9.843 9.5 11.5C9.5 13.157 10.843 14.5 12.5 14.5Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M3 3L5 3L5 5L3 5L3 3ZM8 3L6 3L6 5L8 5L8 3ZM9 3L11 3L11 5L9 5L9 3ZM14 3L12 3L12 5L14 5L14 3ZM3 6L5 6L5 8L3 8L3 6ZM6 6L8 6L8 8L6 8L6 6ZM11 6L9 6L9 8L11 8L11 6ZM5 9L3 9L3 11L5 11L5 9ZM8 9L6 9L6 11L8 11L8 9ZM15 9L17 9L17 11L15 11L15 9ZM3 12L5 12L5 14L3 14L3 12ZM12 12L14 12L14 14L12 14L12 12ZM17 12L15 12L15 14L17 14L17 12ZM9 15L11 15L11 17L9 17L9 15ZM14 15L12 15L12 17L14 17L14 15ZM15 15L17 15L17 17L15 17L15 15Z"/><path class="primary" fill-rule="evenodd" d="M17 3L15 3L15 5L17 5L17 3ZM14 6L12 6L12 8L14 8L14 6ZM15 6L17 6L17 8L15 8L15 6ZM11 9L9 9L9 11L11 11L11 9ZM12 9L14 9L14 11L12 11L12 9ZM8 12L6 12L6 14L8 14L8 12ZM9 12L11 12L11 14L9 14L9 12ZM5 15L3 15L3 17L5 17L5 15ZM6 15L8 15L8 17L6 17L6 15Z"/></svg></span><span class="tile tile-xs" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M3 7.025L3 10L3.625 10Q3.625 10.354 3.995 10.729Q4.44 11.18 5.296 11.547Q6.2 11.934 7.387 12.149Q8.632 12.375 10 12.375Q11.368 12.375 12.613 12.149Q13.8 11.934 14.704 11.547Q15.56 11.18 16.005 10.729Q16.375 10.354 16.375 10L17 10L17 7.025Q16.359 7.605 15.344 8.04Q14.271 8.5 12.903 8.75Q11.514 9 10 9Q8.486 9 7.097 8.75Q5.729 8.5 4.656 8.04Q3.641 7.605 3 7.025ZM3 11.495L3 15C3 16.657 6.134 18 10 18C13.866 18 17 16.657 17 15L17 11.495Q16.949 11.551 16.895 11.607Q16.277 12.232 15.196 12.696Q14.162 13.139 12.836 13.379Q11.48 13.625 10 13.625Q8.52 13.625 7.164 13.379Q5.838 13.139 4.804 12.696Q3.723 12.232 3.105 11.607Q3.051 11.551 3 11.495Z"/><path class="primary" fill-rule="evenodd" d="M17 5C17 6.657 13.866 8 10 8C6.134 8 3 6.657 3 5C3 3.343 6.134 2 10 2C13.866 2 17 3.343 17 5Z"/></svg></span></span>
+</a></div>
+  <div class="featured reveal">
+    <h3 class="featured-title">Popular right now</h3>
+    <div class="ext-grid compact"><a class="ext-card compact" href="/extensions/usage.html" data-category="agents" data-search="usage usage see what your coding agents cost and how close you are to their limits. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 3L6 3C6.552 3 7 3.448 7 4L7 11.267Q6.894 11.206 6.779 11.158Q6.406 11 6 11L4 11Q3.594 11 3.221 11.158Q3.106 11.206 3 11.267L3 4C3 3.448 3.448 3 4 3ZM17 5.267L17 4C17 3.448 16.552 3 16 3L14 3C13.448 3 13 3.448 13 4L13 5.267Q13.106 5.206 13.221 5.158Q13.594 5 14 5L16 5Q16.406 5 16.779 5.158Q16.894 5.206 17 5.267ZM12 7L12 4C12 3.448 11.552 3 11 3L9 3C8.448 3 8 3.448 8 4L8 8.267Q8.106 8.206 8.221 8.158Q8.594 8 9 8L11 8Q11.406 8 11.779 8.158Q11.894 8.206 12 8.267L12 7Z"/><path class="primary" fill-rule="evenodd" d="M14 6L16 6C16.552 6 17 6.448 17 7L17 16C17 16.552 16.552 17 16 17L14 17C13.448 17 13 16.552 13 16L13 7C13 6.448 13.448 6 14 6ZM11 9L9 9C8.448 9 8 9.448 8 10L8 16C8 16.552 8.448 17 9 17L11 17C11.552 17 12 16.552 12 16L12 10C12 9.448 11.552 9 11 9ZM6 12L4 12C3.448 12 3 12.448 3 13L3 16C3 16.552 3.448 17 4 17L6 17C6.552 17 7 16.552 7 16L7 13C7 12.448 6.552 12 6 12Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Usage</span>
+    <span class="ext-card-tagline">See what your coding agents cost and how close you are to their limits.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card compact" href="/extensions/herdr.html" data-category="agents" data-search="agents herdr see every coding agent on your macs in one board, and step in when one needs you. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 6L3.5 2.5L2 4L4 6L2 8L3.5 9.5L7 6ZM7 14L3.5 10.5L2 12L4 14L2 16L3.5 17.5L7 14Z"/><path class="primary" fill-rule="evenodd" d="M10.5 2.5L18 10L10.5 17.5L8 15L13 10L8 5L10.5 2.5Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Agents</span>
+    <span class="ext-card-tagline">See every coding agent on your Macs in one board, and step in when one needs you.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card compact" href="/extensions/bifrost.html" data-category="desk" data-search="launcher bifrost open apps, do quick math and find files from one bar. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 11L3 11C2.448 11 2 11.448 2 12C2 12.552 2.448 13 3 13L17 13C17.552 13 18 12.552 18 12C18 11.448 17.552 11 17 11ZM11 15L3 15C2.448 15 2 15.448 2 16C2 16.552 2.448 17 3 17L11 17C11.552 17 12 16.552 12 16C12 15.448 11.552 15 11 15Z"/><path class="primary" fill-rule="evenodd" d="M3.5 3L16.5 3C17.328 3 18 3.672 18 4.5L18 7.5C18 8.328 17.328 9 16.5 9L3.5 9C2.672 9 2 8.328 2 7.5L2 4.5C2 3.672 2.672 3 3.5 3ZM5 4L6 4L6 8L5 8L5 4ZM13 6L7 6L7 7L13 7L13 6Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Launcher</span>
+    <span class="ext-card-tagline">Open apps, do quick math and find files from one bar.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card compact" href="/extensions/clipboard.html" data-category="desk" data-search="clipboard clipboard everything you copy, searchable and one shortcut away. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M8 2L12 2C12.552 2 13 2.448 13 3L13 5C13 5.552 12.552 6 12 6L8 6C7.448 6 7 5.552 7 5L7 3C7 2.448 7.448 2 8 2Z"/><path class="primary" fill-rule="evenodd" d="M4 5C4 3.895 4.895 3 6 3L6 5Q6 5.406 6.158 5.779Q6.309 6.138 6.586 6.414Q6.862 6.691 7.221 6.842Q7.594 7 8 7L12 7Q12.406 7 12.779 6.842Q13.138 6.691 13.414 6.414Q13.691 6.138 13.842 5.779Q14 5.406 14 5L14 3C15.105 3 16 3.895 16 5L16 16C16 17.105 15.105 18 14 18L6 18C4.895 18 4 17.105 4 16L4 5ZM7 9L13 9L13 11L7 11L7 9ZM11 13L7 13L7 15L11 15L11 13Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Clipboard</span>
+    <span class="ext-card-tagline">Everything you copy, searchable and one shortcut away.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card compact" href="/extensions/studio.html" data-category="media" data-search="studio studio edit, compress and convert pdfs, images, video and audio on your mac. media">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 5L2 5L2 7L4 7L4 5ZM8 7L8 5L15 5L15 12L13 12L13 7L8 7ZM13 16L13 18L15 18L15 16L13 16Z"/><path class="primary" fill-rule="evenodd" d="M5 2L7 2L7 13L18 13L18 15L5 15L5 2Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Studio</span>
+    <span class="ext-card-tagline">Edit, compress and convert PDFs, images, video and audio on your Mac.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card compact" href="/extensions/timeLapse.html" data-category="media" data-search="screen recorder timelapse record your screen, or speed up a long session into a short time-lapse. media">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 2L2 2L2 7L4 7L4 4L7 4L7 2ZM18 2L13 2L13 4L16 4L16 7L18 7L18 2ZM2 13L4 13L4 16L7 16L7 18L2 18L2 13ZM18 13L16 13L16 16L13 16L13 18L18 18L18 13Z"/><path class="primary" fill-rule="evenodd" d="M14 10C14 12.209 12.209 14 10 14C7.791 14 6 12.209 6 10C6 7.791 7.791 6 10 6C12.209 6 14 7.791 14 10Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Screen Recorder</span>
+    <span class="ext-card-tagline">Record your screen, or speed up a long session into a short time-lapse.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card compact" href="/extensions/music.html" data-category="media" data-search="music music your music in one place, with playback that never gets in your way. media">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M8 9.281L8 4.5L6 5L6 12.171C5.687 12.06 5.351 12 5 12C3.343 12 2 13.343 2 15C2 16.657 3.343 18 5 18C6.657 18 8 16.657 8 15L8 9.281Z"/><path class="primary" fill-rule="evenodd" d="M9 4L17 2L17 13C17 14.657 15.657 16 14 16C12.343 16 11 14.657 11 13C11 11.343 12.343 10 14 10C14.351 10 14.687 10.06 15 10.171L15 6.5L9 8L9 4Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Music</span>
+    <span class="ext-card-tagline">Your music in one place, with playback that never gets in your way.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card compact" href="/extensions/appMaintenance.html" data-category="utilities" data-search="app updates appmaintenance keep your apps current and remove them cleanly. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M14 16L5 16L5 17C5 17.552 5.448 18 6 18L14 18C14.552 18 15 17.552 15 17L15 16L14 16Z"/><path class="primary" fill-rule="evenodd" d="M6 2L14 2C15.657 2 17 3.343 17 5L17 12C17 13.657 15.657 15 14 15L6 15C4.343 15 3 13.657 3 12L3 5C3 3.343 4.343 2 6 2ZM5.5 8.5L10 4L14.5 8.5L13 10L11 8L11 13L9 13L9 8L7 10L5.5 8.5ZM10 7L10 7L10 7L10 7Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">App Updates</span>
+    <span class="ext-card-tagline">Keep your apps current and remove them cleanly.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a></div>
+  </div>
+  <div class="center-row reveal"><a class="btn btn-ghost" href="/extensions/">Browse all 41 extensions <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a></div>
+</section>
+<section class="section wrap">
+  <div class="trust reveal">
+    <div class="trust-item"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M15 7C15 4.239 12.761 2 10 2C7.239 2 5 4.239 5 7L5 8L7 8L7 7C7 5.343 8.343 4 10 4C11.657 4 13 5.343 13 7L13 8L15 8L15 7Z"/><path class="primary" fill-rule="evenodd" d="M15 9L5 9C3.895 9 3 9.895 3 11L3 16C3 17.105 3.895 18 5 18L15 18C16.105 18 17 17.105 17 16L17 11C17 9.895 16.105 9 15 9ZM11 12L9 12L9 15L11 15L11 12Z"/></svg><h3>Local first</h3><p>No account and no telemetry. Your history, files and usage stay on your Mac.</p></div>
+    <div class="trust-item"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11.424 2.648C11.591 2.461 11.899 2.608 11.857 2.855L11.049 7.709C11.023 7.861 11.141 8 11.295 8L15.48 8C15.689 8 15.806 8.242 15.675 8.406L8.572 17.285C8.413 17.483 8.094 17.345 8.13 17.093L8.959 11.285C8.981 11.135 8.864 11 8.712 11L4.557 11C4.341 11 4.227 10.745 4.37 10.584L11.424 2.648Z"/></svg><h3>Fast and native</h3><p>SwiftUI, not Electron. About 0% CPU and 22 MB of memory with the panel closed.</p></div>
+    <div class="trust-item"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M9.478 17.21L12.478 3.21L10.522 2.79L7.522 16.79L9.478 17.21Z"/><path class="primary" fill-rule="evenodd" d="M3 10L6.5 6.5L5 5L0 10L5 15L6.5 13.5L3 10ZM20 10L15 5L13.5 6.5L17 10L13.5 13.5L15 15L20 10Z"/></svg><h3>Open source</h3><p>GPL-3.0 on GitHub. Read every line, build it yourself, send a pull request.</p></div>
+    <div class="trust-item"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M17 4.5L10 2L3 4.5L3 10C3 14 6.5 17 10 18C13.5 17 17 14 17 10L17 4.5ZM7 8.5L9 10.5L13 6.5L14.5 8L9 13.5L5.5 10L7 8.5Z"/></svg><h3>Signed and notarized</h3><p>Releases are signed with Developer ID and notarized by Apple. Extensions are verified before they run.</p></div>
+  </div>
+</section>
+<section class="section wrap">
+  <div class="final reveal">
+    <img src="/app-icon-512.png" alt="" width="96" height="96" />
+    <h2>Get Edith.</h2>
+    <p class="lead">Free forever. No account. One app instead of twelve.</p>
+    <div class="cta-row center">
+  <a class="btn btn-gold btn-lg" href="https://github.com/pulkitxm/edith/releases/latest/download/Edith.dmg"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download for macOS</span></a>
+  <div class="command command-lg"><code><span class="prompt" aria-hidden="true">$</span>brew install --cask pulkitxm/tap/edith</code><button class="copy" type="button" data-copy="brew install --cask pulkitxm/tap/edith" aria-label="Copy brew install --cask pulkitxm/tap/edith"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 2L4 2C2.895 2 2 2.895 2 4L2 11C2 12.105 2.895 13 4 13L6 13L6 9Q6 8.39 6.236 7.832Q6.464 7.293 6.875 6.875Q7.293 6.464 7.832 6.236Q8.39 6 9 6L13 6L13 4C13 2.895 12.105 2 11 2Z"/><path class="primary" fill-rule="evenodd" d="M9 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L9 18C7.895 18 7 17.105 7 16L7 9C7 7.895 7.895 7 9 7Z"/></svg><span>Copy</span></button></div>
+</div>
+<p class="cta-meta center">Free and open source · macOS 14 or later on Apple silicon · <span data-dmg-size>6.3 MB</span> download</p>
+  </div>
+</section>
+    </main>
+    <footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <a href="/" class="brand"><img src="/app-icon-512.png" alt="" width="30" height="30" /><span class="brand-name">Edith</span></a>
+      <p>Every tool your Mac is missing, in one native app. Free and open source under the GPL-3.0.</p>
+      <a class="btn btn-ghost btn-sm" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download Edith</span></a>
+    </div>
+    <div class="footer-col"><h2>Product</h2><a href="/features.html">Features</a><a href="/extensions/">Extensions</a><a href="/agents.html">Agents and MCP</a><a href="/download.html">Download</a><a href="/changelog/">Changelog</a><a href="/faq.html">FAQ</a></div>
+    <div class="footer-col"><h2>Resources</h2><a href="https://github.com/pulkitxm/edith/tree/main/docs/cli">CLI reference</a><a href="https://github.com/pulkitxm/edith/wiki">Wiki</a><a href="https://github.com/pulkitxm/edith/releases">Releases</a><a href="https://github.com/pulkitxm/edith/blob/main/SUPPORT.md">Support</a></div>
+    <div class="footer-col"><h2>Project</h2><a href="https://github.com/pulkitxm/edith">GitHub</a><a href="https://github.com/pulkitxm/edith/blob/main/CONTRIBUTING.md">Contributing</a><a href="https://github.com/pulkitxm/edith/blob/main/SECURITY.md">Security</a><a href="https://www.gnu.org/licenses/gpl-3.0.html">Licence</a></div>
+    <div class="footer-col"><h2>Legal</h2><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div>
+  </div>
+  <div class="footer-base"><span>Made on a Mac, for Macs.</span><span>macOS 14+ on Apple silicon</span></div>
+</footer>
   </body>
 </html>
