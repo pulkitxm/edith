@@ -42,6 +42,9 @@ struct DatabaseConnectionManagementModelTests {
                     .environment(\.automaticViewActionsEnabled, true)
                 }
                 #expect(DatabaseRenderCapture.distinctColors(bitmap) > 3)
+                for _ in 0..<100 where model.operation != nil {
+                    try await Task.sleep(for: .milliseconds(50))
+                }
                 #expect(model.failure == nil)
                 #expect(model.operation == nil)
             }

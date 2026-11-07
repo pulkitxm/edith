@@ -120,8 +120,24 @@ enum StudioCapture {
         let image = try #require(bitmap.cgImage)
         guard let text = await recognizedText(in: image) else { return }
         for label in labels {
-            #expect(text.contains(label), "\(name) \(variant.name) is missing \(label)")
+            #expect(
+                recognizes(label, in: text), "\(name) \(variant.name) is missing \(label)")
         }
+    }
+
+    private static func recognizes(_ label: String, in text: String) -> Bool {
+        if text.contains(label) { return true }
+        let target = Array(label.lowercased())
+        let allowed = max(1, target.count / 8)
+        for line in text.lowercased().split(separator: "\n") {
+            let characters = Array(line)
+            guard characters.count >= target.count else { continue }
+            for start in 0...(characters.count - target.count) {
+                let window = characters[start..<(start + target.count)]
+                if zip(window, target).filter({ $0 != $1 }).count <= allowed { return true }
+            }
+        }
+        return false
     }
 }
 

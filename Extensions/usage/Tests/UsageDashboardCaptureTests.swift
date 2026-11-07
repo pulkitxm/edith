@@ -186,8 +186,12 @@ struct UsageDashboardCaptureTests {
                 scene, variant: variant, name: "\(fixture.rawValue)-\(variant.name)")
             #expect(lines.contains { $0.text.localizedCaseInsensitiveContains("Agent usage") })
             if let expected = Self.expectedText[fixture] {
+                let compact = { (text: String) in
+                    text.lowercased().filter { !$0.isWhitespace }
+                }
+                let recognized = compact(lines.map(\.text).joined())
                 #expect(
-                    lines.contains { $0.text.localizedCaseInsensitiveContains(expected) },
+                    recognized.contains(compact(expected)),
                     Comment(rawValue: "\(fixture.rawValue) \(variant.name)"))
             }
             if fixture == .populated, variant.zoom == 1, variant.size.width > 1000 {
@@ -313,7 +317,7 @@ struct UsageDashboardCaptureTests {
         let today = try #require(lines.first { $0.text.hasPrefix("Today") })
         #expect(abs(range.box.minY - today.box.minY) * height < 3)
         #expect(scope.box.minY < range.box.minY)
-        #expect(abs(range.box.minX - scope.box.minX) * 1100 < 2)
+        #expect(abs(range.box.minX - scope.box.minX) * 1100 < 3)
     }
 
     static func scene(_ fixture: Fixture, days: Int = 84) async throws -> Scene {

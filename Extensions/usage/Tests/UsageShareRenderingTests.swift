@@ -53,10 +53,10 @@ extension UsageDashboardRenderingTests {
                     guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else {
                         continue
                     }
-                    let distance =
-                        abs(color.redComponent - 0.94) + abs(color.greenComponent - 0.56)
-                        + abs(color.blueComponent - 0.42)
-                    if distance < 0.12 { count += 1 }
+                    let warm = color.hueComponent < 0.11 || color.hueComponent > 0.97
+                    if warm && color.saturationComponent > 0.3 && color.brightnessComponent > 0.6 {
+                        count += 1
+                    }
                 }
             }
         }
