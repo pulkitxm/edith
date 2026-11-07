@@ -5,7 +5,10 @@ on:
     branches: [main]
     paths:
       - "apps/site/**"
+      - "scripts/site/**"
       - ".github/workflows/pages.yml"
+  schedule:
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -43,9 +46,18 @@ jobs:
             || { echo "deploy blocked: apps/site/CNAME is missing" >&2; exit 1; }
           grep -qx edith.pulkit.page apps/site/CNAME \
             || { echo "deploy blocked: CNAME does not name edith.pulkit.page" >&2; exit 1; }
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Refresh release data and rebuild the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bun scripts/site/fetch-release-data.mjs
+          bun scripts/site/build.mjs
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: apps/site
       - id: deploy
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346
+        with:
+          timeout: 1800000

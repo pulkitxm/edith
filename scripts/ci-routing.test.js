@@ -438,6 +438,7 @@ test("every host cache consumer has full history before restoring source times",
 test("targeted publishing workflows watch every deployment input", () => {
   expect(pushPaths(pagesWorkflow)).toEqual([
     "apps/site/**",
+    "scripts/site/**",
     ".github/workflows/pages.yml",
   ]);
   expect(pushPaths(wikiWorkflow)).toEqual([

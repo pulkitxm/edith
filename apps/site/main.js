@@ -18,8 +18,15 @@ function currentTheme() {
 for (const button of document.querySelectorAll("[data-theme-toggle]")) {
   button.addEventListener("click", () => {
     const next = currentTheme() === "light" ? "dark" : "light";
-    root.dataset.theme = next;
-    storedTheme(next);
+    const apply = () => {
+      root.dataset.theme = next;
+      storedTheme(next);
+    };
+    if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.startViewTransition(apply);
+    } else {
+      apply();
+    }
   });
 }
 
@@ -150,21 +157,93 @@ if (log) {
 
 const player = document.querySelector("[data-player]");
 if (player) {
+  const filmFor = (theme) => ({
+    src: player.dataset[theme],
+    poster: player.dataset[`${theme}Poster`],
+  });
+  let shownTheme = currentTheme();
+  player.poster = filmFor(shownTheme).poster;
+  player.src = filmFor(shownTheme).src;
+  let plyr = null;
+  let warmed = false;
+  let switching = Promise.resolve();
+  const once = (target, name, limit = 6000) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(resolve, limit);
+      target.addEventListener(
+        name,
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+  const warmOther = () => {
+    if (warmed) return;
+    warmed = true;
+    const other = document.createElement("video");
+    other.muted = true;
+    other.preload = "auto";
+    other.src = filmFor(shownTheme === "dark" ? "light" : "dark").src;
+  };
+  const freezeFrame = () => {
+    if (!player.videoWidth) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = player.videoWidth;
+    canvas.height = player.videoHeight;
+    canvas.getContext("2d").drawImage(player, 0, 0, canvas.width, canvas.height);
+    canvas.className = "film-freeze";
+    (player.parentElement ?? player).appendChild(canvas);
+    return canvas;
+  };
+  const swap = async () => {
+    const theme = currentTheme();
+    if (theme === shownTheme) return;
+    shownTheme = theme;
+    const film = filmFor(theme);
+    if (plyr) plyr.poster = film.poster;
+    else player.poster = film.poster;
+    if (player.currentTime === 0 && player.paused) {
+      player.src = film.src;
+      return;
+    }
+    const wasPlaying = !player.paused;
+    const time = player.currentTime;
+    const rate = player.playbackRate;
+    const volume = player.volume;
+    const muted = player.muted;
+    const leftAt = performance.now();
+    const freeze = freezeFrame();
+    player.preload = "auto";
+    player.src = film.src;
+    player.load();
+    await once(player, "loadedmetadata");
+    const elapsed = wasPlaying ? ((performance.now() - leftAt) / 1000) * rate : 0;
+    player.currentTime = Math.min(time + elapsed, Math.max(0, player.duration - 0.05));
+    player.playbackRate = rate;
+    player.volume = volume;
+    player.muted = muted;
+    await once(player, "seeked");
+    if (wasPlaying) await player.play().catch(() => {});
+    if (freeze) {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      freeze.classList.add("fade");
+      setTimeout(() => freeze.remove(), 600);
+    }
+  };
+  const sync = () => {
+    switching = switching.then(swap, swap);
+  };
+  new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", sync);
+  player.addEventListener("play", warmOther, { once: true });
   const start = async () => {
     const { default: Plyr } = await import("/lib/plyr/plyr.min.mjs");
-    new Plyr(player, {
+    plyr = new Plyr(player, {
       iconUrl: "/lib/plyr/edith-controls.svg",
       blankVideo: "",
-      controls: [
-        "play-large",
-        "play",
-        "progress",
-        "current-time",
-        "duration",
-        "mute",
-        "volume",
-        "fullscreen",
-      ],
+      controls: ["play-large", "play", "progress", "current-time", "duration", "mute", "volume", "fullscreen"],
       ratio: "16:9",
       tooltips: { controls: false, seek: true },
     });
@@ -227,7 +306,7 @@ if (releaseTargets.length) {
   };
   let cached = null;
   try {
-    cached = JSON.parse(sessionStorage.getItem("edith-release") ?? "null");
+    cached = JSON.parse(sessionStorage.getItem("edith-release-v2") ?? "null");
   } catch {}
   if (cached) apply(cached);
   else {
@@ -241,12 +320,12 @@ if (releaseTargets.length) {
         const asset = latest.assets.find((item) => item.name === "Edith.dmg");
         if (!asset) return;
         const release = {
-          size: `${(asset.size / 1_000_000).toFixed(1)} MB`,
+          size: `${(asset.size / 1_048_576).toFixed(1)} MB`,
           version: latest.tag_name.replace(/^v/, ""),
         };
         apply(release);
         try {
-          sessionStorage.setItem("edith-release", JSON.stringify(release));
+          sessionStorage.setItem("edith-release-v2", JSON.stringify(release));
         } catch {}
       })
       .catch(() => {});

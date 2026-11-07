@@ -29,7 +29,7 @@ const facts = {
 };
 
 export function setRelease(release, extensionCount) {
-  facts.dmg = `${(release.dmgBytes / 1_000_000).toFixed(1)} MB`;
+  facts.dmg = `${(release.dmgBytes / 1_048_576).toFixed(1)} MB`;
   facts.version = release.version;
   facts.extensions = extensionCount;
 }
@@ -209,7 +209,7 @@ export function home(extensions, screenshots) {
     <h2>Eighty seconds of Edith.</h2>
     <p class="lead">Real screens, real recordings. See the marketplace, agents working over MCP, Studio, Downloads and more.</p>
   </div>
-  <div class="film reveal"><video data-player controls preload="none" playsinline poster="/media/edith-launch.jpg" width="1920" height="1080"><source src="/media/edith-launch.mp4" type="video/mp4" /></video></div>
+  <div class="film reveal"><video data-player data-dark="/media/edith-launch.mp4" data-light="/media/edith-launch-light.mp4" data-dark-poster="/media/edith-launch.jpg" data-light-poster="/media/edith-launch-light.jpg" controls preload="none" playsinline poster="/media/edith-launch.jpg" width="1920" height="1080" src="/media/edith-launch.mp4"></video></div>
 </section>
 <section class="section wrap">
   <div class="section-head reveal">
@@ -686,7 +686,7 @@ export function download() {
   return `${pageHero({
     kicker: "Download",
     title: 'Get <span class="gold-text">Edith.</span>',
-    lead: `Free and open source. ${facts.dmg} to download, then add the extensions you want.`,
+    lead: `Free and open source. ${dmgSize()} to download, then add the extensions you want.`,
   })}
 <section class="section wrap">
   <div class="download-grid">
