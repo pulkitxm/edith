@@ -1,0 +1,6504 @@
+[
+  {
+    "version": "0.0.389",
+    "date": "2026-11-06",
+    "changes": [
+      {
+        "title": "fix(usage): keep the activity row inside the page",
+        "pr": 2026
+      }
+    ]
+  },
+  {
+    "version": "0.0.388",
+    "date": "2026-11-06",
+    "changes": [
+      {
+        "title": "fix(camera): install Edith Camera on Macs with System Integrity Protection",
+        "pr": 2023
+      }
+    ]
+  },
+  {
+    "version": "0.0.387",
+    "date": "2026-11-06",
+    "changes": [
+      {
+        "title": "fix(ui): every clickable control shows a clear hover, and keycaps draw cleanly",
+        "pr": 2029
+      }
+    ]
+  },
+  {
+    "version": "0.0.386",
+    "date": "2026-11-06",
+    "changes": [
+      {
+        "title": "test: make Home, Studio and Cleaner tests reliable on shared CI runners",
+        "pr": 2019
+      },
+      {
+        "title": "fix(agents): quote the ssh socket path when dropping files into a remote terminal",
+        "pr": 2011
+      },
+      {
+        "title": "fix(kit): metric and surface grids never trap on extreme widths",
+        "pr": 2021
+      },
+      {
+        "title": "fix(host): every extension appears once, under its category, with its own name and icon",
+        "pr": 2012
+      },
+      {
+        "title": "fix(marketplace): never offer an extension build that needs a newer host",
+        "pr": 2013
+      },
+      {
+        "title": "fix(lid-awake): keep the Mac awake after Edith quits",
+        "pr": 2016
+      },
+      {
+        "title": "fix(presenter): blur Home cards in place instead of hiding them",
+        "pr": 2017
+      },
+      {
+        "title": "fix(extensions): give every bundled library a private install name",
+        "pr": 2018
+      },
+      {
+        "title": "fix(release): ride out GitHub rate limits instead of failing the publish",
+        "pr": 2020
+      },
+      {
+        "title": "fix(presenter): keep notch, music, calendar and camera content under the blur",
+        "pr": 2024
+      },
+      {
+        "title": "feat(kit): joined split button and even action spacing",
+        "pr": 2025
+      },
+      {
+        "title": "fix(marketplace): finish updating a running extension on the next launch",
+        "pr": 2027
+      },
+      {
+        "title": "fix(extensions): keep renamed frameworks' headers on the compile search path",
+        "pr": 2028
+      }
+    ]
+  },
+  {
+    "version": "0.0.385",
+    "date": "2026-11-06",
+    "changes": [
+      {
+        "title": "fix(extensions): register the privileged carrier when macOS reports it not found",
+        "pr": 1988
+      },
+      {
+        "title": "fix(kit): skeletons match the screens they load",
+        "pr": 1998
+      },
+      {
+        "title": "fix(kit): metric grid no longer crashes Edith",
+        "pr": 2000
+      },
+      {
+        "title": "fix(extensions): accept the host app as a privileged helper caller",
+        "pr": 1999
+      },
+      {
+        "title": "feat(host): connect coding agents to Edith from Settings",
+        "pr": 2001
+      },
+      {
+        "title": "fix(herdr): Cmd+K opens Agents search",
+        "pr": 2003
+      },
+      {
+        "title": "test(kit): remove the stale form skeleton pixel test",
+        "pr": 2005
+      },
+      {
+        "title": "feat(kit): hover state for every button",
+        "pr": 2004
+      },
+      {
+        "title": "fix(extensions): privileged calls no longer hang for 20 seconds",
+        "pr": 2006
+      },
+      {
+        "title": "fix(kit): date ranges keep charts in proportion",
+        "pr": 2007
+      },
+      {
+        "title": "fix(host): Home opens instantly, Music footer and folders respond",
+        "pr": 2008
+      },
+      {
+        "title": "fix(host): info button joins the page header actions",
+        "pr": 2009
+      },
+      {
+        "title": "feat: replace the app logo with the notch mark",
+        "pr": 2002
+      }
+    ]
+  },
+  {
+    "version": "0.0.384",
+    "date": "2026-11-05",
+    "changes": [
+      {
+        "title": "fix(cleaner): show the Cleaner title once",
+        "pr": 1997
+      }
+    ]
+  },
+  {
+    "version": "0.0.383",
+    "date": "2026-11-05",
+    "changes": [
+      {
+        "title": "fix(camera): install registers the privileged helper and keeps its failure",
+        "pr": 1994
+      },
+      {
+        "title": "feat: overhaul the Edith app experience",
+        "pr": 1993
+      },
+      {
+        "title": "fix: CI follow-ups after the app overhaul",
+        "pr": 1995
+      },
+      {
+        "title": "fix(release): accept the 11 MB host in the release proof",
+        "pr": 1996
+      }
+    ]
+  },
+  {
+    "version": "0.0.382",
+    "date": "2026-11-05",
+    "changes": [
+      {
+        "title": "perf(terminal): keep inactive agent terminals in the view tree instead of hiding them",
+        "pr": 1986
+      },
+      {
+        "title": "fix(usage): read remote WAL agent databases and isolate their failures",
+        "pr": 1987
+      },
+      {
+        "title": "feat(herdr): restart agents in another account or agent",
+        "pr": 1992
+      },
+      {
+        "title": "feat(camera): ship Edith's own camera extension and remove OBS",
+        "pr": 1991
+      }
+    ]
+  },
+  {
+    "version": "0.0.381",
+    "date": "2026-11-05",
+    "changes": [
+      {
+        "title": "fix(cli): keep the reply of an on-demand provider the command started",
+        "pr": 1943
+      },
+      {
+        "title": "fix(homebrew): fit calendar-style version upgrades in the version column",
+        "pr": 1956
+      },
+      {
+        "title": "fix(audioMixer): open its static settings while the extension is idle",
+        "pr": 1945
+      },
+      {
+        "title": "fix(marketplace): fast segmented downloads and a prioritized, transparent update queue",
+        "pr": 1940
+      },
+      {
+        "title": "perf(herdr): smoother agent terminal tabs on open, close and idle",
+        "pr": 1948
+      },
+      {
+        "title": "fix(music): disable Play when the open folder or favourites is empty",
+        "pr": 1950
+      },
+      {
+        "title": "fix(database): list a connection's tables when browse is given no path",
+        "pr": 1949
+      },
+      {
+        "title": "fix(seoAudit): count a site's bare URL and its root as one page",
+        "pr": 1951
+      },
+      {
+        "title": "fix(timeLapse): explain missing Screen Recording access",
+        "pr": 1952
+      },
+      {
+        "title": "fix(host): run page work in background testing windows",
+        "pr": 1953
+      },
+      {
+        "title": "fix(utilities): use catalog names in page and settings headers",
+        "pr": 1955
+      },
+      {
+        "title": "fix(appMaintenance): show update history as one full-width list",
+        "pr": 1954
+      },
+      {
+        "title": "fix(notch): make the notch panel scroll freely",
+        "pr": 1944
+      },
+      {
+        "title": "fix(docs): rank ed docs ask answers by the tool ids, options and examples each command documents",
+        "pr": 1958
+      },
+      {
+        "title": "fix(usage): keep remote machine usage fresh and explain when it is not",
+        "pr": 1941
+      },
+      {
+        "title": "fix(ui): let table name columns fill the table",
+        "pr": 1957
+      },
+      {
+        "title": "perf(cleaner): smooth scrolling and idle sync with thousands of rows",
+        "pr": 1946
+      },
+      {
+        "title": "feat(extensions): minimal Extensions page with compact rows and a details sheet",
+        "pr": 1942
+      },
+      {
+        "title": "perf(herdr): cut agent tab switch cost and its growth with open tabs",
+        "pr": 1963
+      },
+      {
+        "title": "fix(settings): align settings forms with the page title",
+        "pr": 1947
+      },
+      {
+        "title": "feat(shell): calmer sidebar footer, Home header, About and onboarding review",
+        "pr": 1964
+      },
+      {
+        "title": "feat(support): add VirtualList primitive and narrow ContentLoad observation",
+        "pr": 1960
+      },
+      {
+        "title": "perf(attention): cut icon churn and no-op invalidations while scrolling",
+        "pr": 1965
+      },
+      {
+        "title": "test: stop the release rate limit and music download tests from flaking under load",
+        "pr": 1966
+      },
+      {
+        "title": "perf(cleaner): toggle thousands of rows within one frame",
+        "pr": 1961
+      },
+      {
+        "title": "perf(attention): virtualize the timeline",
+        "pr": 1967
+      },
+      {
+        "title": "perf(maintenance): virtualize the updates and removal lists",
+        "pr": 1969
+      },
+      {
+        "title": "fix(host): section deep links, starting extension pages, Mic Mute quick action",
+        "pr": 1968
+      },
+      {
+        "title": "test(homebrew): scroll benchmark for the installed package table",
+        "pr": 1971
+      },
+      {
+        "title": "perf(clipboard): smooth scrolling for the history sheet and the panel",
+        "pr": 1975
+      },
+      {
+        "title": "test(music): scroll benchmark for tracks and favourites",
+        "pr": 1981
+      },
+      {
+        "title": "perf(usage): virtualize the dashboard project list",
+        "pr": 1976
+      },
+      {
+        "title": "perf(attention): realize the overview panels up front",
+        "pr": 1970
+      },
+      {
+        "title": "test(machines): scroll benchmark for processes, containers and images",
+        "pr": 1977
+      },
+      {
+        "title": "test(docs): scroll benchmark for the navigator and a long document",
+        "pr": 1974
+      },
+      {
+        "title": "perf(downloads): virtualize the download history",
+        "pr": 1979
+      },
+      {
+        "title": "test(companion): scroll benchmark for the library and mind screens",
+        "pr": 1978
+      },
+      {
+        "title": "test(host): benchmark scrolling the Extensions page",
+        "pr": 1972
+      },
+      {
+        "title": "perf(emoji): draw cached glyph images instead of live emoji text",
+        "pr": 1980
+      },
+      {
+        "title": "fix: Disk Map name in settings and installed-only Presenter blur list",
+        "pr": 1973
+      },
+      {
+        "title": "perf(usage): stop the open project list slowing the page scroll",
+        "pr": 1982
+      },
+      {
+        "title": "perf(usage): cheaper first appearance for the dashboard charts and heatmap",
+        "pr": 1983
+      },
+      {
+        "title": "fix(calendar): make the agenda scrollable and benchmark it with running apps",
+        "pr": 1984
+      },
+      {
+        "title": "fix(release): wait out GitHub's secondary rate limit during extension publication",
+        "pr": 1985
+      }
+    ]
+  },
+  {
+    "version": "0.0.380",
+    "date": "2026-11-04",
+    "changes": [
+      {
+        "title": "fix(release): wait out an exhausted GitHub rate limit during host release publication",
+        "pr": 1939
+      }
+    ]
+  },
+  {
+    "version": "0.0.379",
+    "date": "2026-11-04",
+    "changes": []
+  },
+  {
+    "version": "0.0.378",
+    "date": "2026-11-03",
+    "changes": []
+  },
+  {
+    "version": "0.0.377",
+    "date": "2026-11-03",
+    "changes": [
+      {
+        "title": "feat(extensions): add the versioned Swift runtime contract",
+        "pr": 1931
+      },
+      {
+        "title": "feat(extensions): declare Home and Notch providers in manifests",
+        "pr": 1930
+      },
+      {
+        "title": "fix(extensions): report activation failures and prepare local runtime hosts",
+        "pr": 1933
+      },
+      {
+        "title": "perf(extensions): verify installed bundles before first activation",
+        "pr": 1936
+      },
+      {
+        "title": "test(extensions): verify crash recovery with isolated process aborts",
+        "pr": 1937
+      },
+      {
+        "title": "fix(release): publish locally from a frozen detached checkout",
+        "pr": 1938
+      },
+      {
+        "title": "refactor(extensions): share attention, camera and privileged runtime ownership",
+        "pr": 1932
+      },
+      {
+        "title": "refactor(extensions): share usage and agent service lifecycle",
+        "pr": 1934
+      },
+      {
+        "title": "feat(extensions): use typed dispatch across the host runtime",
+        "pr": 1935
+      }
+    ]
+  },
+  {
+    "version": "0.0.376",
+    "date": "2026-11-03",
+    "changes": [
+      {
+        "title": "fix(release): release commits no longer supersede extension publication",
+        "pr": 1926
+      },
+      {
+        "title": "fix(release): keep extension publication within the GitHub API budget",
+        "pr": 1927
+      },
+      {
+        "title": "fix(release): retry failed asset downloads when verifying extension releases",
+        "pr": 1928
+      },
+      {
+        "title": "fix(release): ignore empty duplicate drafts in release tag lookup",
+        "pr": 1929
+      }
+    ]
+  },
+  {
+    "version": "0.0.375",
+    "date": "2026-11-03",
+    "changes": [
+      {
+        "title": "fix(release): wait out an exhausted GitHub rate limit during extension publication",
+        "pr": 1924
+      },
+      {
+        "title": "feat(release): force_all option to rebuild and re-version every extension",
+        "pr": 1925
+      }
+    ]
+  },
+  {
+    "version": "0.0.374",
+    "date": "2026-11-03",
+    "changes": []
+  },
+  {
+    "version": "0.0.373",
+    "date": "2026-11-01",
+    "changes": [
+      {
+        "title": "feat(dev): one-command extension loop, watch mode and a local signed catalog",
+        "pr": 1887
+      },
+      {
+        "title": "feat(host): start on-demand extensions on first use, remember signature checks and guard launch crashes",
+        "pr": 1888
+      },
+      {
+        "title": "fix(ci): install JavaScript dependencies before make ci-local",
+        "pr": 1889
+      },
+      {
+        "title": "fix(machines): stop crashing when remote command output arrives",
+        "pr": 1890
+      },
+      {
+        "title": "fix: refresh machine usage from large journals",
+        "pr": 1883
+      },
+      {
+        "title": "feat: select rate limit history by account",
+        "pr": 1885
+      },
+      {
+        "title": "fix(host): keep the notch panel full height",
+        "pr": 1891
+      }
+    ]
+  },
+  {
+    "version": "0.0.372",
+    "date": "2026-11-01",
+    "changes": [
+      {
+        "title": "feat(host): measure extension load timings and test dev builds in the background",
+        "pr": 1886
+      }
+    ]
+  },
+  {
+    "version": "0.0.371",
+    "date": "2026-11-01",
+    "changes": [
+      {
+        "title": "fix: make the notch clickable and scrollable again, with Spotify album art",
+        "pr": 1884
+      }
+    ]
+  },
+  {
+    "version": "0.0.370",
+    "date": "2026-11-01",
+    "changes": [
+      {
+        "title": "docs: document parallel development, local extension builds and verification",
+        "pr": 1879
+      },
+      {
+        "title": "fix: restore responsive agent tabs and independent Herdr sessions",
+        "pr": 1880
+      },
+      {
+        "title": "fix: restore usage refresh and subscription account recovery",
+        "pr": 1881
+      },
+      {
+        "title": "fix: make extension startup, updates and page recovery reliable",
+        "pr": 1882
+      }
+    ]
+  },
+  {
+    "version": "0.0.369",
+    "date": "2026-10-30",
+    "changes": [
+      {
+        "title": "fix: keep herdr worker shutdown from hanging on in-process UI work",
+        "pr": 1877
+      },
+      {
+        "title": "fix: rebind the Edith CLI socket when its file is deleted from /tmp",
+        "pr": 1878
+      }
+    ]
+  },
+  {
+    "version": "0.0.368",
+    "date": "2026-10-30",
+    "changes": [
+      {
+        "title": "fix: make ed app relaunch quit Edith and report real extension start failures",
+        "pr": 1875
+      },
+      {
+        "title": "fix: deliver terminal input to in-process herdr and quinjet panes",
+        "pr": 1876
+      }
+    ]
+  },
+  {
+    "version": "0.0.367",
+    "date": "2026-10-30",
+    "changes": [
+      {
+        "title": "fix: name an untitled herdr agent by its kind instead of its pane id",
+        "pr": 1873
+      },
+      {
+        "title": "fix(usage): make the Claude account picker in Rate Limits clickable",
+        "pr": 1871
+      },
+      {
+        "title": "fix: keep notch cards inside their slot and scroll a tall agents card",
+        "pr": 1874
+      }
+    ]
+  },
+  {
+    "version": "0.0.366",
+    "date": "2026-10-30",
+    "changes": [
+      {
+        "title": "fix: keep the Claude status line from launching Edith when it is not reachable",
+        "pr": 1870
+      },
+      {
+        "title": "feat: report each terminal page's input delivery in ed app diagnostics",
+        "pr": 1872
+      }
+    ]
+  },
+  {
+    "version": "0.0.365",
+    "date": "2026-10-30",
+    "changes": [
+      {
+        "title": "fix: herdr panes pick up a new agent's name once it arrives",
+        "pr": 1868
+      },
+      {
+        "title": "fix: keep each herdr presentation's terminal input when another opens or closes",
+        "pr": 1869
+      }
+    ]
+  },
+  {
+    "version": "0.0.363",
+    "date": "2026-10-30",
+    "changes": [
+      {
+        "title": "fix(host): let the npx readiness probe pass on npm 11",
+        "pr": 1865
+      }
+    ]
+  },
+  {
+    "version": "0.0.362",
+    "date": "2026-10-29",
+    "changes": [
+      {
+        "title": "fix(virtualCamera): accept the host ABI the package's parts share",
+        "pr": 1862
+      },
+      {
+        "title": "fix(host): start mid-recovery extensions after their migrated package installs",
+        "pr": 1863
+      },
+      {
+        "title": "fix(ci): find notary submissions when only one extension batch builds",
+        "pr": 1864
+      }
+    ]
+  },
+  {
+    "version": "0.0.361",
+    "date": "2026-10-29",
+    "changes": [
+      {
+        "title": "style: format the usage native collector",
+        "pr": 1841
+      },
+      {
+        "title": "style: wrap two long expectations in the usage capacity tests",
+        "pr": 1842
+      },
+      {
+        "title": "fix(usage): bound the teardown wait so disable reaches disabled",
+        "pr": 1843
+      },
+      {
+        "title": "fix(host): make extensions install enable a disabled extension",
+        "pr": 1845
+      },
+      {
+        "title": "fix: herdr tab and split focus keys reach the page through the responder chain",
+        "pr": 1846
+      },
+      {
+        "title": "fix: resume the shared herdr store when the engine starts again after a disable",
+        "pr": 1850
+      },
+      {
+        "title": "fix: require Developer ID signing and notarization for releases",
+        "pr": 1844
+      },
+      {
+        "title": "perf(usage): parse UTC timestamps without ICU during indexing",
+        "pr": 1849
+      },
+      {
+        "title": "fix(host): report why an extension did not start and retry through a catalog update",
+        "pr": 1848
+      },
+      {
+        "title": "fix(accounts): stop concurrent limit refreshes failing with 'Account storage is busy'",
+        "pr": 1857
+      },
+      {
+        "title": "perf(usage): stop engine polling while hidden and share the peer call queue",
+        "pr": 1847
+      },
+      {
+        "title": "perf(usage): poll only once the scene is visible and back off when nothing changes",
+        "pr": 1860
+      },
+      {
+        "title": "feat: update all installed extensions",
+        "pr": 1852
+      },
+      {
+        "title": "fix: herdr panes opened after the last host event get focused terminal surfaces",
+        "pr": 1853
+      },
+      {
+        "title": "fix: herdr agent terminals rebind after rendering stops",
+        "pr": 1840
+      },
+      {
+        "title": "fix: prepare Ghostty artifacts before extension-dev builds",
+        "pr": 1839
+      },
+      {
+        "title": "fix(machines): wait for a finished download without blocking a concurrency thread",
+        "pr": 1856
+      },
+      {
+        "title": "fix: open the terminal of a freshly launched herdr agent before the next refresh lists it",
+        "pr": 1858
+      },
+      {
+        "title": "fix(usage): finish the pending home usage cache write before shutdown completes",
+        "pr": 1859
+      },
+      {
+        "title": "ci: notarize off macOS runners with a resilient waiter",
+        "pr": 1854
+      },
+      {
+        "title": "feat(host): move to edith-host-6 for the Developer ID signing team",
+        "pr": 1861
+      }
+    ]
+  },
+  {
+    "version": "0.0.360",
+    "date": "2026-10-28",
+    "changes": [
+      {
+        "title": "fix: stop polling the System engine four times a second while the page is open",
+        "pr": 1828
+      },
+      {
+        "title": "perf: defer the full usage index and parse only appended bytes",
+        "pr": 1829
+      },
+      {
+        "title": "fix: stop ed shelf commands from crashing the app",
+        "pr": 1832
+      },
+      {
+        "title": "test: wait for the LaTeX workspace render instead of a fixed sleep",
+        "pr": 1836
+      },
+      {
+        "title": "fix: fetch the extension catalog without the rate-limited GitHub API",
+        "pr": 1833
+      },
+      {
+        "title": "fix: extension command help lists --version and answers it",
+        "pr": 1830
+      },
+      {
+        "title": "fix: stop Task.sleep(for:) defaults and sync task-local bindings from aborting the task allocator",
+        "pr": 1834
+      },
+      {
+        "title": "fix: skip extension publication superseded by a newer main commit",
+        "pr": 1835
+      },
+      {
+        "title": "fix: index large usage histories and isolate per-source failures",
+        "pr": 1837
+      },
+      {
+        "title": "fix: herdr split drop keeps one tab and replaced panes reconnect their terminal",
+        "pr": 1838
+      }
+    ]
+  },
+  {
+    "version": "0.0.359",
+    "date": "2026-10-28",
+    "changes": [
+      {
+        "title": "fix: report real compatibility and state in extensions ls and info",
+        "pr": 1782
+      },
+      {
+        "title": "fix: stop Music rewriting its queue and index files while idle",
+        "pr": 1792
+      },
+      {
+        "title": "fix: extension settings sheets scroll inside their presentation",
+        "pr": 1789
+      },
+      {
+        "title": "fix: stop Disk Map polling the extension while nothing is scanning",
+        "pr": 1791
+      },
+      {
+        "title": "fix: read Keep awake state from the extension so the tile can turn it off",
+        "pr": 1793
+      },
+      {
+        "title": "fix: open the maintenance page each sidebar item names and keep its section switcher",
+        "pr": 1794
+      },
+      {
+        "title": "fix: release the package lease held by extension views when the extension stops",
+        "pr": 1797
+      },
+      {
+        "title": "fix: slow Virtual Camera preview and status polling when no frames arrive",
+        "pr": 1800
+      },
+      {
+        "title": "fix: read piped stdin in ed database and ed latex commands",
+        "pr": 1795
+      },
+      {
+        "title": "fix: add the Navigate menu once however many extensions render pages",
+        "pr": 1786
+      },
+      {
+        "title": "fix: surface shortcut registration conflicts and keep the previous shortcut on failure",
+        "pr": 1788
+      },
+      {
+        "title": "fix: accept /dev/null as stdin and skip live input for help",
+        "pr": 1796
+      },
+      {
+        "title": "fix: sync clipboard backups incrementally and stop polling the idle download queue",
+        "pr": 1801
+      },
+      {
+        "title": "fix: let the emoji CLI run right after install",
+        "pr": 1802
+      },
+      {
+        "title": "fix: stop Color Picker without waiting for the open sampler",
+        "pr": 1803
+      },
+      {
+        "title": "fix: let the app recognise extension views that take keys, scrolling or history directly",
+        "pr": 1806
+      },
+      {
+        "title": "fix: let database connection cards be pressed through accessibility",
+        "pr": 1809
+      },
+      {
+        "title": "fix: recover from a disable that times out and keep the Bifrost shortcut until it stops",
+        "pr": 1811
+      },
+      {
+        "title": "fix: mic mute no longer unmutes a microphone it never muted",
+        "pr": 1784
+      },
+      {
+        "title": "fix: require a command, option or control key when recording a global shortcut",
+        "pr": 1808
+      },
+      {
+        "title": "fix: presenter publishes its shared state only when it changes",
+        "pr": 1787
+      },
+      {
+        "title": "fix: show LaTeX projects added or removed from the terminal in the page",
+        "pr": 1810
+      },
+      {
+        "title": "fix: keep the exit code of commands that finish before stdin ends",
+        "pr": 1812
+      },
+      {
+        "title": "fix: presenter hides menu bar numbers again",
+        "pr": 1783
+      },
+      {
+        "title": "fix: decode the agent activity snapshot dates in the interface",
+        "pr": 1805
+      },
+      {
+        "title": "fix: end the stdin of streamed agent hooks so provider hooks return",
+        "pr": 1804
+      },
+      {
+        "title": "fix: list local folders off the main thread",
+        "pr": 1807
+      },
+      {
+        "title": "fix: leave installs running and make installing and the command line resilient",
+        "pr": 1813
+      },
+      {
+        "title": "fix: report the extension runtime in ed extensions status instead of permission and tool gaps",
+        "pr": 1814
+      },
+      {
+        "title": "fix: index usage with bounded memory and skip reassembly when nothing changed",
+        "pr": 1815
+      },
+      {
+        "title": "fix: presenter privacy applies from the first frame after launch",
+        "pr": 1816
+      },
+      {
+        "title": "fix: ed config reads and writes each extension's own suite and lists every original key",
+        "pr": 1817
+      },
+      {
+        "title": "perf: stop idle wakeups from extension peer waits, workers and quick actions",
+        "pr": 1818
+      },
+      {
+        "title": "perf: verify extension signatures off the main thread and once per process",
+        "pr": 1819
+      },
+      {
+        "title": "perf: back the downloads observer off to 1 s while idle",
+        "pr": 1821
+      },
+      {
+        "title": "perf: stop polling the Hinge lid sensor while the feature is off",
+        "pr": 1822
+      },
+      {
+        "title": "fix: ed config restores every original key with owner routing, live sync and enable hints",
+        "pr": 1820
+      },
+      {
+        "title": "fix: stop bundle signature checks from deadlocking launch with many extensions",
+        "pr": 1823
+      },
+      {
+        "title": "perf: idle Window Sweaters snapshot fallback 100 ms to 1 s",
+        "pr": 1824
+      },
+      {
+        "title": "perf: cheaper first Usage index",
+        "pr": 1826
+      },
+      {
+        "title": "fix: unblock main CI and extension publishing",
+        "pr": 1825
+      },
+      {
+        "title": "fix: skip releases repeated across pages instead of failing the publish",
+        "pr": 1827
+      }
+    ]
+  },
+  {
+    "version": "0.0.358",
+    "date": "2026-10-27",
+    "changes": [
+      {
+        "title": "ci: fix the Semgrep failure and run security scans locally",
+        "pr": 1781
+      }
+    ]
+  },
+  {
+    "version": "0.0.357",
+    "date": "2026-10-27",
+    "changes": [
+      {
+        "title": "ci: publish extensions and the app in one pipeline",
+        "pr": 1780
+      }
+    ]
+  },
+  {
+    "version": "0.0.356",
+    "date": "2026-10-27",
+    "changes": [
+      {
+        "title": "chore: accept the unreachable block-buffer advisory until digest 0.11",
+        "pr": 1774
+      },
+      {
+        "title": "fix: give Presenter its own global hotkey identifier",
+        "pr": 1772
+      },
+      {
+        "title": "fix: ship the privileged extension carrier daemon",
+        "pr": 1770
+      },
+      {
+        "title": "fix: keep Edith in the Dock while open and close on Cmd-Q",
+        "pr": 1771
+      },
+      {
+        "title": "feat: regroup extensions into five clear groups with plain names",
+        "pr": 1776
+      },
+      {
+        "title": "feat: install extensions concurrently with per-extension state",
+        "pr": 1775
+      },
+      {
+        "title": "fix: let agent terminals start and keep worker state private",
+        "pr": 1773
+      },
+      {
+        "title": "feat: sideload locally built extensions into development builds",
+        "pr": 1779
+      },
+      {
+        "title": "ci: build extension packages in balanced batches",
+        "pr": 1778
+      }
+    ]
+  },
+  {
+    "version": "0.0.355",
+    "date": "2026-10-27",
+    "changes": [
+      {
+        "title": "fix: restore keyboard shortcut routing between host and extensions",
+        "pr": 1765
+      }
+    ]
+  },
+  {
+    "version": "0.0.354",
+    "date": "2026-10-26",
+    "changes": [
+      {
+        "title": "fix: resume interrupted extension publication",
+        "pr": 1760
+      },
+      {
+        "title": "fix: restore native window controls",
+        "pr": 1761
+      },
+      {
+        "title": "fix: preserve fleet state across interface presentations",
+        "pr": 1762
+      },
+      {
+        "title": "fix: prevent fleet refresh from starving navigation",
+        "pr": 1763
+      },
+      {
+        "title": "fix: center the about page",
+        "pr": 1764
+      }
+    ]
+  },
+  {
+    "version": "0.0.353",
+    "date": "2026-10-26",
+    "changes": [
+      {
+        "title": "fix: preserve extension state and repair host lifecycle",
+        "pr": 1757
+      },
+      {
+        "title": "fix: repair extension activation and restore native app behavior",
+        "pr": 1758
+      }
+    ]
+  },
+  {
+    "version": "0.0.352",
+    "date": "2026-10-26",
+    "changes": [
+      {
+        "title": "fix: discover optional agent hooks from provider catalogs",
+        "pr": 1756
+      }
+    ]
+  },
+  {
+    "version": "0.0.351",
+    "date": "2026-10-26",
+    "changes": [
+      {
+        "title": "feat: extension marketplace",
+        "pr": 1699
+      },
+      {
+        "title": "fix: complete marketplace lifecycle and release delivery",
+        "pr": 1755
+      }
+    ]
+  },
+  {
+    "version": "0.0.350",
+    "date": "2026-10-22",
+    "changes": [
+      {
+        "title": "refactor(camera): remove the meeting microphone and audio stack",
+        "pr": 1745
+      }
+    ]
+  },
+  {
+    "version": "0.0.349",
+    "date": "2026-10-22",
+    "changes": [
+      {
+        "title": "feat(herdr): cmd-click a terminal path to spot it in the agent's Files",
+        "pr": 1744
+      }
+    ]
+  },
+  {
+    "version": "0.0.348",
+    "date": "2026-10-21",
+    "changes": [
+      {
+        "title": "fix(meetings): keep meeting audio on Edith Microphone when the default output changes",
+        "pr": 1743
+      }
+    ]
+  },
+  {
+    "version": "0.0.347",
+    "date": "2026-10-21",
+    "changes": [
+      {
+        "title": "feat(herdr): browse an agent's files next to its terminal and Quinjet diff",
+        "pr": 1742
+      }
+    ]
+  },
+  {
+    "version": "0.0.346",
+    "date": "2026-10-21",
+    "changes": [
+      {
+        "title": "fix(terminal): keep terminal scale correct when moving between displays",
+        "pr": 1741
+      }
+    ]
+  },
+  {
+    "version": "0.0.345",
+    "date": "2026-10-21",
+    "changes": [
+      {
+        "title": "fix(code-stats): original commit dates, LFS files and filters on every card",
+        "pr": 1739
+      },
+      {
+        "title": "fix(usage): list Claude accounts like other providers",
+        "pr": 1738
+      },
+      {
+        "title": "fix(attention): apply every filter to every section",
+        "pr": 1740
+      }
+    ]
+  },
+  {
+    "version": "0.0.344",
+    "date": "2026-10-20",
+    "changes": [
+      {
+        "title": "fix(social): leave space and arrow keys to the focused website",
+        "pr": 1737
+      }
+    ]
+  },
+  {
+    "version": "0.0.343",
+    "date": "2026-10-19",
+    "changes": [
+      {
+        "title": "feat(usage): show Codex credits in the menu bar",
+        "pr": 1732
+      }
+    ]
+  },
+  {
+    "version": "0.0.342",
+    "date": "2026-10-19",
+    "changes": [
+      {
+        "title": "fix(herdr): pass account credentials through the pane environment",
+        "pr": 1731
+      }
+    ]
+  },
+  {
+    "version": "0.0.341",
+    "date": "2026-10-19",
+    "changes": [
+      {
+        "title": "fix(attention): stop dropping app samples after a delivery sequence gap",
+        "pr": 1728
+      },
+      {
+        "title": "fix(herdr): keep account credentials out of launch commands",
+        "pr": 1727
+      },
+      {
+        "title": "fix(social): basic browser behaviour in website panes",
+        "pr": 1729
+      },
+      {
+        "title": "fix(performance): update input audit evidence after web view input change",
+        "pr": 1730
+      }
+    ]
+  },
+  {
+    "version": "0.0.340",
+    "date": "2026-10-19",
+    "changes": [
+      {
+        "title": "feat(social): full browser right-click menu in Social Manager panes",
+        "pr": 1726
+      }
+    ]
+  },
+  {
+    "version": "0.0.339",
+    "date": "2026-10-19",
+    "changes": [
+      {
+        "title": "fix(usage): show the real reason when account limits fail",
+        "pr": 1725
+      }
+    ]
+  },
+  {
+    "version": "0.0.338",
+    "date": "2026-10-18",
+    "changes": [
+      {
+        "title": "feat: add cross-profile social account views and shared pane navigation",
+        "pr": 1723
+      }
+    ]
+  },
+  {
+    "version": "0.0.337",
+    "date": "2026-10-18",
+    "changes": [
+      {
+        "title": "feat: add profile-based Social Manager with isolated browser workspaces",
+        "pr": 1720
+      },
+      {
+        "title": "fix: complete Social Manager shared UI integration",
+        "pr": 1722
+      }
+    ]
+  },
+  {
+    "version": "0.0.336",
+    "date": "2026-10-18",
+    "changes": [
+      {
+        "title": "fix(herdr): automatically start stopped local sessions",
+        "pr": 1718
+      }
+    ]
+  },
+  {
+    "version": "0.0.335",
+    "date": "2026-10-18",
+    "changes": [
+      {
+        "title": "fix(herdr): clear startup warnings after live confirmation",
+        "pr": 1717
+      }
+    ]
+  },
+  {
+    "version": "0.0.334",
+    "date": "2026-10-17",
+    "changes": [
+      {
+        "title": "fix: keep the virtual camera as sharp as the camera",
+        "pr": 1716
+      },
+      {
+        "title": "fix(limits): show Cursor model pools from the spending page",
+        "pr": 1715
+      }
+    ]
+  },
+  {
+    "version": "0.0.333",
+    "date": "2026-10-17",
+    "changes": [
+      {
+        "title": "fix(terminal): drag-select text in agent sessions",
+        "pr": 1712
+      },
+      {
+        "title": "fix(herdr): wait for a new pane shell before starting an agent",
+        "pr": 1713
+      },
+      {
+        "title": "feat(herdr): message a tab or space and schedule each agent",
+        "pr": 1714
+      }
+    ]
+  },
+  {
+    "version": "0.0.332",
+    "date": "2026-10-17",
+    "changes": [
+      {
+        "title": "feat: fold the desktop as the MacBook lid closes",
+        "pr": 1709
+      },
+      {
+        "title": "fix(herdr): float the terminal panel over the agent canvas",
+        "pr": 1710
+      },
+      {
+        "title": "fix: move the virtual camera picture with the drag",
+        "pr": 1711
+      },
+      {
+        "title": "fix(limits): show Cursor included usage and keep a history miss off the panel",
+        "pr": 1708
+      }
+    ]
+  },
+  {
+    "version": "0.0.331",
+    "date": "2026-10-17",
+    "changes": [
+      {
+        "title": "fix(usage): ignore project attribution in retained baselines",
+        "pr": 1707
+      }
+    ]
+  },
+  {
+    "version": "0.0.330",
+    "date": "2026-10-16",
+    "changes": [
+      {
+        "title": "fix(theme): keep every surface and accent on the selected theme",
+        "pr": 1704
+      },
+      {
+        "title": "fix(limits): show account limits on launch instead of the CLI account",
+        "pr": 1705
+      },
+      {
+        "title": "feat(storage): simplify the storage page",
+        "pr": 1706
+      }
+    ]
+  },
+  {
+    "version": "0.0.329",
+    "date": "2026-10-16",
+    "changes": [
+      {
+        "title": "feat: show days instead of 24+ hours in duration labels",
+        "pr": 1702
+      },
+      {
+        "title": "feat(code-stats): settings sheet after onboarding",
+        "pr": 1701
+      },
+      {
+        "title": "fix(limits): show Claude account limits only for connected subscriptions",
+        "pr": 1703
+      }
+    ]
+  },
+  {
+    "version": "0.0.328",
+    "date": "2026-10-16",
+    "changes": [
+      {
+        "title": "fix(code-stats): count every signed-in gh account",
+        "pr": 1700
+      }
+    ]
+  },
+  {
+    "version": "0.0.327",
+    "date": "2026-10-16",
+    "changes": [
+      {
+        "title": "feat(settings): restore the Storage tab",
+        "pr": 1694
+      },
+      {
+        "title": "feat(accounts): restore saved Claude account storage",
+        "pr": 1695
+      },
+      {
+        "title": "feat(usage): show subscription limits for each saved Claude account",
+        "pr": 1696
+      },
+      {
+        "title": "feat(herdr): choose a saved Claude account for each new session",
+        "pr": 1697
+      }
+    ]
+  },
+  {
+    "version": "0.0.326",
+    "date": "2026-10-16",
+    "changes": [
+      {
+        "title": "fix: v0.0.318 parity batch 3 (navigation, background, status menus, notch alerts, music, studio, camera, pickers) [skip ci]",
+        "pr": 1651
+      },
+      {
+        "title": "fix: v0.0.318 parity batch 4 (packages, updates, clipboard, docs, attention, awake, utilities, memory, jev, plugins, cleaner, retries, no stray apps) [skip ci]",
+        "pr": 1672
+      },
+      {
+        "title": "fix(jev): list JevFind in the extension manifest [skip ci]",
+        "pr": 1673
+      },
+      {
+        "title": "fix(clipboard): drop the deleted shortcut recorder from the extension manifest [skip ci]",
+        "pr": 1675
+      },
+      {
+        "title": "fix(host): no Dock icons from extension processes, and enabled extensions start together [skip ci]",
+        "pr": 1688
+      },
+      {
+        "title": "revert: restore the v0.0.318 app (contents of 227aa1788d7b)",
+        "pr": 1689
+      }
+    ]
+  },
+  {
+    "version": "0.0.325",
+    "date": "2026-10-16",
+    "changes": [
+      {
+        "title": "fix: v0.0.318 parity batch 2 (in-process pages, instant pages, quit, notch, extensions) [skip ci]",
+        "pr": 1637
+      }
+    ]
+  },
+  {
+    "version": "0.0.324",
+    "date": "2026-10-15",
+    "changes": [
+      {
+        "title": "fix(usage): publish refreshes with unattributed receipts [skip ci]",
+        "pr": 1618
+      }
+    ]
+  },
+  {
+    "version": "0.0.323",
+    "date": "2026-10-15",
+    "changes": [
+      {
+        "title": "fix: v0.0.318 parity batch 1 (usage CPU, focus retention, startup, quit, sidebar, cached loading)",
+        "pr": 1607
+      }
+    ]
+  },
+  {
+    "version": "0.0.322",
+    "date": "2026-10-15",
+    "changes": [
+      {
+        "title": "fix: quit, ed launch, crash, extension update and usage CPU fixes",
+        "pr": 1594
+      },
+      {
+        "title": "fix(release): clear previous extension tools before a local release",
+        "pr": 1595
+      }
+    ]
+  },
+  {
+    "version": "0.0.321",
+    "date": "2026-10-15",
+    "changes": [
+      {
+        "title": "fix(release): expect stable host releases in coordinated release checks",
+        "pr": 1586
+      },
+      {
+        "title": "fix(host): simple quit, reliable restart, and crash fixes",
+        "pr": 1587
+      },
+      {
+        "title": "fix(extensions): register extension ed commands and unblock CI builds",
+        "pr": 1588
+      },
+      {
+        "title": "test(views): renew source pins for the reviewed CLI catalog routing",
+        "pr": 1589
+      },
+      {
+        "title": "ci: publish releases locally instead of from GitHub Actions",
+        "pr": 1590
+      },
+      {
+        "title": "feat(host): start at login, restore Quit, and launch Edith for ed",
+        "pr": 1591
+      },
+      {
+        "title": "fix(release): export the release tag before the catalog readiness check",
+        "pr": 1592
+      },
+      {
+        "title": "fix(release): record the host release proof in local releases",
+        "pr": 1593
+      }
+    ]
+  },
+  {
+    "version": "0.0.320",
+    "date": "2026-10-15",
+    "changes": [
+      {
+        "title": "perf(extensions): cut extension build job runtime",
+        "pr": 1579
+      },
+      {
+        "title": "fix: clear shared build and plan log warnings",
+        "pr": 1574
+      },
+      {
+        "title": "fix(companion): clear companion build warnings",
+        "pr": 1572
+      },
+      {
+        "title": "fix(extensions): clear code stats, site audit and bifrost compiler warnings",
+        "pr": 1575
+      },
+      {
+        "title": "fix(extensions): resolve compiler warnings in seven utility extensions",
+        "pr": 1573
+      },
+      {
+        "title": "fix(extensions): clear compiler warnings in media and data extensions",
+        "pr": 1577
+      },
+      {
+        "title": "fix(docs): restore the implementation-only Markdown import",
+        "pr": 1580
+      },
+      {
+        "title": "test(harness): settle camera children and keep virtual camera unchanged",
+        "pr": 1581
+      },
+      {
+        "title": "fix(release): upload large release assets by release ID",
+        "pr": 1582
+      },
+      {
+        "title": "fix(release): tolerate pending and skipped publisher steps in evidence checks",
+        "pr": 1583
+      },
+      {
+        "title": "ci(extensions): run the publisher when its evidence scripts change",
+        "pr": 1584
+      },
+      {
+        "title": "ci(release): publish host releases as stable latest releases",
+        "pr": 1585
+      }
+    ]
+  },
+  {
+    "version": "0.0.319",
+    "date": "2026-10-14",
+    "changes": [
+      {
+        "title": "feat: ship a lightweight app with an independent extension marketplace",
+        "pr": 1014
+      },
+      {
+        "title": "fix: unblock the first Keep Awake and lightweight host releases",
+        "pr": 1357
+      },
+      {
+        "title": "Fix focused Keep Awake release packaging",
+        "pr": 1358
+      },
+      {
+        "title": "fix: complete scoped Keep Awake release inputs",
+        "pr": 1360
+      },
+      {
+        "title": "fix: isolate Keep Awake native tests and shipping fixtures",
+        "pr": 1362
+      },
+      {
+        "title": "fix: repair Keep Awake native acceptance and peer rejection checks",
+        "pr": 1363
+      },
+      {
+        "title": "fix: expose the original Keep Awake control to accessibility",
+        "pr": 1364
+      },
+      {
+        "title": "fix: patch companion QUIC advisories and yanked cipher dependency",
+        "pr": 1366
+      },
+      {
+        "title": "fix: replace the unmaintained companion YAML parser",
+        "pr": 1369
+      },
+      {
+        "title": "feat: adapt saved accounts and quota controls to optional extensions",
+        "pr": 1365
+      },
+      {
+        "title": "test: add fast isolated local account SDK checks",
+        "pr": 1367
+      },
+      {
+        "title": "fix: reconcile focused account CI and presentation checks",
+        "pr": 1370
+      },
+      {
+        "title": "fix: reject immutable extension conflicts before upload",
+        "pr": 1372
+      },
+      {
+        "title": "fix: retain ownership seals after zombie cleanup",
+        "pr": 1373
+      },
+      {
+        "title": "fix: run every host test through its native runner",
+        "pr": 1376
+      },
+      {
+        "title": "test: verify published Keep Awake installation and updates",
+        "pr": 1377
+      },
+      {
+        "title": "fix: use authenticated Unix sockets for extension commands",
+        "pr": 1371
+      },
+      {
+        "title": "fix: retire calendar presentations and cancel each request once",
+        "pr": 1379
+      },
+      {
+        "title": "test: join command fixture work before lifecycle completion",
+        "pr": 1380
+      },
+      {
+        "title": "feat: show per-extension sizes before workflow installation",
+        "pr": 1378
+      },
+      {
+        "title": "build: package extension views with a minimal signed carrier",
+        "pr": 1381
+      },
+      {
+        "title": "fix: join Music shutdown and admit original preference fixtures",
+        "pr": 1382
+      },
+      {
+        "title": "test: verify original Keep Awake controls on integrated main",
+        "pr": 1383
+      },
+      {
+        "title": "test: complete the filesystem installation transaction",
+        "pr": 1384
+      },
+      {
+        "title": "fix: retire Music preferences and refresh original-view source pins",
+        "pr": 1385
+      },
+      {
+        "title": "test: isolate Database mutation and executor diagnostics",
+        "pr": 1386
+      },
+      {
+        "title": "test: verify original Notch settings and scoped preference persistence",
+        "pr": 1387
+      },
+      {
+        "title": "test: compile signed functional roles with owned fixture support",
+        "pr": 1388
+      },
+      {
+        "title": "test: wait for original Keep Awake accessibility press readiness",
+        "pr": 1389
+      },
+      {
+        "title": "build: refresh generated host ABI metadata",
+        "pr": 1390
+      },
+      {
+        "title": "test: fix the isolated carrier copy environment",
+        "pr": 1391
+      },
+      {
+        "title": "test: fix extension engine callback requirement compilation",
+        "pr": 1392
+      },
+      {
+        "title": "ci: pin secret scanning to the pull request head",
+        "pr": 1393
+      },
+      {
+        "title": "ci: validate the selected Swift driver alias",
+        "pr": 1394
+      },
+      {
+        "title": "Fix hosted Keep accessibility value readback",
+        "pr": 1405
+      },
+      {
+        "title": "Separate bounded packaging contract cases",
+        "pr": 1407
+      },
+      {
+        "title": "Complete signed package inspection fixture provenance",
+        "pr": 1408
+      },
+      {
+        "title": "test(host): isolate missing owner diagnostics from process startup",
+        "pr": 1419
+      },
+      {
+        "title": "fix(release): preserve frozen source during host packaging",
+        "pr": 1420
+      },
+      {
+        "title": "test(packaging): isolate size accounting case deadlines",
+        "pr": 1413
+      },
+      {
+        "title": "fix(release): separate catalog staging from promotion",
+        "pr": 1412
+      },
+      {
+        "title": "test(keep-awake): capture bounded original checkbox observations",
+        "pr": 1423
+      },
+      {
+        "title": "test(host): diagnose lifecycle fixture startup signal failures",
+        "pr": 1424
+      },
+      {
+        "title": "fix(timelapse): bind queued thumbnail admission to the loader actor",
+        "pr": 1425
+      },
+      {
+        "title": "fix: stabilize Keep Awake release acceptance and identity",
+        "pr": 1427
+      },
+      {
+        "title": "fix(keep-awake): preserve preference edits while writes are pending",
+        "pr": 1428
+      },
+      {
+        "title": "fix(ci): renew the Keep Awake managed-view source review",
+        "pr": 1430
+      },
+      {
+        "title": "fix(ci): revalidate sealed processes after missing kernel records",
+        "pr": 1432
+      },
+      {
+        "title": "fix(build): preserve packaging arguments on macOS Bash",
+        "pr": 1436
+      },
+      {
+        "title": "fix(ci): track exited children during native cleanup",
+        "pr": 1437
+      },
+      {
+        "title": "fix(timelapse): preserve export joins and queue-owned writer fixtures",
+        "pr": 1438
+      },
+      {
+        "title": "fix(companion): preserve maintained PDF extraction contracts",
+        "pr": 1446
+      },
+      {
+        "title": "fix(test): report closed Keep Awake worker failures",
+        "pr": 1454
+      },
+      {
+        "title": "fix(companion): preserve parser values without dead-code warnings",
+        "pr": 1447
+      },
+      {
+        "title": "fix(ci): scope release-only workflow edits to pull request checks",
+        "pr": 1453
+      },
+      {
+        "title": "fix(music): join service retirement before fresh remote configuration",
+        "pr": 1440
+      },
+      {
+        "title": "test: define source-only contracts for public host and extension updates",
+        "pr": 1404
+      },
+      {
+        "title": "test(update): observe real public app and extension updates",
+        "pr": 1410
+      },
+      {
+        "title": "feat(releases): coordinate public host and live catalog updates",
+        "pr": 1417
+      },
+      {
+        "title": "fix(releases): measure current generation during staged update preparation",
+        "pr": 1426
+      },
+      {
+        "title": "fix(releases): verify staged host readiness",
+        "pr": 1434
+      },
+      {
+        "title": "fix: validate cohort host release stamp continuity",
+        "pr": 1431
+      },
+      {
+        "title": "fix(updates): qualify isolated prerelease routing",
+        "pr": 1433
+      },
+      {
+        "title": "fix(releases): retain observer identity and feed receipts",
+        "pr": 1457
+      },
+      {
+        "title": "feat(release): validate completed hosts for coordinated updates",
+        "pr": 1442
+      },
+      {
+        "title": "feat(release): bind staged catalogs to completed hosts",
+        "pr": 1443
+      },
+      {
+        "title": "fix: admit signed readiness for coordinated host releases",
+        "pr": 1445
+      },
+      {
+        "title": "feat(release): verify previous public cohort inputs",
+        "pr": 1449
+      },
+      {
+        "title": "fix(release): verify inline signing requirements",
+        "pr": 1450
+      },
+      {
+        "title": "fix(ci): isolate coordinated release dispatches",
+        "pr": 1451
+      },
+      {
+        "title": "feat(release): coordinate pending hosts before catalog promotion",
+        "pr": 1455
+      },
+      {
+        "title": "fix(release): validate Sparkle host release channels",
+        "pr": 1458
+      },
+      {
+        "title": "fix(test): refresh the reviewed TimeLapse recorder pin",
+        "pr": 1461
+      },
+      {
+        "title": "fix(ci): isolate optional services from coordinated host releases",
+        "pr": 1462
+      },
+      {
+        "title": "test(ci): preserve ordinary music catalog routing",
+        "pr": 1465
+      },
+      {
+        "title": "fix(build): prepare pinned ArgumentParser sources in private checkouts",
+        "pr": 1429
+      },
+      {
+        "title": "fix(accounts): preserve isolation in optional extensions",
+        "pr": 1439
+      },
+      {
+        "title": "fix(camera): bind native policy fixtures to the frozen host",
+        "pr": 1441
+      },
+      {
+        "title": "test(camera): verify signed development host context",
+        "pr": 1456
+      },
+      {
+        "title": "test(releases): isolate input fixtures from ambient authority",
+        "pr": 1467
+      },
+      {
+        "title": "fix(test): join Studio background export fixture cleanup",
+        "pr": 1459
+      },
+      {
+        "title": "perf(studio): reuse fallback frames within owned exports",
+        "pr": 1464
+      },
+      {
+        "title": "test(releases): exercise coordinated publication across process boundaries",
+        "pr": 1463
+      },
+      {
+        "title": "test(ci): include parser dependency in routing fixtures",
+        "pr": 1469
+      },
+      {
+        "title": "fix(utilities): preserve pending preference reversions",
+        "pr": 1435
+      },
+      {
+        "title": "fix: restore frozen carrier provenance for publication",
+        "pr": 1470
+      },
+      {
+        "title": "fix(ci): authenticate owned child self-group transitions",
+        "pr": 1472
+      },
+      {
+        "title": "test(ci): fix isolated permission and signing fixtures",
+        "pr": 1474
+      },
+      {
+        "title": "fix(ci): reconcile enumerated children across missing kernel records",
+        "pr": 1475
+      },
+      {
+        "title": "fix(ci): retain bounded process ownership failure witnesses",
+        "pr": 1477
+      },
+      {
+        "title": "test(usage): retain private account data during backup",
+        "pr": 1478
+      },
+      {
+        "title": "fix(accounts): own linked subscription login profiles",
+        "pr": 1480
+      },
+      {
+        "title": "fix(ci): authenticate and retire local SDK test processes",
+        "pr": 1481
+      },
+      {
+        "title": "fix(keep-awake): invoke the selected package test driver",
+        "pr": 1482
+      },
+      {
+        "title": "fix(process): retain bounded ownership refusal proofs",
+        "pr": 1483
+      },
+      {
+        "title": "fix(accounts): join scoped renewal before revoked credential cleanup",
+        "pr": 1484
+      },
+      {
+        "title": "fix(testing): authenticate scoped build-only launcher",
+        "pr": 1485
+      },
+      {
+        "title": "fix(navigation): hide unavailable extension destinations",
+        "pr": 1486
+      },
+      {
+        "title": "test(ci): align package routes and temporary fixtures",
+        "pr": 1487
+      },
+      {
+        "title": "test(filesystem): run authority regressions under owned XCTest",
+        "pr": 1488
+      },
+      {
+        "title": "test(release): bound immutable asset scenarios separately",
+        "pr": 1489
+      },
+      {
+        "title": "fix(ci): preserve child self-group refusal diagnostics",
+        "pr": 1491
+      },
+      {
+        "title": "fix(process): reauthenticate sealed live records",
+        "pr": 1492
+      },
+      {
+        "title": "fix(process): recover authenticated live enumerated children",
+        "pr": 1493
+      },
+      {
+        "title": "fix(build): remove copied signatures before host transformation",
+        "pr": 1495
+      },
+      {
+        "title": "style(build): format copied signature test fixtures",
+        "pr": 1496
+      },
+      {
+        "title": "fix(tests): retain exiting process lineage through joined cleanup",
+        "pr": 1497
+      },
+      {
+        "title": "fix(testing): forward captured ownership records",
+        "pr": 1499
+      },
+      {
+        "title": "fix(tests): authenticate selected package driver group transitions",
+        "pr": 1504
+      },
+      {
+        "title": "fix(accounts): refresh scope for interactive subscription login",
+        "pr": 1490
+      },
+      {
+        "title": "fix(testing): retain selected package proofs through hosted cleanup",
+        "pr": 1507
+      },
+      {
+        "title": "test(keep-awake): add isolated local qualification route",
+        "pr": 1508
+      },
+      {
+        "title": "test(sdk): restore isolated owned process group regressions",
+        "pr": 1516
+      },
+      {
+        "title": "fix(ci): update Bun dependencies with the Bun ecosystem",
+        "pr": 1523
+      },
+      {
+        "title": "test(core): qualify owner IPC through a focused local Make target",
+        "pr": 1518
+      },
+      {
+        "title": "fix(ci): resolve Swift updates without generated macOS binaries",
+        "pr": 1526
+      },
+      {
+        "title": "fix(companion): expose maintained PDF dependency metadata",
+        "pr": 1525
+      },
+      {
+        "title": "fix(herdr): launch named accounts through direct commands",
+        "pr": 1509
+      },
+      {
+        "title": "fix(accounts): preserve usage deadlines when selecting named accounts",
+        "pr": 1510
+      },
+      {
+        "title": "fix(herdr): own subscription sign-in from account settings",
+        "pr": 1511
+      },
+      {
+        "title": "fix(ci): admit authenticated compiler frontend transitions",
+        "pr": 1527
+      },
+      {
+        "title": "test(herdr): add focused local account qualification",
+        "pr": 1528
+      },
+      {
+        "title": "fix(marketplace): refresh generated host ABI before checks",
+        "pr": 1529
+      },
+      {
+        "title": "fix(herdr): include login sources in the app role",
+        "pr": 1530
+      },
+      {
+        "title": "fix(usage): renew linked subscription credentials in owned scopes",
+        "pr": 1517
+      },
+      {
+        "title": "fix(usage): retain scoped quota snapshots across retries and restarts",
+        "pr": 1519
+      },
+      {
+        "title": "fix(usage): show account headers with shared menu bar colors",
+        "pr": 1520
+      },
+      {
+        "title": "fix(ci): enforce host ABI checks for script batches",
+        "pr": 1531
+      },
+      {
+        "title": "fix(usage): include quota services in the app role",
+        "pr": 1532
+      },
+      {
+        "title": "test(usage): qualify owned account contracts through local Make",
+        "pr": 1533
+      },
+      {
+        "title": "fix(herdr): use contextual sendable account defaults",
+        "pr": 1534
+      },
+      {
+        "title": "fix(usage): preserve sendable account authority defaults",
+        "pr": 1535
+      },
+      {
+        "title": "test(herdr): cover the original settings callback roundtrip",
+        "pr": 1536
+      },
+      {
+        "title": "fix(herdr): preserve actor reads in a typed default closure",
+        "pr": 1538
+      },
+      {
+        "title": "Add focused local release orchestration checks",
+        "pr": 1539
+      },
+      {
+        "title": "fix(ci): isolate nonpublishing extension validation",
+        "pr": 1537
+      },
+      {
+        "title": "fix(ci): admit runner-owned Xcode package drivers",
+        "pr": 1543
+      },
+      {
+        "title": "style(usage): apply swift format to the account header changes",
+        "pr": 1549
+      },
+      {
+        "title": "fix(host): restore extensions for upgraders from the bundled app",
+        "pr": 1548
+      },
+      {
+        "title": "fix(ci): keep area routing intact for large changed lists",
+        "pr": 1544
+      },
+      {
+        "title": "fix(extensions): expose GhosttyKit headers to terminal-family packages",
+        "pr": 1546
+      },
+      {
+        "title": "test(host): stop core owner fixture cleanup from hanging",
+        "pr": 1547
+      },
+      {
+        "title": "fix(extensions): refresh host ABI after companion Dockerfile bump",
+        "pr": 1545
+      },
+      {
+        "title": "fix(timelapse): start the shipping worker in lifecycle fixture hosts",
+        "pr": 1551
+      },
+      {
+        "title": "fix(extensions): implement suspendCommands for codeStats, music, and studio",
+        "pr": 1550
+      },
+      {
+        "title": "fix(extensions): guard fixture support imports in shipping role sources",
+        "pr": 1552
+      },
+      {
+        "title": "feat(extensions): publish every verified extension",
+        "pr": 1542
+      },
+      {
+        "title": "ci: skip hosted swift test lanes on main",
+        "pr": 1554
+      },
+      {
+        "title": "fix(machines): accept the fixture home when HOME points at it",
+        "pr": 1555
+      },
+      {
+        "title": "fix(extensions): ship attention with isolated fixture support",
+        "pr": 1556
+      },
+      {
+        "title": "fix(lid-awake): verify the carrier stub and ship lid awake",
+        "pr": 1558
+      },
+      {
+        "title": "test(ci): expect main to skip hosted swift test lanes",
+        "pr": 1559
+      },
+      {
+        "title": "feat(usage): split Claude Code usage by saved account",
+        "pr": 1553
+      },
+      {
+        "title": "fix(extensions): ship plugins, notch shelf and studio packages",
+        "pr": 1560
+      },
+      {
+        "title": "fix(ci): unblock the extension tests job and hosted script checks",
+        "pr": 1561
+      },
+      {
+        "title": "feat(extensions): defer studio from the first catalog",
+        "pr": 1563
+      },
+      {
+        "title": "ci(extensions): skip per-extension suites in publishing builds",
+        "pr": 1565
+      },
+      {
+        "title": "test(studio): bound background export completion by progress stalls",
+        "pr": 1564
+      },
+      {
+        "title": "fix(release): retry transient GitHub API failures in release scripts",
+        "pr": 1568
+      },
+      {
+        "title": "fix(database): unblock deadlocked executor shutdown tests",
+        "pr": 1567
+      },
+      {
+        "title": "fix(extensions): make the extension command harness pass on runners",
+        "pr": 1562
+      },
+      {
+        "title": "ci(extensions): drop test-only files from package fingerprints",
+        "pr": 1569
+      },
+      {
+        "title": "fix(companion): update rustls to 0.23.46",
+        "pr": 1570
+      },
+      {
+        "title": "perf(release): batch release lookups and silence expected 404s",
+        "pr": 1571
+      },
+      {
+        "title": "fix(release): keep release tags on edits and retry release commits visibly",
+        "pr": 1576
+      },
+      {
+        "title": "fix(release): stage version-stamped release plists for the release commit",
+        "pr": 1578
+      }
+    ]
+  },
+  {
+    "version": "0.0.318",
+    "date": "2026-10-09",
+    "changes": [
+      {
+        "title": "fix: refresh subscription limits from the saved login",
+        "pr": 1036
+      }
+    ]
+  },
+  {
+    "version": "0.0.317",
+    "date": "2026-10-09",
+    "changes": [
+      {
+        "title": "feat: unify agent actions and open panes in Herdr terminals",
+        "pr": 1020
+      },
+      {
+        "title": "feat: overhaul application workspaces, editing, and performance",
+        "pr": 1013
+      },
+      {
+        "title": "fix: detect hardware idle across attention collectors",
+        "pr": 1034
+      },
+      {
+        "title": "fix(studio): preserve embedded fonts in PDF image export",
+        "pr": 1035
+      },
+      {
+        "title": "feat: rebuild Home and Notch as customizable widget workspaces",
+        "pr": 1010
+      }
+    ]
+  },
+  {
+    "version": "0.0.316",
+    "date": "2026-10-08",
+    "changes": [
+      {
+        "title": "fix: add agent deletion and tab destinations to the sidebar menu",
+        "pr": 1009
+      },
+      {
+        "title": "fix: count requestless cloud receipts and report partial coverage",
+        "pr": 1011
+      },
+      {
+        "title": "fix(herdr): restore terminals and agent startup recovery",
+        "pr": 1012
+      }
+    ]
+  },
+  {
+    "version": "0.0.315",
+    "date": "2026-10-08",
+    "changes": [
+      {
+        "title": "feat: include cloud coding tasks in usage totals",
+        "pr": 1007
+      }
+    ]
+  },
+  {
+    "version": "0.0.314",
+    "date": "2026-10-08",
+    "changes": [
+      {
+        "title": "feat: add LaTeX projects, editor, CLI, and native Quinjet review",
+        "pr": 1005
+      },
+      {
+        "title": "fix: preserve LaTeX scrolling and stabilize CI",
+        "pr": 1008
+      }
+    ]
+  },
+  {
+    "version": "0.0.313",
+    "date": "2026-10-07",
+    "changes": [
+      {
+        "title": "fix(attention): show idle time as a report filter",
+        "pr": 1003
+      }
+    ]
+  },
+  {
+    "version": "0.0.312",
+    "date": "2026-10-07",
+    "changes": [
+      {
+        "title": "feat(attention): add idle-time filtering to screen time",
+        "pr": 1001
+      }
+    ]
+  },
+  {
+    "version": "0.0.311",
+    "date": "2026-10-07",
+    "changes": [
+      {
+        "title": "feat(meetings): replace synthesized soundboard effects with curated recordings",
+        "pr": 1002
+      }
+    ]
+  },
+  {
+    "version": "0.0.310",
+    "date": "2026-10-07",
+    "changes": [
+      {
+        "title": "feat: add the complete Spotify music workspace",
+        "pr": 993
+      }
+    ]
+  },
+  {
+    "version": "0.0.309",
+    "date": "2026-10-07",
+    "changes": [
+      {
+        "title": "feat: add music account and Spotify catalog services",
+        "pr": 994
+      }
+    ]
+  },
+  {
+    "version": "0.0.308",
+    "date": "2026-10-06",
+    "changes": [
+      {
+        "title": "feat(meetings): add native media controls, audio mixing and voice conversion",
+        "pr": 991
+      },
+      {
+        "title": "fix: avoid stalled time-lapse audio exports",
+        "pr": 998
+      }
+    ]
+  },
+  {
+    "version": "0.0.307",
+    "date": "2026-10-06",
+    "changes": []
+  },
+  {
+    "version": "0.0.306",
+    "date": "2026-10-05",
+    "changes": [
+      {
+        "title": "feat: run user-defined scheduled commands in the daemon",
+        "pr": 979
+      },
+      {
+        "title": "fix: connect Claude Code's status line through the ed launcher",
+        "pr": 980
+      },
+      {
+        "title": "fix: let ed-driven ssh answer password and passphrase prompts",
+        "pr": 982
+      },
+      {
+        "title": "fix: stop the daemon holding every transcript chunk in memory",
+        "pr": 981
+      },
+      {
+        "title": "ci: cancel superseded check runs when main moves on",
+        "pr": 983
+      },
+      {
+        "title": "feat: export code stats as shareable metric cards",
+        "pr": 984
+      }
+    ]
+  },
+  {
+    "version": "0.0.305",
+    "date": "2026-10-05",
+    "changes": [
+      {
+        "title": "feat: add the code stats page",
+        "pr": 975
+      },
+      {
+        "title": "feat: count code stats accurately with dedup and fast incremental runs",
+        "pr": 977
+      }
+    ]
+  },
+  {
+    "version": "0.0.304",
+    "date": "2026-10-05",
+    "changes": [
+      {
+        "title": "feat: run code stats in the agent with a schedule and ed commands",
+        "pr": 976
+      }
+    ]
+  },
+  {
+    "version": "0.0.303",
+    "date": "2026-10-04",
+    "changes": [
+      {
+        "title": "feat: add the code stats engine",
+        "pr": 973
+      }
+    ]
+  },
+  {
+    "version": "0.0.302",
+    "date": "2026-10-03",
+    "changes": [
+      {
+        "title": "perf: collect machine usage in parallel with the local pipeline",
+        "pr": 972
+      }
+    ]
+  },
+  {
+    "version": "0.0.301",
+    "date": "2026-10-03",
+    "changes": [
+      {
+        "title": "fix: unify terminal input across machine, split, and Command-J views",
+        "pr": 971
+      }
+    ]
+  },
+  {
+    "version": "0.0.300",
+    "date": "2026-10-03",
+    "changes": [
+      {
+        "title": "feat: toggle agent details with option-command-b",
+        "pr": 970
+      }
+    ]
+  },
+  {
+    "version": "0.0.299",
+    "date": "2026-10-03",
+    "changes": [
+      {
+        "title": "fix: read Claude limits from Claude Code and let terminal programs own drags",
+        "pr": 969
+      }
+    ]
+  },
+  {
+    "version": "0.0.298",
+    "date": "2026-10-03",
+    "changes": [
+      {
+        "title": "feat: toggle agent details with control-command-b",
+        "pr": 968
+      }
+    ]
+  },
+  {
+    "version": "0.0.297",
+    "date": "2026-10-02",
+    "changes": [
+      {
+        "title": "feat: toggle agent details with command-shift-b",
+        "pr": 961
+      },
+      {
+        "title": "fix: stop Cursor mouse reports from corrupting prompts and snapping scrollback",
+        "pr": 966
+      }
+    ]
+  },
+  {
+    "version": "0.0.296",
+    "date": "2026-10-02",
+    "changes": [
+      {
+        "title": "fix(ci): accept transient gateway errors in the link check",
+        "pr": 956
+      },
+      {
+        "title": "fix(ui): repair activity rows and extension readiness",
+        "pr": 957
+      },
+      {
+        "title": "fix: keep the window frame independent of zoom",
+        "pr": 959
+      },
+      {
+        "title": "feat: blur each presenter category on screen",
+        "pr": 962
+      },
+      {
+        "title": "fix: make activity cells lighter as contribution rises",
+        "pr": 958
+      },
+      {
+        "title": "feat(herdr): reopen a closed side-by-side agent in its slot",
+        "pr": 960
+      },
+      {
+        "title": "Queue heavy make targets when the machine is busy",
+        "pr": 965
+      },
+      {
+        "title": "fix(herdr): show agent view controls when a side-by-side agent is zoomed",
+        "pr": 964
+      },
+      {
+        "title": "fix: remember the new agent layout per tab",
+        "pr": 967
+      },
+      {
+        "title": "fix: restore the Swift tests on main",
+        "pr": 963
+      }
+    ]
+  },
+  {
+    "version": "0.0.295",
+    "date": "2026-10-02",
+    "changes": [
+      {
+        "title": "fix: preserve terminal clicks while copying drag selections",
+        "pr": 896
+      },
+      {
+        "title": "perf(dashboard): bound chart marks and cache home usage",
+        "pr": 899
+      },
+      {
+        "title": "test: guard ed help and map the command guide",
+        "pr": 900
+      },
+      {
+        "title": "perf: show cached app maintenance and homebrew lists while refresh streams",
+        "pr": 898
+      },
+      {
+        "title": "perf: cap background jobs and run them at utility priority",
+        "pr": 902
+      },
+      {
+        "title": "refactor: split database drivers into a client module",
+        "pr": 903
+      },
+      {
+        "title": "perf(seo): index pages and decode snapshots off the main thread",
+        "pr": 918
+      },
+      {
+        "title": "docs: document help for the small ed command families",
+        "pr": 906
+      },
+      {
+        "title": "perf: share edithkit as one dynamic framework",
+        "pr": 904
+      },
+      {
+        "title": "feat: launch database drivers from a separate executable",
+        "pr": 921
+      },
+      {
+        "title": "perf: move blocking agent io off the cooperative pool",
+        "pr": 926
+      },
+      {
+        "title": "feat: download and verify the database driver pack",
+        "pr": 927
+      },
+      {
+        "title": "ci: publish the notarized database pack",
+        "pr": 928
+      },
+      {
+        "title": "feat: add site audit commands",
+        "pr": 901
+      },
+      {
+        "title": "perf: show cached music folders while search streams",
+        "pr": 925
+      },
+      {
+        "title": "perf(calendar): show the cached agenda and lazy day rows",
+        "pr": 919
+      },
+      {
+        "title": "perf: drop reflection metadata from the shipped executables",
+        "pr": 924
+      },
+      {
+        "title": "docs: document help for the ed machines commands",
+        "pr": 908
+      },
+      {
+        "title": "docs: document help for the ed companion commands",
+        "pr": 909
+      },
+      {
+        "title": "perf: run clipboard search off the main actor",
+        "pr": 920
+      },
+      {
+        "title": "docs: document help for studio, camera, herdr, music, and usage",
+        "pr": 911
+      },
+      {
+        "title": "perf: update running apps in place off the main thread",
+        "pr": 933
+      },
+      {
+        "title": "feat: add skills commands",
+        "pr": 910
+      },
+      {
+        "title": "docs: document ed database help and drop the baseline",
+        "pr": 936
+      },
+      {
+        "title": "perf: publish event deltas and prune the journal in batches",
+        "pr": 931
+      },
+      {
+        "title": "perf: cache the docs library and reuse highlighting",
+        "pr": 938
+      },
+      {
+        "title": "feat: add notch browser commands",
+        "pr": 912
+      },
+      {
+        "title": "perf: overlap clipboard reads, downloads, search, and herdr listings",
+        "pr": 940
+      },
+      {
+        "title": "feat: add maintenance and attention policy commands",
+        "pr": 913
+      },
+      {
+        "title": "fix: restore the Debug link and the database page budget",
+        "pr": 941
+      },
+      {
+        "title": "perf: render thumbnails off the cooperative pool",
+        "pr": 942
+      },
+      {
+        "title": "feat: add herdr layout commands",
+        "pr": 914
+      },
+      {
+        "title": "perf: resolve the frontmost app once per process",
+        "pr": 943
+      },
+      {
+        "title": "feat: add camera scene and extension commands",
+        "pr": 915
+      },
+      {
+        "title": "feat: add audio mixer commands",
+        "pr": 916
+      },
+      {
+        "title": "feat: add studio record and workflow commands",
+        "pr": 917
+      },
+      {
+        "title": "Add studio cancel, reveal, and camera look reset",
+        "pr": 944
+      },
+      {
+        "title": "Add Homebrew cancel, companion stop, and the attention extension",
+        "pr": 945
+      },
+      {
+        "title": "List app sections and control Herdr space windows",
+        "pr": 946
+      },
+      {
+        "title": "Keep window zoom on one scale",
+        "pr": 947
+      },
+      {
+        "title": "Add window back and forward history",
+        "pr": 948
+      },
+      {
+        "title": "Fix main health test failures",
+        "pr": 949
+      },
+      {
+        "title": "Launch development builds hidden for background checks",
+        "pr": 950
+      },
+      {
+        "title": "feat: route focused pane and selected tab together",
+        "pr": 951
+      },
+      {
+        "title": "fix: register navigation routes while the window is hidden",
+        "pr": 952
+      },
+      {
+        "title": "fix: keep the current route when navigation is rejected",
+        "pr": 953
+      },
+      {
+        "title": "fix: publish a nested route before its child view mounts",
+        "pr": 954
+      },
+      {
+        "title": "feat(attention): configurable activity rules and reporting",
+        "pr": 897
+      },
+      {
+        "title": "feat(attention): add interactive analysis and all-time history",
+        "pr": 922
+      },
+      {
+        "title": "fix(build): load local signing settings for installation",
+        "pr": 929
+      },
+      {
+        "title": "fix(ci): align navigation history and restore cli json contracts",
+        "pr": 955
+      }
+    ]
+  },
+  {
+    "version": "0.0.294",
+    "date": "2026-09-30",
+    "changes": [
+      {
+        "title": "test: remove scheduling race from database deadline regression",
+        "pr": 891
+      },
+      {
+        "title": "feat(studio): synchronize CLI library changes in the running app",
+        "pr": 892
+      },
+      {
+        "title": "feat(editor): add native motion transitions and bounded undo history",
+        "pr": 893
+      },
+      {
+        "title": "fix(studio): complete CLI contracts and production release installation",
+        "pr": 894
+      },
+      {
+        "title": "test(editor): use declared integer metrics in caption references",
+        "pr": 895
+      }
+    ]
+  },
+  {
+    "version": "0.0.293",
+    "date": "2026-09-30",
+    "changes": [
+      {
+        "title": "perf(editor): improve playback, scrubbing and timeline responsiveness",
+        "pr": 889
+      },
+      {
+        "title": "fix: make terminal selection copy automatically with clean formatting",
+        "pr": 890
+      }
+    ]
+  },
+  {
+    "version": "0.0.292",
+    "date": "2026-09-30",
+    "changes": [
+      {
+        "title": "fix(editor): sync headless edits into the running timeline",
+        "pr": 888
+      }
+    ]
+  },
+  {
+    "version": "0.0.291",
+    "date": "2026-09-30",
+    "changes": [
+      {
+        "title": "feat(editor): add editable caption typography and gradients",
+        "pr": 872
+      }
+    ]
+  },
+  {
+    "version": "0.0.290",
+    "date": "2026-09-30",
+    "changes": [
+      {
+        "title": "fix(deps): require patched fast-uri release",
+        "pr": 868
+      },
+      {
+        "title": "feat: add editable original-derived photo backgrounds",
+        "pr": 867
+      },
+      {
+        "title": "feat(cli): support guarded and streamed editor plans",
+        "pr": 869
+      },
+      {
+        "title": "feat: add explicit FFmpeg-compatible photo grading",
+        "pr": 874
+      },
+      {
+        "title": "test(editor): add mixed-source parity acceptance checks",
+        "pr": 866
+      },
+      {
+        "title": "feat(editor): register and open native projects through the CLI",
+        "pr": 873
+      },
+      {
+        "title": "fix(editor): preserve exact frame and sample boundaries",
+        "pr": 875
+      },
+      {
+        "title": "fix(cli): repair editor JSON and silence contracts",
+        "pr": 877
+      },
+      {
+        "title": "fix: match encoded BT.709 video grading domains",
+        "pr": 878
+      },
+      {
+        "title": "fix(editor): match encoded-sRGB background blur semantics",
+        "pr": 879
+      },
+      {
+        "title": "test(editor): add integrated synthetic parity runner",
+        "pr": 876
+      },
+      {
+        "title": "feat(editor): add explicit post-seek frame sampling",
+        "pr": 880
+      },
+      {
+        "title": "docs: document editable video parity and verified delivery workflows",
+        "pr": 881
+      },
+      {
+        "title": "test(usage): synchronize queued refresh result publication",
+        "pr": 882
+      },
+      {
+        "title": "Protect packaged runtime identity in parity acceptance",
+        "pr": 883
+      },
+      {
+        "title": "ci: preserve compact generated blur reference fixtures",
+        "pr": 884
+      },
+      {
+        "title": "feat: add verified soundtrack mastering with immutable provenance",
+        "pr": 865
+      },
+      {
+        "title": "fix: install complete plugin skill packages and refresh previews",
+        "pr": 885
+      },
+      {
+        "title": "Fix parity caption creation and verify public native semantics",
+        "pr": 886
+      },
+      {
+        "title": "fix: normalize native export appearance checks to sRGB",
+        "pr": 887
+      },
+      {
+        "title": "feat: add validated AAC packet-copy delivery",
+        "pr": 870
+      }
+    ]
+  },
+  {
+    "version": "0.0.289",
+    "date": "2026-09-29",
+    "changes": [
+      {
+        "title": "feat: add video editing and delivery skills to Plugins",
+        "pr": 845
+      },
+      {
+        "title": "feat: add supported headless video editing to ed studio",
+        "pr": 841
+      },
+      {
+        "title": "feat(video): add project copies and contact-sheet review",
+        "pr": 843
+      },
+      {
+        "title": "feat: add original media identity, reservations and packaging",
+        "pr": 838
+      },
+      {
+        "title": "feat: add native waveforms and output-frame marker editing",
+        "pr": 839
+      },
+      {
+        "title": "feat(video): preserve still quality and add visual controls",
+        "pr": 842
+      },
+      {
+        "title": "feat(video): add typed visual editing plans",
+        "pr": 852
+      },
+      {
+        "title": "fix: make editor audio independent of video timing",
+        "pr": 840
+      },
+      {
+        "title": "feat(cli): expose native delivery and exact output frames",
+        "pr": 848
+      },
+      {
+        "title": "feat(video): deliver exact output-frame ranges through CLI and MCP",
+        "pr": 854
+      },
+      {
+        "title": "feat: expose media inspection and source reuse audits",
+        "pr": 849
+      },
+      {
+        "title": "feat: expose portable media and source reservations",
+        "pr": 858
+      },
+      {
+        "title": "feat: expose native audio analysis and marker commands",
+        "pr": 850
+      },
+      {
+        "title": "fix(herdr): keep spaces open when closing their last agent",
+        "pr": 857
+      },
+      {
+        "title": "feat: add output-frame and marker-timed caption controls",
+        "pr": 851
+      },
+      {
+        "title": "feat: add independent publication order manifests to the editor CLI",
+        "pr": 853
+      },
+      {
+        "title": "feat: add headless native review diagnostics",
+        "pr": 855
+      },
+      {
+        "title": "fix: keep sidebar sessions stable and allow manual reordering",
+        "pr": 847
+      },
+      {
+        "title": "feat: expose independent audio edit plans",
+        "pr": 859
+      },
+      {
+        "title": "Add waveform and saved beat-marker contact sheet overlays",
+        "pr": 860
+      },
+      {
+        "title": "test: add synthetic video editor acceptance harness",
+        "pr": 856
+      },
+      {
+        "title": "docs: fix video editor heading spacing",
+        "pr": 861
+      },
+      {
+        "title": "fix: satisfy CI Swift checks",
+        "pr": 862
+      },
+      {
+        "title": "fix: stabilize CI test compilation and gesture inventory",
+        "pr": 864
+      },
+      {
+        "title": "fix(editor): retain partial delivery frames and classify native diagnostics",
+        "pr": 863
+      }
+    ]
+  },
+  {
+    "version": "0.0.288",
+    "date": "2026-09-29",
+    "changes": [
+      {
+        "title": "feat(video): add explicit delivery codecs and verified master exports",
+        "pr": 837
+      }
+    ]
+  },
+  {
+    "version": "0.0.287",
+    "date": "2026-09-29",
+    "changes": [
+      {
+        "title": "fix: preserve macOS camera backgrounds and add a full stop",
+        "pr": 836
+      }
+    ]
+  },
+  {
+    "version": "0.0.286",
+    "date": "2026-09-28",
+    "changes": [
+      {
+        "title": "feat: add BlitzTree disk-space extension",
+        "pr": 821
+      },
+      {
+        "title": "feat: add native recording and video studio controls",
+        "pr": 824
+      },
+      {
+        "title": "feat: add direct canvas editing and a multitrack timeline",
+        "pr": 828
+      },
+      {
+        "title": "perf: optimize database grid rendering and add regression budgets",
+        "pr": 822
+      },
+      {
+        "title": "feat: add audio cleanup and caption editing",
+        "pr": 829
+      },
+      {
+        "title": "refactor: extract database workspace query and value components",
+        "pr": 823
+      },
+      {
+        "title": "refactor: separate database editing from workspace execution",
+        "pr": 825
+      },
+      {
+        "title": "feat: rebuild the database workbench with structure and query history",
+        "pr": 827
+      },
+      {
+        "title": "feat: add standalone social media downloads",
+        "pr": 831
+      },
+      {
+        "title": "fix: reserve filesystem headroom when packaging release DMGs",
+        "pr": 832
+      }
+    ]
+  },
+  {
+    "version": "0.0.285",
+    "date": "2026-09-28",
+    "changes": [
+      {
+        "title": "fix: sort launcher items by last use",
+        "pr": 819
+      },
+      {
+        "title": "fix(herdr): simplify agent cards and space-specific launches",
+        "pr": 817
+      },
+      {
+        "title": "fix: keep virtual camera dragging responsive and clarify backgrounds",
+        "pr": 818
+      },
+      {
+        "title": "fix: disambiguate new agent popup initialization",
+        "pr": 820
+      }
+    ]
+  },
+  {
+    "version": "0.0.284",
+    "date": "2026-09-27",
+    "changes": [
+      {
+        "title": "fix: prevent usage provider crashes and stale Grok allowance",
+        "pr": 816
+      }
+    ]
+  },
+  {
+    "version": "0.0.283",
+    "date": "2026-09-27",
+    "changes": [
+      {
+        "title": "fix: use Option for sidebar shortcut highlights",
+        "pr": 815
+      }
+    ]
+  },
+  {
+    "version": "0.0.282",
+    "date": "2026-09-26",
+    "changes": [
+      {
+        "title": "fix: harden release publication",
+        "pr": 814
+      },
+      {
+        "title": "fix: prevent duplicate agent tabs from reopen history",
+        "pr": 811
+      }
+    ]
+  },
+  {
+    "version": "0.0.281",
+    "date": "2026-09-26",
+    "changes": [
+      {
+        "title": "Restructure shared modules, batch the test suites, and tighten lint and format",
+        "pr": 807
+      },
+      {
+        "title": "fix: restore main CI checks",
+        "pr": 812
+      },
+      {
+        "title": "fix: keep Swift CI within macOS runner capacity",
+        "pr": 813
+      }
+    ]
+  },
+  {
+    "version": "0.0.280",
+    "date": "2026-09-26",
+    "changes": []
+  },
+  {
+    "version": "0.0.279",
+    "date": "2026-09-26",
+    "changes": []
+  },
+  {
+    "version": "0.0.278",
+    "date": "2026-09-26",
+    "changes": []
+  },
+  {
+    "version": "0.0.277",
+    "date": "2026-09-26",
+    "changes": []
+  },
+  {
+    "version": "0.0.276",
+    "date": "2026-09-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.275",
+    "date": "2026-09-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.274",
+    "date": "2026-09-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.273",
+    "date": "2026-09-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.272",
+    "date": "2026-09-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.271",
+    "date": "2026-09-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.270",
+    "date": "2026-09-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.269",
+    "date": "2026-09-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.268",
+    "date": "2026-09-25",
+    "changes": [
+      {
+        "title": "fix: close the bifrost shell injection, register the full mcp and tune the jev gates",
+        "pr": 777
+      },
+      {
+        "title": "perf: app performance optimization",
+        "pr": 774
+      }
+    ]
+  },
+  {
+    "version": "0.0.267",
+    "date": "2026-09-25",
+    "changes": [
+      {
+        "title": "fix: close only the focused agent when Cmd-W hits a side-by-side tab",
+        "pr": 775
+      },
+      {
+        "title": "fix: stop terminal clicks from leaving a stuck drag selection",
+        "pr": 776
+      },
+      {
+        "title": "feat: add the jev decision engine with a settings key and edith_find",
+        "pr": 758
+      },
+      {
+        "title": "feat: add ed docs with a bundled cli reference and an ask ranker",
+        "pr": 766
+      },
+      {
+        "title": "feat: add a docs page with an ask bar that jumps to the right command",
+        "pr": 768
+      },
+      {
+        "title": "feat: notify when agents need you, read their screens and open the diff when ready",
+        "pr": 762
+      },
+      {
+        "title": "feat: replace limit alerts with burn-rate projections that name real times",
+        "pr": 765
+      },
+      {
+        "title": "fix: detect screen sharing without titles, in more apps, and with optional jev",
+        "pr": 770
+      },
+      {
+        "title": "feat: choose each agent's model, effort and fast mode when herdr starts it",
+        "pr": 769
+      },
+      {
+        "title": "feat: attribute unknown usage folders to their repositories",
+        "pr": 771
+      }
+    ]
+  },
+  {
+    "version": "0.0.266",
+    "date": "2026-09-24",
+    "changes": [
+      {
+        "title": "feat: add the Command-N new agent popup for Sessions",
+        "pr": 757
+      }
+    ]
+  },
+  {
+    "version": "0.0.265",
+    "date": "2026-09-24",
+    "changes": [
+      {
+        "title": "feat: make Herdr tab and layout changes instant",
+        "pr": 772
+      },
+      {
+        "title": "refactor: scope control-tab and command-w to the sessions tab strip",
+        "pr": 754
+      },
+      {
+        "title": "feat: add herdr workspace/tab/pane command layer and per-kind launch settings",
+        "pr": 756
+      }
+    ]
+  },
+  {
+    "version": "0.0.264",
+    "date": "2026-09-24",
+    "changes": [
+      {
+        "title": "feat: show several Herdr agents side by side in one tab",
+        "pr": 759
+      },
+      {
+        "title": "feat: drag Herdr agents into side-by-side layouts",
+        "pr": 760
+      },
+      {
+        "title": "feat: save Herdr layouts as reusable arrangements",
+        "pr": 761
+      }
+    ]
+  },
+  {
+    "version": "0.0.263",
+    "date": "2026-09-24",
+    "changes": [
+      {
+        "title": "fix: keep screenshot thumbnail drops attached in the terminal",
+        "pr": 763
+      }
+    ]
+  },
+  {
+    "version": "0.0.262",
+    "date": "2026-09-24",
+    "changes": [
+      {
+        "title": "fix: make image drops and pastes reach the right terminal",
+        "pr": 755
+      }
+    ]
+  },
+  {
+    "version": "0.0.261",
+    "date": "2026-09-24",
+    "changes": [
+      {
+        "title": "refactor: simplify sidebar agent rows and mark the open session",
+        "pr": 752
+      },
+      {
+        "title": "fix: widen the flaky EmojiSearchTests interactive budget",
+        "pr": 753
+      }
+    ]
+  },
+  {
+    "version": "0.0.260",
+    "date": "2026-09-24",
+    "changes": [
+      {
+        "title": "perf: cut CI build times by compiling once and reusing products",
+        "pr": 750
+      },
+      {
+        "title": "fix: keep Herdr nesting cleared for Windows terminals",
+        "pr": 751
+      }
+    ]
+  },
+  {
+    "version": "0.0.259",
+    "date": "2026-09-23",
+    "changes": [
+      {
+        "title": "fix: reconnect machine usage and stabilize Herdr terminals",
+        "pr": 749
+      }
+    ]
+  },
+  {
+    "version": "0.0.258",
+    "date": "2026-09-22",
+    "changes": [
+      {
+        "title": "fix: include the YouTube runtime in download setup",
+        "pr": 746
+      },
+      {
+        "title": "fix: publish recovered tokens after usage repricing",
+        "pr": 747
+      },
+      {
+        "title": "fix: keep MCP flags out of remote command arguments",
+        "pr": 748
+      }
+    ]
+  },
+  {
+    "version": "0.0.257",
+    "date": "2026-09-22",
+    "changes": [
+      {
+        "title": "fix: include the media converter in download setup",
+        "pr": 744
+      },
+      {
+        "title": "fix: count migrated OpenCode sessions without duplicates",
+        "pr": 745
+      }
+    ]
+  },
+  {
+    "version": "0.0.256",
+    "date": "2026-09-22",
+    "changes": [
+      {
+        "title": "fix: stop reinstalling the cached usage collector",
+        "pr": 741
+      },
+      {
+        "title": "fix: count complete request usage and refresh session pricing",
+        "pr": 742
+      },
+      {
+        "title": "fix: keep usage limits refreshing when credential storage stalls",
+        "pr": 743
+      }
+    ]
+  },
+  {
+    "version": "0.0.255",
+    "date": "2026-09-21",
+    "changes": [
+      {
+        "title": "fix: refresh live usage dashboard",
+        "pr": 735
+      },
+      {
+        "title": "test: stabilize live usage cadence assertion",
+        "pr": 736
+      }
+    ]
+  },
+  {
+    "version": "0.0.254",
+    "date": "2026-09-16",
+    "changes": [
+      {
+        "title": "feat(bifrost): quicklinks, snippets, commands and window control",
+        "pr": 734
+      }
+    ]
+  },
+  {
+    "version": "0.0.253",
+    "date": "2026-09-16",
+    "changes": [
+      {
+        "title": "feat: add the Bifrost launcher extension",
+        "pr": 731
+      }
+    ]
+  },
+  {
+    "version": "0.0.252",
+    "date": "2026-09-16",
+    "changes": [
+      {
+        "title": "feat(sweaters): knitted window borders as an Edith extension",
+        "pr": 733
+      }
+    ]
+  },
+  {
+    "version": "0.0.251",
+    "date": "2026-09-16",
+    "changes": [
+      {
+        "title": "fix: stop background browser profiles from claiming attention time",
+        "pr": 732
+      }
+    ]
+  },
+  {
+    "version": "0.0.250",
+    "date": "2026-09-16",
+    "changes": [
+      {
+        "title": "fix: close active terminals without confirmation",
+        "pr": 730
+      }
+    ]
+  },
+  {
+    "version": "0.0.249",
+    "date": "2026-09-15",
+    "changes": [
+      {
+        "title": "fix: resolve macOS 27 storage reporting and UI regressions",
+        "pr": 729
+      }
+    ]
+  },
+  {
+    "version": "0.0.248",
+    "date": "2026-09-12",
+    "changes": [
+      {
+        "title": "fix: restore remote usage collection and service reliability",
+        "pr": 724
+      }
+    ]
+  },
+  {
+    "version": "0.0.247",
+    "date": "2026-09-11",
+    "changes": [
+      {
+        "title": "feat(database): add fast table tabs, related filters, and typed row editing",
+        "pr": 722
+      }
+    ]
+  },
+  {
+    "version": "0.0.246",
+    "date": "2026-09-10",
+    "changes": [
+      {
+        "title": "fix: recover usage collection from superseded archive baselines",
+        "pr": 723
+      }
+    ]
+  },
+  {
+    "version": "0.0.245",
+    "date": "2026-09-10",
+    "changes": [
+      {
+        "title": "fix: keep Attention tracking independent of the UI",
+        "pr": 721
+      }
+    ]
+  },
+  {
+    "version": "0.0.244",
+    "date": "2026-09-08",
+    "changes": [
+      {
+        "title": "fix: polish app surfaces and transient interactions",
+        "pr": 720
+      }
+    ]
+  },
+  {
+    "version": "0.0.243",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "test: shorten Swift test execution and preserve compiled caches",
+        "pr": 719
+      }
+    ]
+  },
+  {
+    "version": "0.0.242",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "fix: recover background usage refresh and transient attention locks",
+        "pr": 714
+      },
+      {
+        "title": "fix: make keep awake independent of System",
+        "pr": 712
+      }
+    ]
+  },
+  {
+    "version": "0.0.241",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "ci: unify checks and release in one workflow run",
+        "pr": 713
+      }
+    ]
+  },
+  {
+    "version": "0.0.240",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "perf: shrink release helpers and reuse compiled CI dependencies",
+        "pr": 711
+      },
+      {
+        "title": "perf: keep dashboard and fleet rendering responsive",
+        "pr": 709
+      },
+      {
+        "title": "perf: add a paged background agent event timeline",
+        "pr": 708
+      },
+      {
+        "title": "perf: move library discovery off the main actor and complete loading skeletons",
+        "pr": 710
+      }
+    ]
+  },
+  {
+    "version": "0.0.239",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "feat: add native menus for usage and system controls",
+        "pr": 705
+      },
+      {
+        "title": "fix: restore growing usage totals and live rate limits",
+        "pr": 707
+      }
+    ]
+  },
+  {
+    "version": "0.0.238",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "feat: preview plugin skills with read-only Markdown",
+        "pr": 706
+      }
+    ]
+  },
+  {
+    "version": "0.0.237",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "fix: separate development app and menu bar identities",
+        "pr": 704
+      }
+    ]
+  },
+  {
+    "version": "0.0.236",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "feat: add Plugins with the Edith remote-work skill and agent installation",
+        "pr": 703
+      }
+    ]
+  },
+  {
+    "version": "0.0.235",
+    "date": "2026-09-07",
+    "changes": [
+      {
+        "title": "fix: recover clipboard synchronization without repeated alerts",
+        "pr": 702
+      }
+    ]
+  },
+  {
+    "version": "0.0.234",
+    "date": "2026-09-06",
+    "changes": [
+      {
+        "title": "perf: honor usage refresh cadence",
+        "pr": 701
+      }
+    ]
+  },
+  {
+    "version": "0.0.233",
+    "date": "2026-09-06",
+    "changes": [
+      {
+        "title": "fix: preserve saved history across daemon refreshes",
+        "pr": 700
+      }
+    ]
+  },
+  {
+    "version": "0.0.232",
+    "date": "2026-09-06",
+    "changes": [
+      {
+        "title": "fix: preserve Attention samples across daemon outages",
+        "pr": 699
+      }
+    ]
+  },
+  {
+    "version": "0.0.231",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "fix(runtime): stop retired window and permission workers",
+        "pr": 694
+      },
+      {
+        "title": "fix(runtime): preserve daemon subscriptions and installation ownership",
+        "pr": 695
+      },
+      {
+        "title": "fix: preserve usage history across incomplete refreshes",
+        "pr": 696
+      },
+      {
+        "title": "fix: retain billing records across source pruning",
+        "pr": 697
+      },
+      {
+        "title": "fix: honor database command response deadlines",
+        "pr": 698
+      }
+    ]
+  },
+  {
+    "version": "0.0.230",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "fix(database): repair MySQL authentication and align packaged dependencies",
+        "pr": 693
+      }
+    ]
+  },
+  {
+    "version": "0.0.229",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "refactor(clipboard): prepare previews and copies in the daemon",
+        "pr": 692
+      }
+    ]
+  },
+  {
+    "version": "0.0.228",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "refactor(clipboard): centralize archive storage in the daemon",
+        "pr": 691
+      }
+    ]
+  },
+  {
+    "version": "0.0.227",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "feat(agent): own cloud backup persistence and restore lifecycle",
+        "pr": 686
+      },
+      {
+        "title": "fix: bound daemon backup requests and snapshot resources",
+        "pr": 688
+      },
+      {
+        "title": "perf: inspect storage footprints in the daemon",
+        "pr": 689
+      },
+      {
+        "title": "fix(backup): cancel coordination and await file work at shutdown",
+        "pr": 690
+      }
+    ]
+  },
+  {
+    "version": "0.0.226",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "feat: run machine work and live metrics in the daemon",
+        "pr": 679
+      },
+      {
+        "title": "feat: complete file workflows in durable daemon tasks",
+        "pr": 680
+      },
+      {
+        "title": "feat: run Attention ingestion and summaries in the daemon",
+        "pr": 681
+      },
+      {
+        "title": "perf(agent): limit concurrency per operation without blocking the queue",
+        "pr": 684
+      },
+      {
+        "title": "feat(agent): run durable site audits and browser scoring in the daemon",
+        "pr": 685
+      },
+      {
+        "title": "fix: bound Attention archives and enforce request deadlines",
+        "pr": 682
+      }
+    ]
+  },
+  {
+    "version": "0.0.225",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "fix(agent): launch owned process groups without shell wrappers",
+        "pr": 687
+      }
+    ]
+  },
+  {
+    "version": "0.0.224",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "feat: run persistent downloads in the background daemon",
+        "pr": 678
+      }
+    ]
+  },
+  {
+    "version": "0.0.223",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "feat: inspect daemon activity and suspend hidden workspace polling",
+        "pr": 675
+      },
+      {
+        "title": "feat: execute persistent cancellable tasks in the daemon",
+        "pr": 676
+      },
+      {
+        "title": "feat: inspect and control daemon tasks live",
+        "pr": 677
+      }
+    ]
+  },
+  {
+    "version": "0.0.222",
+    "date": "2026-09-05",
+    "changes": [
+      {
+        "title": "fix: keep daemon clients responsive and restore live subscriptions",
+        "pr": 673
+      },
+      {
+        "title": "feat: make background services reliable without an open window",
+        "pr": 674
+      }
+    ]
+  },
+  {
+    "version": "0.0.221",
+    "date": "2026-09-04",
+    "changes": [
+      {
+        "title": "feat: make edithd own background usage collection",
+        "pr": 672
+      }
+    ]
+  },
+  {
+    "version": "0.0.220",
+    "date": "2026-09-03",
+    "changes": [
+      {
+        "title": "feat: restructure Edith around a background agent and suites",
+        "pr": 667
+      },
+      {
+        "title": "feat: let the background agent's work reach the app",
+        "pr": 669
+      },
+      {
+        "title": "fix: start database server cancellation before shutdown disconnect",
+        "pr": 671
+      }
+    ]
+  },
+  {
+    "version": "0.0.219",
+    "date": "2026-09-02",
+    "changes": [
+      {
+        "title": "fix: keep terminal focus reports out of Herdr panes",
+        "pr": 665
+      },
+      {
+        "title": "fix: drain ghostty before freeing a terminal surface",
+        "pr": 666
+      }
+    ]
+  },
+  {
+    "version": "0.0.218",
+    "date": "2026-09-02",
+    "changes": [
+      {
+        "title": "fix: launch Quinjet terminal for non-repository diffs",
+        "pr": 663
+      },
+      {
+        "title": "fix: clean up Herdr terminal state after Ctrl-C",
+        "pr": 662
+      },
+      {
+        "title": "fix: retry transient DMG verification failures",
+        "pr": 664
+      }
+    ]
+  },
+  {
+    "version": "0.0.217",
+    "date": "2026-09-02",
+    "changes": [
+      {
+        "title": "feat: replace application loaders with skeletons",
+        "pr": 661
+      }
+    ]
+  },
+  {
+    "version": "0.0.216",
+    "date": "2026-09-02",
+    "changes": [
+      {
+        "title": "feat: add machine internet speed tests",
+        "pr": 659
+      },
+      {
+        "title": "test: keep the test host off screen",
+        "pr": 660
+      }
+    ]
+  },
+  {
+    "version": "0.0.215",
+    "date": "2026-09-01",
+    "changes": [
+      {
+        "title": "fix: restore menu bar items",
+        "pr": 652
+      },
+      {
+        "title": "feat: improve embedded terminal UX and integration",
+        "pr": 651
+      },
+      {
+        "title": "Build the database explorer foundation",
+        "pr": 655
+      },
+      {
+        "title": "Add database-specific editing support",
+        "pr": 654
+      },
+      {
+        "title": "fix: retain offline machine usage history",
+        "pr": 653
+      },
+      {
+        "title": "Polish database explorer interactions",
+        "pr": 656
+      },
+      {
+        "title": "fix: keep menu bar indicators compact",
+        "pr": 657
+      },
+      {
+        "title": "fix: use canonical database button styles",
+        "pr": 658
+      }
+    ]
+  },
+  {
+    "version": "0.0.214",
+    "date": "2026-09-01",
+    "changes": [
+      {
+        "title": "fix: prevent overlapping menu bar indicators",
+        "pr": 650
+      }
+    ]
+  },
+  {
+    "version": "0.0.213",
+    "date": "2026-09-01",
+    "changes": [
+      {
+        "title": "fix: restore bidirectional SSH clipboard sync",
+        "pr": 648
+      },
+      {
+        "title": "fix: refresh Herdr fleet after machine changes",
+        "pr": 649
+      }
+    ]
+  },
+  {
+    "version": "0.0.212",
+    "date": "2026-09-01",
+    "changes": [
+      {
+        "title": "feat: database extension",
+        "pr": 618
+      },
+      {
+        "title": "feat: add database connection creation",
+        "pr": 619
+      },
+      {
+        "title": "feat(database): add explorer workbench",
+        "pr": 621
+      },
+      {
+        "title": "feat(database): add native database workspaces",
+        "pr": 622
+      },
+      {
+        "title": "feat(database): add bounded CLI execution",
+        "pr": 623
+      },
+      {
+        "title": "feat(database): add typed MCP execution",
+        "pr": 624
+      },
+      {
+        "title": "feat(database): manage connections and saved queries",
+        "pr": 626
+      },
+      {
+        "title": "feat(database): add preview-bound CLI mutations",
+        "pr": 627
+      },
+      {
+        "title": "feat(database): streamline native row editing",
+        "pr": 630
+      },
+      {
+        "title": "feat(database): edit Redis and Valkey keys",
+        "pr": 631
+      },
+      {
+        "title": "feat(database): edit MongoDB documents",
+        "pr": 632
+      },
+      {
+        "title": "feat(database): add Elasticsearch document workspace",
+        "pr": 636
+      },
+      {
+        "title": "feat(database): add OpenSearch document workspace",
+        "pr": 638
+      },
+      {
+        "title": "feat(database): follow the selected app theme",
+        "pr": 639
+      },
+      {
+        "title": "feat(database): activate native ClickHouse exploration",
+        "pr": 640
+      },
+      {
+        "title": "fix: sign nested helper runtimes",
+        "pr": 647
+      }
+    ]
+  },
+  {
+    "version": "0.0.211",
+    "date": "2026-09-01",
+    "changes": [
+      {
+        "title": "feat: add Caffeinate machine control",
+        "pr": 644
+      }
+    ]
+  },
+  {
+    "version": "0.0.210",
+    "date": "2026-09-01",
+    "changes": [
+      {
+        "title": "fix: support Windows remote commands",
+        "pr": 642
+      }
+    ]
+  },
+  {
+    "version": "0.0.209",
+    "date": "2026-08-31",
+    "changes": [
+      {
+        "title": "feat: add local SEO audit workspace",
+        "pr": 629
+      }
+    ]
+  },
+  {
+    "version": "0.0.208",
+    "date": "2026-08-31",
+    "changes": [
+      {
+        "title": "feat: add keystroke highlight extension",
+        "pr": 628
+      }
+    ]
+  },
+  {
+    "version": "0.0.207",
+    "date": "2026-08-31",
+    "changes": [
+      {
+        "title": "fix: make agent usage scale without dropping history",
+        "pr": 625
+      }
+    ]
+  },
+  {
+    "version": "0.0.206",
+    "date": "2026-08-31",
+    "changes": [
+      {
+        "title": "fix: harden Windows machine integrations",
+        "pr": 617
+      }
+    ]
+  },
+  {
+    "version": "0.0.205",
+    "date": "2026-08-30",
+    "changes": [
+      {
+        "title": "feat: add native Windows machine support",
+        "pr": 616
+      }
+    ]
+  },
+  {
+    "version": "0.0.204",
+    "date": "2026-08-30",
+    "changes": [
+      {
+        "title": "fix: forward mouse input in Herdr agent terminals",
+        "pr": 542
+      },
+      {
+        "title": "feat: unify App Maintenance and Homebrew",
+        "pr": 608
+      }
+    ]
+  },
+  {
+    "version": "0.0.203",
+    "date": "2026-08-30",
+    "changes": [
+      {
+        "title": "feat: add Homebrew Manager extension",
+        "pr": 508
+      }
+    ]
+  },
+  {
+    "version": "0.0.202",
+    "date": "2026-08-30",
+    "changes": [
+      {
+        "title": "feat: add App Maintenance",
+        "pr": 607
+      }
+    ]
+  },
+  {
+    "version": "0.0.201",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "feat: export branded usage share cards",
+        "pr": 550
+      },
+      {
+        "title": "ci: remove release size budget",
+        "pr": 559
+      },
+      {
+        "title": "fix: clean up CI and release warnings",
+        "pr": 558
+      },
+      {
+        "title": "feat: add Space terminal windows",
+        "pr": 563
+      },
+      {
+        "title": "revert: clean up CI and release warnings",
+        "pr": 565
+      }
+    ]
+  },
+  {
+    "version": "0.0.200",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "fix: restore application launch routing",
+        "pr": 549
+      }
+    ]
+  },
+  {
+    "version": "0.0.199",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "feat: improve Herdr agent controls",
+        "pr": 539
+      }
+    ]
+  },
+  {
+    "version": "0.0.198",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "perf: reduce the app and DMG size",
+        "pr": 544
+      }
+    ]
+  },
+  {
+    "version": "0.0.197",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "fix: preserve Herdr layout in presenter mode",
+        "pr": 538
+      }
+    ]
+  },
+  {
+    "version": "0.0.196",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "Fix Lid Awake helper lifecycle",
+        "pr": 537
+      }
+    ]
+  },
+  {
+    "version": "0.0.195",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "perf: cut the macOS release image to 20 MB",
+        "pr": 536
+      }
+    ]
+  },
+  {
+    "version": "0.0.194",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "feat: add emoji picker extension",
+        "pr": 524
+      }
+    ]
+  },
+  {
+    "version": "0.0.193",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "fix: prevent repeated Keychain credential prompts",
+        "pr": 533
+      },
+      {
+        "title": "build: strip dead code from release app",
+        "pr": 534
+      }
+    ]
+  },
+  {
+    "version": "0.0.192",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "fix: refresh menu bar helper identity",
+        "pr": 532
+      }
+    ]
+  },
+  {
+    "version": "0.0.191",
+    "date": "2026-08-29",
+    "changes": [
+      {
+        "title": "fix: restore menu bar indicators",
+        "pr": 531
+      }
+    ]
+  },
+  {
+    "version": "0.0.190",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "perf: ship one CLI executable under two names",
+        "pr": 529
+      }
+    ]
+  },
+  {
+    "version": "0.0.189",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "Improve settings sidebar toggle",
+        "pr": 530
+      }
+    ]
+  },
+  {
+    "version": "0.0.188",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "perf: stop shipping the Edith Files app",
+        "pr": 527
+      }
+    ]
+  },
+  {
+    "version": "0.0.187",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "fix: keep extension readiness stable while refreshing",
+        "pr": 526
+      }
+    ]
+  },
+  {
+    "version": "0.0.186",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "fix: keep button interaction tests offscreen",
+        "pr": 525
+      }
+    ]
+  },
+  {
+    "version": "0.0.185",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "refactor: remove emoji picker",
+        "pr": 523
+      }
+    ]
+  },
+  {
+    "version": "0.0.184",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "fix: invalidate tool versions when symlink targets change",
+        "pr": 522
+      }
+    ]
+  },
+  {
+    "version": "0.0.183",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "fix: trust extension runtime authorities",
+        "pr": 521
+      }
+    ]
+  },
+  {
+    "version": "0.0.182",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "fix: improve extension runtime reliability",
+        "pr": 520
+      }
+    ]
+  },
+  {
+    "version": "0.0.181",
+    "date": "2026-08-28",
+    "changes": [
+      {
+        "title": "refactor: remove bundled utility extensions",
+        "pr": 515
+      }
+    ]
+  },
+  {
+    "version": "0.0.180",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "feat: add app maintenance workflows",
+        "pr": 496
+      }
+    ]
+  },
+  {
+    "version": "0.0.179",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "ci: drop the Pukbot app from every automated workflow",
+        "pr": 492
+      },
+      {
+        "title": "fix: improve notch responsiveness and UI thread stalls",
+        "pr": 493
+      },
+      {
+        "title": "feat: add Window Tools extension",
+        "pr": 494
+      },
+      {
+        "title": "ci: release on any change in the Swift area",
+        "pr": 497
+      },
+      {
+        "title": "Overlap release builds with CI validation",
+        "pr": 500
+      },
+      {
+        "title": "feat: bundle a macOS-verified emoji catalog",
+        "pr": 498
+      },
+      {
+        "title": "feat: add the emoji picker",
+        "pr": 499
+      },
+      {
+        "title": "feat: add Finder Tools extension",
+        "pr": 495
+      },
+      {
+        "title": "fix: make Lid Awake helper launch reliably",
+        "pr": 503
+      }
+    ]
+  },
+  {
+    "version": "0.0.178",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "feat: expand system stats into system monitor",
+        "pr": 491
+      }
+    ]
+  },
+  {
+    "version": "0.0.177",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "fix: keep Lid Awake requests responsive",
+        "pr": 490
+      }
+    ]
+  },
+  {
+    "version": "0.0.176",
+    "date": "2026-08-27",
+    "changes": []
+  },
+  {
+    "version": "0.0.175",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "feat: sync app themes into Quinjet",
+        "pr": 487
+      },
+      {
+        "title": "feat: add Herdr view controls to detached title bars",
+        "pr": 488
+      }
+    ]
+  },
+  {
+    "version": "0.0.174",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "fix: show machine connection failures",
+        "pr": 486
+      }
+    ]
+  },
+  {
+    "version": "0.0.173",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "feat: deepen native terminal integration",
+        "pr": 485
+      }
+    ]
+  },
+  {
+    "version": "0.0.172",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "fix: restore Claude limits in the Notch",
+        "pr": 483
+      },
+      {
+        "title": "fix: keep Herdr live board populated",
+        "pr": 482
+      },
+      {
+        "title": "fix(release): invoke publisher through bash",
+        "pr": 484
+      }
+    ]
+  },
+  {
+    "version": "0.0.171",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "fix: make button hit regions match visible surfaces",
+        "pr": 480
+      }
+    ]
+  },
+  {
+    "version": "0.0.170",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "fix(quinjet): resolve folder picker paths",
+        "pr": 481
+      }
+    ]
+  },
+  {
+    "version": "0.0.169",
+    "date": "2026-08-27",
+    "changes": [
+      {
+        "title": "fix: improve Herdr terminal state and input",
+        "pr": 479
+      },
+      {
+        "title": "fix(ui): restore the centered About page",
+        "pr": 478
+      }
+    ]
+  },
+  {
+    "version": "0.0.168",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "fix(release): restore automatic release commits",
+        "pr": 477
+      }
+    ]
+  },
+  {
+    "version": "0.0.167",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "perf: establish native revamp baselines",
+        "pr": 469
+      },
+      {
+        "title": "fix: anchor activity popovers to hovered cells",
+        "pr": 471
+      },
+      {
+        "title": "feat: establish native interaction primitives",
+        "pr": 473
+      },
+      {
+        "title": "feat: redesign settings and window launch",
+        "pr": 475
+      },
+      {
+        "title": "feat: align core application pages",
+        "pr": 476
+      }
+    ]
+  },
+  {
+    "version": "0.0.166",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "fix: preserve accurate Claude limit reporting",
+        "pr": 470
+      },
+      {
+        "title": "chore(ui): clarify the clear field tooltip",
+        "pr": 468
+      },
+      {
+        "title": "chore(ui): clarify the terminal renderer tooltip",
+        "pr": 474
+      }
+    ]
+  },
+  {
+    "version": "0.0.165",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "perf: quit the main app immediately",
+        "pr": 458
+      },
+      {
+        "title": "perf: trace how long each page takes to open",
+        "pr": 459
+      },
+      {
+        "title": "perf: stop doing usage work nobody asked for",
+        "pr": 460
+      },
+      {
+        "title": "perf: show the Machines page as soon as it has numbers",
+        "pr": 461
+      },
+      {
+        "title": "perf: keep the permissions pill off the launch path",
+        "pr": 462
+      },
+      {
+        "title": "fix(herdr): make the split divider grabbable and light up hovered cards",
+        "pr": 456
+      },
+      {
+        "title": "build: produce the libghostty xcframework",
+        "pr": 457
+      },
+      {
+        "title": "fix(ci): restore automatic releases",
+        "pr": 466
+      },
+      {
+        "title": "feat: theme Edith terminals and Quinjet consistently",
+        "pr": 465
+      },
+      {
+        "title": "fix(release): tag releases as Pukbot",
+        "pr": 467
+      }
+    ]
+  },
+  {
+    "version": "0.0.164",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "fix: guide Companion fresh installs to setup",
+        "pr": 455
+      }
+    ]
+  },
+  {
+    "version": "0.0.163",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "fix: make Audio Mixer runtime failure-safe",
+        "pr": 454
+      }
+    ]
+  },
+  {
+    "version": "0.0.162",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "fix: align Audio Mixer compatibility and readiness",
+        "pr": 453
+      }
+    ]
+  },
+  {
+    "version": "0.0.161",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "perf: make startup, the usage page and the cli snappy",
+        "pr": 447
+      },
+      {
+        "title": "feat: add Lid Awake shared operations",
+        "pr": 451
+      },
+      {
+        "title": "fix: make extension controls consistently reachable",
+        "pr": 452
+      }
+    ]
+  },
+  {
+    "version": "0.0.160",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "fix: make Lid Awake runtime recovery reliable",
+        "pr": 450
+      }
+    ]
+  },
+  {
+    "version": "0.0.159",
+    "date": "2026-08-26",
+    "changes": [
+      {
+        "title": "fix(lid-awake): bound privileged execution",
+        "pr": 449
+      }
+    ]
+  },
+  {
+    "version": "0.0.158",
+    "date": "2026-08-25",
+    "changes": [
+      {
+        "title": "feat(machines): add shared detail operations",
+        "pr": 448
+      }
+    ]
+  },
+  {
+    "version": "0.0.157",
+    "date": "2026-08-25",
+    "changes": [
+      {
+        "title": "feat(machines): add safe single transfers to Finder and CLI",
+        "pr": 446
+      }
+    ]
+  },
+  {
+    "version": "0.0.156",
+    "date": "2026-08-25",
+    "changes": [
+      {
+        "title": "feat(machines): add safe batch transfers",
+        "pr": 445
+      },
+      {
+        "title": "feat(herdr): open a terminal on any machine from the Herdr page",
+        "pr": 444
+      }
+    ]
+  },
+  {
+    "version": "0.0.155",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.154",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.153",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.152",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.151",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.150",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.149",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.148",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.147",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.146",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.145",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.144",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.143",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.142",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.141",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.140",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.139",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.138",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.137",
+    "date": "2026-08-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.136",
+    "date": "2026-08-24",
+    "changes": []
+  },
+  {
+    "version": "0.0.135",
+    "date": "2026-08-24",
+    "changes": []
+  },
+  {
+    "version": "0.0.134",
+    "date": "2026-08-24",
+    "changes": []
+  },
+  {
+    "version": "0.0.133",
+    "date": "2026-08-24",
+    "changes": []
+  },
+  {
+    "version": "0.0.132",
+    "date": "2026-08-24",
+    "changes": [
+      {
+        "title": "ci: run automated mutations as Pukbot",
+        "pr": 407
+      },
+      {
+        "title": "feat: add transactional shelf storage",
+        "pr": 408
+      }
+    ]
+  },
+  {
+    "version": "0.0.131",
+    "date": "2026-08-24",
+    "changes": [
+      {
+        "title": "feat: share machine system operations",
+        "pr": 405
+      }
+    ]
+  },
+  {
+    "version": "0.0.130",
+    "date": "2026-08-24",
+    "changes": [
+      {
+        "title": "fix: bound CLI process probes",
+        "pr": 404
+      },
+      {
+        "title": "revert: restore direct Herdr agent attachment",
+        "pr": 406
+      }
+    ]
+  },
+  {
+    "version": "0.0.129",
+    "date": "2026-08-24",
+    "changes": [
+      {
+        "title": "feat: share Music library operations",
+        "pr": 403
+      }
+    ]
+  },
+  {
+    "version": "0.0.128",
+    "date": "2026-08-24",
+    "changes": [
+      {
+        "title": "fix: keep automatic releases current",
+        "pr": 400
+      },
+      {
+        "title": "fix: restore artifact-aware releases",
+        "pr": 401
+      },
+      {
+        "title": "fix: complete CLI command discovery",
+        "pr": 402
+      }
+    ]
+  },
+  {
+    "version": "0.0.127",
+    "date": "2026-08-24",
+    "changes": [
+      {
+        "title": "feat: share extension control operations",
+        "pr": 399
+      }
+    ]
+  },
+  {
+    "version": "0.0.126",
+    "date": "2026-08-24",
+    "changes": [
+      {
+        "title": "feat: share calendar operations",
+        "pr": 369
+      },
+      {
+        "title": "feat: model extension runtime lifecycle",
+        "pr": 370
+      },
+      {
+        "title": "feat: probe every extension runtime",
+        "pr": 371
+      },
+      {
+        "title": "fix: make every extension modal actionable",
+        "pr": 372
+      },
+      {
+        "title": "test: enforce exact UI operation parity",
+        "pr": 373
+      },
+      {
+        "title": "feat: share clipboard focus and cleaner operations",
+        "pr": 374
+      },
+      {
+        "title": "feat: share companion data and settings operations",
+        "pr": 375
+      },
+      {
+        "title": "feat: share companion chat and library operations",
+        "pr": 376
+      },
+      {
+        "title": "feat: share companion mind and runtime operations",
+        "pr": 377
+      },
+      {
+        "title": "test: exercise fish completions end to end",
+        "pr": 382
+      },
+      {
+        "title": "ci: reduce Swift validation latency",
+        "pr": 384
+      },
+      {
+        "title": "test: isolate app reply timeout environment",
+        "pr": 385
+      },
+      {
+        "title": "feat: share machine fleet operations",
+        "pr": 379
+      },
+      {
+        "title": "feat: share machine tools operations",
+        "pr": 380
+      },
+      {
+        "title": "feat: share Finder file operations",
+        "pr": 383
+      },
+      {
+        "title": "fix: update Gemini and FX.sh agent icons",
+        "pr": 386
+      },
+      {
+        "title": "feat: share Usage collection operations",
+        "pr": 387
+      },
+      {
+        "title": "feat: share Usage project operations",
+        "pr": 388
+      },
+      {
+        "title": "fix: preserve source terminal size in Herdr previews",
+        "pr": 390
+      },
+      {
+        "title": "feat: share app runtime operations",
+        "pr": 391
+      },
+      {
+        "title": "feat: share app inspection operations",
+        "pr": 392
+      },
+      {
+        "title": "feat: share running app operations",
+        "pr": 393
+      },
+      {
+        "title": "feat: share workspace operations",
+        "pr": 395
+      },
+      {
+        "title": "feat: share Docker lifecycle operations",
+        "pr": 396
+      },
+      {
+        "title": "perf: instrument critical application paths",
+        "pr": 398
+      }
+    ]
+  },
+  {
+    "version": "0.0.125",
+    "date": "2026-08-23",
+    "changes": [
+      {
+        "title": "feat: share music actions across app and CLI",
+        "pr": 365
+      },
+      {
+        "title": "feat: share download lifecycle operations",
+        "pr": 366
+      },
+      {
+        "title": "feat: share color picker operations",
+        "pr": 367
+      },
+      {
+        "title": "feat: open Quinjet diffs from Herdr agent sessions",
+        "pr": 368
+      }
+    ]
+  },
+  {
+    "version": "0.0.124",
+    "date": "2026-08-23",
+    "changes": [
+      {
+        "title": "fix: make CLI contracts reliable and completion parser-safe",
+        "pr": 351
+      },
+      {
+        "title": "feat: share machine control operations",
+        "pr": 352
+      },
+      {
+        "title": "feat: complete extension onboarding metadata",
+        "pr": 353
+      },
+      {
+        "title": "fix: preview destructive cli actions",
+        "pr": 354
+      },
+      {
+        "title": "feat: report extension readiness",
+        "pr": 355
+      },
+      {
+        "title": "feat: share extension mutation operations",
+        "pr": 357
+      },
+      {
+        "title": "feat: share extension surface operations",
+        "pr": 356
+      },
+      {
+        "title": "feat: share configuration operations",
+        "pr": 358
+      },
+      {
+        "title": "feat: share permission operations",
+        "pr": 359
+      },
+      {
+        "title": "fix: make SSH stream cancellation deterministic",
+        "pr": 361
+      },
+      {
+        "title": "fix: deliver SSH output before completion",
+        "pr": 362
+      },
+      {
+        "title": "feat: add Quinjet CLI operations",
+        "pr": 360
+      },
+      {
+        "title": "fix: keep superseded releases green",
+        "pr": 363
+      },
+      {
+        "title": "feat: control native Quinjet sessions",
+        "pr": 364
+      }
+    ]
+  },
+  {
+    "version": "0.0.123",
+    "date": "2026-08-23",
+    "changes": [
+      {
+        "title": "perf: eliminate extension redraws and harden Quinjet refreshes",
+        "pr": 350
+      }
+    ]
+  },
+  {
+    "version": "0.0.122",
+    "date": "2026-08-23",
+    "changes": [
+      {
+        "title": "feat: embed Quinjet as a native extension",
+        "pr": 345
+      },
+      {
+        "title": "feat: add Quinjet machine projects",
+        "pr": 346
+      },
+      {
+        "title": "fix: keep thermal profile action visible",
+        "pr": 349
+      }
+    ]
+  },
+  {
+    "version": "0.0.121",
+    "date": "2026-08-22",
+    "changes": [
+      {
+        "title": "feat: show app icons and website favicons in attention timeline",
+        "pr": 344
+      }
+    ]
+  },
+  {
+    "version": "0.0.120",
+    "date": "2026-08-22",
+    "changes": [
+      {
+        "title": "feat: track applications and browser attention locally",
+        "pr": 338
+      },
+      {
+        "title": "feat: add agent-friendly attention CLI workflows",
+        "pr": 339
+      },
+      {
+        "title": "feat: add production attention setup and insights UI",
+        "pr": 340
+      }
+    ]
+  },
+  {
+    "version": "0.0.119",
+    "date": "2026-08-22",
+    "changes": [
+      {
+        "title": "feat: add per-machine SSH clipboard sync",
+        "pr": 337
+      },
+      {
+        "title": "feat: add machine control center",
+        "pr": 331
+      },
+      {
+        "title": "fix: start local commands before timeout waits",
+        "pr": 342
+      },
+      {
+        "title": "test: make command timeout check scheduler independent",
+        "pr": 343
+      }
+    ]
+  },
+  {
+    "version": "0.0.118",
+    "date": "2026-08-21",
+    "changes": [
+      {
+        "title": "feat: remove cycle dashboard filters",
+        "pr": 330
+      },
+      {
+        "title": "fix: dismiss shortcut hints on app switch",
+        "pr": 332
+      }
+    ]
+  },
+  {
+    "version": "0.0.117",
+    "date": "2026-08-21",
+    "changes": [
+      {
+        "title": "fix: eliminate Swift build warnings",
+        "pr": 328
+      },
+      {
+        "title": "fix: prevent sidebar bleed through detail views",
+        "pr": 329
+      }
+    ]
+  },
+  {
+    "version": "0.0.116",
+    "date": "2026-08-21",
+    "changes": [
+      {
+        "title": "ci: run repository checks only in CI",
+        "pr": 326
+      },
+      {
+        "title": "fix: restore sidebar reveal animation",
+        "pr": 327
+      }
+    ]
+  },
+  {
+    "version": "0.0.115",
+    "date": "2026-08-20",
+    "changes": []
+  },
+  {
+    "version": "0.0.114",
+    "date": "2026-08-20",
+    "changes": [
+      {
+        "title": "fix: make token accounting internally consistent",
+        "pr": 322
+      }
+    ]
+  },
+  {
+    "version": "0.0.113",
+    "date": "2026-08-19",
+    "changes": [
+      {
+        "title": "feat: removed Linear history  & Commit messages check",
+        "pr": 320
+      },
+      {
+        "title": "feat: add a herdr extension for live coding agents",
+        "pr": 321
+      }
+    ]
+  },
+  {
+    "version": "0.0.112",
+    "date": "2026-08-19",
+    "changes": [
+      {
+        "title": "fix: preserve usage history across refreshes",
+        "pr": 315
+      }
+    ]
+  },
+  {
+    "version": "0.0.111",
+    "date": "2026-08-19",
+    "changes": [
+      {
+        "title": "fix: track Cursor CLI usage reliably",
+        "pr": 314
+      }
+    ]
+  },
+  {
+    "version": "0.0.110",
+    "date": "2026-08-18",
+    "changes": [
+      {
+        "title": "feat: track Cursor Agent CLI usage",
+        "pr": 313
+      }
+    ]
+  },
+  {
+    "version": "0.0.108",
+    "date": "2026-08-17",
+    "changes": [
+      {
+        "title": "fix: restore remote machine capabilities",
+        "pr": 310
+      }
+    ]
+  },
+  {
+    "version": "0.0.107",
+    "date": "2026-08-17",
+    "changes": [
+      {
+        "title": "fix: keep clipboard Command+Down navigation lazy",
+        "pr": 309
+      }
+    ]
+  },
+  {
+    "version": "0.0.106",
+    "date": "2026-08-17",
+    "changes": [
+      {
+        "title": "fix: stop clipboard tests from replacing the system clipboard",
+        "pr": 308
+      }
+    ]
+  },
+  {
+    "version": "0.0.105",
+    "date": "2026-08-17",
+    "changes": [
+      {
+        "title": "feat: support Linux remote machines",
+        "pr": 307
+      }
+    ]
+  },
+  {
+    "version": "0.0.104",
+    "date": "2026-08-17",
+    "changes": [
+      {
+        "title": "fix: handle unrecoverable machine connection errors",
+        "pr": 305
+      }
+    ]
+  },
+  {
+    "version": "0.0.103",
+    "date": "2026-08-17",
+    "changes": [
+      {
+        "title": "build: update project dependencies",
+        "pr": 304
+      }
+    ]
+  },
+  {
+    "version": "0.0.102",
+    "date": "2026-08-17",
+    "changes": [
+      {
+        "title": "chore: add open-source security baseline",
+        "pr": 295
+      }
+    ]
+  },
+  {
+    "version": "0.0.101",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "Remove remaining Linux support",
+        "pr": 294
+      }
+    ]
+  },
+  {
+    "version": "0.0.100",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "Remove Linux distribution support",
+        "pr": 293
+      }
+    ]
+  },
+  {
+    "version": "0.0.99",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "Reaudit documentation for recent functionality",
+        "pr": 291
+      }
+    ]
+  },
+  {
+    "version": "0.0.98",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "Add Lid Awake extension with a notch shelf tile",
+        "pr": 162
+      }
+    ]
+  },
+  {
+    "version": "0.0.97",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "reusable bg code, an some fixes",
+        "pr": 246
+      }
+    ]
+  },
+  {
+    "version": "0.0.96",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "Act on the overhaul audit",
+        "pr": 289
+      }
+    ]
+  },
+  {
+    "version": "0.0.95",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "Land the rest of the companion overhaul",
+        "pr": 287
+      },
+      {
+        "title": "Pick the menu bar limit windows and track Fable",
+        "pr": 288
+      }
+    ]
+  },
+  {
+    "version": "0.0.94",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "Give the CLI eyes: ed app reveal and ed app snapshot",
+        "pr": 279
+      },
+      {
+        "title": "Let the companion's memory leave, arrive and be erased",
+        "pr": 280
+      }
+    ]
+  },
+  {
+    "version": "0.0.93",
+    "date": "2026-08-16",
+    "changes": [
+      {
+        "title": "Make the clipboard panel fast to open on large histories",
+        "pr": 283
+      }
+    ]
+  },
+  {
+    "version": "0.0.92",
+    "date": "2026-08-15",
+    "changes": [
+      {
+        "title": "Fix the companion bugs that made working writes look broken and search fail outright",
+        "pr": 271
+      },
+      {
+        "title": "Make the companion say what is actually wrong, and probe hosts before offering them",
+        "pr": 272
+      },
+      {
+        "title": "Pick the machine that runs the companion, and drive it from Edith",
+        "pr": 274
+      },
+      {
+        "title": "Put the Rust backend under CI",
+        "pr": 275
+      },
+      {
+        "title": "Show the companion's containers as Edith's own",
+        "pr": 276
+      }
+    ]
+  },
+  {
+    "version": "0.0.91",
+    "date": "2026-08-13",
+    "changes": [
+      {
+        "title": "updating the graph color according to app theme",
+        "pr": 270
+      }
+    ]
+  },
+  {
+    "version": "0.0.90",
+    "date": "2026-08-13",
+    "changes": [
+      {
+        "title": "Add machine fan and thermal profile controls",
+        "pr": 269
+      }
+    ]
+  },
+  {
+    "version": "0.0.89",
+    "date": "2026-08-12",
+    "changes": [
+      {
+        "title": "Fix automatic machine usage refresh",
+        "pr": 268
+      }
+    ]
+  },
+  {
+    "version": "0.0.88",
+    "date": "2026-08-12",
+    "changes": [
+      {
+        "title": "Restructured files&folders",
+        "pr": 265
+      }
+    ]
+  },
+  {
+    "version": "0.0.87",
+    "date": "2026-08-12",
+    "changes": [
+      {
+        "title": "Preserve reconciled Codex usage attribution",
+        "pr": 267
+      }
+    ]
+  },
+  {
+    "version": "0.0.86",
+    "date": "2026-08-12",
+    "changes": [
+      {
+        "title": "Complete agent usage repository attribution",
+        "pr": 266
+      }
+    ]
+  },
+  {
+    "version": "0.0.85",
+    "date": "2026-08-12",
+    "changes": [
+      {
+        "title": "Deduplicate replaced machine usage history",
+        "pr": 264
+      }
+    ]
+  },
+  {
+    "version": "0.0.84",
+    "date": "2026-08-12",
+    "changes": [
+      {
+        "title": "Add pi agent usage details",
+        "pr": 263
+      }
+    ]
+  },
+  {
+    "version": "0.0.83",
+    "date": "2026-08-12",
+    "changes": [
+      {
+        "title": "feat : Redesign the landing page and make it work on phones",
+        "pr": 262
+      },
+      {
+        "title": "Fixed Navbar error and formatted code.",
+        "pr": 238
+      }
+    ]
+  },
+  {
+    "version": "0.0.82",
+    "date": "2026-08-11",
+    "changes": [
+      {
+        "title": "Fix usage attribution, freshness, and test isolation",
+        "pr": 258
+      }
+    ]
+  },
+  {
+    "version": "0.0.81",
+    "date": "2026-08-11",
+    "changes": [
+      {
+        "title": "Fix remote mount memory usage",
+        "pr": 257
+      }
+    ]
+  },
+  {
+    "version": "0.0.80",
+    "date": "2026-08-11",
+    "changes": [
+      {
+        "title": "Unify CI and release into one pipeline",
+        "pr": 253
+      },
+      {
+        "title": "Fix usage accounting and group projects by repository",
+        "pr": 254
+      },
+      {
+        "title": "Modernize CI workflows and stabilize Finder search",
+        "pr": 255
+      },
+      {
+        "title": "Fix release workflow gating and recovery",
+        "pr": 256
+      }
+    ]
+  },
+  {
+    "version": "0.0.79",
+    "date": "2026-08-11",
+    "changes": [
+      {
+        "title": "Publish the top level docs guides to the wiki",
+        "pr": 249
+      },
+      {
+        "title": "Collapse the wiki sidebar into one row per command group",
+        "pr": 251
+      },
+      {
+        "title": "Show contributors in the app and the README",
+        "pr": 252
+      }
+    ]
+  },
+  {
+    "version": "0.0.78",
+    "date": "2026-08-11",
+    "changes": [
+      {
+        "title": "Build each release once",
+        "pr": 250
+      }
+    ]
+  },
+  {
+    "version": "0.0.77",
+    "date": "2026-08-11",
+    "changes": [
+      {
+        "title": "Document toolchain deps and display env for the Ubuntu run",
+        "pr": 243
+      },
+      {
+        "title": "Install Edith with Homebrew",
+        "pr": 247
+      },
+      {
+        "title": "Fix releases blocked by the main ruleset",
+        "pr": 248
+      }
+    ]
+  },
+  {
+    "version": "0.0.76",
+    "date": "2026-08-10",
+    "changes": [
+      {
+        "title": "Install release package from its local path",
+        "pr": 242
+      }
+    ]
+  },
+  {
+    "version": "0.0.73",
+    "date": "2026-08-10",
+    "changes": [
+      {
+        "title": "Start native Ubuntu application and Debian packaging",
+        "pr": 237
+      }
+    ]
+  },
+  {
+    "version": "0.0.72",
+    "date": "2026-08-10",
+    "changes": [
+      {
+        "title": "Cut the build, CI and app size back down after the Xcode migration",
+        "pr": 236
+      }
+    ]
+  },
+  {
+    "version": "0.0.71",
+    "date": "2026-08-10",
+    "changes": [
+      {
+        "title": "Stop one unresponsive filesystem from hanging the machine monitor",
+        "pr": 235
+      }
+    ]
+  },
+  {
+    "version": "0.0.70",
+    "date": "2026-08-10",
+    "changes": [
+      {
+        "title": "Stop the false machine disk-full alerts",
+        "pr": 234
+      }
+    ]
+  },
+  {
+    "version": "0.0.69",
+    "date": "2026-08-10",
+    "changes": [
+      {
+        "title": "Removed the packages and added code to app folder",
+        "pr": 231
+      }
+    ]
+  },
+  {
+    "version": "0.0.68",
+    "date": "2026-08-10",
+    "changes": []
+  },
+  {
+    "version": "0.0.67",
+    "date": "2026-08-10",
+    "changes": [
+      {
+        "title": "Add deep concept pages for the companion docs",
+        "pr": 230
+      },
+      {
+        "title": "Build the rest of the companion architecture: personas, theories, calibration, inquiry, evals and machines",
+        "pr": 232
+      }
+    ]
+  },
+  {
+    "version": "0.0.66",
+    "date": "2026-08-09",
+    "changes": [
+      {
+        "title": "Add a companion concepts page to the docs",
+        "pr": 229
+      },
+      {
+        "title": "Make Docker group actions work on a mixed compose group",
+        "pr": 228
+      }
+    ]
+  },
+  {
+    "version": "0.0.65",
+    "date": "2026-08-09",
+    "changes": [
+      {
+        "title": "Split the CLI docs into one page per command",
+        "pr": 227
+      }
+    ]
+  },
+  {
+    "version": "0.0.64",
+    "date": "2026-08-09",
+    "changes": [
+      {
+        "title": "Resync the CLI docs with the reply, forward and companion changes",
+        "pr": 226
+      }
+    ]
+  },
+  {
+    "version": "0.0.63",
+    "date": "2026-08-09",
+    "changes": [
+      {
+        "title": "Companion chat API: streaming conversations, runtime reasoner settings, media",
+        "pr": 222
+      },
+      {
+        "title": "Companion pane: four screens with streaming chat",
+        "pr": 223
+      }
+    ]
+  },
+  {
+    "version": "0.0.62",
+    "date": "2026-08-09",
+    "changes": [
+      {
+        "title": "Companion module foundation: backend stack and CLI surface",
+        "pr": 204
+      },
+      {
+        "title": "Companion retrieval: chunks, embeddings and hybrid search",
+        "pr": 207
+      },
+      {
+        "title": "Companion voice: whisper.cpp transcription pipeline",
+        "pr": 209
+      },
+      {
+        "title": "Companion observations: GitHub connector",
+        "pr": 210
+      },
+      {
+        "title": "Companion page in the app",
+        "pr": 211
+      },
+      {
+        "title": "Companion reflection: belief formation",
+        "pr": 212
+      },
+      {
+        "title": "Companion ask: grounded answers with citations",
+        "pr": 213
+      },
+      {
+        "title": "Companion claims: extraction and corroboration",
+        "pr": 214
+      },
+      {
+        "title": "Companion nightly: the background learning loop",
+        "pr": 215
+      },
+      {
+        "title": "Companion pane: ask box and file feeding",
+        "pr": 216
+      },
+      {
+        "title": "Companion telemetry: turns and retrieval log",
+        "pr": 217
+      },
+      {
+        "title": "Companion provenance: typed citations",
+        "pr": 218
+      },
+      {
+        "title": "Companion beliefs: strengthen, supersede, or insert",
+        "pr": 219
+      },
+      {
+        "title": "Companion signals: how a recording was spoken",
+        "pr": 220
+      },
+      {
+        "title": "Companion PDFs: born-digital text ingestion",
+        "pr": 221
+      }
+    ]
+  },
+  {
+    "version": "0.0.61",
+    "date": "2026-08-09",
+    "changes": [
+      {
+        "title": "Mount a machine's disk, and tighten the machine and Docker controls",
+        "pr": 206
+      }
+    ]
+  },
+  {
+    "version": "0.0.60",
+    "date": "2026-08-09",
+    "changes": [
+      {
+        "title": "Replay active port forwards after a reconnect",
+        "pr": 205
+      }
+    ]
+  },
+  {
+    "version": "0.0.59",
+    "date": "2026-08-09",
+    "changes": [
+      {
+        "title": "Resync the CLI docs with the machine and error changes",
+        "pr": 202
+      },
+      {
+        "title": "Reduce CLI and machine resource usage",
+        "pr": 203
+      }
+    ]
+  },
+  {
+    "version": "0.0.58",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Make the Terminal settings pane responsive",
+        "pr": 196
+      }
+    ]
+  },
+  {
+    "version": "0.0.57",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Fix the machine actions that could never succeed",
+        "pr": 201
+      }
+    ]
+  },
+  {
+    "version": "0.0.56",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Collect from the machines wherever the refresh is asked for, and show it happening",
+        "pr": 200
+      }
+    ]
+  },
+  {
+    "version": "0.0.55",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Reconnect a dropped machine on its own",
+        "pr": 199
+      }
+    ]
+  },
+  {
+    "version": "0.0.54",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Label every line of a multi-line CLI error",
+        "pr": 198
+      }
+    ]
+  },
+  {
+    "version": "0.0.53",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Document the CLI in docs/cli and sync it to the wiki",
+        "pr": 194
+      }
+    ]
+  },
+  {
+    "version": "0.0.52",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Make every ed command do its own work and show it happening",
+        "pr": 195
+      }
+    ]
+  },
+  {
+    "version": "0.0.51",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Filter the usage dashboard by machine, and keep a renamed machine named",
+        "pr": 193
+      }
+    ]
+  },
+  {
+    "version": "0.0.50",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Count the SSH machines' agent usage, not just this Mac's",
+        "pr": 192
+      }
+    ]
+  },
+  {
+    "version": "0.0.49",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Make one list decide what counts as text, and stop import claiming work it would not do",
+        "pr": 191
+      }
+    ]
+  },
+  {
+    "version": "0.0.48",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Stop an upload dying silently and leaving half a file behind",
+        "pr": 190
+      }
+    ]
+  },
+  {
+    "version": "0.0.47",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Stop a filtered clipboard list renumbering what it shows",
+        "pr": 189
+      }
+    ]
+  },
+  {
+    "version": "0.0.46",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Reach the workspace panes, the project sweep and four stragglers",
+        "pr": 188
+      }
+    ]
+  },
+  {
+    "version": "0.0.45",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Answer the undo request even when no Finder window was ever opened",
+        "pr": 187
+      }
+    ]
+  },
+  {
+    "version": "0.0.44",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Give the undo history a verb, and make the parity escape hatch justify itself",
+        "pr": 186
+      }
+    ]
+  },
+  {
+    "version": "0.0.43",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Give ed the saved workspace layouts",
+        "pr": 185
+      }
+    ]
+  },
+  {
+    "version": "0.0.42",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Close the gaps a re-audit found: pty, forwards, docker pause, finder search",
+        "pr": 184
+      }
+    ]
+  },
+  {
+    "version": "0.0.41",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Add ed music start, seek, shuffle and repeat",
+        "pr": 183
+      }
+    ]
+  },
+  {
+    "version": "0.0.40",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Add ed tools, machines broadcast and a limits refresh",
+        "pr": 182
+      }
+    ]
+  },
+  {
+    "version": "0.0.39",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Let ed store machine secrets and run the Finder's file operations",
+        "pr": 181
+      }
+    ]
+  },
+  {
+    "version": "0.0.38",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Add ed apps for the running app list and quitting",
+        "pr": 180
+      }
+    ]
+  },
+  {
+    "version": "0.0.37",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Put the settings the UI writes but ed could not into the catalog",
+        "pr": 179
+      }
+    ]
+  },
+  {
+    "version": "0.0.36",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Add ed download for the queue the sheet drives",
+        "pr": 178
+      }
+    ]
+  },
+  {
+    "version": "0.0.35",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Give ed the music library, not just the transport buttons",
+        "pr": 177
+      }
+    ]
+  },
+  {
+    "version": "0.0.34",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Give ed the machine power, service and process verbs the app has",
+        "pr": 176
+      }
+    ]
+  },
+  {
+    "version": "0.0.33",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Make ed reach every action the UI reaches",
+        "pr": 175
+      }
+    ]
+  },
+  {
+    "version": "0.0.32",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Install shell completions from the app, and make them actually load",
+        "pr": 174
+      }
+    ]
+  },
+  {
+    "version": "0.0.31",
+    "date": "2026-08-08",
+    "changes": [
+      {
+        "title": "Remember the working directory per terminal when running commands on a machine",
+        "pr": 173
+      }
+    ]
+  },
+  {
+    "version": "0.0.30",
+    "date": "2026-08-07",
+    "changes": [
+      {
+        "title": "Stop the resource bundle lookup from crashing the app, and install completions on update",
+        "pr": 172
+      }
+    ]
+  },
+  {
+    "version": "0.0.29",
+    "date": "2026-08-07",
+    "changes": [
+      {
+        "title": "Add the Machines extension for managing other computers over SSH",
+        "pr": 167
+      },
+      {
+        "title": "Add ed, a first-class CLI for Edith",
+        "pr": 169
+      }
+    ]
+  },
+  {
+    "version": "0.0.28",
+    "date": "2026-08-06",
+    "changes": [
+      {
+        "title": "Stop the limits poller from silently wedging on a hung fetch",
+        "pr": 168
+      }
+    ]
+  },
+  {
+    "version": "0.0.27",
+    "date": "2026-08-02",
+    "changes": []
+  },
+  {
+    "version": "0.0.26",
+    "date": "2026-08-02",
+    "changes": []
+  },
+  {
+    "version": "0.0.25",
+    "date": "2026-08-02",
+    "changes": [
+      {
+        "title": "Configure the update schedule and see check history from a hidden popover",
+        "pr": 165
+      }
+    ]
+  },
+  {
+    "version": "0.0.24",
+    "date": "2026-08-02",
+    "changes": []
+  },
+  {
+    "version": "0.0.23",
+    "date": "2026-07-27",
+    "changes": [
+      {
+        "title": "Ship the app icon resource bundle so activation stops crashing",
+        "pr": 164
+      }
+    ]
+  },
+  {
+    "version": "0.0.22",
+    "date": "2026-07-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.21",
+    "date": "2026-07-25",
+    "changes": [
+      {
+        "title": "Make Sparkle updates actually reach the user",
+        "pr": 160
+      }
+    ]
+  },
+  {
+    "version": "0.0.20",
+    "date": "2026-07-25",
+    "changes": [
+      {
+        "title": "Add Command Code usage source and OpenCode project attribution",
+        "pr": 159
+      }
+    ]
+  },
+  {
+    "version": "0.0.19",
+    "date": "2026-07-25",
+    "changes": [
+      {
+        "title": "Auto-refresh agent usage stats every 5 minutes",
+        "pr": 158
+      }
+    ]
+  },
+  {
+    "version": "0.0.18",
+    "date": "2026-07-25",
+    "changes": []
+  },
+  {
+    "version": "0.0.17",
+    "date": "2026-07-24",
+    "changes": [
+      {
+        "title": "Read calendar permission from the app that holds the grant",
+        "pr": 157
+      }
+    ]
+  },
+  {
+    "version": "0.0.16",
+    "date": "2026-07-24",
+    "changes": [
+      {
+        "title": "Self-heal calendar permission after EventKit resolves post-launch",
+        "pr": 156
+      }
+    ]
+  },
+  {
+    "version": "0.0.15",
+    "date": "2026-07-24",
+    "changes": [
+      {
+        "title": "Fix stale calendar permission showing Needed now when already granted",
+        "pr": 155
+      }
+    ]
+  },
+  {
+    "version": "0.0.14",
+    "date": "2026-07-24",
+    "changes": []
+  },
+  {
+    "version": "0.0.13",
+    "date": "2026-07-24",
+    "changes": []
+  },
+  {
+    "version": "0.0.12",
+    "date": "2026-07-23",
+    "changes": [
+      {
+        "title": "Scope agent usage by folder and fix cross-range token attribution",
+        "pr": 154
+      }
+    ]
+  },
+  {
+    "version": "0.0.11",
+    "date": "2026-07-22",
+    "changes": [
+      {
+        "title": "Music: grid view, favourites, subtree search, and a real playback queue",
+        "pr": 152
+      },
+      {
+        "title": "Share one search field, blur inputs on escape or an outside click, and scroll under fixed headers",
+        "pr": 153
+      }
+    ]
+  },
+  {
+    "version": "0.0.10",
+    "date": "2026-07-22",
+    "changes": [
+      {
+        "title": "Pin the designated requirement to the team id so TCC grants survive",
+        "pr": 151
+      }
+    ]
+  },
+  {
+    "version": "0.0.9",
+    "date": "2026-07-22",
+    "changes": []
+  },
+  {
+    "version": "0.0.8",
+    "date": "2026-07-22",
+    "changes": [
+      {
+        "title": "Music folders, playlist playback, and library management",
+        "pr": 150
+      }
+    ]
+  },
+  {
+    "version": "0.0.7",
+    "date": "2026-07-22",
+    "changes": [
+      {
+        "title": "Add Polar payment integration with license delivery",
+        "pr": 145
+      }
+    ]
+  },
+  {
+    "version": "0.0.6",
+    "date": "2026-07-21",
+    "changes": [
+      {
+        "title": "Render zoom at true point size and align window chrome",
+        "pr": 149
+      }
+    ]
+  },
+  {
+    "version": "0.0.5",
+    "date": "2026-07-21",
+    "changes": [
+      {
+        "title": "Add window zoom and Chrome-style sidebar navigation shortcuts",
+        "pr": 148
+      }
+    ]
+  },
+  {
+    "version": "0.0.4",
+    "date": "2026-07-21",
+    "changes": [
+      {
+        "title": "Fix extension toggle animation, de-alarm the extension and permission panes, unify rate-limit rings, and make iCloud sync survive a reinstall",
+        "pr": 147
+      }
+    ]
+  },
+  {
+    "version": "0.0.3",
+    "date": "2026-07-21",
+    "changes": [
+      {
+        "title": "Unified permissions screen, reliable settings backup, and notch/Focus Dim fixes",
+        "pr": 146
+      }
+    ]
+  },
+  {
+    "version": "0.0.2",
+    "date": "2026-07-19",
+    "changes": []
+  },
+  {
+    "version": "0.0.1",
+    "date": "2026-07-19",
+    "changes": []
+  }
+]

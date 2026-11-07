@@ -1,36 +1,89 @@
 import EdithIcons
 import SwiftUI
 
+enum PageToolbarMetrics {
+    static let glyphWidth = 20.0
+    static let glyphHeight = 24.0
+}
+
+struct PageToolbarIconStyle: ButtonStyle {
+    let tint: Color?
+    let font: Font?
+
+    func makeBody(configuration: Configuration) -> some View {
+        EdithButtonBody(
+            label: configuration.label
+                .foregroundStyle(tint ?? .primary)
+                .transformEnvironment(\.font) { value in
+                    if let font { value = font }
+                }
+                .frame(
+                    width: UIScale.pt(PageToolbarMetrics.glyphWidth),
+                    height: UIScale.pt(PageToolbarMetrics.glyphHeight)),
+            role: .toolbar, selected: false, pressed: configuration.isPressed, tint: nil)
+    }
+}
+
 public struct PageToolbarButton: View {
     let action: () -> Void
     let icon: EdithIcon
     let helperText: String
+    var label: String?
     var isLoading = false
     var tint: Color?
+    var font: Font?
 
     public init(
         action: @escaping () -> Void, icon: EdithIcon, helperText: String,
-        isLoading: Bool = false, tint: Color? = nil
+        accessibilityLabel: String? = nil, isLoading: Bool = false, tint: Color? = nil,
+        font: Font? = nil
     ) {
         self.action = action; self.icon = icon; self.helperText = helperText
-        self.isLoading = isLoading; self.tint = tint
+        self.label = accessibilityLabel; self.isLoading = isLoading; self.tint = tint
+        self.font = font
     }
 
     public var body: some View {
         Button(action: action) {
-            Group {
-                if isLoading {
-                    LoadingIndicator()
-                } else {
-                    EdithIconView(icon).foregroundStyle(tint ?? .primary)
-                }
+            if isLoading {
+                LoadingIndicator()
+            } else {
+                EdithIconView(icon)
             }
-            .frame(width: UIScale.pt(20), height: UIScale.pt(24))
         }
-        .buttonStyle(.edith(.toolbar))
+        .buttonStyle(PageToolbarIconStyle(tint: tint, font: font))
         .disabled(isLoading)
         .help(helperText)
-        .accessibilityLabel(helperText)
+        .accessibilityLabel(label ?? helperText)
+    }
+}
+
+public struct PageToolbarMenu<Content: View>: View {
+    let icon: EdithIcon
+    let helperText: String
+    var label: String?
+    var tint: Color?
+    var font: Font?
+    @ViewBuilder let content: () -> Content
+
+    public init(
+        icon: EdithIcon, helperText: String, accessibilityLabel: String? = nil,
+        tint: Color? = nil, font: Font? = nil, @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.icon = icon; self.helperText = helperText; self.label = accessibilityLabel
+        self.tint = tint; self.font = font; self.content = content
+    }
+
+    public var body: some View {
+        Menu(content: content) {
+            EdithIconView(icon)
+        }
+        .menuStyle(.button)
+        .buttonStyle(PageToolbarIconStyle(tint: tint, font: font))
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(helperText)
+        .accessibilityLabel(label ?? helperText)
     }
 }
 

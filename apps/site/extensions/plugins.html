@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#070a12" />
+    <title>Plugins extension · Edith</title>
+    <meta name="description" content="Teach your coding agents how to use Edith with one-click skills. Plugins are skills: short instruction files that show agents like Claude Code, Cursor or Codex how to drive Edith. You can read each skill first, then install it for the agents you choose." />
+    <link rel="canonical" href="https://edith.pulkit.page/extensions/plugins.html" />
+    <link rel="icon" type="image/png" href="/favicon-180.png" />
+    <link rel="apple-touch-icon" href="/favicon-180.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>try{var t=localStorage.getItem("edith-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Edith" />
+    <meta property="og:title" content="Plugins extension · Edith" />
+    <meta property="og:description" content="Teach your coding agents how to use Edith with one-click skills. Plugins are skills: short instruction files that show agents like Claude Code, Cursor or Codex how to drive Edith. You can read each skill first, then install it for the agents you choose." />
+    <meta property="og:url" content="https://edith.pulkit.page/extensions/plugins.html" />
+    <meta property="og:image" content="https://edith.pulkit.page/og/ext-plugins.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Plugins. Teach your coding agents how to use Edith with one-click skills." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Plugins extension · Edith" />
+    <meta name="twitter:description" content="Teach your coding agents how to use Edith with one-click skills. Plugins are skills: short instruction files that show agents like Claude Code, Cursor or Codex how to drive Edith. You can read each skill first, then install it for the agents you choose." />
+    <meta name="twitter:image" content="https://edith.pulkit.page/og/ext-plugins.jpg" />
+    <meta name="twitter:image:alt" content="Plugins. Teach your coding agents how to use Edith with one-click skills." />
+    <meta name="author" content="Pulkit" />
+    <meta name="application-name" content="Edith" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Edith","item":"https://edith.pulkit.page/"},{"@type":"ListItem","position":2,"name":"Extensions","item":"https://edith.pulkit.page/extensions/"},{"@type":"ListItem","position":3,"name":"Agents & Terminal","item":"https://edith.pulkit.page/extensions/#agents"},{"@type":"ListItem","position":4,"name":"Plugins","item":"https://edith.pulkit.page/extensions/plugins.html"}]}</script>
+    <script type="module" src="/main.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+  <div class="header-inner">
+    <a href="/" class="brand" aria-label="Edith home">
+      <img src="/app-icon-512.png" alt="" width="30" height="30" />
+      <span class="brand-name">Edith</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main"><a href="/features.html">Features</a><a href="/extensions/" aria-current="page">Extensions</a><a href="/agents.html">Agents</a><a href="/download.html">Download</a><a href="/faq.html">FAQ</a><a class="nav-github" href="https://github.com/pulkitxm/edith">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch between light and dark"><svg class="icon icon-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 2L9 2L9 4L11 4L11 2ZM6 4L4 4L4 6L6 6L6 4ZM14 4L16 4L16 6L14 6L14 4ZM10 14C12.209 14 14 12.209 14 10C14 7.791 12.209 6 10 6C7.791 6 6 7.791 6 10C6 12.209 7.791 14 10 14ZM4 9L2 9L2 11L4 11L4 9ZM16 9L18 9L18 11L16 11L16 9ZM6 14L4 14L4 16L6 16L6 14ZM14 14L16 14L16 16L14 16L14 14ZM11 16L11 18L9 18L9 16L11 16Z"/></svg><svg class="icon icon-moon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 14C15.217 14 16.362 13.689 17.359 13.143C16.138 16 13.303 18 10 18C5.582 18 2 14.418 2 10C2 5.905 5.076 2.529 9.044 2.057C7.781 3.323 7 5.07 7 7C7 10.866 10.134 14 14 14Z"/></svg></button>
+      <a class="btn btn-gold btn-sm header-cta" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download</span></a>
+      <button class="menu-toggle" type="button" data-menu-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M17 4L3 4L3 6L17 6L17 4ZM17 9L3 9L3 11L17 11L17 9ZM3 14L17 14L17 16L3 16L3 14Z"/></svg></button>
+    </div>
+  </div>
+</header>
+    <main id="main">
+<section class="page-hero ext-hero">
+  <div class="hero-glow small" aria-hidden="true"></div>
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/extensions/">Extensions</a><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg><a href="/extensions/#agents">Agents & Terminal</a><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg><span aria-current="page">Plugins</span></nav>
+    <div class="ext-hero-row">
+      <span class="tile tile-xl" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 14L9 14L9 18L11 18L11 14Z"/><path class="primary" fill-rule="evenodd" d="M8 2L6 2L6 7L4 7L4 10C4 11.657 5.343 13 7 13L13 13C14.657 13 16 11.657 16 10L16 7L14 7L14 2L12 2L12 7L8 7L8 2Z"/></svg></span>
+      <div>
+        <h1>Plugins</h1>
+        <p class="hero-lead">Teach your coding agents how to use Edith with one-click skills.</p>
+        <div class="ext-tags"><span class="pill">Agents & Terminal</span></div>
+      </div>
+    </div>
+    <div class="install-row"><div class="command"><code><span class="prompt" aria-hidden="true">$</span>ed extensions install plugins</code><button class="copy" type="button" data-copy="ed extensions install plugins" aria-label="Copy ed extensions install plugins"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 2L4 2C2.895 2 2 2.895 2 4L2 11C2 12.105 2.895 13 4 13L6 13L6 9Q6 8.39 6.236 7.832Q6.464 7.293 6.875 6.875Q7.293 6.464 7.832 6.236Q8.39 6 9 6L13 6L13 4C13 2.895 12.105 2 11 2Z"/><path class="primary" fill-rule="evenodd" d="M9 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L9 18C7.895 18 7 17.105 7 16L7 9C7 7.895 7.895 7 9 7Z"/></svg><span>Copy</span></button></div><a class="btn btn-gold" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Get Edith</span></a></div>
+  </div>
+</section>
+<div class="wrap detail">
+  <section class="detail-shot reveal"><figure class="shot "><div class="shot-frame"><img class="shot-dark" src="/shots/dark/ext-plugins.webp" srcset="/shots/dark/ext-plugins-1200.webp 1200w, /shots/dark/ext-plugins.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="Plugins in Edith" width="2400" height="1500" loading="lazy" decoding="async" /><img class="shot-light" src="/shots/light/ext-plugins.webp" srcset="/shots/light/ext-plugins-1200.webp 1200w, /shots/light/ext-plugins.webp 2400w" sizes="(max-width: 1240px) 100vw, 1200px" alt="" aria-hidden="true" width="2400" height="1500" loading="lazy" decoding="async" /></div></figure></section>
+  <div class="detail-grid">
+    <div class="detail-main">
+      <section class="detail-block reveal"><h2>Overview</h2><p class="lead">Plugins are skills: short instruction files that show agents like Claude Code, Cursor or Codex how to drive Edith. You can read each skill first, then install it for the agents you choose.</p></section>
+      <section class="detail-block"><h2 class="reveal">How it works</h2><ol class="timeline"><li class="reveal"><span class="step-num">1</span><div><h3>Read a skill</h3><p>Click Preview to see exactly what the skill tells your agent, and copy the Markdown if you prefer.</p></div></li><li class="reveal"><span class="step-num">2</span><div><h3>Choose your agents</h3><p>Edith finds the coding agents installed on this Mac and remembers which ones you pick.</p></div></li><li class="reveal"><span class="step-num">3</span><div><h3>Install</h3><p>The skill is added to each agent for all your projects. Nothing else on your Mac is touched.</p></div></li></ol></section>
+      <section class="detail-block reveal"><h2>From the terminal</h2><p class="muted">Every example returns JSON with <code>--json</code>, and agents can call the same thing over MCP.</p><div class="terminal"><div class="terminal-bar"><span></span><span></span><span></span></div><pre><code><span class="t-prompt">$</span> ed skills ls
+<span class="t-prompt">$</span> ed skills preview edith-remote-work
+<span class="t-prompt">$</span> ed skills install edith-remote-work --agent cursor --yes</code></pre></div><a class="link-arrow" href="https://github.com/pulkitxm/edith/blob/main/docs/cli/skills/README.md">ed skills reference <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 3L6 3C4.343 3 3 4.343 3 6L3 14C3 15.657 4.343 17 6 17L14 17C15.657 17 17 15.657 17 14L17 6C17 4.343 15.657 3 14 3ZM8 6L14 6L14 12L12 12L12 10L7 15L5.5 13.5L11 8L8 8L8 6Z"/></svg></a></section>
+    </div>
+    <aside class="detail-side">
+      
+      <section class="side-card reveal"><h2>Where it shows up</h2><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M9.646 2.354C9.842 2.158 10.158 2.158 10.354 2.354L18 10L16 10L16 17C16 17.552 15.552 18 15 18L11 18L11 12L9 12L9 18L5 18C4.448 18 4 17.552 4 17L4 10L2 10L9.646 2.354Z"/></svg><div><strong>Home cards</strong><span>Adds cards you can place on Edith's Home screen.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4.5 3L6 3L6 4.5C6 5.328 6.672 6 7.5 6L12.5 6C13.328 6 14 5.328 14 4.5L14 3L15.5 3C16.881 3 18 4.119 18 5.5L18 14.5C18 15.881 16.881 17 15.5 17L4.5 17C3.119 17 2 15.881 2 14.5L2 5.5C2 4.119 3.119 3 4.5 3ZM5.5 12.5L10 8L14.5 12.5L13 14L10 11L7 14L5.5 12.5Z"/></svg><div><strong>Notch cards</strong><span>Adds cards you can pin in the notch.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L15 3C16.657 3 18 4.343 18 6L18 14C18 15.657 16.657 17 15 17L5 17C3.343 17 2 15.657 2 14L2 6C2 4.343 3.343 3 5 3ZM10 10L5.5 5.5L4 7L7 10L4 13L5.5 14.5L10 10ZM15 12L10 12L10 14L15 14L15 12Z"/></svg><div><strong>Command line</strong><span>Scriptable with <code>ed skills</code>, with JSON output.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 6L3.5 2.5L2 4L4 6L2 8L3.5 9.5L7 6ZM7 14L3.5 10.5L2 12L4 14L2 16L3.5 17.5L7 14Z"/><path class="primary" fill-rule="evenodd" d="M10.5 2.5L18 10L10.5 17.5L8 15L13 10L8 5L10.5 2.5Z"/></svg><div><strong>Agent tools</strong><span>Every command is an MCP tool such as <code>edith_skills</code>.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L7 3C7.552 3 8 3.448 8 4L8 16C8 16.552 7.552 17 7 17L5 17C4.448 17 4 16.552 4 16L4 4C4 3.448 4.448 3 5 3ZM13 3L15 3C15.552 3 16 3.448 16 4L16 16C16 16.552 15.552 17 15 17L13 17C12.448 17 12 16.552 12 16L12 4C12 3.448 12.448 3 13 3Z"/></svg><div><strong>Starts on demand</strong><span>Loads only when you open it, and stops when you are done.</span></div></div></section>
+      <section class="side-card reveal"><h2>Details</h2><dl class="facts">
+        <div><dt>Suite</dt><dd>Agents & Terminal</dd></div>
+        <div><dt>ID</dt><dd><code>plugins</code></dd></div>
+        <div><dt>Source</dt><dd><a href="https://github.com/pulkitxm/edith/tree/main/Extensions/plugins">GitHub</a></dd></div>
+      </dl></section>
+    </aside>
+  </div>
+  <section class="section"><div class="section-head reveal"><h2>More in Agents & Terminal</h2></div><div class="ext-grid"><a class="ext-card" href="/extensions/docs.html" data-category="agents" data-search="docs docs find the right edith command by describing what you want to do. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 5C13 3.5 15.5 3.5 18 5L18 18C15.5 16.5 13 16.5 11 18L11 5Z"/><path class="primary" fill-rule="evenodd" d="M9 5C7 3.5 4.5 3.5 2 5L2 18C4.5 16.5 7 16.5 9 18L9 5Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Docs</span>
+    <span class="ext-card-tagline">Find the right Edith command by describing what you want to do.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/companion.html" data-category="agents" data-search="memory companion a private memory of your notes and voice memos that you can ask questions. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M15 2L11 2C10.448 2 10 2.448 10 3L10 4L5 4C4.448 4 4 4.448 4 5L4 8L16 8L16 3C16 2.448 15.552 2 15 2Z"/><path class="primary" fill-rule="evenodd" d="M18 9L2 9L2 16C2 17.105 2.895 18 4 18L16 18C17.105 18 18 17.105 18 16L18 9ZM13 12L7 12L7 14L13 14L13 12Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Memory</span>
+    <span class="ext-card-tagline">A private memory of your notes and voice memos that you can ask questions.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/terminal.html" data-category="agents" data-search="terminal terminal a fast built-in terminal with tabs that keeps your shells in one place. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L15 3C16.657 3 18 4.343 18 6L18 14C18 15.657 16.657 17 15 17L5 17C3.343 17 2 15.657 2 14L2 6C2 4.343 3.343 3 5 3ZM10 10L5.5 5.5L4 7L7 10L4 13L5.5 14.5L10 10ZM15 12L10 12L10 14L15 14L15 12Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Terminal</span>
+    <span class="ext-card-tagline">A fast built-in terminal with tabs that keeps your shells in one place.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/usage.html" data-category="agents" data-search="usage usage see what your coding agents cost and how close you are to their limits. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 3L6 3C6.552 3 7 3.448 7 4L7 11.267Q6.894 11.206 6.779 11.158Q6.406 11 6 11L4 11Q3.594 11 3.221 11.158Q3.106 11.206 3 11.267L3 4C3 3.448 3.448 3 4 3ZM17 5.267L17 4C17 3.448 16.552 3 16 3L14 3C13.448 3 13 3.448 13 4L13 5.267Q13.106 5.206 13.221 5.158Q13.594 5 14 5L16 5Q16.406 5 16.779 5.158Q16.894 5.206 17 5.267ZM12 7L12 4C12 3.448 11.552 3 11 3L9 3C8.448 3 8 3.448 8 4L8 8.267Q8.106 8.206 8.221 8.158Q8.594 8 9 8L11 8Q11.406 8 11.779 8.158Q11.894 8.206 12 8.267L12 7Z"/><path class="primary" fill-rule="evenodd" d="M14 6L16 6C16.552 6 17 6.448 17 7L17 16C17 16.552 16.552 17 16 17L14 17C13.448 17 13 16.552 13 16L13 7C13 6.448 13.448 6 14 6ZM11 9L9 9C8.448 9 8 9.448 8 10L8 16C8 16.552 8.448 17 9 17L11 17C11.552 17 12 16.552 12 16L12 10C12 9.448 11.552 9 11 9ZM6 12L4 12C3.448 12 3 12.448 3 13L3 16C3 16.552 3.448 17 4 17L6 17C6.552 17 7 16.552 7 16L7 13C7 12.448 6.552 12 6 12Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Usage</span>
+    <span class="ext-card-tagline">See what your coding agents cost and how close you are to their limits.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/machines.html" data-category="agents" data-search="machines machines watch, browse and run your servers and containers from one place. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 8L3 8C2.448 8 2 8.448 2 9L2 11C2 11.552 2.448 12 3 12L17 12C17.552 12 18 11.552 18 11L18 9C18 8.448 17.552 8 17 8ZM4 9L6 9L6 11L4 11L4 9ZM17 13L3 13C2.448 13 2 13.448 2 14L2 16C2 16.552 2.448 17 3 17L17 17C17.552 17 18 16.552 18 16L18 14C18 13.448 17.552 13 17 13ZM6 14L4 14L4 16L6 16L6 14Z"/><path class="primary" fill-rule="evenodd" d="M17 3L3 3C2.448 3 2 3.448 2 4L2 6C2 6.552 2.448 7 3 7L17 7C17.552 7 18 6.552 18 6L18 4C18 3.448 17.552 3 17 3ZM6 4L4 4L4 6L6 6L6 4Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Machines</span>
+    <span class="ext-card-tagline">Watch, browse and run your servers and containers from one place.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/herdr.html" data-category="agents" data-search="agents herdr see every coding agent on your macs in one board, and step in when one needs you. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 6L3.5 2.5L2 4L4 6L2 8L3.5 9.5L7 6ZM7 14L3.5 10.5L2 12L4 14L2 16L3.5 17.5L7 14Z"/><path class="primary" fill-rule="evenodd" d="M10.5 2.5L18 10L10.5 17.5L8 15L13 10L8 5L10.5 2.5Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Agents</span>
+    <span class="ext-card-tagline">See every coding agent on your Macs in one board, and step in when one needs you.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/quinjet.html" data-category="agents" data-search="code review quinjet review pull requests and code changes in a focused terminal workspace. agents &amp; terminal">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 3L3 3C2.448 3 2 3.448 2 4L2 8C2 8.552 2.448 9 3 9L17 9C17.552 9 18 8.552 18 8L18 4C18 3.448 17.552 3 17 3ZM4 5L8 5L8 7L4 7L4 5ZM14 5L10 5L10 7L14 7L14 5Z"/><path class="primary" fill-rule="evenodd" d="M3 11L17 11C17.552 11 18 11.448 18 12L18 16C18 16.552 17.552 17 17 17L3 17C2.448 17 2 16.552 2 16L2 12C2 11.448 2.448 11 3 11ZM5 12L7 12L7 13L8 13L8 15L7 15L7 16L5 16L5 15L4 15L4 13L5 13L5 12ZM16 13L10 13L10 15L16 15L16 13Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Code Review</span>
+    <span class="ext-card-tagline">Review pull requests and code changes in a focused terminal workspace.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a></div></section>
+  <nav class="pager" aria-label="More extensions">
+    <a href="/extensions/blitztree.html" class="pager-link"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M9 16L3 10L9 4L10.5 5.5L7 9L17 9L17 11L7 11L10.5 14.5L9 16Z"/></svg><span><small>Previous</small>Disk Map</span></a>
+    <a href="/extensions/notchShelf.html" class="pager-link next"><span><small>Next</small>Notch Shelf</span><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+  </nav>
+</div>
+    </main>
+    <footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <a href="/" class="brand"><img src="/app-icon-512.png" alt="" width="30" height="30" /><span class="brand-name">Edith</span></a>
+      <p>Every tool your Mac is missing, in one native app. Free and open source under the GPL-3.0.</p>
+      <a class="btn btn-ghost btn-sm" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download Edith</span></a>
+    </div>
+    <div class="footer-col"><h2>Product</h2><a href="/features.html">Features</a><a href="/extensions/">Extensions</a><a href="/agents.html">Agents and MCP</a><a href="/download.html">Download</a><a href="/changelog/">Changelog</a><a href="/faq.html">FAQ</a></div>
+    <div class="footer-col"><h2>Resources</h2><a href="https://github.com/pulkitxm/edith/tree/main/docs/cli">CLI reference</a><a href="https://github.com/pulkitxm/edith/wiki">Wiki</a><a href="https://github.com/pulkitxm/edith/releases">Releases</a><a href="https://github.com/pulkitxm/edith/blob/main/SUPPORT.md">Support</a></div>
+    <div class="footer-col"><h2>Project</h2><a href="https://github.com/pulkitxm/edith">GitHub</a><a href="https://github.com/pulkitxm/edith/blob/main/CONTRIBUTING.md">Contributing</a><a href="https://github.com/pulkitxm/edith/blob/main/SECURITY.md">Security</a><a href="https://www.gnu.org/licenses/gpl-3.0.html">Licence</a></div>
+    <div class="footer-col"><h2>Legal</h2><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div>
+  </div>
+  <div class="footer-base"><span>Made on a Mac, for Macs.</span><span>macOS 14+ on Apple silicon</span></div>
+</footer>
+  </body>
+</html>

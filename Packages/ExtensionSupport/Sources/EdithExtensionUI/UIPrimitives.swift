@@ -115,7 +115,7 @@ extension ButtonStyle where Self == EdithButtonStyle {
     }
 }
 
-private struct EdithButtonBody<Label: View>: View {
+struct EdithButtonBody<Label: View>: View {
     let label: Label
     let role: EdithButtonRole
     let selected: Bool
