@@ -6,6 +6,7 @@ public enum SweaterTheme {
     public static let processName = "Edith"
 
     static let themeYarns: [AppTheme: UInt32] = [
+        .navy: 0xff_1e3a8a,
         .accent: 0xff_d97757,
         .blue: 0xff_0091ff,
         .indigo: 0xff_6d7cff,
