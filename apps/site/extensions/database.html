@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#070a12" />
+    <title>Database extension · Edith</title>
+    <meta name="description" content="Browse and safely edit your databases without leaving your Mac. Save a connection to PostgreSQL, MySQL, SQLite, MongoDB, Redis and more, then browse tables, run queries and edit rows. Risky changes are previewed and need your confirmation first. Passwords stay in your Keychain." />
+    <link rel="canonical" href="https://edith.pulkit.page/extensions/database.html" />
+    <link rel="icon" type="image/png" href="/favicon-180.png" />
+    <link rel="apple-touch-icon" href="/favicon-180.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>try{var t=localStorage.getItem("edith-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Edith" />
+    <meta property="og:title" content="Database extension · Edith" />
+    <meta property="og:description" content="Browse and safely edit your databases without leaving your Mac. Save a connection to PostgreSQL, MySQL, SQLite, MongoDB, Redis and more, then browse tables, run queries and edit rows. Risky changes are previewed and need your confirmation first. Passwords stay in your Keychain." />
+    <meta property="og:url" content="https://edith.pulkit.page/extensions/database.html" />
+    <meta property="og:image" content="https://edith.pulkit.page/og/ext-database.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Database. Browse and safely edit your databases without leaving your Mac." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Database extension · Edith" />
+    <meta name="twitter:description" content="Browse and safely edit your databases without leaving your Mac. Save a connection to PostgreSQL, MySQL, SQLite, MongoDB, Redis and more, then browse tables, run queries and edit rows. Risky changes are previewed and need your confirmation first. Passwords stay in your Keychain." />
+    <meta name="twitter:image" content="https://edith.pulkit.page/og/ext-database.jpg" />
+    <meta name="twitter:image:alt" content="Database. Browse and safely edit your databases without leaving your Mac." />
+    <meta name="author" content="Pulkit" />
+    <meta name="application-name" content="Edith" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Edith","item":"https://edith.pulkit.page/"},{"@type":"ListItem","position":2,"name":"Extensions","item":"https://edith.pulkit.page/extensions/"},{"@type":"ListItem","position":3,"name":"Developer & Data","item":"https://edith.pulkit.page/extensions/#developer"},{"@type":"ListItem","position":4,"name":"Database","item":"https://edith.pulkit.page/extensions/database.html"}]}</script>
+    <script type="module" src="/main.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+  <div class="header-inner">
+    <a href="/" class="brand" aria-label="Edith home">
+      <img src="/app-icon-512.png" alt="" width="30" height="30" />
+      <span class="brand-name">Edith</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main"><a href="/features.html">Features</a><a href="/extensions/" aria-current="page">Extensions</a><a href="/agents.html">Agents</a><a href="/download.html">Download</a><a href="/faq.html">FAQ</a><a class="nav-github" href="https://github.com/pulkitxm/edith">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch between light and dark"><svg class="icon icon-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 2L9 2L9 4L11 4L11 2ZM6 4L4 4L4 6L6 6L6 4ZM14 4L16 4L16 6L14 6L14 4ZM10 14C12.209 14 14 12.209 14 10C14 7.791 12.209 6 10 6C7.791 6 6 7.791 6 10C6 12.209 7.791 14 10 14ZM4 9L2 9L2 11L4 11L4 9ZM16 9L18 9L18 11L16 11L16 9ZM6 14L4 14L4 16L6 16L6 14ZM14 14L16 14L16 16L14 16L14 14ZM11 16L11 18L9 18L9 16L11 16Z"/></svg><svg class="icon icon-moon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 14C15.217 14 16.362 13.689 17.359 13.143C16.138 16 13.303 18 10 18C5.582 18 2 14.418 2 10C2 5.905 5.076 2.529 9.044 2.057C7.781 3.323 7 5.07 7 7C7 10.866 10.134 14 14 14Z"/></svg></button>
+      <a class="btn btn-gold btn-sm header-cta" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download</span></a>
+      <button class="menu-toggle" type="button" data-menu-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M17 4L3 4L3 6L17 6L17 4ZM17 9L3 9L3 11L17 11L17 9ZM3 14L17 14L17 16L3 16L3 14Z"/></svg></button>
+    </div>
+  </div>
+</header>
+    <main id="main">
+<section class="page-hero ext-hero">
+  <div class="hero-glow small" aria-hidden="true"></div>
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/extensions/">Extensions</a><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg><a href="/extensions/#developer">Developer & Data</a><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg><span aria-current="page">Database</span></nav>
+    <div class="ext-hero-row">
+      <span class="tile tile-xl" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M3 7.025L3 10L3.625 10Q3.625 10.354 3.995 10.729Q4.44 11.18 5.296 11.547Q6.2 11.934 7.387 12.149Q8.632 12.375 10 12.375Q11.368 12.375 12.613 12.149Q13.8 11.934 14.704 11.547Q15.56 11.18 16.005 10.729Q16.375 10.354 16.375 10L17 10L17 7.025Q16.359 7.605 15.344 8.04Q14.271 8.5 12.903 8.75Q11.514 9 10 9Q8.486 9 7.097 8.75Q5.729 8.5 4.656 8.04Q3.641 7.605 3 7.025ZM3 11.495L3 15C3 16.657 6.134 18 10 18C13.866 18 17 16.657 17 15L17 11.495Q16.949 11.551 16.895 11.607Q16.277 12.232 15.196 12.696Q14.162 13.139 12.836 13.379Q11.48 13.625 10 13.625Q8.52 13.625 7.164 13.379Q5.838 13.139 4.804 12.696Q3.723 12.232 3.105 11.607Q3.051 11.551 3 11.495Z"/><path class="primary" fill-rule="evenodd" d="M17 5C17 6.657 13.866 8 10 8C6.134 8 3 6.657 3 5C3 3.343 6.134 2 10 2C13.866 2 17 3.343 17 5Z"/></svg></span>
+      <div>
+        <h1>Database</h1>
+        <p class="hero-lead">Browse and safely edit your databases without leaving your Mac.</p>
+        <div class="ext-tags"><span class="pill">Developer & Data</span></div>
+      </div>
+    </div>
+    <div class="install-row"><div class="command"><code><span class="prompt" aria-hidden="true">$</span>ed extensions install database</code><button class="copy" type="button" data-copy="ed extensions install database" aria-label="Copy ed extensions install database"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 2L4 2C2.895 2 2 2.895 2 4L2 11C2 12.105 2.895 13 4 13L6 13L6 9Q6 8.39 6.236 7.832Q6.464 7.293 6.875 6.875Q7.293 6.464 7.832 6.236Q8.39 6 9 6L13 6L13 4C13 2.895 12.105 2 11 2Z"/><path class="primary" fill-rule="evenodd" d="M9 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L9 18C7.895 18 7 17.105 7 16L7 9C7 7.895 7.895 7 9 7Z"/></svg><span>Copy</span></button></div><a class="btn btn-gold" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Get Edith</span></a></div>
+  </div>
+</section>
+<div class="wrap detail">
+  
+  <div class="detail-grid">
+    <div class="detail-main">
+      <section class="detail-block reveal"><h2>Overview</h2><p class="lead">Save a connection to PostgreSQL, MySQL, SQLite, MongoDB, Redis and more, then browse tables, run queries and edit rows. Risky changes are previewed and need your confirmation first. Passwords stay in your Keychain.</p></section>
+      <section class="detail-block"><h2 class="reveal">How it works</h2><ol class="timeline"><li class="reveal"><span class="step-num">1</span><div><h3>Add a connection</h3><p>Pick your database type and enter its host, or choose a file for SQLite.</p></div></li><li class="reveal"><span class="step-num">2</span><div><h3>Open it</h3><p>Edith connects and shows the tables, collections or keys inside.</p></div></li><li class="reveal"><span class="step-num">3</span><div><h3>Browse and filter</h3><p>Look through records, search, sort and filter without writing a query.</p></div></li><li class="reveal"><span class="step-num">4</span><div><h3>Review before changing</h3><p>Edits show exactly what will change and wait for your confirmation.</p></div></li></ol></section>
+      <section class="detail-block reveal"><h2>From the terminal</h2><p class="muted">Every example returns JSON with <code>--json</code>, and agents can call the same thing over MCP.</p><div class="terminal"><div class="terminal-bar"><span></span><span></span><span></span></div><pre><code><span class="t-prompt">$</span> ed database connections list
+<span class="t-prompt">$</span> ed database connections add notes --product postgresql
+<span class="t-prompt">$</span> ed database connect &lt;connection-id&gt;</code></pre></div><a class="link-arrow" href="https://github.com/pulkitxm/edith/blob/main/docs/cli/database/README.md">ed database reference <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 3L6 3C4.343 3 3 4.343 3 6L3 14C3 15.657 4.343 17 6 17L14 17C15.657 17 17 15.657 17 14L17 6C17 4.343 15.657 3 14 3ZM8 6L14 6L14 12L12 12L12 10L7 15L5.5 13.5L11 8L8 8L8 6Z"/></svg></a></section>
+    </div>
+    <aside class="detail-side">
+      
+      <section class="side-card reveal"><h2>Where it shows up</h2><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M9.646 2.354C9.842 2.158 10.158 2.158 10.354 2.354L18 10L16 10L16 17C16 17.552 15.552 18 15 18L11 18L11 12L9 12L9 18L5 18C4.448 18 4 17.552 4 17L4 10L2 10L9.646 2.354Z"/></svg><div><strong>Home cards</strong><span>Adds cards you can place on Edith's Home screen.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4.5 3L6 3L6 4.5C6 5.328 6.672 6 7.5 6L12.5 6C13.328 6 14 5.328 14 4.5L14 3L15.5 3C16.881 3 18 4.119 18 5.5L18 14.5C18 15.881 16.881 17 15.5 17L4.5 17C3.119 17 2 15.881 2 14.5L2 5.5C2 4.119 3.119 3 4.5 3ZM5.5 12.5L10 8L14.5 12.5L13 14L10 11L7 14L5.5 12.5Z"/></svg><div><strong>Notch cards</strong><span>Adds cards you can pin in the notch.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L15 3C16.657 3 18 4.343 18 6L18 14C18 15.657 16.657 17 15 17L5 17C3.343 17 2 15.657 2 14L2 6C2 4.343 3.343 3 5 3ZM10 10L5.5 5.5L4 7L7 10L4 13L5.5 14.5L10 10ZM15 12L10 12L10 14L15 14L15 12Z"/></svg><div><strong>Command line</strong><span>Scriptable with <code>ed database</code>, with JSON output.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 6L3.5 2.5L2 4L4 6L2 8L3.5 9.5L7 6ZM7 14L3.5 10.5L2 12L4 14L2 16L3.5 17.5L7 14Z"/><path class="primary" fill-rule="evenodd" d="M10.5 2.5L18 10L10.5 17.5L8 15L13 10L8 5L10.5 2.5Z"/></svg><div><strong>Agent tools</strong><span>Every command is an MCP tool such as <code>edith_database</code>.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L7 3C7.552 3 8 3.448 8 4L8 16C8 16.552 7.552 17 7 17L5 17C4.448 17 4 16.552 4 16L4 4C4 3.448 4.448 3 5 3ZM13 3L15 3C15.552 3 16 3.448 16 4L16 16C16 16.552 15.552 17 15 17L13 17C12.448 17 12 16.552 12 16L12 4C12 3.448 12.448 3 13 3Z"/></svg><div><strong>Starts on demand</strong><span>Loads only when you open it, and stops when you are done.</span></div></div></section>
+      <section class="side-card reveal"><h2>Details</h2><dl class="facts">
+        <div><dt>Suite</dt><dd>Developer & Data</dd></div>
+        <div><dt>ID</dt><dd><code>database</code></dd></div>
+        <div><dt>Source</dt><dd><a href="https://github.com/pulkitxm/edith/tree/main/Extensions/database">GitHub</a></dd></div>
+      </dl></section>
+    </aside>
+  </div>
+  <section class="section"><div class="section-head reveal"><h2>More in Developer & Data</h2></div><div class="ext-grid"><a class="ext-card" href="/extensions/latex.html" data-category="developer" data-search="latex latex write latex documents and see the pdf next to your source. developer &amp; data">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 3L4 3L4 6L8 10L4 14L4 17L16 17L16 14L9 14L13 10L9 6L16 6L16 3Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">LaTeX</span>
+    <span class="ext-card-tagline">Write LaTeX documents and see the PDF next to your source.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/attention.html" data-category="developer" data-search="attention attention see which apps and sites really get your time, and protect your focus. developer &amp; data">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M18 9C18 5.134 14.866 2 11 2L11 9L18 9Z"/><path class="primary" fill-rule="evenodd" d="M2 11C2 7.134 5.134 4 9 4L9 11L16 11C16 14.866 12.866 18 9 18C5.134 18 2 14.866 2 11Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Attention</span>
+    <span class="ext-card-tagline">See which apps and sites really get your time, and protect your focus.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/seoAudit.html" data-category="developer" data-search="site audit seoaudit find seo problems on your website, page by page. developer &amp; data">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 3L13 3C14.105 3 15 3.895 15 5L15 6L14.901 6Q14.869 5.986 14.836 5.972Q13.72 5.5 12.5 5.5Q11.28 5.5 10.164 5.972Q10.131 5.986 10.099 6L2 6L2 5C2 3.895 2.895 3 4 3ZM2 7L2 14C2 15.105 2.895 16 4 16L8.531 16Q8.391 15.875 8.257 15.743Q7.427 14.913 6.972 13.836Q6.5 12.72 6.5 11.5Q6.5 10.28 6.972 9.164Q7.427 8.087 8.257 7.257Q8.391 7.125 8.531 7L2 7ZM13.278 13.343Q12.908 13.5 12.5 13.5Q12.092 13.5 11.722 13.343Q11.363 13.192 11.086 12.914Q10.808 12.637 10.657 12.278Q10.5 11.908 10.5 11.5Q10.5 11.092 10.657 10.722Q10.808 10.363 11.086 10.086Q11.363 9.808 11.722 9.657Q12.092 9.5 12.5 9.5Q12.908 9.5 13.278 9.657Q13.637 9.808 13.914 10.086Q14.192 10.363 14.343 10.722Q14.5 11.092 14.5 11.5Q14.5 11.908 14.343 12.278Q14.192 12.637 13.914 12.914Q13.637 13.192 13.278 13.343Z"/><path class="primary" fill-rule="evenodd" d="M12.5 16.5C13.519 16.5 14.467 16.195 15.257 15.672L17.793 18.207L19.207 16.793L16.672 14.257C17.195 13.467 17.5 12.519 17.5 11.5C17.5 8.739 15.261 6.5 12.5 6.5C9.739 6.5 7.5 8.739 7.5 11.5C7.5 14.261 9.739 16.5 12.5 16.5ZM12.5 14.5C14.157 14.5 15.5 13.157 15.5 11.5C15.5 9.843 14.157 8.5 12.5 8.5C10.843 8.5 9.5 9.843 9.5 11.5C9.5 13.157 10.843 14.5 12.5 14.5Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Site Audit</span>
+    <span class="ext-card-tagline">Find SEO problems on your website, page by page.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/codeStats.html" data-category="developer" data-search="code stats codestats see how much code you write, across every github repository you own. developer &amp; data">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M3 3L5 3L5 5L3 5L3 3ZM8 3L6 3L6 5L8 5L8 3ZM9 3L11 3L11 5L9 5L9 3ZM14 3L12 3L12 5L14 5L14 3ZM3 6L5 6L5 8L3 8L3 6ZM6 6L8 6L8 8L6 8L6 6ZM11 6L9 6L9 8L11 8L11 6ZM5 9L3 9L3 11L5 11L5 9ZM8 9L6 9L6 11L8 11L8 9ZM15 9L17 9L17 11L15 11L15 9ZM3 12L5 12L5 14L3 14L3 12ZM12 12L14 12L14 14L12 14L12 12ZM17 12L15 12L15 14L17 14L17 12ZM9 15L11 15L11 17L9 17L9 15ZM14 15L12 15L12 17L14 17L14 15ZM15 15L17 15L17 17L15 17L15 15Z"/><path class="primary" fill-rule="evenodd" d="M17 3L15 3L15 5L17 5L17 3ZM14 6L12 6L12 8L14 8L14 6ZM15 6L17 6L17 8L15 8L15 6ZM11 9L9 9L9 11L11 11L11 9ZM12 9L14 9L14 11L12 11L12 9ZM8 12L6 12L6 14L8 14L8 12ZM9 12L11 12L11 14L9 14L9 12ZM5 15L3 15L3 17L5 17L5 15ZM6 15L8 15L8 17L6 17L6 15Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Code Stats</span>
+    <span class="ext-card-tagline">See how much code you write, across every GitHub repository you own.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a></div></section>
+  <nav class="pager" aria-label="More extensions">
+    <a href="/extensions/quinjet.html" class="pager-link"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M9 16L3 10L9 4L10.5 5.5L7 9L17 9L17 11L7 11L10.5 14.5L9 16Z"/></svg><span><small>Previous</small>Code Review</span></a>
+    <a href="/extensions/socialManager.html" class="pager-link next"><span><small>Next</small>Social Manager</span><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+  </nav>
+</div>
+    </main>
+    <footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <a href="/" class="brand"><img src="/app-icon-512.png" alt="" width="30" height="30" /><span class="brand-name">Edith</span></a>
+      <p>Every tool your Mac is missing, in one native app. Free and open source under the GPL-3.0.</p>
+      <a class="btn btn-ghost btn-sm" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download Edith</span></a>
+    </div>
+    <div class="footer-col"><h2>Product</h2><a href="/features.html">Features</a><a href="/extensions/">Extensions</a><a href="/agents.html">Agents and MCP</a><a href="/download.html">Download</a><a href="/changelog/">Changelog</a><a href="/faq.html">FAQ</a></div>
+    <div class="footer-col"><h2>Resources</h2><a href="https://github.com/pulkitxm/edith/tree/main/docs/cli">CLI reference</a><a href="https://github.com/pulkitxm/edith/wiki">Wiki</a><a href="https://github.com/pulkitxm/edith/releases">Releases</a><a href="https://github.com/pulkitxm/edith/blob/main/SUPPORT.md">Support</a></div>
+    <div class="footer-col"><h2>Project</h2><a href="https://github.com/pulkitxm/edith">GitHub</a><a href="https://github.com/pulkitxm/edith/blob/main/CONTRIBUTING.md">Contributing</a><a href="https://github.com/pulkitxm/edith/blob/main/SECURITY.md">Security</a><a href="https://www.gnu.org/licenses/gpl-3.0.html">Licence</a></div>
+    <div class="footer-col"><h2>Legal</h2><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div>
+  </div>
+  <div class="footer-base"><span>Made on a Mac, for Macs.</span><span>macOS 14+ on Apple silicon</span></div>
+</footer>
+  </body>
+</html>

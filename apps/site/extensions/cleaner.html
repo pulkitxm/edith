@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#070a12" />
+    <title>Cleaner extension · Edith</title>
+    <meta name="description" content="Get back disk space from caches and leftovers, safely. Cleaner finds build caches, package downloads, old Xcode data and unused git worktrees. You review the list first, and everything you clean goes to the Trash so you can undo it." />
+    <link rel="canonical" href="https://edith.pulkit.page/extensions/cleaner.html" />
+    <link rel="icon" type="image/png" href="/favicon-180.png" />
+    <link rel="apple-touch-icon" href="/favicon-180.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>try{var t=localStorage.getItem("edith-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Edith" />
+    <meta property="og:title" content="Cleaner extension · Edith" />
+    <meta property="og:description" content="Get back disk space from caches and leftovers, safely. Cleaner finds build caches, package downloads, old Xcode data and unused git worktrees. You review the list first, and everything you clean goes to the Trash so you can undo it." />
+    <meta property="og:url" content="https://edith.pulkit.page/extensions/cleaner.html" />
+    <meta property="og:image" content="https://edith.pulkit.page/og/ext-cleaner.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Cleaner. Get back disk space from caches and leftovers, safely." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Cleaner extension · Edith" />
+    <meta name="twitter:description" content="Get back disk space from caches and leftovers, safely. Cleaner finds build caches, package downloads, old Xcode data and unused git worktrees. You review the list first, and everything you clean goes to the Trash so you can undo it." />
+    <meta name="twitter:image" content="https://edith.pulkit.page/og/ext-cleaner.jpg" />
+    <meta name="twitter:image:alt" content="Cleaner. Get back disk space from caches and leftovers, safely." />
+    <meta name="author" content="Pulkit" />
+    <meta name="application-name" content="Edith" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Edith","item":"https://edith.pulkit.page/"},{"@type":"ListItem","position":2,"name":"Extensions","item":"https://edith.pulkit.page/extensions/"},{"@type":"ListItem","position":3,"name":"Mac Utilities","item":"https://edith.pulkit.page/extensions/#utilities"},{"@type":"ListItem","position":4,"name":"Cleaner","item":"https://edith.pulkit.page/extensions/cleaner.html"}]}</script>
+    <script type="module" src="/main.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+  <div class="header-inner">
+    <a href="/" class="brand" aria-label="Edith home">
+      <img src="/app-icon-512.png" alt="" width="30" height="30" />
+      <span class="brand-name">Edith</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main"><a href="/features.html">Features</a><a href="/extensions/" aria-current="page">Extensions</a><a href="/agents.html">Agents</a><a href="/download.html">Download</a><a href="/faq.html">FAQ</a><a class="nav-github" href="https://github.com/pulkitxm/edith">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch between light and dark"><svg class="icon icon-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 2L9 2L9 4L11 4L11 2ZM6 4L4 4L4 6L6 6L6 4ZM14 4L16 4L16 6L14 6L14 4ZM10 14C12.209 14 14 12.209 14 10C14 7.791 12.209 6 10 6C7.791 6 6 7.791 6 10C6 12.209 7.791 14 10 14ZM4 9L2 9L2 11L4 11L4 9ZM16 9L18 9L18 11L16 11L16 9ZM6 14L4 14L4 16L6 16L6 14ZM14 14L16 14L16 16L14 16L14 14ZM11 16L11 18L9 18L9 16L11 16Z"/></svg><svg class="icon icon-moon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 14C15.217 14 16.362 13.689 17.359 13.143C16.138 16 13.303 18 10 18C5.582 18 2 14.418 2 10C2 5.905 5.076 2.529 9.044 2.057C7.781 3.323 7 5.07 7 7C7 10.866 10.134 14 14 14Z"/></svg></button>
+      <a class="btn btn-gold btn-sm header-cta" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download</span></a>
+      <button class="menu-toggle" type="button" data-menu-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M17 4L3 4L3 6L17 6L17 4ZM17 9L3 9L3 11L17 11L17 9ZM3 14L17 14L17 16L3 16L3 14Z"/></svg></button>
+    </div>
+  </div>
+</header>
+    <main id="main">
+<section class="page-hero ext-hero">
+  <div class="hero-glow small" aria-hidden="true"></div>
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/extensions/">Extensions</a><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg><a href="/extensions/#utilities">Mac Utilities</a><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg><span aria-current="page">Cleaner</span></nav>
+    <div class="ext-hero-row">
+      <span class="tile tile-xl" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M19.071 2.929L17.572 1.429L11.915 7.086L13.414 8.586L19.071 2.929Z"/><path class="primary" fill-rule="evenodd" d="M14.078 10.664L9.836 6.422C9.445 6.031 8.812 6.031 8.422 6.422L7.714 7.125L1.991 11.044C1.475 11.398 1.406 12.134 1.849 12.577L3.637 14.365L7.172 10.829L8.172 11.829L4.636 15.364L5.136 15.864L8.672 12.329L9.672 13.329L6.136 16.864L7.923 18.651C8.366 19.094 9.102 19.025 9.456 18.509L13.375 12.786L14.078 12.078C14.469 11.688 14.469 11.055 14.078 10.664Z"/></svg></span>
+      <div>
+        <h1>Cleaner</h1>
+        <p class="hero-lead">Get back disk space from caches and leftovers, safely.</p>
+        <div class="ext-tags"><span class="pill">Mac Utilities</span></div>
+      </div>
+    </div>
+    <div class="install-row"><div class="command"><code><span class="prompt" aria-hidden="true">$</span>ed extensions install cleaner</code><button class="copy" type="button" data-copy="ed extensions install cleaner" aria-label="Copy ed extensions install cleaner"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 2L4 2C2.895 2 2 2.895 2 4L2 11C2 12.105 2.895 13 4 13L6 13L6 9Q6 8.39 6.236 7.832Q6.464 7.293 6.875 6.875Q7.293 6.464 7.832 6.236Q8.39 6 9 6L13 6L13 4C13 2.895 12.105 2 11 2Z"/><path class="primary" fill-rule="evenodd" d="M9 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L9 18C7.895 18 7 17.105 7 16L7 9C7 7.895 7.895 7 9 7Z"/></svg><span>Copy</span></button></div><a class="btn btn-gold" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Get Edith</span></a></div>
+  </div>
+</section>
+<div class="wrap detail">
+  
+  <div class="detail-grid">
+    <div class="detail-main">
+      <section class="detail-block reveal"><h2>Overview</h2><p class="lead">Cleaner finds build caches, package downloads, old Xcode data and unused git worktrees. You review the list first, and everything you clean goes to the Trash so you can undo it.</p></section>
+      <section class="detail-block"><h2 class="reveal">How it works</h2><ol class="timeline"><li class="reveal"><span class="step-num">1</span><div><h3>Scan your Mac</h3><p>Pick where to search. A scan only reads folders and never changes anything.</p></div></li><li class="reveal"><span class="step-num">2</span><div><h3>Review what it found</h3><p>Open a category to see every item, and untick anything you want to keep.</p></div></li><li class="reveal"><span class="step-num">3</span><div><h3>Move it to the Trash</h3><p>Confirm once, then restore anything from the Trash until you empty it.</p></div></li></ol></section>
+      <section class="detail-block reveal"><h2>From the terminal</h2><p class="muted">Every example returns JSON with <code>--json</code>, and agents can call the same thing over MCP.</p><div class="terminal"><div class="terminal-bar"><span></span><span></span><span></span></div><pre><code><span class="t-prompt">$</span> ed cleaner scan
+<span class="t-prompt">$</span> ed cleaner categories
+<span class="t-prompt">$</span> ed cleaner drives
+<span class="t-prompt">$</span> ed cleaner clean --yes</code></pre></div><a class="link-arrow" href="https://github.com/pulkitxm/edith/blob/main/docs/cli/cleaner/README.md">ed cleaner reference <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 3L6 3C4.343 3 3 4.343 3 6L3 14C3 15.657 4.343 17 6 17L14 17C15.657 17 17 15.657 17 14L17 6C17 4.343 15.657 3 14 3ZM8 6L14 6L14 12L12 12L12 10L7 15L5.5 13.5L11 8L8 8L8 6Z"/></svg></a></section>
+    </div>
+    <aside class="detail-side">
+      
+      <section class="side-card reveal"><h2>Where it shows up</h2><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M9.646 2.354C9.842 2.158 10.158 2.158 10.354 2.354L18 10L16 10L16 17C16 17.552 15.552 18 15 18L11 18L11 12L9 12L9 18L5 18C4.448 18 4 17.552 4 17L4 10L2 10L9.646 2.354Z"/></svg><div><strong>Home cards</strong><span>Adds cards you can place on Edith's Home screen.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4.5 3L6 3L6 4.5C6 5.328 6.672 6 7.5 6L12.5 6C13.328 6 14 5.328 14 4.5L14 3L15.5 3C16.881 3 18 4.119 18 5.5L18 14.5C18 15.881 16.881 17 15.5 17L4.5 17C3.119 17 2 15.881 2 14.5L2 5.5C2 4.119 3.119 3 4.5 3ZM5.5 12.5L10 8L14.5 12.5L13 14L10 11L7 14L5.5 12.5Z"/></svg><div><strong>Notch cards</strong><span>Adds cards you can pin in the notch.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L15 3C16.657 3 18 4.343 18 6L18 14C18 15.657 16.657 17 15 17L5 17C3.343 17 2 15.657 2 14L2 6C2 4.343 3.343 3 5 3ZM10 10L5.5 5.5L4 7L7 10L4 13L5.5 14.5L10 10ZM15 12L10 12L10 14L15 14L15 12Z"/></svg><div><strong>Command line</strong><span>Scriptable with <code>ed cleaner</code>, with JSON output.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 6L3.5 2.5L2 4L4 6L2 8L3.5 9.5L7 6ZM7 14L3.5 10.5L2 12L4 14L2 16L3.5 17.5L7 14Z"/><path class="primary" fill-rule="evenodd" d="M10.5 2.5L18 10L10.5 17.5L8 15L13 10L8 5L10.5 2.5Z"/></svg><div><strong>Agent tools</strong><span>Every command is an MCP tool such as <code>edith_cleaner</code>.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L7 3C7.552 3 8 3.448 8 4L8 16C8 16.552 7.552 17 7 17L5 17C4.448 17 4 16.552 4 16L4 4C4 3.448 4.448 3 5 3ZM13 3L15 3C15.552 3 16 3.448 16 4L16 16C16 16.552 15.552 17 15 17L13 17C12.448 17 12 16.552 12 16L12 4C12 3.448 12.448 3 13 3Z"/></svg><div><strong>Starts on demand</strong><span>Loads only when you open it, and stops when you are done.</span></div></div></section>
+      <section class="side-card reveal"><h2>Details</h2><dl class="facts">
+        <div><dt>Suite</dt><dd>Mac Utilities</dd></div>
+        <div><dt>ID</dt><dd><code>cleaner</code></dd></div>
+        <div><dt>Source</dt><dd><a href="https://github.com/pulkitxm/edith/tree/main/Extensions/cleaner">GitHub</a></dd></div>
+      </dl></section>
+    </aside>
+  </div>
+  <section class="section"><div class="section-head reveal"><h2>More in Mac Utilities</h2></div><div class="ext-grid"><a class="ext-card" href="/extensions/keepAwake.html" data-category="utilities" data-search="keep awake keepawake stop your mac and display from going to sleep while you work. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M10 4.5C6.076 4.5 2.675 6.734 1 10C2.675 13.266 6.076 15.5 10 15.5C13.924 15.5 17.325 13.266 19 10C17.325 6.734 13.924 4.5 10 4.5ZM14 10C14 12.209 12.209 14 10 14C7.791 14 6 12.209 6 10C6 7.791 7.791 6 10 6C12.209 6 14 7.791 14 10ZM12 10C12 11.105 11.105 12 10 12C8.895 12 8 11.105 8 10C8 8.895 8.895 8 10 8C11.105 8 12 8.895 12 10Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Keep Awake</span>
+    <span class="ext-card-tagline">Stop your Mac and display from going to sleep while you work.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/micMute.html" data-category="utilities" data-search="mic mute micmute mute every microphone on your mac with one shortcut. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M9.593 13.984Q8.795 13.921 8.054 13.607Q7.157 13.228 6.464 12.536Q6.21 12.282 6 12L3.674 12Q4.189 13.089 5.05 13.95Q6.019 14.918 7.275 15.449Q8.112 15.804 9 15.93L9 18L11 18L11 15.93Q11.625 15.841 12.225 15.639L10.742 14.156L9.593 13.984ZM15.607 13.193Q16.115 12.516 16.449 11.725Q17 10.423 17 9L15 9Q15 10.018 14.607 10.946Q14.426 11.375 14.172 11.758L15.607 13.193Z"/><path class="primary" fill-rule="evenodd" d="M12.952 10.538C12.984 10.363 13 10.184 13 10L13 5C13 3.343 11.657 2 10 2C8.475 2 7.216 3.138 7.025 4.611L12.952 10.538ZM3.5 2.5L17.5 16.5L16 18L2 4L3.5 2.5ZM7.033 10.447C7.227 11.75 8.25 12.773 9.553 12.967L7.033 10.447Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Mic Mute</span>
+    <span class="ext-card-tagline">Mute every microphone on your Mac with one shortcut.</span>
+    <span class="ext-card-meta"><span class="keys"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>M</kbd></span></span>
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/presenter.html" data-category="utilities" data-search="presenter presenter blur private details in edith while you share your screen. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M16 3L4 3C3.448 3 3 3.448 3 4C3 4.552 3.448 5 4 5L16 5C16.552 5 17 4.552 17 4C17 3.448 16.552 3 16 3ZM11 15L4 15C3.448 15 3 15.448 3 16C3 16.552 3.448 17 4 17L11 17C11.552 17 12 16.552 12 16C12 15.448 11.552 15 11 15Z"/><path class="primary" fill-rule="evenodd" d="M17 7L14 7L8 13L11 13L17 7ZM13 13L17 13C17.552 13 18 12.552 18 12L18 8L13 13ZM7 7L3 7C2.448 7 2 7.448 2 8L2 12L7 7ZM9 7L12 7L6 13L3 13L9 7Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Presenter</span>
+    <span class="ext-card-tagline">Blur private details in Edith while you share your screen.</span>
+    <span class="ext-card-meta"><span class="keys"><kbd>⌥</kbd><kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd></span></span>
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/systemStats.html" data-category="utilities" data-search="menu bar stats systemstats see how busy your mac is, right in the menu bar. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M10.238 5.505L10 3.815L10 2.5Q11.276 2.5 12.493 2.875Q13.684 3.239 14.722 3.933Q15.76 4.625 16.554 5.587Q17.365 6.569 17.853 7.75Q18.341 8.926 18.462 10.193Q18.58 11.434 18.337 12.658Q18.093 13.883 17.509 14.984Q16.912 16.108 16.01 17.01L13.889 14.889Q14.473 14.305 14.859 13.578Q15.237 12.866 15.394 12.073Q15.552 11.28 15.475 10.477Q15.413 9.827 15.202 9.212L16.664 7.75L13.75 4.836L13.043 5.543L12.49 6.096Q12.069 5.881 11.613 5.741Q10.939 5.535 10.238 5.505Z"/><path class="primary" fill-rule="evenodd" d="M3.99 17.01Q3.143 16.164 2.564 15.118Q1.995 14.091 1.726 12.948Q1.457 11.805 1.508 10.633Q1.559 9.438 1.939 8.303Q2.319 7.167 3 6.183Q3.662 5.216 4.565 4.465Q5.468 3.714 6.54 3.236Q7.631 2.75 8.817 2.583L9.235 5.554Q8.467 5.661 7.761 5.976Q7.068 6.285 6.483 6.771Q5.899 7.258 5.468 7.883Q5.03 8.52 4.784 9.255Q4.538 9.99 4.505 10.762Q4.472 11.521 4.646 12.261Q4.821 13 5.188 13.665Q5.563 14.341 6.111 14.889L3.99 17.01ZM13.75 6.25L10.823 9.177C10.572 9.063 10.294 9 10 9C8.895 9 8 9.895 8 11C8 12.105 8.895 13 10 13C11.105 13 12 12.105 12 11L12 11L15.25 7.75L13.75 6.25Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Menu Bar Stats</span>
+    <span class="ext-card-tagline">See how busy your Mac is, right in the menu bar.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/homebrew.html" data-category="utilities" data-search="homebrew homebrew install, update and remove homebrew packages without the terminal. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M13 2L5 2C3.895 2 3 2.895 3 4C3 5.105 3.895 6 5 6L13 6C14.105 6 15 5.105 15 4C15 2.895 14.105 2 13 2Z"/><path class="primary" fill-rule="evenodd" d="M4 7L14 7L14 9L16 9C17.105 9 18 9.895 18 11L18 14C18 15.105 17.105 16 16 16L14 16C14 17.105 13.105 18 12 18L6 18C4.895 18 4 17.105 4 16L4 7ZM6 10L8 10L8 15L6 15L6 10ZM12 10L10 10L10 15L12 15L12 10ZM14 14L14 11L16 11L16 14L14 14Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Homebrew</span>
+    <span class="ext-card-tagline">Install, update and remove Homebrew packages without the terminal.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/calendar.html" data-category="utilities" data-search="calendar calendar your next meetings at a glance, with one-click join. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M8 4L12 4L12 6L14 6L14 4L15 4C16.105 4 17 4.895 17 6L17 8L3 8L3 6C3 4.895 3.895 4 5 4L6 4L6 6L8 6L8 4Z"/><path class="primary" fill-rule="evenodd" d="M6 2L8 2L8 6L6 6L6 2ZM12 2L14 2L14 6L12 6L12 2ZM17 9L3 9L3 16C3 17.105 3.895 18 5 18L15 18C16.105 18 17 17.105 17 16L17 9ZM14 12L11 12L11 15L14 15L14 12Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Calendar</span>
+    <span class="ext-card-tagline">Your next meetings at a glance, with one-click join.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/system.html" data-category="utilities" data-search="running apps system see what is running and quit what you do not need. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M16 4L13 4C11.895 4 11 4.895 11 6L11 9C11 10.105 11.895 11 13 11L16 11C17.105 11 18 10.105 18 9L18 6C18 4.895 17.105 4 16 4Z"/><path class="primary" fill-rule="evenodd" d="M4 4L7 4C8.105 4 9 4.895 9 6L9 9C9 10.105 8.105 11 7 11L4 11C2.895 11 2 10.105 2 9L2 6C2 4.895 2.895 4 4 4ZM5.5 13C6.328 13 7 13.672 7 14.5C7 15.328 6.328 16 5.5 16C4.672 16 4 15.328 4 14.5C4 13.672 4.672 13 5.5 13Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Running Apps</span>
+    <span class="ext-card-tagline">See what is running and quit what you do not need.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/appMaintenance.html" data-category="utilities" data-search="app updates appmaintenance keep your apps current and remove them cleanly. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M14 16L5 16L5 17C5 17.552 5.448 18 6 18L14 18C14.552 18 15 17.552 15 17L15 16L14 16Z"/><path class="primary" fill-rule="evenodd" d="M6 2L14 2C15.657 2 17 3.343 17 5L17 12C17 13.657 15.657 15 14 15L6 15C4.343 15 3 13.657 3 12L3 5C3 3.343 4.343 2 6 2ZM5.5 8.5L10 4L14.5 8.5L13 10L11 8L11 13L9 13L9 8L7 10L5.5 8.5ZM10 7L10 7L10 7L10 7Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">App Updates</span>
+    <span class="ext-card-tagline">Keep your apps current and remove them cleanly.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/blitztree.html" data-category="utilities" data-search="disk map blitztree see what is using your disk space, then free it up. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M12 4L12 7C12 7.552 12.448 8 13 8L16 8C16.552 8 17 7.552 17 7L17 5C17 3.895 16.105 3 15 3L13 3C12.448 3 12 3.448 12 4ZM12 10L12 16C12 16.552 12.448 17 13 17L15 17C16.105 17 17 16.105 17 15L17 10C17 9.448 16.552 9 16 9L13 9C12.448 9 12 9.448 12 10ZM10 13L4 13C3.448 13 3 13.448 3 14L3 15C3 16.105 3.895 17 5 17L10 17C10.552 17 11 16.552 11 16L11 14C11 13.448 10.552 13 10 13Z"/><path class="primary" fill-rule="evenodd" d="M5 3L10 3C10.552 3 11 3.448 11 4L11 11C11 11.552 10.552 12 10 12L4 12C3.448 12 3 11.552 3 11L3 5C3 3.895 3.895 3 5 3Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Disk Map</span>
+    <span class="ext-card-tagline">See what is using your disk space, then free it up.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/lidAwake.html" data-category="utilities" data-search="lid awake lidawake keep your mac running with the lid closed. mac utilities">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M3 16L17 16L17 17C17 17.552 16.552 18 16 18L4 18C3.448 18 3 17.552 3 17L3 16Z"/><path class="primary" fill-rule="evenodd" d="M10 4C7.018 4 4.412 5.606 3 8C4.412 10.394 7.018 12 10 12C12.982 12 15.588 10.394 17 8C15.588 5.606 12.982 4 10 4ZM10 10C11.105 10 12 9.105 12 8C12 6.895 11.105 6 10 6C8.895 6 8 6.895 8 8C8 9.105 8.895 10 10 10ZM18 14C18 13.448 17.552 13 17 13L3 13C2.448 13 2 13.448 2 14C2 14.552 2.448 15 3 15L17 15C17.552 15 18 14.552 18 14Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Lid Awake</span>
+    <span class="ext-card-tagline">Keep your Mac running with the lid closed.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a></div></section>
+  <nav class="pager" aria-label="More extensions">
+    <a href="/extensions/timeLapse.html" class="pager-link"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M9 16L3 10L9 4L10.5 5.5L7 9L17 9L17 11L7 11L10.5 14.5L9 16Z"/></svg><span><small>Previous</small>Screen Recorder</span></a>
+    <a href="/extensions/appMaintenance.html" class="pager-link next"><span><small>Next</small>App Updates</span><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+  </nav>
+</div>
+    </main>
+    <footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <a href="/" class="brand"><img src="/app-icon-512.png" alt="" width="30" height="30" /><span class="brand-name">Edith</span></a>
+      <p>Every tool your Mac is missing, in one native app. Free and open source under the GPL-3.0.</p>
+      <a class="btn btn-ghost btn-sm" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download Edith</span></a>
+    </div>
+    <div class="footer-col"><h2>Product</h2><a href="/features.html">Features</a><a href="/extensions/">Extensions</a><a href="/agents.html">Agents and MCP</a><a href="/download.html">Download</a><a href="/changelog/">Changelog</a><a href="/faq.html">FAQ</a></div>
+    <div class="footer-col"><h2>Resources</h2><a href="https://github.com/pulkitxm/edith/tree/main/docs/cli">CLI reference</a><a href="https://github.com/pulkitxm/edith/wiki">Wiki</a><a href="https://github.com/pulkitxm/edith/releases">Releases</a><a href="https://github.com/pulkitxm/edith/blob/main/SUPPORT.md">Support</a></div>
+    <div class="footer-col"><h2>Project</h2><a href="https://github.com/pulkitxm/edith">GitHub</a><a href="https://github.com/pulkitxm/edith/blob/main/CONTRIBUTING.md">Contributing</a><a href="https://github.com/pulkitxm/edith/blob/main/SECURITY.md">Security</a><a href="https://www.gnu.org/licenses/gpl-3.0.html">Licence</a></div>
+    <div class="footer-col"><h2>Legal</h2><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div>
+  </div>
+  <div class="footer-base"><span>Made on a Mac, for Macs.</span><span>macOS 14+ on Apple silicon</span></div>
+</footer>
+  </body>
+</html>

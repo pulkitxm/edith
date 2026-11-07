@@ -64,7 +64,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-icons ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate prepare-pdf-extract ci-pdf-source-preparation ci-tools verify-release-build-settings verify-bundle ci-shipping shipping-fixture shipping-appcast-fixture site-dev cli icon wiki wiki-push bench-cli performance-fixture
+.PHONY: build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-icons ci-lint ci-scripts ci-docs ci-companion-runtime ci-site ci-promo ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-studio ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate prepare-pdf-extract ci-pdf-source-preparation ci-tools verify-release-build-settings verify-bundle ci-shipping shipping-fixture shipping-appcast-fixture site-dev site-data site-build site-og cli icon wiki wiki-push bench-cli performance-fixture
 
 ci:
 	bun install --frozen-lockfile
@@ -89,6 +89,15 @@ release-dry:
 
 site-dev:
 	cd apps/site && python3 -m http.server 8000
+
+site-data:
+	bun scripts/site/fetch-release-data.mjs
+
+site-build:
+	bun scripts/site/build.mjs
+
+site-og: site-build
+	bun scripts/site/og.mjs
 
 cli:
 	./build.sh --no-open

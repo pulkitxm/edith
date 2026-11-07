@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#070a12" />
+    <title>Color Picker extension · Edith</title>
+    <meta name="description" content="Pick any color on your screen and copy it in the format you need. Press the shortcut to get a magnifier you can move over anything on screen. Click to copy the exact color as hex, RGB, HSL or code. Recent colors are kept so you can copy them again later." />
+    <link rel="canonical" href="https://edith.pulkit.page/extensions/colorPicker.html" />
+    <link rel="icon" type="image/png" href="/favicon-180.png" />
+    <link rel="apple-touch-icon" href="/favicon-180.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>try{var t=localStorage.getItem("edith-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Edith" />
+    <meta property="og:title" content="Color Picker extension · Edith" />
+    <meta property="og:description" content="Pick any color on your screen and copy it in the format you need. Press the shortcut to get a magnifier you can move over anything on screen. Click to copy the exact color as hex, RGB, HSL or code. Recent colors are kept so you can copy them again later." />
+    <meta property="og:url" content="https://edith.pulkit.page/extensions/colorPicker.html" />
+    <meta property="og:image" content="https://edith.pulkit.page/og/ext-colorPicker.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Color Picker. Pick any color on your screen and copy it in the format you need." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Color Picker extension · Edith" />
+    <meta name="twitter:description" content="Pick any color on your screen and copy it in the format you need. Press the shortcut to get a magnifier you can move over anything on screen. Click to copy the exact color as hex, RGB, HSL or code. Recent colors are kept so you can copy them again later." />
+    <meta name="twitter:image" content="https://edith.pulkit.page/og/ext-colorPicker.jpg" />
+    <meta name="twitter:image:alt" content="Color Picker. Pick any color on your screen and copy it in the format you need." />
+    <meta name="author" content="Pulkit" />
+    <meta name="application-name" content="Edith" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Edith","item":"https://edith.pulkit.page/"},{"@type":"ListItem","position":2,"name":"Extensions","item":"https://edith.pulkit.page/extensions/"},{"@type":"ListItem","position":3,"name":"Desk","item":"https://edith.pulkit.page/extensions/#desk"},{"@type":"ListItem","position":4,"name":"Color Picker","item":"https://edith.pulkit.page/extensions/colorPicker.html"}]}</script>
+    <script type="module" src="/main.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+  <div class="header-inner">
+    <a href="/" class="brand" aria-label="Edith home">
+      <img src="/app-icon-512.png" alt="" width="30" height="30" />
+      <span class="brand-name">Edith</span>
+    </a>
+    <nav class="nav" id="site-nav" aria-label="Main"><a href="/features.html">Features</a><a href="/extensions/" aria-current="page">Extensions</a><a href="/agents.html">Agents</a><a href="/download.html">Download</a><a href="/faq.html">FAQ</a><a class="nav-github" href="https://github.com/pulkitxm/edith">GitHub</a></nav>
+    <div class="header-actions">
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch between light and dark"><svg class="icon icon-sun" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 2L9 2L9 4L11 4L11 2ZM6 4L4 4L4 6L6 6L6 4ZM14 4L16 4L16 6L14 6L14 4ZM10 14C12.209 14 14 12.209 14 10C14 7.791 12.209 6 10 6C7.791 6 6 7.791 6 10C6 12.209 7.791 14 10 14ZM4 9L2 9L2 11L4 11L4 9ZM16 9L18 9L18 11L16 11L16 9ZM6 14L4 14L4 16L6 16L6 14ZM14 14L16 14L16 16L14 16L14 14ZM11 16L11 18L9 18L9 16L11 16Z"/></svg><svg class="icon icon-moon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 14C15.217 14 16.362 13.689 17.359 13.143C16.138 16 13.303 18 10 18C5.582 18 2 14.418 2 10C2 5.905 5.076 2.529 9.044 2.057C7.781 3.323 7 5.07 7 7C7 10.866 10.134 14 14 14Z"/></svg></button>
+      <a class="btn btn-gold btn-sm header-cta" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download</span></a>
+      <button class="menu-toggle" type="button" data-menu-toggle aria-controls="site-nav" aria-expanded="false" aria-label="Open menu"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M17 4L3 4L3 6L17 6L17 4ZM17 9L3 9L3 11L17 11L17 9ZM3 14L17 14L17 16L3 16L3 14Z"/></svg></button>
+    </div>
+  </div>
+</header>
+    <main id="main">
+<section class="page-hero ext-hero">
+  <div class="hero-glow small" aria-hidden="true"></div>
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/extensions/">Extensions</a><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg><a href="/extensions/#desk">Desk</a><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg><span aria-current="page">Color Picker</span></nav>
+    <div class="ext-hero-row">
+      <span class="tile tile-xl" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11.206 11.792L8.208 8.794L3.456 13.546C3.327 13.675 3.235 13.837 3.192 14.015L2.282 17.718L5.985 16.808C6.163 16.765 6.325 16.673 6.454 16.544L11.206 11.792Z"/><path class="primary" fill-rule="evenodd" d="M16.778 3.222C17.754 4.198 17.754 5.781 16.778 6.757L16.071 7.464C15.095 8.441 13.512 8.441 12.536 7.464C11.559 6.488 11.559 4.905 12.536 3.929L13.243 3.222C14.219 2.246 15.802 2.246 16.778 3.222ZM9.707 4.636L12.536 7.464L15.364 10.293C15.754 10.683 15.754 11.317 15.364 11.707L14.657 12.414C14.266 12.805 13.633 12.805 13.243 12.414L7.586 6.757C7.195 6.367 7.195 5.734 7.586 5.343L8.293 4.636C8.683 4.246 9.317 4.246 9.707 4.636Z"/></svg></span>
+      <div>
+        <h1>Color Picker</h1>
+        <p class="hero-lead">Pick any color on your screen and copy it in the format you need.</p>
+        <div class="ext-tags"><span class="pill">Desk</span><span class="keys"><kbd>⌃</kbd><kbd>⌥</kbd><kbd>⌘</kbd><kbd>C</kbd></span></div>
+      </div>
+    </div>
+    <div class="install-row"><div class="command"><code><span class="prompt" aria-hidden="true">$</span>ed extensions install colorPicker</code><button class="copy" type="button" data-copy="ed extensions install colorPicker" aria-label="Copy ed extensions install colorPicker"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M11 2L4 2C2.895 2 2 2.895 2 4L2 11C2 12.105 2.895 13 4 13L6 13L6 9Q6 8.39 6.236 7.832Q6.464 7.293 6.875 6.875Q7.293 6.464 7.832 6.236Q8.39 6 9 6L13 6L13 4C13 2.895 12.105 2 11 2Z"/><path class="primary" fill-rule="evenodd" d="M9 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L9 18C7.895 18 7 17.105 7 16L7 9C7 7.895 7.895 7 9 7Z"/></svg><span>Copy</span></button></div><a class="btn btn-gold" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Get Edith</span></a></div>
+  </div>
+</section>
+<div class="wrap detail">
+  
+  <div class="detail-grid">
+    <div class="detail-main">
+      <section class="detail-block reveal"><h2>Overview</h2><p class="lead">Press the shortcut to get a magnifier you can move over anything on screen. Click to copy the exact color as hex, RGB, HSL or code. Recent colors are kept so you can copy them again later.</p></section>
+      <section class="detail-block"><h2 class="reveal">How it works</h2><ol class="timeline"><li class="reveal"><span class="step-num">1</span><div><h3>Press the shortcut</h3><p>A magnifier appears. You can also choose Pick Color in settings.</p></div></li><li class="reveal"><span class="step-num">2</span><div><h3>Click a color</h3><p>Move over any pixel on screen and click to sample it.</p></div></li><li class="reveal"><span class="step-num">3</span><div><h3>Paste it anywhere</h3><p>The color is copied in your chosen format, such as #1A73E8.</p></div></li><li class="reveal"><span class="step-num">4</span><div><h3>Reuse recent colors</h3><p>Click a swatch in settings to copy it again.</p></div></li></ol></section>
+      <section class="detail-block reveal"><h2>From the terminal</h2><p class="muted">Every example returns JSON with <code>--json</code>, and agents can call the same thing over MCP.</p><div class="terminal"><div class="terminal-bar"><span></span><span></span><span></span></div><pre><code><span class="t-prompt">$</span> ed color pick
+<span class="t-prompt">$</span> ed color ls --limit 5
+<span class="t-prompt">$</span> ed color copy 1 --format rgb</code></pre></div><a class="link-arrow" href="https://github.com/pulkitxm/edith/blob/main/docs/cli/color/README.md">ed color reference <svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M14 3L6 3C4.343 3 3 4.343 3 6L3 14C3 15.657 4.343 17 6 17L14 17C15.657 17 17 15.657 17 14L17 6C17 4.343 15.657 3 14 3ZM8 6L14 6L14 12L12 12L12 10L7 15L5.5 13.5L11 8L8 8L8 6Z"/></svg></a></section>
+    </div>
+    <aside class="detail-side">
+      <section class="side-card reveal"><h2>Shortcut</h2><div class="hotkey"><span class="keys"><kbd>⌃</kbd><kbd>⌥</kbd><kbd>⌘</kbd><kbd>C</kbd></span><div><strong>Pick a color</strong><span>Summons the color picker loupe</span></div></div></section>
+      <section class="side-card reveal"><h2>Where it shows up</h2><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M9.646 2.354C9.842 2.158 10.158 2.158 10.354 2.354L18 10L16 10L16 17C16 17.552 15.552 18 15 18L11 18L11 12L9 12L9 18L5 18C4.448 18 4 17.552 4 17L4 10L2 10L9.646 2.354Z"/></svg><div><strong>Home cards</strong><span>Adds cards you can place on Edith's Home screen.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4.5 3L6 3L6 4.5C6 5.328 6.672 6 7.5 6L12.5 6C13.328 6 14 5.328 14 4.5L14 3L15.5 3C16.881 3 18 4.119 18 5.5L18 14.5C18 15.881 16.881 17 15.5 17L4.5 17C3.119 17 2 15.881 2 14.5L2 5.5C2 4.119 3.119 3 4.5 3ZM5.5 12.5L10 8L14.5 12.5L13 14L10 11L7 14L5.5 12.5Z"/></svg><div><strong>Notch cards</strong><span>Adds cards you can pin in the notch.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 7.171L4 11Q4 11.61 4.236 12.168Q4.464 12.707 4.875 13.125Q5.293 13.536 5.832 13.764Q6.39 14 7 14L13 14Q13.61 14 14.168 13.764Q14.707 13.536 15.125 13.125Q15.536 12.707 15.764 12.168Q16 11.61 16 11L16 7.171C17.165 7.583 18 8.694 18 10L18 15C18 16.657 16.657 18 15 18L5 18C3.343 18 2 16.657 2 15L2 10C2 8.694 2.835 7.583 4 7.171Z"/><path class="primary" fill-rule="evenodd" d="M7 2L13 2C14.105 2 15 2.895 15 4L15 11C15 12.105 14.105 13 13 13L7 13C5.895 13 5 12.105 5 11L5 4C5 2.895 5.895 2 7 2Z"/></svg><div><strong>A global shortcut</strong><span>Works from any app, and you can record your own.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L15 3C16.657 3 18 4.343 18 6L18 14C18 15.657 16.657 17 15 17L5 17C3.343 17 2 15.657 2 14L2 6C2 4.343 3.343 3 5 3ZM10 10L5.5 5.5L4 7L7 10L4 13L5.5 14.5L10 10ZM15 12L10 12L10 14L15 14L15 12Z"/></svg><div><strong>Command line</strong><span>Scriptable with <code>ed color</code>, with JSON output.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M7 6L3.5 2.5L2 4L4 6L2 8L3.5 9.5L7 6ZM7 14L3.5 10.5L2 12L4 14L2 16L3.5 17.5L7 14Z"/><path class="primary" fill-rule="evenodd" d="M10.5 2.5L18 10L10.5 17.5L8 15L13 10L8 5L10.5 2.5Z"/></svg><div><strong>Agent tools</strong><span>Every command is an MCP tool such as <code>edith_color</code>.</span></div></div><div class="surface"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M5 3L7 3C7.552 3 8 3.448 8 4L8 16C8 16.552 7.552 17 7 17L5 17C4.448 17 4 16.552 4 16L4 4C4 3.448 4.448 3 5 3ZM13 3L15 3C15.552 3 16 3.448 16 4L16 16C16 16.552 15.552 17 15 17L13 17C12.448 17 12 16.552 12 16L12 4C12 3.448 12.448 3 13 3Z"/></svg><div><strong>Starts on demand</strong><span>Loads only when you open it, and stops when you are done.</span></div></div></section>
+      <section class="side-card reveal"><h2>Details</h2><dl class="facts">
+        <div><dt>Suite</dt><dd>Desk</dd></div>
+        <div><dt>ID</dt><dd><code>colorPicker</code></dd></div>
+        <div><dt>Source</dt><dd><a href="https://github.com/pulkitxm/edith/tree/main/Extensions/colorPicker">GitHub</a></dd></div>
+      </dl></section>
+    </aside>
+  </div>
+  <section class="section"><div class="section-head reveal"><h2>More in Desk</h2></div><div class="ext-grid"><a class="ext-card" href="/extensions/audioMixer.html" data-category="desk" data-search="audio mixer audiomixer set the volume of each app separately. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 2C4.552 2 5 2.448 5 3L5 10L3 10L3 3C3 2.448 3.448 2 4 2ZM3 16L3 17C3 17.552 3.448 18 4 18C4.552 18 5 17.552 5 17L5 16L3 16ZM10 2C10.552 2 11 2.448 11 3L11 4L9 4L9 3C9 2.448 9.448 2 10 2ZM9 10L9 17C9 17.552 9.448 18 10 18C10.552 18 11 17.552 11 17L11 10L9 10ZM17 3C17 2.448 16.552 2 16 2C15.448 2 15 2.448 15 3L15 8L17 8L17 3ZM17 14L15 14L15 17C15 17.552 15.448 18 16 18C16.552 18 17 17.552 17 17L17 14Z"/><path class="primary" fill-rule="evenodd" d="M11 5L9 5C8.448 5 8 5.448 8 6L8 8C8 8.552 8.448 9 9 9L11 9C11.552 9 12 8.552 12 8L12 6C12 5.448 11.552 5 11 5ZM15 9L17 9C17.552 9 18 9.448 18 10L18 12C18 12.552 17.552 13 17 13L15 13C14.448 13 14 12.552 14 12L14 10C14 9.448 14.448 9 15 9ZM5 11L3 11C2.448 11 2 11.448 2 12L2 14C2 14.552 2.448 15 3 15L5 15C5.552 15 6 14.552 6 14L6 12C6 11.448 5.552 11 5 11Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Audio Mixer</span>
+    <span class="ext-card-tagline">Set the volume of each app separately.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/focusDim.html" data-category="desk" data-search="focus dim focusdim dim everything except the window you are working in. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M2 12L2 13C2 14.105 2.895 15 4 15L5 15L5 9L5 9L2 12ZM8 6L15 6L15 4C15 2.895 14.105 2 13 2L12 2L8 6ZM10 2L7 2L2 7L2 10L10 2ZM4 2L5 2L2 5L2 4C2 2.895 2.895 2 4 2Z"/><path class="primary" fill-rule="evenodd" d="M8 7L16 7C17.105 7 18 7.895 18 9L18 16C18 17.105 17.105 18 16 18L8 18C6.895 18 6 17.105 6 16L6 9C6 7.895 6.895 7 8 7Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Focus Dim</span>
+    <span class="ext-card-tagline">Dim everything except the window you are working in.</span>
+    <span class="ext-card-meta"><span class="keys"><kbd>⌥</kbd><kbd>⌘</kbd><kbd>F</kbd></span></span>
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/keystrokeHighlight.html" data-category="desk" data-search="keystroke highlight keystrokehighlight show the keys you press on screen for demos and recordings. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M4 7.171L4 11Q4 11.61 4.236 12.168Q4.464 12.707 4.875 13.125Q5.293 13.536 5.832 13.764Q6.39 14 7 14L13 14Q13.61 14 14.168 13.764Q14.707 13.536 15.125 13.125Q15.536 12.707 15.764 12.168Q16 11.61 16 11L16 7.171C17.165 7.583 18 8.694 18 10L18 15C18 16.657 16.657 18 15 18L5 18C3.343 18 2 16.657 2 15L2 10C2 8.694 2.835 7.583 4 7.171Z"/><path class="primary" fill-rule="evenodd" d="M7 2L13 2C14.105 2 15 2.895 15 4L15 11C15 12.105 14.105 13 13 13L7 13C5.895 13 5 12.105 5 11L5 4C5 2.895 5.895 2 7 2Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Keystroke Highlight</span>
+    <span class="ext-card-tagline">Show the keys you press on screen for demos and recordings.</span>
+    <span class="ext-card-meta"><span class="keys"><kbd>⌃</kbd><kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd></span></span>
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/emoji.html" data-category="desk" data-search="emoji picker emoji find and type any emoji without leaving what you are writing. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M10 18C14.418 18 18 14.418 18 10C18 5.582 14.418 2 10 2C5.582 2 2 5.582 2 10C2 14.418 5.582 18 10 18ZM8 8C8 7.448 7.552 7 7 7C6.448 7 6 7.448 6 8C6 8.552 6.448 9 7 9C7.552 9 8 8.552 8 8ZM12 7L14 7C14.552 7 15 7.448 15 8C15 8.552 14.552 9 14 9L12 9C11.448 9 11 8.552 11 8C11 7.448 11.448 7 12 7ZM15.638 12.052Q15.318 12.931 14.75 13.669Q14.19 14.391 13.441 14.915Q12.693 15.439 11.824 15.716Q10.935 16 10 16Q9.065 16 8.176 15.716Q7.307 15.439 6.559 14.915Q5.81 14.391 5.25 13.669Q4.682 12.931 4.362 12.052L6.241 11.368Q6.455 11.954 6.835 12.446Q7.206 12.927 7.706 13.277Q8.205 13.625 8.784 13.811Q9.375 14 10 14Q10.625 14 11.216 13.811Q11.795 13.625 12.294 13.277Q12.793 12.927 13.165 12.446Q13.545 11.954 13.759 11.368L15.638 12.052Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Emoji Picker</span>
+    <span class="ext-card-tagline">Find and type any emoji without leaving what you are writing.</span>
+    <span class="ext-card-meta"><span class="keys"><kbd>⌃</kbd><kbd>⇧</kbd><kbd>E</kbd></span></span>
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/notchShelf.html" data-category="desk" data-search="notch shelf notchshelf a tray, browser and alerts that live in your macbook's notch. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M4.5 3L6 3L6 4.5C6 5.328 6.672 6 7.5 6L12.5 6C13.328 6 14 5.328 14 4.5L14 3L15.5 3C16.881 3 18 4.119 18 5.5L18 14.5C18 15.881 16.881 17 15.5 17L4.5 17C3.119 17 2 15.881 2 14.5L2 5.5C2 4.119 3.119 3 4.5 3ZM5.5 12.5L10 8L14.5 12.5L13 14L10 11L7 14L5.5 12.5Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Notch Shelf</span>
+    <span class="ext-card-tagline">A tray, browser and alerts that live in your MacBook's notch.</span>
+    
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/clipboard.html" data-category="desk" data-search="clipboard clipboard everything you copy, searchable and one shortcut away. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M8 2L12 2C12.552 2 13 2.448 13 3L13 5C13 5.552 12.552 6 12 6L8 6C7.448 6 7 5.552 7 5L7 3C7 2.448 7.448 2 8 2Z"/><path class="primary" fill-rule="evenodd" d="M4 5C4 3.895 4.895 3 6 3L6 5Q6 5.406 6.158 5.779Q6.309 6.138 6.586 6.414Q6.862 6.691 7.221 6.842Q7.594 7 8 7L12 7Q12.406 7 12.779 6.842Q13.138 6.691 13.414 6.414Q13.691 6.138 13.842 5.779Q14 5.406 14 5L14 3C15.105 3 16 3.895 16 5L16 16C16 17.105 15.105 18 14 18L6 18C4.895 18 4 17.105 4 16L4 5ZM7 9L13 9L13 11L7 11L7 9ZM11 13L7 13L7 15L11 15L11 13Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Clipboard</span>
+    <span class="ext-card-tagline">Everything you copy, searchable and one shortcut away.</span>
+    <span class="ext-card-meta"><span class="keys"><kbd>⌃</kbd><kbd>⇧</kbd><kbd>C</kbd></span></span>
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a><a class="ext-card" href="/extensions/bifrost.html" data-category="desk" data-search="launcher bifrost open apps, do quick math and find files from one bar. desk">
+  <span class="tile tile-md" aria-hidden="true"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="secondary" fill-rule="evenodd" opacity="0.45" d="M17 11L3 11C2.448 11 2 11.448 2 12C2 12.552 2.448 13 3 13L17 13C17.552 13 18 12.552 18 12C18 11.448 17.552 11 17 11ZM11 15L3 15C2.448 15 2 15.448 2 16C2 16.552 2.448 17 3 17L11 17C11.552 17 12 16.552 12 16C12 15.448 11.552 15 11 15Z"/><path class="primary" fill-rule="evenodd" d="M3.5 3L16.5 3C17.328 3 18 3.672 18 4.5L18 7.5C18 8.328 17.328 9 16.5 9L3.5 9C2.672 9 2 8.328 2 7.5L2 4.5C2 3.672 2.672 3 3.5 3ZM5 4L6 4L6 8L5 8L5 4ZM13 6L7 6L7 7L13 7L13 6Z"/></svg></span>
+  <span class="ext-card-body">
+    <span class="ext-card-title">Launcher</span>
+    <span class="ext-card-tagline">Open apps, do quick math and find files from one bar.</span>
+    <span class="ext-card-meta"><span class="keys"><kbd>⌥</kbd><kbd>Space</kbd></span></span>
+  </span>
+  <svg class="icon chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M7 4L13 10L7 16L5.5 14.5L10 10L5.5 5.5L7 4Z"/></svg>
+</a></div></section>
+  <nav class="pager" aria-label="More extensions">
+    <a href="/extensions/presenter.html" class="pager-link"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M9 16L3 10L9 4L10.5 5.5L7 9L17 9L17 11L7 11L10.5 14.5L9 16Z"/></svg><span><small>Previous</small>Presenter</span></a>
+    <a href="/extensions/systemStats.html" class="pager-link next"><span><small>Next</small>Menu Bar Stats</span><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M11 4L17 10L11 16L9.5 14.5L13 11L3 11L3 9L13 9L9.5 5.5L11 4Z"/></svg></a>
+  </nav>
+</div>
+    </main>
+    <footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <a href="/" class="brand"><img src="/app-icon-512.png" alt="" width="30" height="30" /><span class="brand-name">Edith</span></a>
+      <p>Every tool your Mac is missing, in one native app. Free and open source under the GPL-3.0.</p>
+      <a class="btn btn-ghost btn-sm" href="/download.html"><svg class="icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path class="primary" fill-rule="evenodd" d="M16 11L10 17L4 11L5.5 9.5L9 13L9 3L11 3L11 13L14.5 9.5L16 11Z"/></svg><span>Download Edith</span></a>
+    </div>
+    <div class="footer-col"><h2>Product</h2><a href="/features.html">Features</a><a href="/extensions/">Extensions</a><a href="/agents.html">Agents and MCP</a><a href="/download.html">Download</a><a href="/changelog/">Changelog</a><a href="/faq.html">FAQ</a></div>
+    <div class="footer-col"><h2>Resources</h2><a href="https://github.com/pulkitxm/edith/tree/main/docs/cli">CLI reference</a><a href="https://github.com/pulkitxm/edith/wiki">Wiki</a><a href="https://github.com/pulkitxm/edith/releases">Releases</a><a href="https://github.com/pulkitxm/edith/blob/main/SUPPORT.md">Support</a></div>
+    <div class="footer-col"><h2>Project</h2><a href="https://github.com/pulkitxm/edith">GitHub</a><a href="https://github.com/pulkitxm/edith/blob/main/CONTRIBUTING.md">Contributing</a><a href="https://github.com/pulkitxm/edith/blob/main/SECURITY.md">Security</a><a href="https://www.gnu.org/licenses/gpl-3.0.html">Licence</a></div>
+    <div class="footer-col"><h2>Legal</h2><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></div>
+  </div>
+  <div class="footer-base"><span>Made on a Mac, for Macs.</span><span>macOS 14+ on Apple silicon</span></div>
+</footer>
+  </body>
+</html>

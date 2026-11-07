@@ -1,326 +1,254 @@
-const library = [
-  {
-    title: "Weightless",
-    artist: "Marconi Union",
-    cover: "/music/cover-1.jpg",
-    seconds: 372,
-  },
-  {
-    title: "Clair de Lune",
-    artist: "Debussy",
-    cover: "/music/cover-2.jpg",
-    seconds: 302,
-  },
-  {
-    title: "Time",
-    artist: "Hans Zimmer",
-    cover: "/music/cover-3.jpg",
-    seconds: 275,
-  },
-  {
-    title: "Intro",
-    artist: "The xx",
-    cover: "/music/cover-4.jpg",
-    seconds: 127,
-  },
-];
+const root = document.documentElement;
+root.classList.add("js");
 
-const sparkHeights = [
-  18, 22, 20, 26, 30, 28, 34, 40, 37, 44, 48, 46, 53, 58, 55, 61, 66, 64, 68,
-];
-
-function level(index) {
-  const random = Math.abs(Math.sin(index * 12.9898 + 4.1) * 43758.5453) % 1;
-  return random < 0.06 ? 0 : Math.min(4, 1 + Math.floor(random * 4.2));
-}
-
-function buildHeatmaps() {
-  for (const element of document.querySelectorAll("[data-rows][data-cols]")) {
-    const rows = Number(element.dataset.rows) || 7;
-    const columns = Number(element.dataset.cols) || 16;
-    const fragment = document.createDocumentFragment();
-    for (let column = 0; column < columns; column += 1) {
-      for (let row = 0; row < rows; row += 1) {
-        const cell = document.createElement("i");
-        cell.className = `heat-${level(column * rows + row)}`;
-        fragment.appendChild(cell);
-      }
-    }
-    element.appendChild(fragment);
+function storedTheme(value) {
+  try {
+    if (value) localStorage.setItem("edith-theme", value);
+    return localStorage.getItem("edith-theme");
+  } catch {
+    return null;
   }
 }
 
-function buildSparks() {
-  for (const element of document.querySelectorAll("[data-spark]")) {
-    for (const height of sparkHeights) {
-      const bar = document.createElement("i");
-      bar.style.height = `${height}%`;
-      element.appendChild(bar);
-    }
-  }
+function currentTheme() {
+  if (root.dataset.theme) return root.dataset.theme;
+  return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
-function startNowPlaying() {
-  const titleElement = document.querySelector("[data-title]");
-  const artistElement = document.querySelector("[data-artist]");
-  const artElement = document.querySelector("[data-art]");
-  const progressElement = document.querySelector("[data-progress]");
-  if (!titleElement || !artistElement || !artElement || !progressElement) {
-    return;
-  }
-  let trackIndex = 0;
-  let progress = 18;
-  const paint = () => {
-    const track = library[trackIndex];
-    titleElement.textContent = track.title;
-    artistElement.textContent = track.artist;
-    artElement.src = track.cover;
-  };
-  paint();
-  window.setInterval(() => {
-    progress += 100 / 60;
-    if (progress >= 100) {
-      progress = 0;
-      trackIndex = (trackIndex + 1) % library.length;
-      paint();
-    }
-    progressElement.style.width = `${progress}%`;
-  }, 100);
+for (const button of document.querySelectorAll("[data-theme-toggle]")) {
+  button.addEventListener("click", () => {
+    const next = currentTheme() === "light" ? "dark" : "light";
+    root.dataset.theme = next;
+    storedTheme(next);
+  });
 }
 
-function clock(seconds) {
-  const whole = Math.max(0, Math.round(seconds));
-  const minutes = Math.floor(whole / 60);
-  return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
+const menu = document.querySelector("[data-menu-toggle]");
+const nav = document.getElementById("site-nav");
+if (menu && nav) {
+  menu.addEventListener("click", () => {
+    const open = nav.classList.toggle("open");
+    menu.setAttribute("aria-expanded", String(open));
+  });
+  nav.addEventListener("click", (event) => {
+    if (event.target.closest("a")) {
+      nav.classList.remove("open");
+      menu.setAttribute("aria-expanded", "false");
+    }
+  });
 }
 
-function startPlayer() {
-  const root = document.querySelector("[data-player]");
-  if (!root) {
-    return;
-  }
-  const art = root.querySelector("[data-np-art]");
-  const title = root.querySelector("[data-np-title]");
-  const artist = root.querySelector("[data-np-artist]");
-  const bar = root.querySelector("[data-np-progress]");
-  const elapsedText = root.querySelector("[data-np-elapsed]");
-  const remainingText = root.querySelector("[data-np-remaining]");
-  const queueElement = root.querySelector("[data-queue]");
-  if (!art || !title || !bar || !queueElement) {
-    return;
-  }
-
-  const queue = library.slice();
-  const secondsPerTick = 1.6;
-  let elapsed = 0;
-
-  const renderQueue = () => {
-    queueElement.textContent = "";
-    for (const track of queue.slice(1)) {
-      const row = document.createElement("div");
-      const cover = document.createElement("img");
-      cover.className = "track-art";
-      cover.src = track.cover;
-      cover.alt = "";
-      const name = document.createElement("span");
-      name.className = "track-name";
-      name.textContent = `${track.title} · ${track.artist}`;
-      const length = document.createElement("span");
-      length.className = "mono subtle";
-      length.textContent = clock(track.seconds);
-      row.append(cover, name, length);
-      queueElement.appendChild(row);
+for (const button of document.querySelectorAll("[data-copy]")) {
+  button.addEventListener("click", async () => {
+    const label = button.querySelector("span");
+    try {
+      await navigator.clipboard.writeText(button.dataset.copy);
+      button.classList.add("copied");
+      if (label) label.textContent = "Copied";
+    } catch {
+      if (label) label.textContent = "Press ⌘C";
     }
-  };
-
-  const paint = () => {
-    const track = queue[0];
-    art.src = track.cover;
-    title.textContent = track.title;
-    if (artist) {
-      artist.textContent = track.artist;
-    }
-    renderQueue();
-  };
-
-  const advance = () => {
-    queue.push(queue.shift());
-    elapsed = 0;
-    queueElement.dataset.shifting = "true";
-    paint();
-    window.setTimeout(() => {
-      delete queueElement.dataset.shifting;
-    }, 460);
-  };
-
-  paint();
-  window.setInterval(() => {
-    const track = queue[0];
-    elapsed += secondsPerTick;
-    if (elapsed >= track.seconds) {
-      advance();
-      return;
-    }
-    bar.style.width = `${(elapsed / track.seconds) * 100}%`;
-    if (elapsedText) {
-      elapsedText.textContent = clock(elapsed);
-    }
-    if (remainingText) {
-      remainingText.textContent = `-${clock(track.seconds - elapsed)}`;
-    }
-  }, 100);
+    setTimeout(() => {
+      button.classList.remove("copied");
+      if (label) label.textContent = "Copy";
+    }, 1600);
+  });
 }
 
-function startReveals() {
-  const targets = document.querySelectorAll(
-    "[data-reveal-item], [data-reveal-group] > *",
-  );
-  if (!("IntersectionObserver" in window) || !targets.length) {
-    return;
-  }
-  const groups = new Map();
-  for (const element of targets) {
-    const parent = element.parentElement;
-    const index = groups.get(parent) ?? 0;
-    groups.set(parent, index + 1);
-    element.dataset.reveal = "pending";
-    element.style.setProperty(
-      "--reveal-delay",
-      `${Math.min(index * 0.07, 0.42)}s`,
-    );
-  }
+const revealed = document.querySelectorAll(".reveal");
+if (
+  "IntersectionObserver" in window &&
+  !matchMedia("(prefers-reduced-motion: reduce)").matches
+) {
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
-          entry.target.dataset.reveal = "visible";
+          entry.target.classList.add("in");
           observer.unobserve(entry.target);
         }
       }
     },
-    { rootMargin: "0px 0px -8% 0px", threshold: 0.15 },
+    { rootMargin: "0px 0px -8% 0px", threshold: 0.08 },
   );
-  for (const element of targets) {
-    observer.observe(element);
-  }
-}
-
-function startPresenterDemo() {
-  const demo = document.querySelector("[data-presenter-demo]");
-  if (!demo) {
-    return;
-  }
-  const badge = demo.querySelector("[data-pbadge]");
-  const note = demo.querySelector("[data-pnote]");
-  if (!badge || !note) {
-    return;
-  }
-  const swapText = (element, text) => {
-    if (element.textContent === text) {
-      return;
-    }
-    element.dataset.swap = "out";
-    window.setTimeout(() => {
-      element.textContent = text;
-      element.dataset.swap = "in";
-    }, 200);
-  };
-
-  const flip = () => {
-    const enabled = demo.dataset.presenterState !== "on";
-    demo.dataset.presenterState = enabled ? "on" : "off";
-    swapText(badge, enabled ? "Presenter on" : "Presenter off");
-    swapText(
-      note,
-      enabled
-        ? "Spend and track names hidden for the room."
-        : "Everything visible to you.",
-    );
-  };
-  demo.dataset.presenterState = "off";
-  badge.dataset.swap = "in";
-  note.dataset.swap = "in";
-  flip();
-  window.setInterval(flip, 3600);
-}
-
-function startSystemActions() {
-  const buttons = document.querySelectorAll("[data-action]");
-  const text = document.querySelector("[data-action-text]");
-  const icon = document.querySelector("[data-action-icon]");
-  if (!buttons.length || !text || !icon) {
-    return;
-  }
-  const idle =
-    "Tap any control to see what it does. Nothing here can lock you out.";
-  for (const button of buttons) {
-    button.addEventListener("click", () => {
-      const pressed = button.getAttribute("aria-pressed") === "true";
-      for (const other of buttons) {
-        other.setAttribute("aria-pressed", "false");
-        other.classList.remove("is-active");
-      }
-      if (!pressed) {
-        button.setAttribute("aria-pressed", "true");
-        button.classList.add("is-active");
-      }
-      const message = pressed ? idle : button.dataset.explain;
-      if (text.textContent === message) {
-        return;
-      }
-      text.dataset.swap = "out";
-      window.setTimeout(() => {
-        text.textContent = message;
-        icon.textContent = pressed ? "🔒" : button.dataset.icon;
-        text.dataset.swap = "in";
-      }, 180);
-    });
-  }
-}
-
-function startCopyButtons() {
-  for (const button of document.querySelectorAll("[data-copy]")) {
-    button.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(button.dataset.copy);
-      } catch {
-        return;
-      }
-      const label = button.textContent;
-      button.textContent = "Copied";
-      setTimeout(() => {
-        button.textContent = label;
-      }, 1500);
-    });
-  }
-}
-
-function startHeaderScroll() {
-  const header = document.querySelector(".site-header");
-  if (!header) {
-    return;
-  }
-  const sync = () => {
-    header.classList.toggle("is-scrolled", window.scrollY > 16);
-  };
-  sync();
-  window.addEventListener("scroll", sync, { passive: true });
-}
-
-function start() {
-  startHeaderScroll();
-  startSystemActions();
-  startCopyButtons();
-  buildHeatmaps();
-  buildSparks();
-  startNowPlaying();
-  startPlayer();
-  startReveals();
-  startPresenterDemo();
-}
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", start);
+  for (const element of revealed) observer.observe(element);
 } else {
-  start();
+  for (const element of revealed) element.classList.add("in");
+}
+
+const search = document.querySelector("[data-ext-search]");
+const extensionChips = document.querySelectorAll("[data-filter]");
+if (search || extensionChips.length) {
+  const sections = document.querySelectorAll("[data-section]");
+  const empty = document.querySelector("[data-ext-empty]");
+  let category = "all";
+  const apply = () => {
+    const query = (search?.value ?? "").trim().toLowerCase();
+    let shown = 0;
+    for (const section of sections) {
+      let visible = 0;
+      for (const card of section.querySelectorAll(".ext-card")) {
+        const match =
+          (category === "all" || card.dataset.category === category) &&
+          (!query || card.dataset.search.includes(query));
+        card.hidden = !match;
+        if (match) visible += 1;
+      }
+      section.hidden = visible === 0;
+      shown += visible;
+    }
+    if (empty) empty.hidden = shown > 0;
+  };
+  const select = (value) => {
+    category = value;
+    for (const chip of extensionChips)
+      chip.setAttribute("aria-pressed", String(chip.dataset.filter === value));
+    apply();
+  };
+  for (const chip of extensionChips)
+    chip.addEventListener("click", () => select(chip.dataset.filter));
+  search?.addEventListener("input", apply);
+  const hash = location.hash.slice(1);
+  if (hash && [...extensionChips].some((chip) => chip.dataset.filter === hash))
+    select(hash);
+  addEventListener("hashchange", () => {
+    const value = location.hash.slice(1);
+    if ([...extensionChips].some((chip) => chip.dataset.filter === value))
+      select(value);
+  });
+}
+
+const log = document.querySelector("[data-changelog]");
+if (log) {
+  const chips = document.querySelectorAll("[data-log-filter]");
+  const apply = () => {
+    const filter = log.dataset.filter ?? "all";
+    for (const release of log.querySelectorAll(".release")) {
+      const items = [...release.querySelectorAll("li")];
+      const visible = items.some((item) => {
+        const type = item.dataset.type;
+        return filter === "all" || type === filter;
+      });
+      release.classList.toggle("filtered-out", filter !== "all" && !visible);
+    }
+    const empty = document.querySelector("[data-log-empty]");
+    if (empty)
+      empty.hidden = [...log.querySelectorAll(".release")].some(
+        (release) => !release.classList.contains("filtered-out"),
+      );
+  };
+  for (const chip of chips) {
+    chip.addEventListener("click", () => {
+      log.dataset.filter = chip.dataset.logFilter;
+      for (const other of chips)
+        other.setAttribute("aria-pressed", String(other === chip));
+      apply();
+    });
+  }
+  apply();
+}
+
+const player = document.querySelector("[data-player]");
+if (player) {
+  const start = async () => {
+    const { default: Plyr } = await import("/vendor/plyr/plyr.min.mjs");
+    new Plyr(player, {
+      iconUrl: "/vendor/plyr/edith-controls.svg",
+      blankVideo: "",
+      controls: [
+        "play-large",
+        "play",
+        "progress",
+        "current-time",
+        "duration",
+        "mute",
+        "volume",
+        "fullscreen",
+      ],
+      ratio: "16:9",
+      tooltips: { controls: false, seek: true },
+    });
+  };
+  if ("IntersectionObserver" in window) {
+    const watch = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          watch.disconnect();
+          start();
+        }
+      },
+      { rootMargin: "400px 0px" },
+    );
+    watch.observe(player);
+  } else {
+    start();
+  }
+}
+
+const idle =
+  window.requestIdleCallback ?? ((callback) => setTimeout(callback, 1200));
+addEventListener("load", () => {
+  idle(() => {
+    for (const image of document.querySelectorAll(
+      ".shot img[loading='lazy']",
+    )) {
+      const frame = image.closest(".shot");
+      if (!frame) continue;
+      const rect = frame.getBoundingClientRect();
+      if (rect.top < innerHeight * 2) image.loading = "eager";
+    }
+  });
+});
+addEventListener(
+  "scroll",
+  () => {
+    idle(() => {
+      for (const image of document.querySelectorAll(
+        ".shot img[loading='lazy']",
+      )) {
+        const rect = image.closest(".shot").getBoundingClientRect();
+        if (rect.top < innerHeight * 1.5 && rect.bottom > -innerHeight)
+          image.loading = "eager";
+      }
+    });
+  },
+  { passive: true },
+);
+
+const releaseTargets = document.querySelectorAll(
+  "[data-dmg-size], [data-version]",
+);
+if (releaseTargets.length) {
+  const apply = (release) => {
+    for (const node of document.querySelectorAll("[data-dmg-size]"))
+      node.textContent = release.size;
+    for (const node of document.querySelectorAll("[data-version]"))
+      node.textContent = release.version;
+  };
+  let cached = null;
+  try {
+    cached = JSON.parse(sessionStorage.getItem("edith-release") ?? "null");
+  } catch {}
+  if (cached) apply(cached);
+  else {
+    fetch("https://api.github.com/repos/pulkitxm/edith/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" },
+    })
+      .then((response) =>
+        response.ok ? response.json() : Promise.reject(response.status),
+      )
+      .then((latest) => {
+        const asset = latest.assets.find((item) => item.name === "Edith.dmg");
+        if (!asset) return;
+        const release = {
+          size: `${(asset.size / 1_000_000).toFixed(1)} MB`,
+          version: latest.tag_name.replace(/^v/, ""),
+        };
+        apply(release);
+        try {
+          sessionStorage.setItem("edith-release", JSON.stringify(release));
+        } catch {}
+      })
+      .catch(() => {});
+  }
 }
