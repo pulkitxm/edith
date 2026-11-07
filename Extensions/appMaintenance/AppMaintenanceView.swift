@@ -5,17 +5,21 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum AppMaintenanceSection: String, CaseIterable, Identifiable {
-    case updates = "Updates"
-    case removal = "Remove"
-    case history = "History"
+    case updates
+    case removal = "remove"
+    case history
 
     var id: Self { self }
 
-    var reviewsSelection: Bool { self != .history }
-
-    init(hostSection: String?) {
-        self = hostSection.flatMap(Self.init(rawValue:)) ?? .updates
+    var title: String {
+        switch self {
+        case .updates: "Updates"
+        case .removal: "Remove"
+        case .history: "History"
+        }
     }
+
+    var reviewsSelection: Bool { self != .history }
 
     var uiScope: AppMaintenanceUIScope {
         switch self {
@@ -26,9 +30,27 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
     }
 }
 
-struct AppMaintenanceView: View {
+struct AppMaintenancePage: View {
     @State var model: AppMaintenanceModel
-    let section: AppMaintenanceSection
+    @AppStorage(AppStorageKeys.AppMaintenance.section, store: SharedDefaults.store)
+    private var sectionRaw = AppMaintenanceSection.updates.rawValue
+
+    private var section: Binding<AppMaintenanceSection> {
+        Binding(
+            get: { AppMaintenanceSection(rawValue: sectionRaw) ?? .updates },
+            set: { sectionRaw = $0.rawValue })
+    }
+
+    var body: some View {
+        AppMaintenanceView(model: model, section: section)
+            .navigationRoute("tab", selection: section)
+    }
+}
+
+struct AppMaintenanceView: View {
+    static let title = "App Updates"
+    @State var model: AppMaintenanceModel
+    @Binding var section: AppMaintenanceSection
     @State private var query = ""
     @State private var confirmingRemoval = false
     @State private var confirmingUpdates = false
@@ -85,11 +107,14 @@ struct AppMaintenanceView: View {
 
     var body: some View {
         PageWorkspace {
-            PageSubtitle(section.summary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .pageGutter(compact)
-                .padding(.top, UIScale.pt(16))
-                .padding(.bottom, UIScale.pt(12))
+            PageHeader(Self.title, subtitle: section.summary)
+            PageTabPicker(
+                "App Updates section", selection: $section,
+                options: AppMaintenanceSection.allCases, label: \.title
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageGutter(compact)
+            .padding(.bottom, UIScale.pt(12))
             if section.reviewsSelection { toolbar }
             Divider()
         } content: {
@@ -158,7 +183,10 @@ struct AppMaintenanceView: View {
     }
 
     private var toolbar: some View {
-        WrapHStack(spacing: UIScale.pt(10), lineSpacing: UIScale.pt(8)) {
+        WrapHStack(
+            spacing: UIScale.pt(PageMetrics.controlSpacing),
+            lineSpacing: UIScale.pt(PageMetrics.controlSpacing)
+        ) {
             Button {
                 model.refresh(interval: updateRefreshInterval)
             } label: {
@@ -589,6 +617,7 @@ struct AppMaintenanceView: View {
                     AppMaintenanceUpdateSkeleton()
                 }
                 Button("Cancel") { model.cancel() }
+                    .buttonStyle(.edithDefault)
                     .pageGutter(compact)
                     .padding(.vertical, UIScale.pt(22))
             }
@@ -670,6 +699,9 @@ struct AppMaintenanceView: View {
                             Button("Exclude This App") { model.exclude(item) }
                         }
                     }
+                    .menuStyle(.button)
+                    .buttonStyle(.edithDefault)
+                    .fixedSize()
                     Spacer()
                     Button(
                         item.action == .openUpdater && model.selectedUpdateIDs.count == 1
@@ -915,7 +947,7 @@ private struct AppMaintenanceUpdateRow: View {
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        HStack(spacing: UIScale.pt(9)) {
+        HStack(spacing: 0) {
             Toggle(
                 "",
                 isOn: Binding(get: { entry.selected }, set: setSelected)
@@ -950,9 +982,11 @@ private struct AppMaintenanceUpdateRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(EdithButtonStyle(.borderless, selected: entry.focused, tint: tint))
+            .buttonStyle(.edith(.row, tint: tint))
+            .accessibilityAddTraits(entry.focused ? .isSelected : AccessibilityTraits())
         }
-        .pageGutter(compact)
+        .padding(.leading, PageMetrics.gutter(compact))
+        .padding(.trailing, PageMetrics.gutter(compact) - UIScale.pt(9))
         .frame(maxHeight: .infinity)
         .background(entry.focused ? tint.opacity(0.2) : Color.clear)
     }
@@ -1067,6 +1101,7 @@ private struct AppMaintenanceInstallReview: View {
                 }
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
+                    .buttonStyle(.edithDefault)
                     .keyboardShortcut(.cancelAction)
                     .disabled(installing)
                 Button(plan.replacesExisting ? "Replace App" : "Install App") {

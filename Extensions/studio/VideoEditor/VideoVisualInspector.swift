@@ -17,6 +17,9 @@ struct VideoSettingsInspector: View {
                 Button("1080 × 1080") { canvasPreset(1080, 1080) }
                 Button("3840 × 2160") { canvasPreset(3840, 2160) }
             }
+            .menuStyle(.button)
+            .buttonStyle(.edithDefault)
+            .fixedSize()
             integer("FPS numerator", \.frameRateNumerator)
             integer("FPS denominator", \.frameRateDenominator)
             Text("\(settings.frameRate.formatted(.number.precision(.fractionLength(0...3)))) fps")
@@ -29,6 +32,9 @@ struct VideoSettingsInspector: View {
                 Button("29.970 fps") { ratePreset(30000, 1001) }
                 Button("59.940 fps") { ratePreset(60000, 1001) }
             }
+            .menuStyle(.button)
+            .buttonStyle(.edithDefault)
+            .fixedSize()
             Picker(
                 "Color space",
                 selection: Binding(

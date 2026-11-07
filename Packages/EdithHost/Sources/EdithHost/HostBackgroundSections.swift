@@ -505,7 +505,7 @@ struct HostBackgroundDiagnosticsSection: View {
                 .padding(.vertical, UIScale.pt(4))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.hostFormRow)
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
                 VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                     Text("Logs")
@@ -563,6 +563,7 @@ struct HostBackgroundEventTimeline: View {
                     Spacer()
                     Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 }
+                .buttonStyle(.edithDefault)
                 if timeline.matches.isEmpty {
                     Text(
                         model.failure ?? model.unavailable
@@ -598,6 +599,7 @@ struct HostBackgroundEventTimeline: View {
                 }
                 if timeline.hasMore {
                     Button("Load more events") { timeline.loadMore() }
+                        .buttonStyle(.edithDefault)
                 }
             }
         }

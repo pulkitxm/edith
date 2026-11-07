@@ -475,7 +475,10 @@ struct EmbeddedDownloadSheet: View {
                 .background(canStart ? theme : Color.gray.opacity(0.35))
                 .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(9)))
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(
+                .edithShaped(
+                    RoundedRectangle(cornerRadius: UIScale.pt(9), style: .continuous), filled: true)
+            )
             .disabled(!canStart)
         }
     }
@@ -693,7 +696,7 @@ struct EmbeddedDownloadSheet: View {
                     .foregroundStyle(theme)
                     .disabled(downloader.isRunning)
                 case .done:
-                    HStack(spacing: UIScale.pt(4)) {
+                    HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                         Button {
                             downloader.openResult(item)
                         } label: {
@@ -778,7 +781,7 @@ struct EmbeddedDownloadSheet: View {
                 .foregroundStyle(theme)
                 .disabled(downloader.isRunning)
             case .done:
-                HStack(spacing: UIScale.pt(4)) {
+                HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                     Button {
                         downloader.openResult(item)
                     } label: {

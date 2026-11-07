@@ -1,22 +1,13 @@
 {
   "id": "cleaner",
   "title": "Cleaner",
-  "icon": "broom",
+  "icon": "cleaner",
   "category": "utilities",
   "background": false,
   "commands": [
     "cleaner"
   ],
-  "sections": [
-    {
-      "page": "appMaintenance",
-      "id": "Cleaner",
-      "title": "Cleaner",
-      "icon": "broom",
-      "summary": "Find build caches, downloads and old worktrees you can safely remove. Nothing is deleted until you confirm.",
-      "order": 4
-    }
-  ],
+  "page": true,
   "homeCards": [
     "extension:cleaner"
   ],

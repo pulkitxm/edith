@@ -132,7 +132,8 @@ struct HostSurfaceEditor: View {
                 HStack {
                     Text(panel.title).font(.edithText(.title2))
                     Spacer()
-                    Button("Done") { editorPanel = nil }.keyboardShortcut(.defaultAction)
+                    Button("Done") { editorPanel = nil }.buttonStyle(.edith(.primary))
+                        .keyboardShortcut(.defaultAction)
                 }
                 Divider()
                 ScrollView {
@@ -149,7 +150,6 @@ struct HostSurfaceEditor: View {
             id: sourceRequestID,
             active: selection.map {
                 $0.widget.supportsSourceFilters && $0.widget != .agents
-                    && !marketplace.surfaces.privacy.hides($0.widget)
             } ?? false,
             cancel: {
                 sourceLoad.reset(); sourceChoices = []
@@ -186,8 +186,7 @@ struct HostSurfaceEditor: View {
         .pageTask(
             id: "agent-providers:" + sourceRequestID + ":" + String(glancesExpanded),
             active: (selection?.widget == .agents || (target == .notch && glancesExpanded))
-                && availability.activeIDs.contains("herdr")
-                && !marketplace.surfaces.privacy.hides(.agents),
+                && availability.activeIDs.contains("herdr"),
             cancel: { agentSourceChoices = [] }
         ) {
             agentSourceChoices = []
@@ -359,8 +358,11 @@ struct HostSurfaceEditor: View {
                                             }
                                             Button("Delete") { store.removeProfile(profile.id) }
                                         } label: {
-                                            EdithIconView(.more)
+                                            menuLabel { EdithIconView(.more) }
                                         }
+                                        .menuStyle(.button)
+                                        .buttonStyle(.edithDefault)
+                                        .menuIndicator(.hidden)
                                         .help("Manage " + profile.name)
                                     }
                                 }
@@ -378,7 +380,9 @@ struct HostSurfaceEditor: View {
                 }
                 Text("Home and Notch have separate saved layouts. Applying a layout can be undone.")
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
-            }.padding(.top, UIScale.pt(8))
+            }
+            .buttonStyle(.edithDefault)
+            .padding(.top, UIScale.pt(8))
         }.font(.edithText(.callout))
     }
 
@@ -514,8 +518,10 @@ struct HostSurfaceEditor: View {
                     layoutError = nil
                 }
             } label: {
-                EdithIconView(.sidebarLeft)
+                menuLabel { EdithIconView(.sidebarLeft) }
             }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
             .help("Workspace panels and layout sharing")
             Button {
                 editorPanel = .geometry
@@ -527,7 +533,7 @@ struct HostSurfaceEditor: View {
             } label: {
                 Label("Layouts", edith: .layers)
             }
-            Menu("Presets") {
+            Menu {
                 ForEach(SurfacePreset.allCases) { preset in
                     Button {
                         store.update(target) { $0 = preset.layout(for: target) }
@@ -538,7 +544,11 @@ struct HostSurfaceEditor: View {
                 }
                 Divider()
                 Button("Empty canvas") { store.update(target) { $0.tiles = [] } }
+            } label: {
+                menuLabel { Text("Presets") }
             }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
         }.buttonStyle(.edith(.secondary))
     }
 
@@ -878,7 +888,10 @@ struct HostSurfaceEditor: View {
                             previewCompact = width == 420
                         }
                     }
-                }.help("Preview the actual canvas width")
+                }
+                .borderlessMenu()
+                .fixedSize()
+                .help("Preview the actual canvas width")
             }
             if target != .notch || !layout.notchHorizontal {
                 Toggle("Single column", isOn: $previewCompact)
@@ -1167,6 +1180,7 @@ struct HostSurfaceEditor: View {
                     HStack { widgetActions(tile) }
                     VStack(alignment: .leading) { widgetActions(tile) }
                 }
+                .buttonStyle(.edithDefault)
             } else {
                 Text("Select Configure on a widget to change its title, size, and behavior.")
                     .font(.edithText(.callout)).foregroundStyle(.secondary)
@@ -1213,42 +1227,54 @@ struct HostSurfaceEditor: View {
                 isOn: Binding(
                     get: { selection?.sourceIDs == nil },
                     set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
-            if marketplace.surfaces.privacy.hides(tile.widget) {
-                Text("Sources are hidden while presenting.").font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-            } else if tile.sourceIDs != nil {
-                let available =
-                    sourceChoices
-                let known = Set(available.map(\.id))
-                let choices =
-                    available
-                    + (tile.sourceIDs ?? []).subtracting(known).sorted().map {
-                        SurfaceSourceChoice($0, $0 + " (unavailable)")
-                    }
-                ForEach(choices) { choice in
-                    Toggle(
-                        choice.title,
-                        isOn: Binding(
-                            get: { selection?.sourceIDs?.contains(choice.id) == true },
-                            set: { enabled in
-                                edit(tile.id) {
-                                    if enabled {
-                                        $0.sourceIDs?.insert(choice.id)
-                                    } else {
-                                        $0.sourceIDs?.remove(choice.id)
-                                    }
-                                }
-                            }))
-                }
-                if choices.isEmpty {
-                    Text(sourceLoad.errorMessage ?? "No sources available yet.")
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
-                }
-                if tile.sourceIDs?.isEmpty == true {
-                    Text("Select sources to show data in this widget.")
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+            if tile.sourceIDs != nil {
+                presentedSources(tile) {
+                    sourceToggles(tile)
                 }
             }
+        }
+    }
+
+    private func presentedSources<Content: View>(
+        _ tile: SurfaceTile, @ViewBuilder content: () -> Content
+    ) -> some View {
+        let presenting = marketplace.surfaces.privacy.hides(tile.widget)
+        return VStack(alignment: .leading, spacing: UIScale.pt(8)) { content() }
+            .disabled(presenting)
+            .presenterCover(presenting, dark: scheme == .dark)
+    }
+
+    @ViewBuilder private func sourceToggles(_ tile: SurfaceTile) -> some View {
+        let available =
+            sourceChoices
+        let known = Set(available.map(\.id))
+        let choices =
+            available
+            + (tile.sourceIDs ?? []).subtracting(known).sorted().map {
+                SurfaceSourceChoice($0, $0 + " (unavailable)")
+            }
+        ForEach(choices) { choice in
+            Toggle(
+                choice.title,
+                isOn: Binding(
+                    get: { selection?.sourceIDs?.contains(choice.id) == true },
+                    set: { enabled in
+                        edit(tile.id) {
+                            if enabled {
+                                $0.sourceIDs?.insert(choice.id)
+                            } else {
+                                $0.sourceIDs?.remove(choice.id)
+                            }
+                        }
+                    }))
+        }
+        if choices.isEmpty {
+            Text(sourceLoad.errorMessage ?? "No sources available yet.")
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+        }
+        if tile.sourceIDs?.isEmpty == true {
+            Text("Select sources to show data in this widget.")
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -1271,24 +1297,23 @@ struct HostSurfaceEditor: View {
                 isOn: Binding(
                     get: { selection?.sourceIDs == nil },
                     set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
-            if marketplace.surfaces.privacy.hides(tile.widget) {
-                Text("Providers are hidden while presenting.").font(.edithText(.caption))
-                    .foregroundStyle(.secondary)
-            } else if tile.sourceIDs != nil {
-                ForEach(agentProviderChoices, id: \.id) { provider in
-                    Toggle(
-                        provider.title,
-                        isOn: Binding(
-                            get: { selection?.sourceIDs?.contains(provider.id) == true },
-                            set: { enabled in
-                                edit(tile.id) {
-                                    if enabled {
-                                        $0.sourceIDs?.insert(provider.id)
-                                    } else {
-                                        $0.sourceIDs?.remove(provider.id)
+            if tile.sourceIDs != nil {
+                presentedSources(tile) {
+                    ForEach(agentProviderChoices, id: \.id) { provider in
+                        Toggle(
+                            provider.title,
+                            isOn: Binding(
+                                get: { selection?.sourceIDs?.contains(provider.id) == true },
+                                set: { enabled in
+                                    edit(tile.id) {
+                                        if enabled {
+                                            $0.sourceIDs?.insert(provider.id)
+                                        } else {
+                                            $0.sourceIDs?.remove(provider.id)
+                                        }
                                     }
-                                }
-                            }))
+                                }))
+                    }
                 }
             }
             Text("Session states").font(.edithText(.headline))
@@ -1322,6 +1347,15 @@ struct HostSurfaceEditor: View {
                 }
             }
             Toggle("Include subagents", isOn: setting(tile.id, \.includeSubagents, fallback: true))
+        }
+    }
+
+    private func menuLabel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(spacing: UIScale.pt(4)) {
+            content()
+            EdithIconView(.chevronDown, size: UIScale.pt(10))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
     }
 

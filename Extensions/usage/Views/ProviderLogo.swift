@@ -119,11 +119,8 @@ public struct ProviderSwitchButton: View {
                             }
                         }
                         .foregroundStyle(.primary)
-                        .padding(.horizontal, UIScale.pt(8))
-                        .padding(.vertical, UIScale.pt(6))
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.edith(.borderless))
+                    .buttonStyle(.edith(.row))
                 }
             }
             .padding(UIScale.pt(6))

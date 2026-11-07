@@ -86,13 +86,13 @@ private final class SurfaceTapProbe: AudioMixerTapControlling {
                 ).encoded(providerID: "audioMixer"))
         }
         privacy = ["active": "1", "blurStudio": "1"]
-        let masked = try SurfaceSnapshot.decode(
+        let presented = try SurfaceSnapshot.decode(
             await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "audioMixer")),
             providerID: "audioMixer")
-        #expect(masked.rows.isEmpty)
-        #expect(masked.sources.isEmpty)
-        #expect(masked.message == "Hidden while presenting.")
+        #expect(presented.rows.map(\.id) == result.rows.map(\.id))
+        #expect(presented.sources == result.sources)
+        #expect(presented.message == nil)
     }
 
     @Test func shutdownRejectsLateActionsAndNonfiniteGains() async throws {

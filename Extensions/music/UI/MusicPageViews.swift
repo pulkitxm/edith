@@ -690,65 +690,59 @@ private struct EmbeddedMusicFolderRow: View {
     @State private var trackCount: Int?
 
     var body: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            Button(action: onOpen) {
-                HStack(spacing: UIScale.pt(10)) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: UIScale.pt(7))
-                            .fill(theme.opacity(0.16))
-                            .frame(width: UIScale.pt(34), height: UIScale.pt(34))
-                        EdithIconView(.folder)
-                            .font(.system(size: UIScale.pt(14)))
-                            .foregroundStyle(theme)
-                    }
-                    VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                        Text(folder.name)
-                            .font(.edithText(.body).weight(.medium))
-                            .lineLimit(1)
-                            .foregroundStyle(.primary)
-                            .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
-                        Text(
-                            location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" }
-                                ?? "Folder"
-                        )
-                        .presenterBlur(
-                            location != nil && EmbeddedMusicPrivacyState.shared.hides(.music)
-                        )
-                        .font(.edithText(.subheadline))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                    }
-                    Spacer()
+        EdithRowButton(action: onOpen) {
+            HStack(spacing: UIScale.pt(10)) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: UIScale.pt(7))
+                        .fill(theme.opacity(0.16))
+                        .frame(width: UIScale.pt(34), height: UIScale.pt(34))
+                    EdithIconView(.folder)
+                        .font(.system(size: UIScale.pt(14)))
+                        .foregroundStyle(theme)
                 }
-                .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                    Text(folder.name)
+                        .font(.edithText(.body).weight(.medium))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                        .presenterBlur(EmbeddedMusicPrivacyState.shared.hides(.music))
+                    Text(
+                        location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" }
+                            ?? "Folder"
+                    )
+                    .presenterBlur(
+                        location != nil && EmbeddedMusicPrivacyState.shared.hides(.music)
+                    )
+                    .font(.edithText(.subheadline))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                }
             }
-            .buttonStyle(.edith(.borderless))
+        } accessory: {
+            HStack(spacing: UIScale.pt(10)) {
+                Button(action: onPlay) {
+                    EdithIconView(.play)
+                        .font(.system(size: UIScale.pt(22)))
+                        .foregroundStyle(theme)
+                }
+                .buttonStyle(.edith(.borderless))
+                .help("Play this folder")
+                .opacity(hovering || trackCount == 0 ? 1 : 0.55)
+                .frame(width: EmbeddedMusicRowColumn.value, alignment: .trailing)
 
-            Button(action: onPlay) {
-                EdithIconView(.play)
-                    .font(.system(size: UIScale.pt(22)))
-                    .foregroundStyle(theme)
+                EdithIconView(.chevronRight)
+                    .font(.system(size: UIScale.pt(11), weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: EmbeddedMusicRowColumn.trailing)
             }
-            .buttonStyle(.edith(.borderless))
-            .help("Play this folder")
-            .opacity(hovering || trackCount == 0 ? 1 : 0.55)
-            .frame(width: EmbeddedMusicRowColumn.value, alignment: .trailing)
-
-            EdithIconView(.chevronRight)
-                .font(.system(size: UIScale.pt(11), weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .frame(width: EmbeddedMusicRowColumn.trailing)
         }
-        .padding(.vertical, UIScale.pt(6))
-        .padding(.horizontal, UIScale.pt(8))
         .background(
-            dropTargeted
-                ? theme.opacity(0.16) : hovering ? Color.primary.opacity(0.05) : .clear,
-            in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+            dropTargeted ? theme.opacity(0.16) : .clear,
+            in: RoundedRectangle(cornerRadius: EmbeddedMusicRowColumn.cornerRadius)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(7))
+            RoundedRectangle(cornerRadius: EmbeddedMusicRowColumn.cornerRadius)
                 .strokeBorder(theme, lineWidth: dropTargeted ? UIScale.pt(1.5) : 0)
         )
         .onHover { hovering = $0 }
@@ -799,13 +793,9 @@ private struct EmbeddedMusicPageRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            Button(action: onOpenDetails) {
-                EmbeddedPageArtworkThumb(track: track, size: 34)
-            }
-            .buttonStyle(.edith(.borderless))
-            .help("Show details")
-            Button(action: onToggle) {
+        EdithRowButton(action: onToggle) {
+            HStack(spacing: UIScale.pt(10)) {
+                Color.clear.frame(width: UIScale.pt(34), height: UIScale.pt(34))
                 HStack(spacing: UIScale.pt(10)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(1)) {
                         Text(track.title)
@@ -836,10 +826,8 @@ private struct EmbeddedMusicPageRow: View {
                         .frame(width: EmbeddedMusicRowColumn.value, alignment: .trailing)
                 }
                 .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.edith(.borderless))
-
+        } accessory: {
             Button(action: onToggleFavourite) {
                 EdithIconView(.heart, tone: isFavourite ? .duotone : .muted)
                     .font(.system(size: UIScale.pt(12)))
@@ -851,12 +839,20 @@ private struct EmbeddedMusicPageRow: View {
             .help(isFavourite ? "Remove from favourites" : "Add to favourites")
             .opacity(hovering || isFavourite ? 1 : 0)
         }
-        .padding(.vertical, UIScale.pt(6))
-        .padding(.horizontal, UIScale.pt(8))
+        .overlay(alignment: .leading) {
+            Button(action: onOpenDetails) {
+                EmbeddedPageArtworkThumb(track: track, size: 34)
+            }
+            .buttonStyle(
+                .edithShaped(
+                    RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous), filled: true)
+            )
+            .help("Show details")
+            .padding(.leading, EmbeddedMusicRowColumn.inset)
+        }
         .background(
-            isCurrent
-                ? Color.primary.opacity(0.08) : hovering ? Color.primary.opacity(0.05) : .clear,
-            in: RoundedRectangle(cornerRadius: UIScale.pt(7))
+            isCurrent ? Color.primary.opacity(0.08) : .clear,
+            in: RoundedRectangle(cornerRadius: EmbeddedMusicRowColumn.cornerRadius)
         )
         .onHover { hovering = $0 }
         .draggable(track.relativePath)
@@ -961,8 +957,8 @@ struct EmbeddedMusicLibrarySkeleton: View {
                             SkeletonBlock(width: 16, height: 16, corner: 8)
                                 .frame(width: EmbeddedMusicRowColumn.trailing)
                         }
-                        .padding(.vertical, UIScale.pt(6))
-                        .padding(.horizontal, UIScale.pt(8))
+                        .padding(.vertical, UIScale.pt(7))
+                        .padding(.horizontal, EmbeddedMusicRowColumn.inset)
                     }
                 }
             }
@@ -994,6 +990,8 @@ struct EmbeddedMusicTileSkeleton: View {
 private enum EmbeddedMusicRowColumn {
     static var value: CGFloat { UIScale.pt(56) }
     static var trailing: CGFloat { UIScale.pt(16) }
+    static var inset: CGFloat { UIScale.pt(9) }
+    static var cornerRadius: CGFloat { UIScale.pt(8) }
 }
 
 enum EmbeddedMusicTile {
@@ -1059,7 +1057,10 @@ struct EmbeddedMusicFolderTile: View {
                     }
                     .frame(width: UIScale.pt(art), height: UIScale.pt(art))
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(
+                    .edithShaped(
+                        RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous))
+                )
                 .accessibilityLabel(
                     EmbeddedMusicPrivacyState.shared.hides(.music)
                         ? "Open folder" : "Open \(folder.name)")
@@ -1069,7 +1070,7 @@ struct EmbeddedMusicFolderTile: View {
                         .frame(width: UIScale.pt(24), height: UIScale.pt(24))
                         .background(theme, in: Circle())
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(.edithShaped(Circle(), filled: true))
                 .help("Play this folder")
                 .opacity(hovering ? 1 : 0)
                 .padding(UIScale.pt(7))
@@ -1158,7 +1159,10 @@ private struct EmbeddedMusicTrackTile: View {
                             .padding(UIScale.pt(7))
                         }
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(
+                    .edithShaped(
+                        RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous),
+                        filled: true))
                 Button(action: onToggleFavourite) {
                     EdithIconView(.heart, tone: isFavourite ? .duotone : .muted)
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
@@ -1394,7 +1398,7 @@ struct EmbeddedMusicDetailSheet: View {
                 .background(DashSkin.paper2(dark).opacity(0.6), in: Circle())
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Circle()))
         .help(help)
     }
 
@@ -1453,7 +1457,7 @@ struct EmbeddedMusicDetailSheet: View {
             .background(theme.opacity(0.1), in: Capsule())
             .contentShape(Capsule())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Capsule()))
         .help("Show this folder in Music")
     }
 
@@ -1469,9 +1473,10 @@ struct EmbeddedMusicDetailSheet: View {
                         .foregroundStyle(Color.themeOnAccent)
                         .frame(width: UIScale.pt(52), height: UIScale.pt(52))
                         .contentShape(Circle())
+                        .embeddedLiquidGlass(
+                            in: Circle(), tint: theme, interactive: true, dark: dark)
                 }
-                .buttonStyle(.edith(.borderless))
-                .embeddedLiquidGlass(in: Circle(), tint: theme, interactive: true, dark: dark)
+                .buttonStyle(.edithShaped(Circle(), filled: true))
                 .shadow(color: .black.opacity(0.28), radius: UIScale.pt(8), y: UIScale.pt(3))
                 .help(isPlaying ? "Pause" : "Play")
                 .offset(x: UIScale.pt(10), y: UIScale.pt(10))
@@ -1535,7 +1540,7 @@ struct EmbeddedMusicDetailSheet: View {
     }
 
     private func youtubeLink(_ url: URL) -> some View {
-        Link(destination: url) {
+        EdithLink(destination: url) {
             HStack(spacing: UIScale.pt(6)) {
                 EdithIconView(.play)
                 Text("Open original on YouTube")
@@ -1550,7 +1555,6 @@ struct EmbeddedMusicDetailSheet: View {
             .padding(.vertical, UIScale.pt(8))
             .background(theme.opacity(0.1), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
         }
-        .buttonStyle(.edith(.borderless))
     }
 
     private var renameReveal: some View {
@@ -1665,6 +1669,9 @@ struct EmbeddedMusicFooter: View {
 
     private var barHeight: CGFloat { accounts.selected == .spotify ? 80 : Self.expandedHeight }
     static let expandedHeight: CGFloat = 64
+    static var artworkShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous)
+    }
     static let collapsedHeight: CGFloat = 2
 
     var body: some View {
@@ -1793,33 +1800,37 @@ struct EmbeddedMusicFooter: View {
     private func trackInfo(_ track: EmbeddedTrack) -> some View {
         HStack(spacing: UIScale.pt(11)) {
             Button {
-                EmbeddedMusicDetailPresenter.shared.show(track)
-            } label: {
-                EmbeddedPageArtworkThumb(track: track, size: 44)
-            }
-            .buttonStyle(.edith(.borderless))
-            .help(track.isVideo ? "Watch this video" : "Show details")
-            Button {
                 remote.reveal(track)
             } label: {
                 HStack(spacing: UIScale.pt(11)) {
+                    Color.clear.frame(width: UIScale.pt(44), height: UIScale.pt(44))
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                         Text(track.title)
                             .font(.edithText(.body).weight(.semibold))
                             .lineLimit(1)
+                            .truncationMode(.tail)
                             .presenterBlur(blur)
                         Text(remote.isPlaying ? "Now playing" : "Paused")
                             .font(.edithText(.subheadline))
                             .foregroundStyle(.secondary)
                             .frame(width: UIScale.pt(78), alignment: .leading)
                     }
-                    EmbeddedPlaybackWave(
-                        playing: remote.isPlaying && visible, color: theme.opacity(0.9),
-                        maxHeight: UIScale.pt(13))
                 }
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edithBlock)
             .help("Show this track in Music")
+            .overlay(alignment: .leading) {
+                Button {
+                    EmbeddedMusicDetailPresenter.shared.show(track)
+                } label: {
+                    EmbeddedPageArtworkThumb(track: track, size: 44)
+                }
+                .buttonStyle(.edithShaped(EmbeddedMusicFooter.artworkShape, filled: true))
+                .help(track.isVideo ? "Watch this video" : "Show details")
+            }
+            EmbeddedPlaybackWave(
+                playing: remote.isPlaying && visible, color: theme.opacity(0.9),
+                maxHeight: UIScale.pt(13))
         }
     }
 
@@ -1848,15 +1859,24 @@ struct EmbeddedMusicFooter: View {
         iconColor: Color? = nil,
         tint: Color?, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            EdithIconView(icon, tone: tone)
-                .font(.system(size: UIScale.pt(iconSize), weight: .semibold))
-                .foregroundStyle(iconColor ?? theme)
-                .frame(width: UIScale.pt(diameter), height: UIScale.pt(diameter))
-                .contentShape(Circle())
+        let glyph = EdithIconView(icon, tone: tone)
+            .font(.system(size: UIScale.pt(iconSize), weight: .semibold))
+            .foregroundStyle(iconColor ?? theme)
+            .frame(width: UIScale.pt(diameter), height: UIScale.pt(diameter))
+            .contentShape(Circle())
+        return Group {
+            if let tint {
+                Button(action: action) {
+                    glyph.embeddedLiquidGlass(
+                        in: Circle(), tint: tint, interactive: true, dark: dark)
+                }
+                .buttonStyle(.edithShaped(Circle(), filled: true))
+            } else {
+                Button(action: action) { glyph }
+                    .buttonStyle(.edithShaped(Circle()))
+                    .embeddedLiquidGlass(in: Circle(), interactive: true, dark: dark)
+            }
         }
-        .buttonStyle(.edith(.borderless))
-        .embeddedLiquidGlass(in: Circle(), tint: tint, interactive: true, dark: dark)
     }
 
     private var scrubber: some View {

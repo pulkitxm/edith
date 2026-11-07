@@ -198,7 +198,9 @@ public func themeOnAccentColor(_ name: String) -> Color {
 
 private struct ThemedControls: ViewModifier {
     func body(content: Content) -> some View {
-        content.tint(ThemeStore.shared.theme.accent)
+        content
+            .tint(ThemeStore.shared.theme.accent)
+            .buttonStyle(EdithDefaultButtonStyle())
     }
 }
 

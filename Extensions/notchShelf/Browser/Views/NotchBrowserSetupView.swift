@@ -104,13 +104,16 @@ struct NotchBrowserSetupView: View {
             }
             Spacer(minLength: 0)
             if let actionTitle {
-                Button(actionTitle, action: action)
-                    .buttonStyle(.edith(.borderless))
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(DashSkin.onAccent(true))
-                    .padding(.horizontal, 12)
-                    .frame(height: 26)
-                    .background(DashSkin.accent(true), in: Capsule())
+                Button(action: action) {
+                    Text(actionTitle)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(DashSkin.onAccent(true))
+                        .padding(.horizontal, 12)
+                        .frame(height: 26)
+                        .background(DashSkin.accent(true), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.edithShaped(Capsule(), filled: true))
             }
         }
         .padding(.horizontal, 12)
@@ -168,7 +171,7 @@ struct NotchBrowserSetupView: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 14))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(RoundedRectangle(cornerRadius: 14, style: .continuous)))
         .help("Attach \(profile.name)")
     }
 

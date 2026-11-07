@@ -84,7 +84,10 @@ struct VideoProjectCard: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+        )
         .onHover { hovering = $0 }
         .pageTask(id: listing.previewURL) {
             guard image == nil, let url = listing.previewURL else { return }

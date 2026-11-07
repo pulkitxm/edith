@@ -66,7 +66,8 @@ import Testing
                 MarketplacePage(marketplace: fixture.marketplace), name: "page-stages",
                 variant: variant)
             #expect(find(host, label: "Agents & Terminal suite enabled") != nil)
-            #expect(find(host, label: "Find it in the sidebar as Usage.") != nil)
+            #expect(
+                find(host, label: "Find Usage in the sidebar under Agents & Terminal.") != nil)
             for label in ["Open Usage", "Retry Launcher", "Cancel installing Agents"] {
                 #expect(find(host, label: label) != nil, "\(label)")
             }
@@ -77,7 +78,7 @@ import Testing
         let full = try await capture(
             MarketplacePage(marketplace: fixture.marketplace), name: "page-stages-full",
             variant: .init(
-                name: "regular-light", size: .init(width: 1100, height: 3000), zoom: 1,
+                name: "regular-light", size: .init(width: 1100, height: 3200), zoom: 1,
                 scheme: .light))
         try expectVisible(full, labels: ["Update Keep Awake", "Update extensions automatically"])
         _ = try await capture(

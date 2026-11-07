@@ -45,6 +45,7 @@ struct CodeStatsRows: View {
                             .truncationMode(.middle)
                             .foregroundStyle(.secondary)
                         Button("Choose folder…") { chooseFolder() }
+                            .buttonStyle(.edithDefault)
                     }
                 }
                 Text(
@@ -58,6 +59,7 @@ struct CodeStatsRows: View {
                     "Include archived repositories",
                     isOn: $includeArchived)
                 Button("Refresh now") { refresh() }
+                    .buttonStyle(.edithDefault)
                 if let message {
                     Text(message).settingsCaption()
                 }
@@ -111,12 +113,14 @@ struct CodeStatsRows: View {
                 ForEach(identity.labels, id: \.self) { label in
                     LabeledContent(label) {
                         Button("Remove") { remove(label) }
+                            .buttonStyle(.edithDefault)
                     }
                 }
                 HStack {
                     TextField("Email or name fragment", text: $newIdentity)
                         .onSubmit { add() }
                     Button("Add") { add() }
+                        .buttonStyle(.edithDefault)
                         .disabled(newIdentity.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 Text(

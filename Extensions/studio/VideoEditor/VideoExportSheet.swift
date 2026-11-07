@@ -135,6 +135,7 @@ struct VideoExportSheet: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
+                    .buttonStyle(.edithDefault)
                 Button("Export…") {
                     if format == "audio" {
                         model.exportAudio(settings: audioDelivery)
@@ -294,6 +295,7 @@ struct VideoExportSheet: View {
                 HStack {
                     Spacer()
                     Button("Stop Export", role: .destructive) { exporter.cancel() }
+                        .buttonStyle(.edithDefault)
                     Button("Hide") { dismiss() }
                         .buttonStyle(.edith(.primary))
                         .keyboardShortcut(.defaultAction)
@@ -328,6 +330,7 @@ struct VideoExportSheet: View {
                     Button("Show in Finder") {
                         StudioFileActions.reveal([job.destination], facade: facade)
                     }
+                    .buttonStyle(.edithDefault)
                     Button("Done") { close() }
                         .buttonStyle(.edith(.primary))
                         .keyboardShortcut(.defaultAction)

@@ -7,6 +7,7 @@ RELEASE_PRERELEASE="${RELEASE_PRERELEASE:-false}"
 [[ "$RELEASE_PRERELEASE" == true || "$RELEASE_PRERELEASE" == false ]] \
   || { echo "release blocked: invalid host release channel" >&2; exit 1; }
 REPO="${GITHUB_REPOSITORY:-pulkitxm/edith}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${RELEASE_TAG:?RELEASE_TAG is required}"
 : "${RELEASE_VERSION:?RELEASE_VERSION is required}"
 : "${RELEASE_BUILD:?RELEASE_BUILD is required}"
@@ -55,6 +56,14 @@ latest_release_tag() {
     fi
   done < <(git tag --merged origin/main --sort=-version:refname)
   return 1
+}
+
+retry_delay() {
+  local attempt="$1"
+  shift
+  node "$SCRIPT_DIR/github-retry.mjs" delay "$attempt" \
+    "${RELEASE_RETRY_SECONDS:-15}" "${RELEASE_RATE_LIMIT_SECONDS:-65}" "$@" \
+    || echo $((attempt * ${RELEASE_RETRY_SECONDS:-15}))
 }
 
 release_superseded() {
@@ -118,6 +127,7 @@ case "$MODE" in
         echo "release commit attempt ${attempt} failed:" >&2
         cat "$COMMIT_ERRORS" >&2
         printf '%s\n' "$RESULT" >&2
+        printf '%s\n' "$RESULT" >> "$COMMIT_ERRORS"
         git fetch origin main --tags
         MAIN_SHA="$(git rev-parse origin/main)"
         if [[ "$MAIN_SHA" != "$BUILT_SHA" ]]; then
@@ -132,7 +142,7 @@ case "$MODE" in
           echo "release blocked: release commit failed" >&2
           exit 1
         fi
-        sleep $((attempt * ${RELEASE_RETRY_SECONDS:-15}))
+        sleep "$(retry_delay "$attempt" "$COMMIT_ERRORS")"
       done
       rm -f "$COMMIT_ERRORS"
       RELEASE_SHA="$(printf '%s' "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["resourceUrl"].rsplit("/",1)[1])')"
@@ -148,20 +158,26 @@ case "$MODE" in
       verify_cask
     fi
     TAG_DONE=0
+    TAG_ERRORS="$(mktemp)"
     for attempt in 1 2 3 4; do
-      if pukbot tag create "$RELEASE_TAG" --repo "$REPO" --target "$RELEASE_SHA" \
-        --message "Edith $RELEASE_TAG build $RELEASE_BUILD" --json; then
+      if TAG_RESULT="$(pukbot tag create "$RELEASE_TAG" --repo "$REPO" --target "$RELEASE_SHA" \
+        --message "Edith $RELEASE_TAG build $RELEASE_BUILD" --json 2>"$TAG_ERRORS")"; then
+        printf '%s\n' "$TAG_RESULT"
         TAG_DONE=1
         break
       fi
-      echo "release tag attempt ${attempt} failed" >&2
+      echo "release tag attempt ${attempt} failed:" >&2
+      cat "$TAG_ERRORS" >&2
+      printf '%s\n' "$TAG_RESULT" >&2
+      printf '%s\n' "$TAG_RESULT" >> "$TAG_ERRORS"
       git fetch origin --tags --force
       if [[ "$(git rev-parse -q --verify "refs/tags/${RELEASE_TAG}^{commit}" || true)" == "$RELEASE_SHA" ]]; then
         TAG_DONE=1
         break
       fi
-      [[ "$attempt" -eq 4 ]] || sleep $((attempt * ${RELEASE_RETRY_SECONDS:-15}))
+      [[ "$attempt" -eq 4 ]] || sleep "$(retry_delay "$attempt" "$TAG_ERRORS")"
     done
+    rm -f "$TAG_ERRORS"
     [[ "$TAG_DONE" -eq 1 ]] \
       || { echo "release blocked: release tag failed; retry the same built source" >&2; exit 1; }
     ;;

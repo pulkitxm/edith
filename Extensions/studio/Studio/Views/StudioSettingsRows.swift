@@ -12,6 +12,7 @@ struct StudioSettingsRows: View {
             .settingsCaption()
             StudioDestinationPicker(model: model)
             Button("Open Studio") { model.facade?.openSettingsStudio() }
+                .buttonStyle(.edithDefault)
         }
         .disabled(model.isStopped || model.facade?.state == nil)
         .opacity(model.isStopped ? 0.5 : 1)
@@ -28,6 +29,7 @@ struct StudioSettingsScene: View {
                 Section {
                     Text(failure).settingsCaption()
                     Button("Retry") { model.facade?.refresh() }
+                        .buttonStyle(.edithDefault)
                 }
             }
         }

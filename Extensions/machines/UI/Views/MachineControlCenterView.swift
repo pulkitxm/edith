@@ -554,6 +554,7 @@ struct MachineControlCenterView: View {
                         }
                     }
                 }
+                .buttonStyle(.edithDefault)
                 .controlSize(.small)
                 .disabled(session.state.isBusy)
                 .padding(.top, UIScale.pt(3))
@@ -734,13 +735,11 @@ struct MachineControlCenterView: View {
             }
             .padding(.horizontal, UIScale.pt(8))
             .padding(.vertical, UIScale.pt(8))
-            .background(rowBackground(title))
             .contentShape(Rectangle())
             .opacity(controlsDisabled ? 0.55 : 1)
         }
         .buttonStyle(.edith(.borderless))
         .disabled(controlsDisabled)
-        .onHover { updateHover(title, hovering: $0) }
     }
 
     private var coolingControls: some View {
@@ -820,6 +819,7 @@ struct MachineControlCenterView: View {
                 .frame(width: UIScale.pt(92))
                 .disabled(controlsDisabled)
                 Button("Apply") { model.applyProfile() }
+                    .buttonStyle(.edithDefault)
                     .controlSize(.small)
                     .disabled(model.selectedProfile.isEmpty || controlsDisabled)
             }

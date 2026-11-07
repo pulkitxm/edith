@@ -164,7 +164,6 @@ private struct DockerContainerRow: View {
     let onAction: (String) -> Void
     let onShell: () -> Void
     let onRemove: () -> Void
-    @State private var hovering = false
 
     private var browserPorts: [DockerPortMapping] {
         DockerBrowserOperationExecution.reachablePorts(in: container, for: machine)
@@ -186,9 +185,8 @@ private struct DockerContainerRow: View {
         }
         .dockerPaneInset()
         .padding(.vertical, UIScale.pt(9))
-        .background(hovering ? DashSkin.inkFaint(dark).opacity(0.06) : .clear)
         .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .edithHoverHighlight(tone: .neutral)
         .onTapGesture(count: 2, perform: onOpen)
         .contextMenu {
             Button("Open Details", action: onOpen)
@@ -284,7 +282,7 @@ private struct DockerContainerRow: View {
                             .background(DashSkin.accent(dark).opacity(0.15), in: Capsule())
                             .foregroundStyle(DashSkin.accent(dark))
                     }
-                    .buttonStyle(.edith(.borderless))
+                    .buttonStyle(.edithShaped(Capsule()))
                 }
             }
         }

@@ -203,6 +203,25 @@ index 525bc856d..06adc8f83 100644
      export fn ghostty_surface_set_size(surface: *Surface, w: u32, h: u32) void {
          surface.updateSize(w, h);
      }
+diff --git a/src/renderer/metal/IOSurfaceLayer.zig b/src/renderer/metal/IOSurfaceLayer.zig
+--- a/src/renderer/metal/IOSurfaceLayer.zig
++++ b/src/renderer/metal/IOSurfaceLayer.zig
+@@ -145,8 +145,14 @@
+     const CALayer =
+         objc.getClass("CALayer") orelse return error.ObjCFailed;
+ 
++    var name: [64]u8 = undefined;
++    const class_name = std.fmt.bufPrintZ(
++        &name,
++        "IOSurfaceLayer_{x}",
++        .{@intFromPtr(&Subclass)},
++    ) catch return error.ObjCFailed;
+     var subclass =
+-        objc.allocateClassPair(CALayer, "IOSurfaceLayer") orelse return error.ObjCFailed;
++        objc.allocateClassPair(CALayer, class_name) orelse return error.ObjCFailed;
+     errdefer objc.disposeClassPair(subclass);
+ 
+     if (!subclass.addIvar("display_cb")) return error.ObjCFailed;
 diff --git a/src/termio.zig b/src/termio.zig
 index b16885109..f0dab45bb 100644
 --- a/src/termio.zig

@@ -27,7 +27,7 @@ Feature code supplies data, actions, and domain-specific content to these APIs.
 | Social Manager | `PageWorkspace`, window-owned isolated browser sessions, shared tab strip and Agent Sessions split geometry, local account catalog loading |
 | Calendar | Shared page composition, window visibility-owned refresh, service-owned calendar data |
 | Downloads | Shared workspace and controls, page-owned estimates, service-owned transfers |
-| App Maintenance and Homebrew | Shared composition, `ContentLoad` inventory and discovery ownership, shared initial recipes and retained refresh feedback |
+| App Updates and Homebrew | Shared composition, `ContentLoad` inventory and discovery ownership, shared initial recipes and retained refresh feedback |
 | BlitzTree and Cleaner | Shared composition and controls, owned scans, shared discovery loading and determinate progress |
 | Plugins, Extensions, Skills | Shared composition, cards, forms, provisioning controls, shared discovery load owners |
 | Docs | Shared workspace, visibility-owned document work, shared theme and typography |

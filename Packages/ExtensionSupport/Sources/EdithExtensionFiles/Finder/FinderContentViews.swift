@@ -111,17 +111,18 @@ private struct FinderIconCell: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, UIScale.pt(6))
-        .background(
+        .background {
             RoundedRectangle(cornerRadius: UIScale.pt(8))
                 .fill(
                     dropTargeted
                         ? DashSkin.accent(dark).opacity(0.38)
-                        : (selected
-                            ? DashSkin.accent(dark).opacity(0.2)
-                            : (hovering ? DashSkin.inkFaint(dark).opacity(0.08) : .clear)))
-        )
+                        : (selected ? DashSkin.accent(dark).opacity(0.2) : .clear))
+            EdithHoverPlate(
+                hovered: hovering && !selected && !dropTargeted, tone: .neutral,
+                cornerRadius: UIScale.pt(8))
+        }
         .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .edithHoverTracking($hovering)
         .onTapGesture(count: 2) { model.open(entry) }
         .onTapGesture(count: 1) {
             model.click(entry, modifiers: FinderClick.currentModifiers)
@@ -279,15 +280,15 @@ private struct FinderListRow: View {
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(4))
-        .background(
+        .background {
             dropTargeted
                 ? DashSkin.accent(dark).opacity(0.34)
-                : (selected
-                    ? DashSkin.accent(dark).opacity(0.22)
-                    : (hovering ? DashSkin.inkFaint(dark).opacity(0.07) : .clear))
-        )
+                : (selected ? DashSkin.accent(dark).opacity(0.22) : .clear)
+            EdithHoverPlate(
+                hovered: hovering && !selected && !dropTargeted, tone: .neutral, cornerRadius: 0)
+        }
         .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .edithHoverTracking($hovering)
         .onTapGesture(count: 2) { model.open(entry) }
         .onTapGesture(count: 1) {
             model.click(entry, modifiers: FinderClick.currentModifiers)
@@ -566,22 +567,23 @@ private struct FinderSidebarRow: View {
             }
             .padding(.horizontal, UIScale.pt(10))
             .padding(.vertical, UIScale.pt(5))
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(6))
-                    .fill(
-                        selected
-                            ? DashSkin.accent(dark).opacity(0.18)
-                            : (targeted
-                                ? DashSkin.accent(dark).opacity(0.28)
-                                : (hovering
-                                    ? DashSkin.inkFaint(dark).opacity(0.08) : .clear))
-                    )
-                    .padding(.horizontal, UIScale.pt(6))
-            )
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: UIScale.pt(6))
+                        .fill(
+                            selected
+                                ? DashSkin.accent(dark).opacity(0.18)
+                                : (targeted ? DashSkin.accent(dark).opacity(0.28) : .clear))
+                    EdithHoverPlate(
+                        hovered: hovering && !selected && !targeted, tone: .neutral,
+                        cornerRadius: UIScale.pt(6))
+                }
+                .padding(.horizontal, UIScale.pt(6))
+            }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
-        .onHover { hovering = $0 }
+        .buttonStyle(FinderSidebarButtonStyle())
+        .edithHoverTracking($hovering)
         .onDrop(
             of: [MachineItemsPayload.typeIdentifier, UTType.fileURL.identifier],
             isTargeted: $targeted
@@ -728,5 +730,12 @@ struct FinderConflictSheet: View {
                 intent: conflict.intent, destination: conflict.destination,
                 resolutions: resolutions)
         }
+    }
+}
+
+private struct FinderSidebarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }

@@ -1,7 +1,7 @@
 {
   "id": "systemStats",
   "title": "Menu Bar Stats",
-  "icon": "gauge",
+  "icon": "systemStats",
   "category": "utilities",
   "background": true,
   "commands": [

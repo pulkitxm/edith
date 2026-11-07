@@ -73,7 +73,7 @@ after navigation. None of these should truncate the data silently.
 | Music | Playback owns its lifetime; lazy libraries and visibility-owned metadata requests. |
 | Calendar | Service-owned events, visibility-owned refresh, responsive date navigation. |
 | Downloads | Transfers survive navigation; queue uses available width; estimates have request ownership. |
-| App Maintenance | Inventory query persists; navigation does not cancel owned installation work. |
+| App Updates | Inventory query persists; navigation does not cancel owned installation work. |
 | Homebrew | Recycled package table, visible inventory filters, retained discovery and mutation ownership. |
 | Blitz Tree | Retained scan and selection; view choice survives navigation. |
 | Plugins and Skills | Responsive preview and install actions; discovery and install have separate lifetimes. |

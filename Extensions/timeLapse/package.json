@@ -1,18 +1,11 @@
 {
   "id": "timeLapse",
   "title": "Screen Recorder",
-  "icon": "record",
+  "icon": "timeLapse",
   "category": "media",
   "background": false,
   "commands": [],
-  "pages": [
-    {
-      "id": "timeLapse",
-      "title": "Screen Recorder",
-      "icon": "record",
-      "order": 3
-    }
-  ],
+  "page": true,
   "homeCards": [
     "media",
     "extension:timeLapse"

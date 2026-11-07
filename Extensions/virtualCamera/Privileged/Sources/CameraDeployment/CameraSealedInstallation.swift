@@ -232,7 +232,6 @@ public final class CameraSealedInstallation {
             && platform.st_mode & S_IFMT == S_IFDIR
             && anchor.st_uid == 0 && anchor.st_mode & 0o022 == 0
             && anchor.st_mode & S_IFMT == S_IFDIR
-            && anchor.st_flags & UInt32(SF_NOUNLINK) != 0
     }
 
     private func prepareApplicationsAnchor() throws {
@@ -255,11 +254,7 @@ public final class CameraSealedInstallation {
         guard fstat(descriptor, &anchor) == 0, anchor.st_uid == 0,
             anchor.st_mode & S_IFMT == S_IFDIR, anchor.st_mode & 0o022 == 0
         else { throw CocoaError(.fileWriteNoPermission) }
-        let previousFlags = anchor.st_flags
-        var accepted = false
-        defer { if !accepted { _ = fchflags(descriptor, previousFlags) } }
         guard fchown(descriptor, 0, 0) == 0, fchmod(descriptor, 0o755) == 0,
-            fchflags(descriptor, previousFlags | UInt32(SF_NOUNLINK)) == 0,
             fstat(descriptor, &anchor) == 0
         else { throw failure("macOS could not protect the camera installation directory.") }
         var published = stat()
@@ -267,7 +262,6 @@ public final class CameraSealedInstallation {
             published.st_dev == anchor.st_dev, published.st_ino == anchor.st_ino,
             Self.admitsApplicationsParent(platform, anchor: published)
         else { throw CocoaError(.fileWriteNoPermission) }
-        accepted = true
     }
 
     private func protectedTree(_ url: URL, recursive: Bool = true) throws {

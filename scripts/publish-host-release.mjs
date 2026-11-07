@@ -5,7 +5,9 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { verifyCurrentMain } from "./extension-release-ready.mjs";
 import {
+  publicReadExecute,
   rateLimitWait,
+  retryWithProbe,
   withGitHubRetrySync,
   withRateLimitRecovery,
   withRateLimitRecoverySync,
@@ -18,7 +20,9 @@ import {
 } from "./host-release-snapshot.mjs";
 import { releaseAssetMatchesFile } from "./release-asset-read.mjs";
 import {
+  discardReleaseAsset,
   executeReleaseMutation,
+  isIncompleteAsset,
   preflightReleaseAsset,
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
@@ -139,7 +143,7 @@ export async function publishHostRelease({
       target: sourceTarget,
       releaseTag: tag,
       repository,
-      retry,
+      retry: retryWithProbe(execute, retry),
       fetchMetadata: async (url) =>
         new Response(
           execute("gh", ["api", url], {
@@ -184,7 +188,7 @@ export async function publishHostRelease({
                 maxBuffer: 1024 ** 2,
               }),
             ),
-          retry,
+          retryWithProbe(execute, retry),
         );
       const reference = read(`git/ref/tags/${tag}`);
       if (
@@ -263,7 +267,7 @@ export async function publishHostRelease({
               maxBuffer: 1024 ** 2,
             }),
           ),
-        retry,
+        retryWithProbe(execute, retry),
       );
       if (
         reference.ref !== "refs/heads/main" ||
@@ -311,6 +315,22 @@ export async function publishHostRelease({
       await verifyInputs();
       release = readRelease();
       if (!release) throw new Error("Created host release is not available");
+    }
+    const incomplete = release.assets.filter(
+      (asset) => isIncompleteAsset(asset) && hostAssets.includes(asset.name),
+    );
+    if (
+      release.draft &&
+      incomplete.length > 0 &&
+      release.tag_name === tag &&
+      release.target_commitish === target &&
+      release.prerelease === prerelease
+    ) {
+      await verifyInputs();
+      for (const asset of incomplete)
+        discardReleaseAsset({ repository, asset, execute, retry });
+      release = readRelease();
+      if (!release) throw new Error("Host release disappeared during cleanup");
     }
     requireIdentity(release, release.draft, release.id);
     releaseID = release.id;
@@ -436,7 +456,7 @@ export async function publishHostRelease({
 }
 
 export function preflightHostReleaseWithRecovery({
-  execute = execFileSync,
+  execute = publicReadExecute(),
   rateLimit = {},
   ...options
 }) {
@@ -447,7 +467,7 @@ export function preflightHostReleaseWithRecovery({
 }
 
 export function publishHostReleaseWithRecovery({
-  execute = execFileSync,
+  execute = publicReadExecute(),
   rateLimit = {},
   ...options
 }) {

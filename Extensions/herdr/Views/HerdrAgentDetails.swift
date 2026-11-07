@@ -172,7 +172,10 @@ struct HerdrAgentDetails: View {
                 .background(Color.red.opacity(dark ? 0.78 : 0.86))
                 .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(
+                .edithShaped(
+                    RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+            )
             .disabled(closingAgent)
             .help("Close the agent and its Herdr pane")
             .padding(UIScale.pt(12))

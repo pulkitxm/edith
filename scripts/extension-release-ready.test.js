@@ -60,6 +60,21 @@ test("app publication requires a package built for its host contract", () => {
   ).toEqual([]);
 });
 
+test("app publication requires a package its own build can load", () => {
+  const newer = { ...record, version: "1.0.1", minimumHostBuild: 396 };
+  expect(missingPackages(expected, { packages: [newer] }, 395)).toEqual(
+    expected,
+  );
+  expect(missingPackages(expected, { packages: [newer] }, 396)).toEqual([]);
+  expect(missingPackages(expected, { packages: [newer, record] }, 395)).toEqual(
+    [],
+  );
+  for (const build of [0, Number.NaN, 1.5])
+    expect(() =>
+      missingPackages(expected, { packages: [record] }, build),
+    ).toThrow("Invalid host build");
+});
+
 test("the release guard authenticates the catalog before trusting its packages", () => {
   expect(verifyCatalog(signed([record]), rawKey).packages).toEqual([record]);
   const forged = JSON.parse(signed([record]));

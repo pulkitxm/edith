@@ -89,9 +89,9 @@ struct SurfaceRichTransportTests {
         #expect(volume == 0.9)
         privacy = ["active": "1", "blurMusic": "1"]
         let beforePrivacy = reads
-        let hidden = try await client.snapshot(providerID: "music", target: .home, tile: tile)
-        #expect(hidden.rows.isEmpty && hidden.charts == nil && hidden.sliders == nil)
-        #expect(reads == beforePrivacy)
+        let presented = try await client.snapshot(providerID: "music", target: .home, tile: tile)
+        #expect(presented.rows.map(\.title) == ["Synthetic track"])
+        #expect(reads == beforePrivacy + 1)
         privacy = [:]; slow = true
         let pending = Task {
             try await client.snapshot(providerID: "music", target: .home, tile: tile)

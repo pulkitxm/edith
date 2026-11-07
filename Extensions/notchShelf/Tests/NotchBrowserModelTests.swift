@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionUI
 @testable import NotchShelfExtension
 import AppKit
 import CoreGraphics
@@ -515,5 +516,18 @@ import Testing
         container.show(other)
         #expect(other.frame.size == CGSize(width: 800, height: 500))
         #expect(webView.superview == nil)
+    }
+
+    @Test func presentingKeepsThePageVisibleUnderTheLayerBlur() throws {
+        let container = BrowserWebContainerView(frame: NSRect(x: 0, y: 0, width: 800, height: 500))
+        let webView = NotchWebView(frame: .zero)
+        container.show(webView)
+        container.setCovered(true)
+        let layer = try #require(container.layer)
+        #expect(webView.superview === container && webView.alphaValue == 1 && !webView.isHidden)
+        #expect(container.subviews.count == 1)
+        #expect(PresenterLayerCover.covers(layer))
+        container.setCovered(false)
+        #expect(!PresenterLayerCover.covers(layer))
     }
 }

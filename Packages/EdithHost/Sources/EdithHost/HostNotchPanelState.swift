@@ -166,8 +166,7 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
                     ? slot.tile.widget.providerIDs.contains(slot.providerID)
                     : slot.tile.widget.providerIDs == [slot.providerID])
             else { throw HostNotchPanelError.invalidState }
-            guard admission.activeVersions[slot.providerID] == slot.providerVersion,
-                !admission.hiddenWidgets.contains(slot.tile.widget)
+            guard admission.activeVersions[slot.providerID] == slot.providerVersion
             else { throw HostNotchPanelError.unavailableProvider }
             if slot.section == "surface.card" {
                 guard
@@ -235,6 +234,5 @@ struct HostNotchPanelAdmission {
     let previousRevision: UInt64?
     let activeVersions: [String: String]
     let layout: SurfaceLayout
-    var hiddenWidgets: Set<SurfaceWidget> = []
     var reservedProviderScenes: [String: Int] = [:]
 }

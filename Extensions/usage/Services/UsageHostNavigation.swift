@@ -12,7 +12,7 @@ struct UsageNavigationRequest: Codable, Equatable, Sendable {
     }
 
     var dictionary: NSDictionary {
-        ["section": "dashboard", "presentationID": presentationID.uuidString, "location": location]
+        ["section": "usage", "presentationID": presentationID.uuidString, "location": location]
     }
 }
 

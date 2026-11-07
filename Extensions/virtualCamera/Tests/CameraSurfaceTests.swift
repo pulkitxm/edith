@@ -76,14 +76,18 @@ import Testing
                 payload: SurfaceActionRequest(snapshot: request, actionID: action.id).encoded(
                     providerID: "virtualCamera"))
         }
-        privacy = ["active": "1", "blurCamera": "1"]
-        let masked = try SurfaceSnapshot.decode(
+        let current = try SurfaceSnapshot.decode(
             await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "virtualCamera")),
             providerID: "virtualCamera")
-        #expect(masked.rows.isEmpty)
-        #expect(masked.sources.isEmpty)
-        #expect(masked.sliders == nil)
+        privacy = ["active": "1", "blurCamera": "1"]
+        let presented = try SurfaceSnapshot.decode(
+            await surface.execute(
+                "surface.snapshot", payload: request.encoded(providerID: "virtualCamera")),
+            providerID: "virtualCamera")
+        #expect(presented.rows == current.rows && presented.sources == current.sources)
+        #expect(presented.sliders == current.sliders)
+        #expect(presented.message == current.message)
         await #expect(throws: (any Error).self) {
             try await surface.execute(
                 "surface.perform",

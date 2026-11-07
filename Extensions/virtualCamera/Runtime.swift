@@ -306,15 +306,11 @@ enum CameraCarrierLaunchEnvironment {
                     register: { try ExtensionPrivilegedService.service.register() },
                     requestApproval: { try privilege.requestApproval() })
                 let payload = try JSONSerialization.data(withJSONObject: ["source": source.path])
-                let result = try await privilege.invoke("installCarrier", payload: payload)
-                guard
-                    let values = try JSONSerialization.jsonObject(with: result)
-                        as? [String: String],
-                    values.count == 1, let path = values["path"],
-                    path == "/Applications/Edith Extensions/" + host + ".cameraCarrier.app"
-                else { throw ExtensionPeerError.invalidRequest }
-                try await privilege.release()
-                return URL(fileURLWithPath: path)
+                return try await Self.installCarrier(
+                    host: host,
+                    run: { try await privilege.invoke("installCarrier", payload: payload) },
+                    release: { try await privilege.release() },
+                    abandon: { privilege.shutdown() })
             },
             launch: { carrier in
                 guard let executable = Bundle(url: carrier)?.executableURL else {
@@ -434,6 +430,26 @@ enum CameraCarrierLaunchEnvironment {
     ) rethrows {
         if status == .notFound { try register() }
         if status != .enabled { try requestApproval() }
+    }
+
+    static func installCarrier(
+        host: String, run: () async throws -> Data, release: () async throws -> Void,
+        abandon: () -> Void
+    ) async throws -> URL {
+        do {
+            let result = try await run()
+            guard
+                let values = try JSONSerialization.jsonObject(with: result) as? [String: String],
+                values.count == 1, let path = values["path"],
+                path == "/Applications/Edith Extensions/" + host + ".cameraCarrier.app"
+            else { throw ExtensionPeerError.invalidRequest }
+            try await release()
+            return URL(fileURLWithPath: path)
+        } catch {
+            try? await release()
+            abandon()
+            throw error
+        }
     }
 
     private static func entitledCarrier(_ source: URL) -> Bool {

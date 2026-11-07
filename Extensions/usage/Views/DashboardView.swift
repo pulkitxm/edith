@@ -22,6 +22,7 @@ struct DashboardView: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @State private var showLog = false
     @State private var showMoreMetrics = false
+    @State private var activityRowWidth = CGFloat.infinity
     @State private var folderPickerOpen = false
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
@@ -153,7 +154,7 @@ struct DashboardView: View {
                     retry: refresh.requestRefresh
                 ) {
                     kpiGrid
-                    activityRow(compact: compactLayout)
+                    activityRow
                     LimitsCardView(theme: acc, dark: dark)
                     BudgetCardView(theme: acc, dark: dark)
                     charts(compact: compactLayout)
@@ -312,22 +313,36 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder private func activityRow(compact: Bool) -> some View {
-        if compact {
-            VStack(spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-                PageCard(title: "Activity") { activityHeatmap }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("usage-activity")
-                RateLimitsDialsView(dark: dark)
+    private var stacksActivity: Bool {
+        compactLayout || activityRowWidth < UIScale.pt(840)
+    }
+
+    private var activityRow: some View {
+        Group {
+            if stacksActivity {
+                VStack(spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    PageCard(title: "Activity") { activityHeatmap }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("usage-activity")
+                    RateLimitsDialsView(dark: dark)
+                        .accessibilityIdentifier("usage-rate-limits")
+                }
+            } else {
+                HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    PageCard(title: "Activity", fill: true) { activityHeatmap }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("usage-activity")
+                    RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
+                        .accessibilityIdentifier("usage-rate-limits")
+                }
+                .fixedSize(horizontal: false, vertical: true)
             }
-        } else {
-            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-                PageCard(title: "Activity", fill: true) { activityHeatmap }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("usage-activity")
-                RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
-            }
-            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            activityRowWidth = $0
         }
     }
 
@@ -338,7 +353,7 @@ struct DashboardView: View {
             model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage
         )
         return Group {
-            if compactLayout {
+            if stacksActivity {
                 VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
                     heatmap.frame(maxWidth: .infinity, alignment: .leading)
                     UsageActivitySummaryView(

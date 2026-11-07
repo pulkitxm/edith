@@ -107,8 +107,8 @@ def proof(products, destination):
     })
     entries = [{
         "id": name, "title": name, "icon": "appTile", "category": "desk",
-        "background": True, "commands": [], "hotkeys": [], "launchWhen": [], "pages": [],
-        "sections": [], "homeCards": [], "notchCards": [], "notchTabs": [],
+        "background": True, "commands": [], "hotkeys": [], "launchWhen": [],
+        "homeCards": [], "notchCards": [], "notchTabs": [],
     } for name in ["crashProbe", "healthyProbe"]]
     (contents / "Resources/index.json").write_text(json.dumps(entries))
     signed(kit)

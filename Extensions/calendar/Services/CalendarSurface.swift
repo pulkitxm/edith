@@ -65,12 +65,9 @@ final class CalendarSurface {
                 updatedAt: now)
         }
         let events = selected(tile, target: target, now: now)
-        let privateContent = presentation.blurEvents
         var sourceIDs = Set<String>()
         let sources =
-            privateContent
-            ? []
-            : store.events.compactMap { event -> SurfaceSourceChoice? in
+            store.events.compactMap { event -> SurfaceSourceChoice? in
                 guard !event.calendarID.isEmpty, event.calendarID.utf8.count <= 2048,
                     sourceIDs.insert(event.calendarID).inserted
                 else { return nil }
@@ -87,13 +84,9 @@ final class CalendarSurface {
                 ? [.init("join:" + event.id, "Join", .video, field: "join")] : []
             return .init(
                 event.id,
-                sourceID: privateContent
-                    ? "hidden" : event.calendarID.isEmpty ? "unknown" : event.calendarID,
-                title: privateContent
-                    ? "Meeting"
-                    : String((event.title.isEmpty ? "Untitled meeting" : event.title).prefix(256)),
-                detail: privateContent || !tile.showDetails
-                    ? "" : String(event.calendar.prefix(256)),
+                sourceID: event.calendarID.isEmpty ? "unknown" : event.calendarID,
+                title: String((event.title.isEmpty ? "Untitled meeting" : event.title).prefix(256)),
+                detail: tile.showDetails ? String(event.calendar.prefix(256)) : "",
                 value: tile.shows("time")
                     ? (event.isAllDay
                         ? "All day"

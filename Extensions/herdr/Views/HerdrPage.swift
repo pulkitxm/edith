@@ -364,7 +364,10 @@ struct HerdrPage: View {
                     stroke: DashSkin.line(dark)
                 )
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous), filled: true)
+        )
         .popover(isPresented: $compactRailPresented) {
             agentList.frame(width: UIScale.pt(260), height: UIScale.pt(420))
         }
@@ -672,7 +675,10 @@ struct HerdrPage: View {
                     ? DashSkin.accent(dark).opacity(hovered ? 0.7 : 0.45)
                     : HerdrStatusColor.stroke(agent, dark: dark, selected: hovered))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(
+                RoundedRectangle(cornerRadius: UIScale.pt(12), style: .continuous), filled: true)
+        )
         .onHover { inside in
             if inside {
                 hoveredCard = agent.id
@@ -825,6 +831,10 @@ struct HerdrPage: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                     Spacer(minLength: 0)
                 }
+                .frame(minHeight: UIScale.pt(22))
+                .padding(.leading, UIScale.pt(14))
+                .padding(.top, UIScale.pt(7))
+                .padding(.bottom, UIScale.pt(3))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
@@ -832,37 +842,11 @@ struct HerdrPage: View {
             .accessibilityLabel("\(accessibleTitle), \(collapsed ? "collapsed" : "expanded")")
             .herdrDraggable(.space(space.id), simultaneous: true)
 
-            if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
-                spaceMessageMenu(space, accessibleTitle: accessibleTitle)
+            HStack(spacing: UIScale.pt(2)) {
+                spaceHeaderActions(space, accessibleTitle: accessibleTitle)
             }
-
-            Button {
-                newAgentSpace = space
-            } label: {
-                EdithIconView(.plus)
-                    .font(.edithText(.caption).weight(.semibold))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
-            }
-            .buttonStyle(.edith(.borderless))
-            .disabled(
-                space.agents.first?.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .isEmpty != false
-            )
-            .help("New agent in \(accessibleTitle)")
-            .accessibilityLabel("New agent in \(accessibleTitle)")
-
-            Button {
-                openSpace(space)
-            } label: {
-                EdithIconView(.window)
-                    .font(.edithText(.caption).weight(.semibold))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
-            }
-            .buttonStyle(.edith(.borderless))
-            .help("Open \(accessibleTitle) in a new window")
-            .accessibilityLabel("Open \(accessibleTitle) in a new window")
+            .padding(.top, UIScale.pt(7))
+            .padding(.bottom, UIScale.pt(3))
         }
         .contextMenu {
             if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
@@ -873,10 +857,44 @@ struct HerdrPage: View {
                 }
             }
         }
-        .padding(.leading, UIScale.pt(14))
         .padding(.trailing, UIScale.pt(6))
-        .padding(.top, UIScale.pt(7))
-        .padding(.bottom, UIScale.pt(3))
+    }
+
+    @ViewBuilder
+    private func spaceHeaderActions(_ space: HerdrAgentSpace, accessibleTitle: String)
+        -> some View
+    {
+        if !HerdrBroadcastGroup.all.recipients(from: space.agents).isEmpty {
+            spaceMessageMenu(space, accessibleTitle: accessibleTitle)
+        }
+
+        Button {
+            newAgentSpace = space
+        } label: {
+            EdithIconView(.plus)
+                .font(.edithText(.caption).weight(.semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        }
+        .buttonStyle(.edith(.borderless))
+        .disabled(
+            space.agents.first?.workspace.trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty != false
+        )
+        .help("New agent in \(accessibleTitle)")
+        .accessibilityLabel("New agent in \(accessibleTitle)")
+
+        Button {
+            openSpace(space)
+        } label: {
+            EdithIconView(.window)
+                .font(.edithText(.caption).weight(.semibold))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+        }
+        .buttonStyle(.edith(.borderless))
+        .help("Open \(accessibleTitle) in a new window")
+        .accessibilityLabel("Open \(accessibleTitle) in a new window")
     }
 
     private func railHeader(

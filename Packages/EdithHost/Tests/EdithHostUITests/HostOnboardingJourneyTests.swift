@@ -372,11 +372,12 @@ import Testing
         await fixture.settle(model)
         #expect(model.stage == .finished)
         let entry = Fixture.entries.first { $0.id == "plain" }!
-        let page = model.destinations(for: entry).first!
+        let page = model.destination(for: entry)!
+        #expect(page.title == "Plain" && page.parentID == "media")
         model.open(page: page.id)
         #expect(!model.presented)
         #expect(
-            fixture.defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "plainPage"
+            fixture.defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "plain"
         )
     }
 
@@ -427,9 +428,7 @@ import Testing
             HostExtension(
                 id: "notchShelf", title: "Notch", icon: .ring, category: "labs"),
             HostExtension(
-                id: "plain", title: "Plain", icon: .ring, category: "media",
-                pages: [HostPage(id: "plainPage", title: "Plain", icon: .ring, order: 0)]
-            ),
+                id: "plain", title: "Plain", icon: .ring, category: "media", page: HostPage()),
         ]
         let name = "com.pulkit.edith.tests.journey.\(UUID().uuidString)"
         let defaults: UserDefaults

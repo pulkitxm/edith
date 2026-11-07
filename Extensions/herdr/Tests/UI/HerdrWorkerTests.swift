@@ -38,7 +38,10 @@ import Testing
         await worker.shutdown()
     }
 
-    @Test func privacyHidesSourcesAndPreventsDispatchAndCancellationPreventsOpen() async throws {
+    @Test
+    func presentingKeepsAgentsForTheBlurOverlayAndPreventsDispatchAndCancellationPreventsOpen()
+        async throws
+    {
         defer { HerdrWorkOwnership.enable() }
         let store = makeStore()
         store.hosts = [host(agent("private", host: "local"))]
@@ -49,7 +52,9 @@ import Testing
             try await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "herdr")),
             providerID: "herdr")
-        #expect(snapshot.rows.isEmpty && snapshot.sources.isEmpty && snapshot.actions.isEmpty)
+        #expect(!snapshot.rows.isEmpty)
+        #expect(snapshot.sources.contains { $0.id == "synthetic tool" })
+        #expect(snapshot.message == nil)
         await #expect(throws: ExtensionPeerError.self) {
             try await surface.execute(
                 "surface.perform",

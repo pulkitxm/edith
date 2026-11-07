@@ -3,8 +3,17 @@ import { statSync } from "node:fs";
 import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { TransientGitHubError, withGitHubRetrySync } from "./github-retry.mjs";
-import { lookupRelease, readGitHubAPI } from "./release-lookup.mjs";
+import {
+  retryWithProbe,
+  sleepSync,
+  TransientGitHubError,
+  withGitHubRetrySync,
+} from "./github-retry.mjs";
+import {
+  isMissingLookup,
+  lookupRelease,
+  readGitHubAPI,
+} from "./release-lookup.mjs";
 
 function assetArguments({ repository, releaseID, file, name }) {
   const size = statSync(file).size;
@@ -44,40 +53,76 @@ function runAssetRequest(args, execute, timeout = 120_000) {
   return result;
 }
 
-function watchWorkflow(workflowUrl, execute, timeout) {
+export function awaitWorkflowRun(
+  workflowUrl,
+  { execute = execFileSync, remaining, retry = {} },
+) {
   const match =
     /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/actions\/runs\/([1-9][0-9]*)$/.exec(
       workflowUrl,
     );
   if (!match) throw new Error("Invalid release mutation workflow identity");
+  const sleep = retry.sleep ?? sleepSync;
+  for (let poll = 0; ; poll++) {
+    const run = readGitHubAPI({
+      path: `repos/${match[1]}/${match[2]}/actions/runs/${match[3]}`,
+      execute,
+      retry: { ...retry, remaining },
+      maxBuffer: 2 * 1024 ** 2,
+      timeout: () => Math.min(60_000, remaining()),
+    });
+    if (run?.status === "completed") {
+      if (run.conclusion === "success") return run;
+      throw new TransientGitHubError(
+        `Pukbot workflow failed: ${workflowUrl}: ${run.conclusion}`,
+      );
+    }
+    const delay = Math.min(5_000 * 2 ** poll, 30_000);
+    if (delay >= remaining())
+      throw new Error("Release mutation workflow did not finish in time");
+    sleep(delay);
+  }
+}
+
+export function isIncompleteAsset(asset) {
+  return typeof asset?.state === "string" && asset.state !== "uploaded";
+}
+
+export function discardReleaseAsset({
+  repository,
+  asset,
+  execute = execFileSync,
+  retry = {},
+}) {
+  if (
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
+    !Number.isSafeInteger(asset?.id) ||
+    asset.id < 1 ||
+    !isIncompleteAsset(asset)
+  )
+    throw new Error("Invalid incomplete release asset");
   try {
-    execute(
-      "gh",
-      [
-        "run",
-        "watch",
-        match[3],
-        "--repo",
-        `${match[1]}/${match[2]}`,
-        "--exit-status",
-        "--interval",
-        "20",
-      ],
-      {
-        encoding: "utf8",
-        timeout,
-        killSignal: "SIGKILL",
-        maxBuffer: 2 * 1024 ** 2,
-      },
+    withGitHubRetrySync(
+      () =>
+        execute(
+          "gh",
+          [
+            "api",
+            "--method",
+            "DELETE",
+            `repos/${repository}/releases/assets/${asset.id}`,
+          ],
+          {
+            encoding: "utf8",
+            timeout: 60_000,
+            killSignal: "SIGKILL",
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        ),
+      retryWithProbe(execute, retry),
     );
   } catch (error) {
-    if (error?.code === "ETIMEDOUT" || error?.signal) throw error;
-    throw new TransientGitHubError(
-      `Pukbot workflow failed: ${workflowUrl}: ${error?.message}`,
-      {
-        cause: error,
-      },
-    );
+    if (!isMissingLookup(error)) throw error;
   }
 }
 
@@ -115,7 +160,49 @@ function readTagCommit({ repository, tag, execute, retry }) {
   });
 }
 
+export function editedReleaseConfirmation(args, execute, retry = {}) {
+  if (args[0] !== "release" || args[1] !== "edit" || args.includes("--dry-run"))
+    return undefined;
+  const positional = [];
+  const values = {};
+  for (let index = 2; index < args.length; index++) {
+    if (args[index].startsWith("--")) values[args[index]] = args[++index];
+    else positional.push(args[index]);
+  }
+  const releaseID = Number(positional[0]);
+  const repository = values["--repo"];
+  const tag = values["--tag"];
+  if (
+    positional.length !== 1 ||
+    !Number.isSafeInteger(releaseID) ||
+    releaseID < 1 ||
+    typeof repository !== "string" ||
+    typeof tag !== "string"
+  )
+    return undefined;
+  const expected = (flag, actual) =>
+    values[flag] === undefined || values[flag] === actual;
+  return () => {
+    const release = lookupRelease({
+      repository,
+      tag,
+      releaseID,
+      execute,
+      retry,
+    });
+    return Boolean(
+      release &&
+        release.id === releaseID &&
+        expected("--draft", String(release.draft)) &&
+        expected("--prerelease", String(release.prerelease)) &&
+        expected("--body", release.body),
+    );
+  };
+}
+
 export function createdObjectConfirmation(args, execute, retry = {}) {
+  if (args[0] === "release" && args[1] === "edit")
+    return editedReleaseConfirmation(args, execute, retry);
   if (args[1] !== "create" || args.includes("--dry-run")) return undefined;
   const { positional, flags } = mutationArguments(args);
   const repository = flags["--repo"];
@@ -206,7 +293,7 @@ export function preflightReleaseAsset({
   try {
     withGitHubRetrySync(
       () => runAssetRequest([...args, "--dry-run"], execute),
-      retry,
+      retryWithProbe(execute, retry),
     );
     return "pukbot";
   } catch (error) {
@@ -256,18 +343,23 @@ export function executeReleaseMutation(
     now,
     operation: "mutation",
   });
+  const options = retryWithProbe(execute, retry);
   const result = retryMutation(
     () => {
       const result = runAssetRequest(args, execute, remaining());
       if (result.workflowUrl)
-        watchWorkflow(result.workflowUrl, execute, remaining());
+        awaitWorkflowRun(result.workflowUrl, {
+          execute,
+          remaining,
+          retry: options,
+        });
       return result;
     },
     {
       confirm: createdObjectConfirmation(args, execute, retry),
       confirmed: { ok: true, confirmed: true },
       remaining,
-      retry,
+      retry: options,
     },
   );
   remaining();
@@ -292,6 +384,7 @@ export async function uploadReleaseAsset({
   });
   const args = assetArguments({ repository, releaseID, file, name });
   const size = statSync(file).size;
+  const options = retryWithProbe(execute, retry);
   const confirm =
     typeof tag === "string"
       ? () => {
@@ -302,15 +395,18 @@ export async function uploadReleaseAsset({
             execute,
             retry,
           });
-          return Boolean(
-            release?.id === releaseID &&
-              release.assets.some(
-                (asset) =>
-                  asset.name === name &&
-                  asset.size === size &&
-                  asset.state === "uploaded",
-              ),
-          );
+          if (release?.id !== releaseID) return false;
+          const named = release.assets.filter((asset) => asset.name === name);
+          if (
+            named.some(
+              (asset) => asset.size === size && asset.state === "uploaded",
+            )
+          )
+            return true;
+          for (const asset of named)
+            if (isIncompleteAsset(asset))
+              discardReleaseAsset({ repository, asset, execute, retry });
+          return false;
         }
       : undefined;
   try {
@@ -318,10 +414,14 @@ export async function uploadReleaseAsset({
       () => {
         const result = runAssetRequest(args, execute, remaining());
         if (result.workflowUrl)
-          watchWorkflow(result.workflowUrl, execute, remaining());
+          awaitWorkflowRun(result.workflowUrl, {
+            execute,
+            remaining,
+            retry: options,
+          });
         return "pukbot";
       },
-      { confirm, confirmed: "pukbot", remaining, retry },
+      { confirm, confirmed: "pukbot", remaining, retry: options },
     );
     remaining();
     return result;
@@ -353,7 +453,7 @@ export async function uploadReleaseAsset({
               killSignal: "SIGKILL",
             },
           ),
-        { confirm, confirmed: "gh", remaining, retry },
+        { confirm, confirmed: "gh", remaining, retry: options },
       );
       remaining();
       return "gh";

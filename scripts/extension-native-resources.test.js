@@ -19,6 +19,7 @@ import {
   nativeClangModuleFlags,
   nativePackageLinkFlags,
   nativeRolePolicy,
+  privateImageToken,
   runtimeRoleLinkFlags,
 } from "./build-extension-package.mjs";
 
@@ -112,35 +113,41 @@ test("native frameworks flatten versioned links before signing and reject unowne
       join(root, nativePackage, source, "Parser"),
     );
     const contents = join(root, "mock.bundle/Contents");
+    const scope = { id: "mock", role: "app", version: "1.0.0" };
     const copied = await copyNativeFrameworks(
       root,
       { nativePackage, nativeFrameworks: [source] },
       contents,
+      scope,
     );
+    const framework = `Parser.${privateImageToken(scope, "synthetic binary")}.framework`;
     expect(
       (
-        await lstat(join(contents, "Frameworks/Parser.framework/Parser"))
+        await lstat(join(contents, "Frameworks", framework, "Parser"))
       ).isSymbolicLink(),
     ).toBe(false);
     expect(
-      await lstat(join(contents, "Frameworks/Parser.framework/Versions")).catch(
+      await lstat(join(contents, "Frameworks", framework, "Versions")).catch(
+        () => undefined,
+      ),
+    ).toBeUndefined();
+    expect(
+      await lstat(join(contents, "Frameworks/Parser.framework")).catch(
         () => undefined,
       ),
     ).toBeUndefined();
     expect(copied).toEqual([
       {
+        name: "Parser.framework",
         binary: await realpath(
-          join(contents, "Frameworks/Parser.framework/Parser"),
+          join(contents, "Frameworks", framework, "Parser"),
         ),
-        framework: join(contents, "Frameworks/Parser.framework"),
-        installName: "@rpath/Parser.framework/Parser",
+        framework: join(contents, "Frameworks", framework),
+        installName: `@rpath/${framework}/Parser`,
       },
     ]);
     expect(
-      await readFile(
-        join(contents, "Frameworks/Parser.framework/Parser"),
-        "utf8",
-      ),
+      await readFile(join(contents, "Frameworks", framework, "Parser"), "utf8"),
     ).toBe("synthetic binary");
     for (const nativeFrameworks of [
       ["../Outside.framework"],
@@ -152,6 +159,7 @@ test("native frameworks flatten versioned links before signing and reject unowne
           root,
           { nativePackage, nativeFrameworks },
           contents,
+          scope,
         ),
       ).rejects.toThrow("invalid native framework");
     }
@@ -225,8 +233,22 @@ test("native payloads can be limited to selected roles without eager dynamic lin
       "/workspace",
       existing,
       "/payload/app.bundle/Contents",
+      "libMockNative.mock-0123456789abcdef.dylib",
     ),
-  ).toContain("-lMockNative");
+  ).toContain("-lMockNative.mock-0123456789abcdef");
+  for (const library of [
+    undefined,
+    "libMockNative.dylib.txt",
+    "libOtherNative.mock-0123456789abcdef.dylib",
+  ])
+    expect(() =>
+      nativePackageLinkFlags(
+        "/workspace",
+        existing,
+        "/payload/app.bundle/Contents",
+        library,
+      ),
+    ).toThrow("private library");
   expect(nativeRolePolicy({ roles: { app: [] } })).toEqual({
     roles: [],
     link: true,
@@ -418,6 +440,7 @@ test("native-only Attention wrappers link the shared kit without a second enviro
     "/source",
     attention,
     "/payload/app.bundle/Contents",
+    "libAttentionNative.attention-0123456789abcdef.dylib",
   );
   const flags = runtimeRoleLinkFlags(kit, undefined, native);
   expect(flags).toContain("/kit/Modules");
@@ -425,9 +448,9 @@ test("native-only Attention wrappers link the shared kit without a second enviro
   expect(flags.filter((flag) => flag === "-lEdithExtensionKit")).toHaveLength(
     1,
   );
-  expect(flags.indexOf("-lAttentionNative")).toBeLessThan(
-    flags.indexOf("-lEdithExtensionKit"),
-  );
+  expect(
+    flags.indexOf("-lAttentionNative.attention-0123456789abcdef"),
+  ).toBeLessThan(flags.indexOf("-lEdithExtensionKit"));
   expect(flags).toContain("@executable_path/../Frameworks");
   expect(flags).toContain("@executable_path/../../../../Frameworks");
   expect(
@@ -472,4 +495,26 @@ test("role support overrides retain their scopes and native non-presentation rol
     "-lNativeOnly",
   ]);
   expect(() => runtimeRoleLinkFlags(undefined, support)).toThrow();
+});
+
+test("renamed native frameworks keep their original headers on the compile search path", () => {
+  const flags = nativePackageLinkFlags(
+    "/source",
+    {
+      nativePackage: "Extensions/studio/NativeRuntime",
+      nativeProduct: "StudioNativeRuntime",
+      nativeFrameworks: [
+        ".build/artifacts/pdfium/PDFium.xcframework/macos-arm64_x86_64/PDFium.framework",
+      ],
+    },
+    "/payload/app.bundle/Contents",
+    "libStudioNativeRuntime.studio-0123456789abcdef.dylib",
+  );
+  const searched = flags.flatMap((flag, index) =>
+    flag === "-F" ? [flags[index + 1]] : [],
+  );
+  expect(searched).toContain("/payload/app.bundle/Contents/Frameworks");
+  expect(searched).toContain(
+    "/source/Extensions/studio/NativeRuntime/.build/artifacts/pdfium/PDFium.xcframework/macos-arm64_x86_64",
+  );
 });

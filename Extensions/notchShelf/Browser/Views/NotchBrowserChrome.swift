@@ -121,7 +121,7 @@ struct NotchBrowserTabItem: View {
                         .background(.white.opacity(hovering ? 0.1 : 0), in: Circle())
                         .contentShape(Circle())
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(.edithShaped(Circle()))
                 .padding(.trailing, 5)
                 .help("Close tab")
             }
@@ -132,8 +132,7 @@ struct NotchBrowserTabItem: View {
     }
 
     private var background: Color {
-        if selected { return DashSkin.accent(true).opacity(0.3) }
-        return hovering ? .white.opacity(0.08) : .clear
+        selected ? DashSkin.accent(true).opacity(0.3) : .clear
     }
 
     @ViewBuilder private var menu: some View {

@@ -7,14 +7,7 @@
   "commands": [
     "studio"
   ],
-  "pages": [
-    {
-      "id": "studio",
-      "title": "Studio",
-      "icon": "studio",
-      "order": 1
-    }
-  ],
+  "page": true,
   "homeCards": [
     "media",
     "extension:studio"

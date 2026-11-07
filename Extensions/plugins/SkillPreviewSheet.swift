@@ -65,6 +65,7 @@ struct SkillPreviewSheet: View {
                     Label(
                         copied ? "Copied" : "Copy", edith: copied ? .check : .copy)
                 }
+                .buttonStyle(.edithDefault)
                 .disabled(document == nil)
                 .help("Copy the complete skill Markdown, including its metadata")
             }
@@ -118,6 +119,7 @@ struct SkillPreviewSheet: View {
                 Text(error).multilineTextAlignment(.center)
                     .font(.edithText(.callout)).frame(maxWidth: UIScale.pt(380))
                 Button("Try again") { refreshID = UUID() }
+                    .buttonStyle(.edithDefault)
             }
         } else {
             SkeletonGroup {

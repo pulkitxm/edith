@@ -9,8 +9,8 @@ import Testing
 @testable import EdithHost
 @testable import EdithHostCore
 
-@MainActor @Suite(.serialized) struct HostMaintenanceRoutingTests {
-    @Test func sectionRoutesLandOnTheRequestedMaintenanceSection() async throws {
+@MainActor @Suite(.serialized) struct HostUtilitiesRoutingTests {
+    @Test func utilityRoutesLandOnEachExtensionsOwnPage() async throws {
         let fixture = try await Fixture()
         defer { fixture.clean() }
         let router = WindowRouter()
@@ -24,22 +24,17 @@ import Testing
         window.orderBack(nil)
         defer { window.orderOut(nil) }
         await settle()
-        for (route, expected) in [
-            ("appMaintenance/Remove", "Remove"), ("appMaintenance/Packages", "Packages"),
-            ("appMaintenance/History", "History"), ("appMaintenance/Updates", "Updates"),
-        ] {
+        for route in ["homebrew", "utilities", "appMaintenance", "home"] {
             let reply = NavigationCommands.perform(action: "navigate", route: route)
             await settle()
-            #expect(reply["ok"] as? Bool == true)
-            #expect(state.page == "appMaintenance")
-            #expect(state.maintenance == expected)
-            #expect(
-                NavigationCommands.perform(action: "route", route: nil)["route"] as? String == route
-            )
+            #expect(reply["ok"] as? Bool == true, "\(route)")
+            #expect(state.page == route)
         }
-        _ = NavigationCommands.perform(action: "navigate", route: "appMaintenance/Cleaner")
-        await settle()
-        #expect(state.maintenance == "Updates")
+        for removed in ["dashboard", "runningApps", "data"] {
+            let reply = NavigationCommands.perform(action: "navigate", route: removed)
+            await settle()
+            #expect(reply["ok"] as? Bool != true, "\(removed)")
+        }
     }
 
     @Test func pagesStayNavigableWhileTheirExtensionIsStarting() {
@@ -62,26 +57,26 @@ import Testing
     }
 
     @MainActor final class HarnessState {
-        var page = "appMaintenance"
-        var maintenance = "Updates"
+        var page = "home"
     }
 
     private struct Harness: View {
         let marketplace: HostMarketplace
         let state: HarnessState
-        @State private var page = "appMaintenance"
+        @State private var page = "home"
         @State private var settings = "general"
-        @State private var maintenance = "Updates"
 
         var body: some View {
             HostPageContent(
                 marketplace: marketplace, updater: HostUpdater(startingUpdater: false),
                 permissions: HostPermissions(), destination: HostNavigationCatalog.page(page),
-                settings: $settings, maintenanceSection: $maintenance, select: { page = $0 }
+                settings: $settings, select: { page = $0 }
             )
-            .navigationRoute("section", selection: $page)
+            .navigationRoute(
+                "section", selection: $page,
+                isValid: { raw in HostNavigationCatalog.pages.contains { $0.id == raw } }
+            )
             .onChange(of: page, initial: true) { _, value in state.page = value }
-            .onChange(of: maintenance, initial: true) { _, value in state.maintenance = value }
         }
     }
 
@@ -98,7 +93,7 @@ import Testing
         init() async throws {
             root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             let identity = try HostIdentity(
-                identifier: "com.pulkit.edith.tests.maintenance-" + UUID().uuidString,
+                identifier: "com.pulkit.edith.tests.utilities-" + UUID().uuidString,
                 supportDirectory: root)
             let defaults = try #require(UserDefaults(suiteName: identity.defaultsSuite))
             let store = ExtensionPackageStore(

@@ -1,0 +1,158 @@
+[
+  {
+    "path": "Packages/ExtensionSupport/Sources/EdithExtensionUI/EdithLink.swift",
+    "rule": "link",
+    "count": 1,
+    "reason": "EdithLink is the kit wrapper and applies .edithLink to the Link it builds"
+  },
+  {
+    "path": "Packages/ExtensionSupport/Sources/EdithExtensionUI/SurfaceCalendarContent.swift",
+    "rule": "plain",
+    "count": 1,
+    "reason": "calendar day cells draw edithHoverHighlight themselves; a kit role would add minimum sizes to the dense month grid"
+  },
+  {
+    "path": "Packages/ExtensionSupport/Sources/EdithExtensionUI/EdithSwitch.swift",
+    "rule": "control-style",
+    "count": 1,
+    "reason": "a switch shows its state with the track and never draws a hover plate"
+  },
+  {
+    "path": "Packages/ExtensionSupport/Sources/EdithExtensionUI/EdithField.swift",
+    "rule": "control-style",
+    "count": 1,
+    "reason": "a checkbox shows its state with the box and never draws a hover plate"
+  },
+  {
+    "path": "Packages/ExtensionSupport/Sources/EdithExtensionUI/EdithSegmentedPicker.swift",
+    "rule": "control-style",
+    "count": 1,
+    "reason": "segments already show the selection, a hover plate would read as a second selection"
+  },
+  {
+    "path": "Packages/ExtensionSupport/Sources/EdithExtensionFiles/Finder/FinderContentViews.swift",
+    "rule": "tap-gesture",
+    "count": 7,
+    "reason": "file items need single and double click with modifiers plus drag and draw the kit plate themselves; two taps clear the selection on empty space and one swallows taps on the preview panel"
+  },
+  {
+    "path": "Packages/ExtensionSupport/Sources/EdithExtensionUI/SurfaceCanvas.swift",
+    "rule": "tap-gesture",
+    "count": 2,
+    "reason": "layout editor tiles select on tap while a drag gesture moves them; the drag handle draws the kit plate"
+  },
+  {
+    "path": "Packages/ExtensionSupport/Sources/EdithExtensionUI/SurfaceShelf.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "the shelf drag handle selects on tap while a drag gesture resizes it, and draws the kit plate"
+  },
+  {
+    "path": "Extensions/cleaner/CleanerViews.swift",
+    "rule": "control-style",
+    "count": 3,
+    "reason": "selection checkboxes in the Cleaner lists show their state with the box and never draw a plate"
+  },
+  {
+    "path": "Extensions/usage/Views/FilterMultiSelect.swift",
+    "rule": "control-style",
+    "count": 1,
+    "reason": "a filter checkbox shows its state with the box and never draws a plate"
+  },
+  {
+    "path": "Packages/EdithHost/Sources/EdithHost/HostOnboardingToolsView.swift",
+    "rule": "control-style",
+    "count": 2,
+    "reason": "onboarding check rows are toggles and never draw a plate"
+  },
+  {
+    "path": "Extensions/codeStats/Views/CodeStatsExplorerCards.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "a tap selects the hovered point on a chart, which is not a button"
+  },
+  {
+    "path": "Extensions/codeStats/Views/CodeStatsTrendCards.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "a tap selects a location on a chart, which is not a button"
+  },
+  {
+    "path": "Extensions/herdr/Views/HerdrCanvas.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "double click on a pane divider equalizes, a resize handle shows its cursor instead of a plate"
+  },
+  {
+    "path": "Extensions/herdr/Views/HerdrSessionView.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "double click on a resize handle resets the size, the handle shows its cursor instead of a plate"
+  },
+  {
+    "path": "Extensions/herdr/Views/HerdrSpaceWindow.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "double click on a pane divider equalizes, a resize handle shows its cursor instead of a plate"
+  },
+  {
+    "path": "Extensions/herdr/Views/HerdrTabBar.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "the tab chip is also a drag source and draws edithHoverHighlight itself"
+  },
+  {
+    "path": "Extensions/machines/UI/ViewModels/DockerDetailModel.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "double click opens a folder in the file list, the row draws edithHoverHighlight"
+  },
+  {
+    "path": "Extensions/machines/UI/ViewModels/WorkspaceModel.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "double click on a pane divider equalizes, a resize handle shows its cursor instead of a plate"
+  },
+  {
+    "path": "Extensions/machines/UI/Views/DockerConsoleViews.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "double click opens a container, the row draws edithHoverHighlight"
+  },
+  {
+    "path": "Extensions/music/UI/MusicPageViews.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "the backdrop dismisses the overlay and is not a button"
+  },
+  {
+    "path": "Extensions/notchShelf/Browser/Views/NotchBrowserPane.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "an empty tap target stops clicks reaching the content behind the panel"
+  },
+  {
+    "path": "Extensions/notchShelf/Shelf/Views/NotchShelfView.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "a shelf item needs tap with modifiers plus drag out and draws edithHoverHighlight"
+  },
+  {
+    "path": "Extensions/socialManager/Support/HerdrLayoutDividerHandle.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "double click on a pane divider equalizes, a resize handle shows its cursor instead of a plate"
+  },
+  {
+    "path": "Extensions/socialManager/Support/WorkspaceTabControls.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "the tab is a drop target and pageChipChrome draws the hover plate"
+  },
+  {
+    "path": "Packages/EdithHost/Sources/EdithHost/HostWorkspace.swift",
+    "rule": "tap-gesture",
+    "count": 1,
+    "reason": "double click on the sidebar resize handle resets the width, the sidebar look stays untouched"
+  }
+]

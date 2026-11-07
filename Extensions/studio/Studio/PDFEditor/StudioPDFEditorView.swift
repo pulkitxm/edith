@@ -599,7 +599,7 @@ struct StudioPDFStyleControls: View {
                             )
                             .edithButtonTarget(.borderless)
                     }
-                    .buttonStyle(.edith(.borderless))
+                    .buttonStyle(.edithShaped(Circle(), filled: true))
                     .help(hex)
                 }
             }

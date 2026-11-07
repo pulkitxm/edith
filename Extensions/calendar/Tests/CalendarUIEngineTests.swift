@@ -36,7 +36,9 @@ import Testing
         #expect(fixture.opened.count == 2)
     }
 
-    @Test func privacyAndPermissionAreAppliedBeforeAnyEventIsReturned() async throws {
+    @Test func presentingKeepsRealEventsForTheBlurOverlayAndPermissionStillApplies()
+        async throws
+    {
         let fixture = Fixture()
         defer { fixture.stop() }
         _ = try await fixture.engine.execute("calendar.ui.list", payload: Data("{}".utf8))
@@ -44,13 +46,12 @@ import Testing
         let data = try await fixture.engine.execute(
             "calendar.ui.metadata", payload: Data("{}".utf8))
         let snapshot = try JSONDecoder().decode(CalendarUISnapshot.self, from: data)
-        #expect(snapshot.blurEvents && snapshot.events.first?.title == "Meeting")
-        let text = String(decoding: data, as: UTF8.self)
-        #expect(!text.contains("Synthetic private") && !text.contains("google.com/synthetic"))
+        #expect(snapshot.blurEvents && snapshot.events.first?.title == "Synthetic private title")
+        #expect(snapshot.events.first?.calendar == "Synthetic private calendar")
         fixture.allowed = false
         let denied = try await fixture.engine.execute("calendar.ui.list", payload: Data("{}".utf8))
         let revoked = try JSONDecoder().decode(CalendarUISnapshot.self, from: denied)
-        #expect(!revoked.authorized && revoked.events.first?.title == "Meeting")
+        #expect(!revoked.authorized && revoked.events.first?.title == "Synthetic private title")
         _ = try await fixture.engine.execute(
             "calendar.ui.action", payload: Data("{\"action\":\"permission\"}".utf8))
         #expect(fixture.grants == 1)

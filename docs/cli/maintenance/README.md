@@ -1,6 +1,6 @@
 # `ed maintenance`
 
-`ed maintenance` is the command-line surface for App Maintenance. It discovers updates across supported sources, runs reviewed batches, verifies and installs single-app disk images, previews exact bundle-identifier support files, and moves confirmed selections to the Trash.
+`ed maintenance` is the command-line surface for App Updates. It discovers updates across supported sources, runs reviewed batches, verifies and installs single-app disk images, previews exact bundle-identifier support files, and moves confirmed selections to the Trash.
 
 [The `ed` command line](../README.md)
 
@@ -21,4 +21,4 @@
 
 Commands run locally and do not require Edith to be open. `inventory`, `updates`, `history`, and `scan` are read-only. `update`, `remove`, and `install` require `--yes` before applying their reviewed plan.
 
-The App Maintenance extension settings explain the same supported paths and safety rules in the app.
+The App Updates extension settings explain the same supported paths and safety rules in the app.

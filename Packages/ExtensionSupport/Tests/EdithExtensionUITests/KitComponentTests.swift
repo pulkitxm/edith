@@ -36,7 +36,7 @@ private struct SchemeSwitchingList: View {
 }
 
 @MainActor
-@Suite(.serialized)
+@Suite(.serialized, .exclusiveScale)
 struct KitComponentTests {
     private let previousScale = UIScale.current
 
@@ -143,6 +143,84 @@ struct KitComponentTests {
         #expect(layout.rowCounts(count: 5, width: .infinity) == [5])
         #expect(capped.rowCounts(count: 5, width: .infinity) == [2, 2, 1])
         #expect(layout.rowCounts(count: 3, width: .nan) == [3])
+    }
+
+    @Test func metricRowsSurviveExtremeWidthsAndMetrics() {
+        let layout = PageMetricLayout(spacing: 12, minimumWidth: 148, maximumColumns: nil)
+        #expect(layout.rowCounts(count: 4, width: .greatestFiniteMagnitude) == [4])
+        #expect(layout.rowCounts(count: 4, width: 1e300) == [4])
+        #expect(layout.rowCounts(count: 3, width: -1e300) == [1, 1, 1])
+        #expect(layout.rowCounts(count: 3, width: -.infinity) == [3])
+        #expect(layout.rowCounts(count: 3, width: 0) == [1, 1, 1])
+        #expect(layout.rowCounts(count: 3, width: .leastNonzeroMagnitude) == [1, 1, 1])
+        let hairline = PageMetricLayout(spacing: 0, minimumWidth: 1e-300, maximumColumns: nil)
+        #expect(hairline.rowCounts(count: 6, width: 900) == [6])
+        let collapsed = PageMetricLayout(spacing: 0, minimumWidth: 0, maximumColumns: nil)
+        #expect(collapsed.rowCounts(count: 2, width: 900) == [2])
+        let unknown = PageMetricLayout(spacing: .nan, minimumWidth: 148, maximumColumns: nil)
+        #expect(unknown.rowCounts(count: 2, width: 900) == [2])
+        let unreachable = PageMetricLayout(
+            spacing: 12, minimumWidth: .infinity, maximumColumns: nil)
+        #expect(unreachable.rowCounts(count: 2, width: 900) == [1, 1])
+        for limit in [0, -3] {
+            let capped = PageMetricLayout(spacing: 12, minimumWidth: 148, maximumColumns: limit)
+            #expect(capped.rowCounts(count: 2, width: 900) == [1, 1])
+        }
+    }
+
+    @Test func fittedColumnsStayWithinOneAndTheLimit() {
+        let fit = { (width: Double, minimum: Double, spacing: Double, limit: Int?) in
+            PageMetrics.fittedColumns(
+                count: 5, width: width, minimum: minimum, spacing: spacing, limit: limit)
+        }
+        #expect(fit(640, 148, 12, nil) == 4)
+        #expect(fit(640, 148, 12, 2) == 2)
+        #expect(fit(.greatestFiniteMagnitude, 148, 12, nil) == 5)
+        #expect(fit(.infinity, 148, 12, nil) == 5)
+        #expect(fit(.nan, 148, 12, 3) == 3)
+        #expect(fit(900, 1e-300, 0, nil) == 5)
+        #expect(fit(900, 0, 0, nil) == 5)
+        #expect(fit(900, -40, 12, nil) == 5)
+        #expect(fit(-900, 148, 12, nil) == 1)
+        #expect(fit(900, .infinity, 12, nil) == 1)
+        #expect(fit(900, 148, .infinity, nil) == 1)
+        #expect(PageMetrics.fittedColumns(count: 0, width: 900, minimum: 148, spacing: 12) == 1)
+    }
+
+    @Test func metricGridLaysOutAtDegenerateAndUnboundedWidths() {
+        let grid = PageMetricGrid(minimumWidth: 120) {
+            ForEach(0..<6, id: \.self) { index in
+                PageMetric(title: "Synthetic \(index)", value: "\(index)")
+            }
+        }
+        let shapes: [AnyView] = [
+            AnyView(grid.frame(width: 0)),
+            AnyView(grid.frame(width: 0.5)),
+            AnyView(grid.frame(width: 1)),
+            AnyView(grid.fixedSize()),
+            AnyView(grid.fixedSize(horizontal: true, vertical: false)),
+            AnyView(Grid { GridRow { grid } }),
+            AnyView(
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top) {
+                        Color.clear.frame(width: 300)
+                        VStack { grid }.frame(maxWidth: .infinity)
+                    }
+                    VStack { grid }
+                }),
+            AnyView(ScrollView(.horizontal) { HStack { grid } }),
+            AnyView(ScrollView(.horizontal) { LazyHStack { grid } }),
+        ]
+        for (index, shape) in shapes.enumerated() {
+            for width in [1.0, 320, 1100] {
+                let host = NSHostingView(
+                    rootView: shape.environment(\.automaticViewActionsEnabled, false))
+                host.frame = CGRect(x: 0, y: 0, width: width, height: 400)
+                host.layoutSubtreeIfNeeded()
+                let size = host.fittingSize
+                #expect(size.width.isFinite && size.height.isFinite, "shape \(index) at \(width)")
+            }
+        }
     }
 
     @Test func metricGridMeasuresInsideLazyStacksThatProposeAnInfiniteWidth() {

@@ -83,7 +83,7 @@ struct EmbeddedNotchNowPlaying: Equatable {
         state?.snapshot.rows.first { $0.sourceID == selectedSource && $0.field == nil }
     }
     var playback: EmbeddedMusicNotchPlayback? { state?.playback.first { $0.rowID == row?.id } }
-    var hidden: Bool { state?.snapshot.message == "Hidden while presenting." }
+    var hidden: Bool { state?.presenting ?? false }
     var nowPlaying: EmbeddedNotchNowPlaying? {
         guard let row, let playback else { return nil }
         return .init(
@@ -248,7 +248,11 @@ struct EmbeddedMusicNotchScene: View {
                         } label: {
                             Image(nsImage: icon).resizable().scaledToFit().frame(
                                 width: 24, height: 24)
-                        }.buttonStyle(.edith(.borderless)).help("Open the current music player")
+                        }.buttonStyle(
+                            .edithShaped(
+                                RoundedRectangle(cornerRadius: UIScale.pt(6), style: .continuous),
+                                filled: true)
+                        ).help("Open the current music player")
                             .padding(.trailing, 6)
                             .disabled(!route.request.tile.showActions || model.hidden)
                     }
@@ -347,13 +351,13 @@ private struct EmbeddedNotchNowPlayingCard: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(track.title).font(.edithText(.headline)).foregroundStyle(.white)
-                            .lineLimit(2).presenterBlur(controller.hidden)
+                            .lineLimit(2)
                         if tile.showDetails, tile.shows("artist") {
                             Text(sourceLabel).font(.edithText(.caption)).foregroundStyle(.secondary)
-                                .lineLimit(2).presenterBlur(
-                                    controller.hidden)
+                                .lineLimit(2)
                         }
-                    }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    }.presenterCover(controller.hidden)
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.edith(.borderless)).disabled(!tile.showActions)
                     .help(isLocal ? "Show this track in Music" : "Open the app playing this")
             }
@@ -452,7 +456,9 @@ private struct EmbeddedNotchNowPlayingCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edithShaped(RoundedRectangle(cornerRadius: 10, style: .continuous), filled: true)
+        )
         .help("Open player")
     }
 
@@ -472,7 +478,9 @@ private struct EmbeddedNotchNowPlayingCard: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless)).help(label).accessibilityLabel(label)
+        .buttonStyle(.edithShaped(RoundedRectangle(cornerRadius: 10, style: .continuous))).help(
+            label
+        ).accessibilityLabel(label)
     }
 }
 

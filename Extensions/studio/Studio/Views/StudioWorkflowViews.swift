@@ -265,6 +265,7 @@ struct StudioWorkflowEditor: View {
                             draft.steps.isEmpty ? "Choose the first tool" : "Add a step",
                             edith: .plus)
                     }
+                    .menuStyle(.button)
                     .buttonStyle(.edith(.secondary))
                     .fixedSize()
                     .padding(.top, UIScale.pt(4))

@@ -7,14 +7,7 @@
   "commands": [
     "calendar"
   ],
-  "pages": [
-    {
-      "id": "calendar",
-      "title": "Calendar",
-      "icon": "calendar",
-      "order": 3
-    }
-  ],
+  "page": true,
   "homeCards": [
     "calendar",
     "extension:calendar"

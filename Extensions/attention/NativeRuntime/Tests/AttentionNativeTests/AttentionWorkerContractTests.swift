@@ -189,7 +189,7 @@ struct AttentionWorkerContractTests {
         try fixture.database.close()
     }
 
-    @Test func presentationPrivacySuppressesHistoryAndMutations() async throws {
+    @Test func presentingKeepsTheRealCardForTheBlurOverlayAndRejectsMutations() async throws {
         let fixture = try AttentionWorkerFixture()
         defer { fixture.remove() }
         let surface = AttentionSurface(
@@ -200,7 +200,9 @@ struct AttentionWorkerContractTests {
             try await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "attention")),
             providerID: "attention")
-        #expect(snapshot.rows.isEmpty && snapshot.metrics.isEmpty && snapshot.actions.isEmpty)
+        #expect(snapshot.metrics.map(\.id) == ["remaining"])
+        #expect(snapshot.actions.map(\.id) == ["focus.start.25"])
+        #expect(snapshot.message == nil)
         let start = try SurfaceActionRequest(snapshot: request, actionID: "focus.start.25").encoded(
             providerID: "attention")
         await #expect(throws: ExtensionPeerError.self) {

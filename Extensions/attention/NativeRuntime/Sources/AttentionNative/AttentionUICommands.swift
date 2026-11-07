@@ -21,8 +21,7 @@ import Foundation
             throw ExtensionPeerError.rejected("System actions are unavailable in fixture mode.")
         }
         if [
-            "attention.ui.summary", "attention.ui.focus.get", "attention.ui.focus.start",
-            "attention.ui.focus.stop", "attention.ui.breakdown.copy",
+            "attention.ui.focus.start", "attention.ui.focus.stop", "attention.ui.breakdown.copy",
         ].contains(operation) {
             guard
                 !SurfacePrivacyState.hides(

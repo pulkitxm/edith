@@ -92,8 +92,16 @@ jobs:
             changed=""
             echo "no comparable base commit, running every area"
           fi
+          unreleased="$changed"
+          if [ -n "$base" ] && [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            release_tag="$(git tag --merged HEAD --sort=-version:refname | grep -m 1 -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+            if [ -n "$release_tag" ]; then
+              unreleased="$(printf '%s\n%s\n' "$changed" "$(git diff --name-only "$release_tag" HEAD)")"
+              echo "host area also covers changes since $release_tag"
+            fi
+          fi
           area() {
-            if [ -z "$base" ] || printf '%s\n' "$changed" | grep -E "$2" >/dev/null; then
+            if [ -z "$base" ] || printf '%s\n' "${3:-$changed}" | grep -E "$2" >/dev/null; then
               echo "$1=true" >> "$GITHUB_OUTPUT"
               echo "$1: run"
             else
@@ -103,7 +111,7 @@ jobs:
           }
           area swift '^(apps/music-player/|Packages/(EdithHost|EdithDocsWorker|EdithIcons|ExtensionMarketplace|ExtensionSupport)/|Extensions/|Resources/|scripts/(build-minimal-host\.mjs|package-shipping-host\.py|host_build_metadata\.py|verify.shipping.host\.py|package-host-dmg\.py)$|build\.sh$|Makefile$|\.swift-format$)'
           area extensions '^(Extensions/|Packages/(ExtensionMarketplace|EdithHost|ExtensionSupport|EdithDocsWorker)/|Packages/EdithIcons/(Package\.swift$|Sources/)|docs/cli/|scripts/generate-cli-docs-bundle\.mjs$|scripts/[^/]*extension|scripts/release-asset-|scripts/release-lookup\.|scripts/(build-minimal-host|build-contained-host-runtime|build-camera-carrier)\.mjs$|scripts/build-ghostty\.sh$|scripts/patches/ghostty-external-io\.patch$|apps/music-player/|\.github/actions/cache-host/|\.github/workflows/(extensions|ci)\.yml$|scripts/(package-shipping-host|verify_shipping_host|host_build_metadata)\.py$)'
-          area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/EdithIcons/(Package\.swift$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionCore|EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|Host.entitlements|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|host_build_metadata.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
+          area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/EdithIcons/(Package\.swift$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionCore|EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|Host.entitlements|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|host_build_metadata.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))' "$unreleased"
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'
@@ -680,6 +688,7 @@ jobs:
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
       GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
       RELEASE_PRERELEASE: "false"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -724,8 +733,6 @@ jobs:
           test -f release-plists/HelperInfo.plist
 
       - name: Verify compatible extension releases
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: node release-source/scripts/extension-release-ready.mjs release-source
 
       - name: Require the release client to accept both assets
@@ -768,14 +775,31 @@ jobs:
         env:
           TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |
-          GH_TOKEN="$TAP_PUSH_TOKEN" gh repo clone pulkitxm/homebrew-tap tap -- --depth 1
+          for attempt in 1 2 3; do
+            GH_TOKEN="$TAP_PUSH_TOKEN" gh repo clone pulkitxm/homebrew-tap tap -- --depth 1 && break
+            [ "$attempt" -lt 3 ] || exit 1
+            rm -rf tap
+            sleep $((attempt * 10))
+          done
           mkdir -p tap/Casks
           cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
-          if git diff --quiet -- Casks/edith.rb; then
-            echo "the tap already carries $RELEASE_TAG"
-            exit 0
-          fi
-          git add Casks/edith.rb
-          GH_TOKEN="$TAP_PUSH_TOKEN" pukbot commit create --repo pulkitxm/homebrew-tap --branch main \
-            --message "Update the Edith cask to ${RELEASE_TAG}" Casks/edith.rb --json
+          errors="$RUNNER_TEMP/tap-commit-errors"
+          for attempt in 1 2 3 4; do
+            git fetch --quiet --depth 1 origin main || true
+            if git diff --quiet origin/main -- Casks/edith.rb; then
+              echo "the tap already carries $RELEASE_TAG"
+              exit 0
+            fi
+            git add Casks/edith.rb
+            if result="$(GH_TOKEN="$TAP_PUSH_TOKEN" pukbot commit create --repo pulkitxm/homebrew-tap --branch main \
+              --message "Update the Edith cask to ${RELEASE_TAG}" Casks/edith.rb --json 2>"$errors")"; then
+              printf '%s\n' "$result"
+              exit 0
+            fi
+            printf '%s\n' "$result" >> "$errors"
+            echo "tap commit attempt ${attempt} failed:" >&2
+            cat "$errors" >&2
+            [ "$attempt" -lt 4 ] || exit 1
+            sleep "$(node ../scripts/github-retry.mjs delay "$attempt" 15 65 "$errors" || echo $((attempt * 15)))"
+          done

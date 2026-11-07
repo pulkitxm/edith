@@ -91,13 +91,6 @@ final class MusicSurface {
             guard request.target == .notch, request.tile.widget == .music else {
                 throw ExtensionPeerError.invalidRequest
             }
-            if SurfacePrivacyState.hides(.music, values: privacyValues()) {
-                return try MusicNotchState(
-                    version: version,
-                    snapshot: .init(providerID: "music", message: "Hidden while presenting."),
-                    playback: []
-                ).encoded()
-            }
             let states: [MusicSurfacePlayback]
             switch command {
             case "music.notch.glance": states = try await read(request.tile)
@@ -105,13 +98,6 @@ final class MusicSurface {
             default: states = try await readNotch(request.tile)
             }
             try Task.checkCancellation()
-            guard !SurfacePrivacyState.hides(.music, values: privacyValues()) else {
-                return try MusicNotchState(
-                    version: version,
-                    snapshot: .init(providerID: "music", message: "Hidden while presenting."),
-                    playback: []
-                ).encoded()
-            }
             let snapshot = SurfaceCommandService.project(
                 Self.snapshot(states, tile: request.tile, target: .notch), tile: request.tile)
             let playback = states.compactMap { state -> MusicNotchPlayback? in
@@ -132,7 +118,8 @@ final class MusicSurface {
             }
             return try MusicNotchState(
                 version: version, snapshot: snapshot, playback: playback,
-                controlError: controlError()
+                controlError: controlError(),
+                presenting: SurfacePrivacyState.hides(.music, values: privacyValues())
             )
             .encoded()
         }

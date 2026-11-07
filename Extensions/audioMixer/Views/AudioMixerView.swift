@@ -30,6 +30,9 @@ struct AudioMixerView: View {
     private let notch: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.compactLayout) private var compact
+    @State private var privacy = ExtensionSharedState.current.map(
+        SurfacePrivacyState.init(channel:))
+    private var presenting: Bool { privacy?.hides(.ability("audioMixer")) ?? false }
 
     init(engine: any AudioMixerPresenting, monitorsWhileVisible: Bool = true, notch: Bool = false) {
         self.monitorsWhileVisible = monitorsWhileVisible
@@ -49,6 +52,8 @@ struct AudioMixerView: View {
                 pageContent
             }
         }
+        .disabled(presenting)
+        .presenterCover(presenting, dark: notch || colorScheme == .dark)
         .onAppear { if monitorsWhileVisible { engine.viewAppeared() } }
         .onDisappear { if monitorsWhileVisible { engine.viewDisappeared() } }
     }

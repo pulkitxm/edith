@@ -126,7 +126,9 @@ private struct SocialBrowserPane: View {
                             }
                             .accessibilityLabel("Close website tab \(page.title)")
                         }
-                    }.padding(UIScale.pt(6))
+                    }
+                    .buttonStyle(.edithDefault)
+                    .padding(UIScale.pt(6))
                 }
             }
             if let page = session.selectedPage {
@@ -209,6 +211,7 @@ struct SocialBrowserContent: View {
                     Text(error).font(.edithText(.caption)).fixedSize(
                         horizontal: false, vertical: true)
                     Button("Reload") { page.retry() }
+                        .buttonStyle(.edithDefault)
                 }
                 .padding(UIScale.pt(8))
             }
@@ -304,6 +307,7 @@ struct SocialBrowserContent: View {
             .accessibilityLabel("Next match")
             Button("Done") { page.hideFind() }
         }
+        .buttonStyle(.edithDefault)
         .padding(.horizontal, UIScale.pt(8)).padding(.bottom, UIScale.pt(8))
     }
 }

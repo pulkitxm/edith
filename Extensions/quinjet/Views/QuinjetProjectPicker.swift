@@ -148,7 +148,10 @@ struct QuinjetLocalProjectPicker: View {
 
 enum QuinjetProjectRowMetrics {
     static let spacing = 12.0
-    static var dividerInset: Double { PageMetrics.cardPadding }
+    static var dividerInset: Double { EdithRowMetrics.plateInset }
+    static var verticalPadding: Double {
+        EdithRowMetrics.plateInset + EdithRowMetrics.contentVertical
+    }
 }
 
 struct QuinjetProjectList: View {
@@ -156,18 +159,9 @@ struct QuinjetProjectList: View {
     let open: (QuinjetProject, QuinjetWorktree) -> Void
 
     var body: some View {
-        LazyVStack(spacing: 0) {
-            ForEach(Array(projects.enumerated()), id: \.element.id) { index, project in
-                if index > 0 {
-                    Divider().padding(.leading, UIScale.pt(QuinjetProjectRowMetrics.dividerInset))
-                }
-                QuinjetProjectRow(project: project) { open(project, $0) }
-            }
+        EdithRowList(projects, lazy: true) { project in
+            QuinjetProjectRow(project: project) { open(project, $0) }
         }
-        .edithSurface(cornerRadius: PageMetrics.cardCornerRadius)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: UIScale.pt(PageMetrics.cardCornerRadius), style: .continuous))
     }
 }
 
@@ -181,58 +175,55 @@ struct QuinjetProjectRow: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(QuinjetProjectRowMetrics.spacing)) {
-            Button {
-                if let worktree = project.defaultWorktree { open(worktree) }
-            } label: {
-                HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-                    EdithIconView(.folder)
-                        .font(.edithText(.title2).weight(.medium))
-                        .foregroundStyle(DashSkin.accent(dark))
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        Text(project.name)
-                            .font(.edithText(.headline))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .lineLimit(1)
-                        Text(project.defaultWorktree?.path ?? project.commonDir)
-                            .font(.edithText(.caption, design: .monospaced))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.edith(.borderless))
-
-            Button {
-                showsWorktrees = true
-            } label: {
-                VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
-                    Text(worktreeCount)
-                        .font(.edithText(.callout).weight(.semibold))
-                    Text("opened recently")
-                        .font(.edithText(.caption))
+        EdithRowButton {
+            if let worktree = project.defaultWorktree { open(worktree) }
+        } label: {
+            HStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                EdithIconView(.folder)
+                    .font(.edithText(.title2).weight(.medium))
+                    .foregroundStyle(DashSkin.accent(dark))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                    Text(project.name)
+                        .font(.edithText(.headline))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(1)
+                    Text(project.defaultWorktree?.path ?? project.commonDir)
+                        .font(.edithText(.caption, design: .monospaced))
                         .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .padding(.horizontal, UIScale.pt(12))
-                .padding(.vertical, UIScale.pt(8))
             }
-            .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
-            .popover(isPresented: $showsWorktrees, arrowEdge: .bottom) {
-                QuinjetWorktreePicker(
-                    projectName: project.name, worktrees: project.availableWorktrees,
-                    selectedPath: nil,
-                    select: {
-                        open($0)
-                        showsWorktrees = false
-                    })
-            }
+        } accessory: {
+            worktreesButton
         }
-        .padding(.horizontal, UIScale.pt(PageMetrics.cardPadding))
-        .padding(.vertical, UIScale.pt(10))
+    }
+
+    private var worktreesButton: some View {
+        Button {
+            showsWorktrees = true
+        } label: {
+            VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
+                Text(worktreeCount)
+                    .font(.edithText(.callout).weight(.semibold))
+                Text("opened recently")
+                    .font(.edithText(.caption))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            .padding(.horizontal, UIScale.pt(12))
+            .padding(.vertical, UIScale.pt(8))
+        }
+        .buttonStyle(QuinjetWorktreeCountButtonStyle(dark: dark))
+        .popover(isPresented: $showsWorktrees, arrowEdge: .bottom) {
+            QuinjetWorktreePicker(
+                projectName: project.name, worktrees: project.availableWorktrees,
+                selectedPath: nil,
+                select: {
+                    open($0)
+                    showsWorktrees = false
+                })
+        }
     }
 
     private var worktreeCount: String {

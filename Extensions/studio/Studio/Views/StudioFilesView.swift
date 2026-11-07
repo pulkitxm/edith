@@ -31,6 +31,7 @@ struct StudioFilesView: View {
                                 Text("Choose another file type or show all files.")
                             } actions: {
                                 Button("Show all files") { model.kindFilter = nil }
+                                    .buttonStyle(.edithDefault)
                             }
                         } else {
                             StudioTileGrid(items: model.visibleFiles) { item in
@@ -199,7 +200,11 @@ struct StudioFileCard: View {
                         .opacity(missing ? 0.35 : 1)
                         .edithButtonTarget(.borderless)
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(
+                    .edithShaped(
+                        RoundedRectangle(cornerRadius: UIScale.pt(8), style: .continuous),
+                        filled: true)
+                )
                 .onDrag { NSItemProvider(object: item.url as NSURL) }
                 .accessibilityLabel(
                     privacy?.hides(.ability("studio")) == true
@@ -215,7 +220,7 @@ struct StudioFileCard: View {
                             )
                             .background(Circle().fill(DashSkin.paper2(scheme == .dark)).padding(1))
                     }
-                    .buttonStyle(.edith(.iconOnly))
+                    .buttonStyle(.edithShaped(Circle(), filled: true))
                     .opacity(selected || hovering ? 1 : 0)
                     .accessibilityLabel(selected ? "Deselect" : "Select")
                     Spacer()
@@ -234,7 +239,7 @@ struct StudioFileCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            HStack(spacing: UIScale.pt(4)) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 ForEach(StudioQuickAction.allCases, id: \.self) { action in
                     if let tool = StudioCatalog.quickTool(action, for: item.kind) {
                         StudioQuickButton(title: action.title, primary: action == .edit) {

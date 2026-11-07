@@ -191,7 +191,6 @@ private struct FleetMachineRow: View {
     let dark: Bool
     let hostsCompanion: Bool
     let onOpen: () -> Void
-    @State private var hovering = false
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
@@ -291,16 +290,10 @@ private struct FleetMachineRow: View {
                     }
                 }
             }
-            .padding(.vertical, UIScale.pt(8))
-            .padding(.horizontal, UIScale.pt(4))
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(7))
-                    .fill(hovering ? DashSkin.inkFaint(dark).opacity(0.07) : .clear)
-            )
+            .padding(.vertical, UIScale.pt(1))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
-        .onHover { hovering = $0 }
+        .buttonStyle(.edith(.row))
     }
 
     private var offlineDetail: String {

@@ -190,6 +190,7 @@ struct HerdrPaneHeader: View {
                         .lineLimit(1)
                     Spacer(minLength: UIScale.pt(4))
                 }
+                .padding(.leading, UIScale.pt(9))
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
             }
@@ -211,7 +212,6 @@ struct HerdrPaneHeader: View {
                 }
             }
         }
-        .padding(.leading, UIScale.pt(9))
         .padding(.trailing, UIScale.pt(4))
         .frame(height: UIScale.pt(28))
         .background(focused ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper2(dark))

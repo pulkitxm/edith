@@ -114,7 +114,7 @@ struct NotchWorkerOwnershipTests {
         #expect(controller.surfaceSnapshots.isEmpty)
     }
 
-    @Test func shelfSnapshotMasksFilenamesBeforeTheProcessBoundary() async throws {
+    @Test func shelfSnapshotKeepsFilenamesForTheBlurOverlay() async throws {
         let (controller, context, root, id) = try fixture()
         defer { cleanup(controller, root, id) }
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("notch-mock-" + UUID().uuidString))
@@ -131,8 +131,9 @@ struct NotchWorkerOwnershipTests {
         let data = try await controller.execute(
             "surface.snapshot", payload: request.encoded(providerID: "notchShelf"))
         let result = try SurfaceSnapshot.decode(data, providerID: "notchShelf")
-        #expect(result.rows.isEmpty)
-        #expect(result.message == "Hidden while presenting")
-        #expect(controller.leadingGlance == nil)
+        #expect(
+            result.rows.map(\.title) == controller.items.prefix(request.tile.itemLimit).map(\.name))
+        #expect(result.message == nil)
+        #expect(controller.leadingGlance.map(\.covered) != false)
     }
 }

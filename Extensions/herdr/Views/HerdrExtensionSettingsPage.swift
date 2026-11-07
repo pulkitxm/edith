@@ -15,6 +15,7 @@ struct HerdrExtensionSettingsPage: View {
                     Button("Open Herdr") { model.openHerdr() }
                     Button("Open setup guide") { model.openGuide() }
                 }
+                .buttonStyle(.edithDefault)
                 if model.checking {
                     SkeletonGroup { SkeletonBlock(width: 238, height: 9, corner: 4) }
                         .accessibilityLabel("Checking Herdr sessions")

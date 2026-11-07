@@ -64,7 +64,7 @@ struct HostPermissionInfoButton: View {
                     .font(.system(size: UIScale.pt(10)))
             }
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edithShaped(Capsule()))
         .foregroundStyle(color)
         .accessibilityLabel("Permission details")
         .help("Permission details")

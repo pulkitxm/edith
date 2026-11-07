@@ -143,6 +143,7 @@ private struct CalendarDayHeader: View {
 private struct CalendarEventRow: View {
     @State private var detailsExpanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     let event: CalendarEventPayload
     let style: CalendarAgendaStyle
     let accentColor: Color
@@ -192,7 +193,7 @@ private struct CalendarEventRow: View {
                 Text(event.title)
                     .font(.edithText(.body).weight(.medium))
                     .lineLimit(style.compact ? 2 : 1)
-                    .presenterBlur(blurEvents)
+                    .presenterCover(blurEvents, dark: scheme == .dark)
                 metadata
                 if style.compact {
                     actions.padding(.top, UIScale.pt(4))
@@ -223,14 +224,15 @@ private struct CalendarEventRow: View {
     private var metadataItems: some View {
         if let calendar = CalendarText.calendarName(for: event) {
             CalendarMetadataLabel(icon: .calendar, text: calendar)
+                .presenterCover(blurEvents, dark: scheme == .dark)
         }
         if let location = CalendarText.visibleLocation(for: event) {
             CalendarMetadataLabel(icon: .location, text: location)
-                .presenterBlur(blurEvents)
+                .presenterCover(blurEvents, dark: scheme == .dark)
         }
         if let attendees = CalendarText.attendeeSummary(for: event) {
             CalendarMetadataLabel(icon: .people, text: attendees)
-                .presenterBlur(blurEvents)
+                .presenterCover(blurEvents, dark: scheme == .dark)
         }
         if event.isRecurring {
             CalendarMetadataLabel(icon: .repeatAll, text: "Recurring")
@@ -270,10 +272,10 @@ private struct CalendarEventRow: View {
                 HStack(spacing: UIScale.pt(16)) { summaryDetails }
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) { summaryDetails }
             }
-            .presenterBlur(blurEvents)
+            .presenterCover(blurEvents, dark: scheme == .dark)
             if let attendees = CalendarText.attendeeNames(for: event) {
                 CalendarDetailLabel(title: "Attendees", value: attendees, icon: .people)
-                    .presenterBlur(blurEvents)
+                    .presenterCover(blurEvents, dark: scheme == .dark)
             }
             if let notes = CalendarText.notes(for: event) {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -283,7 +285,7 @@ private struct CalendarEventRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(5)
                         .textSelection(.enabled)
-                        .presenterBlur(blurEvents)
+                        .presenterCover(blurEvents, dark: scheme == .dark)
                 }
             }
             if !hasDetails {

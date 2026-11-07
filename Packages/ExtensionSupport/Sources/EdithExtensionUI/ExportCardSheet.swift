@@ -108,7 +108,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                 arrow(.chevronRight, shortcut: .rightArrow, movement: 1)
             }
             pagination
-            HStack(spacing: UIScale.pt(12)) {
+            HStack(spacing: UIScale.pt(PageMetrics.controlSpacing)) {
                 Button {
                     deliver(save: false)
                 } label: {
@@ -251,7 +251,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                         )
                         .frame(width: UIScale.pt(16), height: UIScale.pt(16))
                 }
-                .buttonStyle(.edith(.borderless))
+                .buttonStyle(.edithShaped(Circle(), filled: true))
                 .disabled(busy)
                 .accessibilityLabel(deck.title(for: deck.cards[destination]))
                 .accessibilityAddTraits(destination == index ? .isSelected : [])

@@ -187,8 +187,7 @@ struct HostSurfaceCard: View {
 
     var body: some View {
         Group {
-            if let presenter, !marketplace.surfaces.privacy.hides(tile.widget),
-                providers.count == 1, let provider = providers.first,
+            if let presenter, providers.count == 1, let provider = providers.first,
                 let section = HostNativeSurfaceRoute.section(
                     provider: provider.id, target: target, tile: tile)
             {
@@ -198,9 +197,7 @@ struct HostSurfaceCard: View {
                     openMarketplace: { openExtension?(provider.id) },
                     surface: HostNativeSurfaceRoute.request(
                         target: target, tile: tile, presentation: presentation))
-            } else if tile.widget == .actions, target == .home,
-                !marketplace.surfaces.privacy.hides(tile.widget)
-            {
+            } else if tile.widget == .actions, target == .home {
                 HostQuickActionsCard(
                     marketplace: marketplace, tile: tile, fill: fillHeight,
                     openExtensions: openExtensions)
@@ -292,13 +289,10 @@ private struct HostSurfaceProviderCard: View {
                     }
                 }
             }.buttonStyle(.edith(.borderless))
-            if hidden {
-                Label("Hidden while presenting", edith: .eyeOff).font(
-                    .edithText(.caption)
-                ).foregroundStyle(.secondary)
-            } else if let snapshot {
+            if let snapshot {
                 SurfaceSnapshotContent(
-                    tile: tile, snapshot: snapshot, perform: perform, adjust: adjust
+                    tile: tile, snapshot: snapshot, presenting: hidden, perform: perform,
+                    adjust: adjust
                 )
                 .disabled(actionTask != nil)
             } else if load.errorMessage == nil {
@@ -326,7 +320,7 @@ private struct HostSurfaceProviderCard: View {
         .background(HostSurfaceNavigationAnchor(origin: navigationOrigin))
         .pageTask(
             id: Request(tile: tile, version: version, retry: retry),
-            active: version != nil && !hidden
+            active: version != nil
                 && (target != .notch
                     || marketplace.surfaceAvailability.activeIDs.contains("notchShelf")),
             cancel: resetContent
@@ -343,7 +337,7 @@ private struct HostSurfaceProviderCard: View {
             } while !Task.isCancelled
         }
         .onChange(of: version) { clear() }
-        .onChange(of: hidden) { clear() }
+        .onChange(of: hidden) { cancelAction() }
         .onDisappear(perform: clear)
     }
 
@@ -363,8 +357,11 @@ private struct HostSurfaceProviderCard: View {
     }
 
     private func clear() {
-        actionTask?.cancel(); actionTask = nil; actionToken = nil
-        resetContent(); actionError = nil
+        cancelAction(); resetContent()
+    }
+
+    private func cancelAction() {
+        actionTask?.cancel(); actionTask = nil; actionToken = nil; actionError = nil
     }
 
     private func resetContent() {

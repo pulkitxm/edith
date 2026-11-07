@@ -223,6 +223,7 @@ private struct SurfaceShelfTile<Content: View>: View {
                 }
                 .font(.edithText(.caption)).padding(.horizontal, UIScale.pt(8))
                 .padding(.top, UIScale.pt(8)).contentShape(Rectangle())
+                .edithHoverHighlight(tone: .neutral, cornerRadius: UIScale.pt(6))
                 .onTapGesture(perform: select)
                 .highPriorityGesture(
                     DragGesture(

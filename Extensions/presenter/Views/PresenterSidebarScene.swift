@@ -9,7 +9,6 @@ struct PresenterSidebarScene: View {
         false
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private var enabled =
         false
-    @State private var hovering = false
 
     @MainActor static func controller(
         _ input: NSDictionary, presentation: ControlPresentation? = nil
@@ -46,11 +45,10 @@ struct PresenterSidebarScene: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Toggle("", isOn: binding).labelsHidden().toggleStyle(.edithSwitch)
                         .controlSize(.small).allowsHitTesting(false)
-                }.frame(maxWidth: .infinity).padding(.horizontal, UIScale.pt(8))
-                    .padding(.vertical, UIScale.pt(8))
-                    .background(hovering ? Color.primary.opacity(0.06) : Color.clear)
+                }.frame(maxWidth: .infinity)
+                    .padding(.vertical, UIScale.pt(1))
                     .contentShape(Rectangle())
-            }.buttonStyle(.edith(.borderless)).onHover { hovering = $0 }
+            }.buttonStyle(.edith(.row))
                 .disabled(!enabled).accessibilityLabel("Manual presenter mode")
                 .accessibilityValue(manual ? "On" : "Off")
             ScrollView {

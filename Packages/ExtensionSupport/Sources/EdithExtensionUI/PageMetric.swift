@@ -148,10 +148,9 @@ struct PageMetricLayout: Layout {
 
     func rowCounts(count: Int, width: CGFloat) -> [Int] {
         guard count > 0 else { return [] }
-        let fitted =
-            width.isFinite && minimumWidth + spacing > 0
-            ? Int(max(0, (width + spacing) / (minimumWidth + spacing))) : count
-        let columns = max(1, min(fitted, maximumColumns ?? count, count))
+        let columns = PageMetrics.fittedColumns(
+            count: count, width: width, minimum: minimumWidth, spacing: spacing,
+            limit: maximumColumns)
         let rows = Int((Double(count) / Double(columns)).rounded(.up))
         return (0..<rows).map { count / rows + ($0 < count % rows ? 1 : 0) }
     }

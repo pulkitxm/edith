@@ -247,7 +247,8 @@ struct NotchQuickActionsView: View {
                 .background(
                     active ? tile.highlightColor : Color.white.opacity(0.055),
                     in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.edith(.borderless)).disabled(!tile.showActions)
+        }.buttonStyle(.edithShaped(RoundedRectangle(cornerRadius: 10, style: .continuous)))
+            .disabled(!tile.showActions)
     }
     private func detail(_ title: String) -> String {
         switch title {

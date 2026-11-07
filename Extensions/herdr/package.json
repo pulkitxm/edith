@@ -1,21 +1,13 @@
 {
   "id": "herdr",
   "title": "Agents",
-  "icon": "columns",
+  "icon": "herdr",
   "category": "agents",
   "background": true,
   "commands": [
     "herdr"
   ],
-  "pages": [
-    {
-      "id": "herdr",
-      "title": "Agents",
-      "icon": "columns",
-      "order": 2,
-      "logoName": "herdr"
-    }
-  ],
+  "page": true,
   "homeCards": [
     "agents",
     "extension:herdr"

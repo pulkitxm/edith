@@ -51,19 +51,21 @@ enum EmbeddedMusicSceneRoute: String, CaseIterable {
 
 struct EmbeddedMusicFooterScene: View {
     var remote = EmbeddedMusicRemote.shared
+    var privacy = EmbeddedMusicPrivacyState.shared
     @State private var accounts = EmbeddedMusicAccounts.shared
     @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
         var autoHide = false
 
     var body: some View {
         if accounts.playerReady && (!autoHide || accounts.playerTitle != nil) {
-            EmbeddedMusicFooter(remote: remote)
+            EmbeddedMusicFooter(remote: remote).musicPresenterCover(privacy)
         }
     }
 }
 
 struct EmbeddedMusicSidebarScene: View {
     var remote = EmbeddedMusicRemote.shared
+    var privacy = EmbeddedMusicPrivacyState.shared
     @State private var accounts = EmbeddedMusicAccounts.shared
     @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
         var autoHide = false
@@ -78,7 +80,25 @@ struct EmbeddedMusicSidebarScene: View {
                     remote.setBarCollapsed(false)
                 }
             }
+            .musicPresenterCover(privacy)
         }
+    }
+}
+
+private struct MusicPresenterCover: ViewModifier {
+    var privacy: EmbeddedMusicPrivacyState
+    @Environment(\.colorScheme) private var scheme
+
+    private var presenting: Bool { privacy.hides(.music) }
+
+    func body(content: Content) -> some View {
+        content.disabled(presenting).presenterCover(presenting, dark: scheme == .dark)
+    }
+}
+
+extension View {
+    func musicPresenterCover(_ privacy: EmbeddedMusicPrivacyState) -> some View {
+        modifier(MusicPresenterCover(privacy: privacy))
     }
 }
 

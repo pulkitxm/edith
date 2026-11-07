@@ -36,8 +36,9 @@ system extension carrier, the lid-awake helper, and the `ed` launcher.
 
 Each extension declares what the host registers for it in
 `Extensions/<id>/package.json`: its title, symbol, category, `ed` command words,
-global shortcuts, settings that start it at launch, sidebar pages, Maintenance
-sections and whether it has `background` work. `scripts/extension-index.mjs --write`
+global shortcuts, settings that start it at launch, whether it has a sidebar
+page (always under its own category, with its own title and icon) and whether it
+has `background` work. `scripts/extension-index.mjs --write`
 renders those declarations into the host index
 (`Packages/EdithHost/Sources/EdithHostCore/Resources/index.json`), and
 `make ci-extension-index` fails when the index is stale. The host registers
@@ -60,6 +61,20 @@ that needs per-extension state takes the caller's image through an
 `image: UnsafeRawPointer = #dsohandle` default argument and resolves it with
 `ExtensionScope.resolve`; it never caches a scope in a static. Packaging fails
 if a role embeds kit code.
+
+Every other library a role bundles in its own `Contents/Frameworks` (a native
+product such as `libGhosttyTerminal.dylib`, a vendored framework, a Cargo
+library) is private to that build. dyld reuses a loaded image whose install
+name matches, so packaging gives each one a unique install name, such as
+`libGhosttyTerminal.herdr-<digest>.dylib`, where the digest covers the
+extension id, role, version and the library bytes. Libraries the Runtime links
+are renamed to match; libraries an extension opens by path keep their file name. The Runtime records that
+name when it links, so two extensions, or two versions of one extension, that
+bundle the same engine never bind each other's copy. Packaging fails if a role
+links any `@rpath` library other than the shared kit and its own private ones.
+A bundled engine must therefore tolerate other copies of itself in the process:
+the Ghostty patch names its runtime `CALayer` subclass after the loading image,
+because a second copy cannot register a class name that is already taken.
 
 ## Marketplace
 

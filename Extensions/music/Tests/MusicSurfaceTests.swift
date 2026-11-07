@@ -116,23 +116,25 @@ extension MusicExtensionTests {
             }
         }
 
-        @Test func presenterModeSkipsDataReadsAndRejectsMusicActions() async throws {
+        @Test func presenterModeKeepsTheTrackForTheBlurOverlayAndRejectsMusicActions() async throws
+        {
             let fixture = Fixture()
             fixture.privacy = ["active": "1", "blurMusic": "1"]
             let snapshot = try await fixture.snapshot()
-            #expect(snapshot.rows.isEmpty && snapshot.sources.isEmpty)
-            #expect(fixture.reads == 0)
+            #expect(snapshot.rows.first?.title == "Mock Track")
+            #expect(snapshot.message == nil)
+            #expect(fixture.reads == 1)
             await #expect(throws: ExtensionPeerError.self) {
                 _ = try await fixture.action(fixture.states[0].identifier("toggle"))
             }
-            #expect(fixture.commands.isEmpty && fixture.reads == 0)
+            #expect(fixture.commands.isEmpty && fixture.reads == 1)
         }
 
-        @Test func privacyChangesDuringReadPreventActionsAndPrivateResponses() async throws {
+        @Test func privacyChangesDuringReadPreventActionsButKeepTheTrack() async throws {
             let fixture = Fixture()
             fixture.hideDuringRead = true
             let snapshot = try await fixture.snapshot()
-            #expect(snapshot.rows.isEmpty)
+            #expect(snapshot.rows.first?.title == "Mock Track")
             fixture.privacy = [:]
             await #expect(throws: ExtensionPeerError.self) {
                 _ = try await fixture.action(fixture.states[0].identifier("toggle"))

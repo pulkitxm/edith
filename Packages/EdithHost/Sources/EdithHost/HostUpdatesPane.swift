@@ -40,6 +40,7 @@ struct HostUpdatesPane: View {
                         Button("Check for Updates") {
                             updater.checkForUpdates()
                         }
+                        .buttonStyle(.edithDefault)
                         .disabled(!updater.canCheckForUpdates)
                     } header: {
                         Text("Version")

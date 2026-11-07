@@ -5,7 +5,7 @@ import SwiftUI
 import Testing
 @testable import EdithExtensionUI
 
-@MainActor @Suite(.serialized) struct PageDateFilterRenderingTests {
+@MainActor @Suite(.serialized, .exclusiveScale) struct PageDateFilterRenderingTests {
     private static let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt

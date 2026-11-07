@@ -75,7 +75,7 @@ struct HostAboutPage: View {
                 .background(theme.opacity(0.16), in: Capsule(style: .circular))
                 .overlay(Capsule(style: .circular).strokeBorder(theme.opacity(0.38), lineWidth: 1))
             }
-            .buttonStyle(.edith(.borderless))
+            .buttonStyle(.edithShaped(Capsule(style: .circular)))
             .help("Open the repository on GitHub")
             .padding(.top, UIScale.pt(2))
             contributorWall

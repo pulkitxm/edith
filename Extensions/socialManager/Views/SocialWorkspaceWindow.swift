@@ -78,6 +78,7 @@ private struct DetachedSocialBrowser: View {
                 Text(model.accountTitle(account)).font(.edithText(.headline))
                 Spacer()
                 Button("Return to workspace") { model.open(account) }
+                    .buttonStyle(.edithDefault)
             }.padding(UIScale.pt(12))
             if session.pages.count > 1 {
                 EdithSegmentedPicker(

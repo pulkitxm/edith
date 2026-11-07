@@ -1,7 +1,7 @@
 {
   "id": "keepAwake",
   "title": "Keep Awake",
-  "icon": "moon",
+  "icon": "keepAwake",
   "category": "utilities",
   "background": false,
   "commands": [],

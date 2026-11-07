@@ -193,6 +193,8 @@ import Testing
         #expect(top.value == "gpt-large")
         #expect(top.sub.contains("300"))
         #expect(top.sub.contains("75.0% of tokens"))
+        let total = try #require(dashboard.kpis.first { $0.label == "Total tokens" })
+        #expect(total.sub.hasSuffix(" 1 active day"))
         #expect(abs(dashboard.series.reduce(0) { $0 + $1.cost } - 14) < 0.0001)
     }
 

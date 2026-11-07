@@ -7,14 +7,7 @@
   "commands": [
     "quinjet"
   ],
-  "pages": [
-    {
-      "id": "quinjet",
-      "title": "Code Review",
-      "icon": "quinjet",
-      "order": 3
-    }
-  ],
+  "page": true,
   "homeCards": [
     "github",
     "extension:quinjet"

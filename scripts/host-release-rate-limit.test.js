@@ -1,4 +1,9 @@
 import { expect, test } from "bun:test";
+import {
+  rateLimitRecoveries,
+  rateLimitRetries,
+  secondaryRateLimitWaitMs,
+} from "./github-retry.mjs";
 import { assetNames, fixture } from "./host-release-test-fixture.mjs";
 import {
   preflightHostReleaseWithRecovery,
@@ -62,6 +67,7 @@ function publishLimited(value, github) {
     execute: github.execute,
     matchesAsset: value.matchesAsset,
     rateLimit: github.rateLimit,
+    retry: github.rateLimit,
   });
 }
 
@@ -97,6 +103,10 @@ test("an exhausted rate limit in the middle of the asset uploads waits for the r
     let uploads = 0;
     let exhausted = false;
     const waits = [];
+    const sleep = async (milliseconds) => {
+      waits.push(milliseconds);
+      exhausted = false;
+    };
     const execute = (command, args, options) => {
       if (command === "gh" && args[1] === "rate_limit")
         return exhausted
@@ -119,12 +129,8 @@ test("an exhausted rate limit in the middle of the asset uploads waits for the r
       target: "a".repeat(40),
       execute,
       matchesAsset: value.matchesAsset,
-      rateLimit: {
-        sleep: async (milliseconds) => {
-          waits.push(milliseconds);
-          exhausted = false;
-        },
-      },
+      rateLimit: { sleep },
+      retry: { sleep },
     });
     expect(result.assets).toEqual(assetNames);
     expect(waits).toHaveLength(1);
@@ -171,14 +177,41 @@ test("publication survives two consecutive exhausted windows", async () => {
   }
 });
 
-test("a third exhausted window stops publication with the rate limit error and leaves an unpublished draft", async () => {
+test("publication survives a third exhausted window without restarting", async () => {
   const value = fixture();
   try {
     const github = limitedGitHub(value, { exhaustAt: [4, 12, 20] });
-    await expect(publishLimited(value, github)).rejects.toThrow(
-      "Command failed",
+    await publishLimited(value, github);
+    expect(github.waits).toHaveLength(3);
+    expectSinglePublishedRelease(value);
+  } finally {
+    value.clean();
+  }
+});
+
+test("a rate limit that never clears stops after bounded waits and leaves an unpublished draft", async () => {
+  const value = fixture();
+  try {
+    const github = limitedGitHub(value, { exhaustAt: [4] });
+    const waits = [];
+    const sleep = async (milliseconds) => {
+      waits.push(milliseconds);
+    };
+    await expect(
+      publishHostReleaseWithRecovery({
+        directory: value.directory,
+        repository: "synthetic/fixture",
+        tag: "v1.2.3",
+        target: "a".repeat(40),
+        execute: github.execute,
+        matchesAsset: value.matchesAsset,
+        rateLimit: { sleep },
+        retry: { sleep },
+      }),
+    ).rejects.toThrow("Command failed");
+    expect(waits).toHaveLength(
+      (rateLimitRetries + 1) * (rateLimitRecoveries + 1) - 1,
     );
-    expect(github.waits).toHaveLength(2);
     expect(value.release?.draft ?? true).toBe(true);
   } finally {
     value.clean();
@@ -223,10 +256,11 @@ test("failures with rate limit left are not retried and never wait", async () =>
   }
 });
 
-test("an unreadable rate limit probe fails closed with the original error", async () => {
+test("an unreadable rate limit probe waits a bounded secondary backoff, then fails with the original error", async () => {
   const value = fixture();
   try {
     const waits = [];
+    const sleep = async (milliseconds) => waits.push(milliseconds);
     await expect(
       publishHostReleaseWithRecovery({
         directory: value.directory,
@@ -240,10 +274,15 @@ test("an unreadable rate limit probe fails closed with the original error", asyn
           return value.execute(command, args, options);
         },
         matchesAsset: value.matchesAsset,
-        rateLimit: { sleep: async (milliseconds) => waits.push(milliseconds) },
+        rateLimit: { sleep },
+        retry: { sleep, random: () => 0 },
       }),
     ).rejects.toThrow("Command failed: gh api");
-    expect(waits).toEqual([]);
+    expect(waits).toEqual([
+      secondaryRateLimitWaitMs,
+      2 * secondaryRateLimitWaitMs,
+      4 * secondaryRateLimitWaitMs,
+    ]);
   } finally {
     value.clean();
   }
@@ -254,6 +293,10 @@ test("preflight waits out an exhausted rate limit before accepting the assets", 
   try {
     let exhausted = true;
     const waits = [];
+    const sleep = (milliseconds) => {
+      waits.push(milliseconds);
+      exhausted = false;
+    };
     const assets = preflightHostReleaseWithRecovery({
       directory: value.directory,
       repository: "synthetic/fixture",
@@ -265,12 +308,8 @@ test("preflight waits out an exhausted rate limit before accepting the assets", 
         if (exhausted && command === "pukbot") throw rateLimitError();
         return value.execute(command, args, options);
       },
-      rateLimit: {
-        sleep: (milliseconds) => {
-          waits.push(milliseconds);
-          exhausted = false;
-        },
-      },
+      rateLimit: { sleep },
+      retry: { sleep },
     });
     expect(assets).toEqual(assetNames);
     expect(waits).toHaveLength(1);

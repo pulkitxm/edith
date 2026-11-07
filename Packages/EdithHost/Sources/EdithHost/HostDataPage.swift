@@ -40,6 +40,7 @@ struct HostDataPage: View {
                             services.identity.root.appendingPathComponent("Logs"))
                     }
                 }
+                .buttonStyle(.edithDefault)
                 Text("Secrets live in Keychain. Caches and logs are regenerable and never synced.")
                     .settingsCaption()
             }
@@ -56,7 +57,8 @@ struct HostDataPage: View {
                         "Measured \(collectedAt.formatted(date: .abbreviated, time: .shortened)). Sizes refresh on demand."
                     ).settingsCaption()
                 }
-                Button("Reload") { revision += 1 }.disabled(services.inspecting)
+                Button("Reload") { revision += 1 }.buttonStyle(.edithDefault)
+                    .disabled(services.inspecting)
             }
             if let snapshot = services.snapshot?.storage {
                 Section("Restore preview") {
