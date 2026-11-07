@@ -56,7 +56,7 @@ const software = {
   applicationCategory: "UtilitiesApplication",
   operatingSystem: "macOS 14 or later",
   softwareVersion: release.version,
-  fileSize: `${(release.dmgBytes / 1_000_000).toFixed(1)} MB`,
+  fileSize: `${(release.dmgBytes / 1_048_576).toFixed(1)} MB`,
   downloadUrl: dmg,
   url: `${origin}/`,
   image: `${origin}/app-icon-512.png`,

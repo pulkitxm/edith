@@ -1,5 +1,6 @@
 import React from 'react';
 import {staticFile} from 'remotion';
+import {ink} from '../theme';
 
 export const Icon: React.FC<{name: string; size: number; color: string; style?: React.CSSProperties}> = ({
   name,
@@ -38,9 +39,9 @@ export const IconTile: React.FC<{name: string; size: number; tint?: string; glow
       width: size,
       height: size,
       borderRadius: size * 0.26,
-      background: 'linear-gradient(160deg, #2e2e32, #1c1c1f)',
-      border: '1px solid rgba(255,255,255,0.08)',
-      boxShadow: `0 ${size * 0.12}px ${size * 0.4}px rgba(0,0,0,0.45), 0 0 ${glow * size * 0.6}px rgba(233,182,90,${glow * 0.45})`,
+      background: `${ink.tile}`,
+      border: `1px solid ${ink.glass}`,
+      boxShadow: `0 ${size * 0.12}px ${size * 0.4}px ${ink.shadow}, 0 0 ${glow * size * 0.6}px rgba(233,182,90,${glow * 0.45})`,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',

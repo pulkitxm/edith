@@ -51,9 +51,9 @@ export const AgentsMcp: React.FC = () => {
             position: 'absolute',
             top: stage.top,
             transform: `translateY(${(1 - enter) * 300}px)`,
-            boxShadow: '0 50px 140px rgba(0,0,0,0.6)',
+            boxShadow: `0 50px 140px ${ink.shadow}`,
             borderRadius: 18,
-            border: '1px solid rgba(255,255,255,0.1)',
+            border: `1px solid ${ink.glassLine}`,
           }}
         >
           <Camera view={stage} source={source} rect={rect}>
@@ -77,7 +77,7 @@ export const AgentsMcp: React.FC = () => {
             right: (width - stage.width) / 2 + 24,
             padding: '10px 20px',
             borderRadius: 999,
-            background: 'rgba(10,23,48,0.92)',
+            background: `${ink.chip}`,
             border: '1px solid rgba(233,182,90,0.5)',
             color: ink.goldLight,
             fontFamily: display,
@@ -109,13 +109,13 @@ export const AgentsMcp: React.FC = () => {
                   opacity: p * ramp(frame, 0, 1),
                   padding: '12px 24px',
                   borderRadius: 999,
-                  background: 'rgba(10,23,48,0.94)',
+                  background: `${ink.chip}`,
                   border: '1px solid rgba(233,182,90,0.5)',
                   color: ink.goldLight,
                   fontFamily: display,
                   fontSize: 26,
                   fontWeight: 600,
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+                  boxShadow: `0 20px 40px ${ink.shadow}`,
                 }}
               >
                 {c}

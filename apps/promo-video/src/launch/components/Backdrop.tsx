@@ -25,7 +25,7 @@ export const Backdrop: React.FC<{glow?: string; intensity?: number; children?: R
       <AbsoluteFill
         style={{
           backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)',
+            `linear-gradient(${ink.grid} 1px, transparent 1px), linear-gradient(90deg, ${ink.grid} 1px, transparent 1px)`,
           backgroundSize: '64px 64px',
           backgroundPosition: `0 ${frame * 0.3}px`,
           maskImage: 'radial-gradient(80% 70% at 50% 40%, black, transparent)',

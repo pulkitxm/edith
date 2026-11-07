@@ -36,7 +36,7 @@ const Wall: React.FC = () => {
           style={{
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'radial-gradient(42% 38% at 50% 50%, rgba(5,8,15,0.94), rgba(5,8,15,0.2) 100%)',
+            background: `radial-gradient(42% 38% at 50% 50%, ${ink.scrim}, ${ink.scrimSoft} 100%)`,
           }}
         >
           <div

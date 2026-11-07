@@ -38,7 +38,7 @@ export const Performance: React.FC = () => {
                   width: square ? 900 : 480,
                   padding: square ? '22px 40px' : '40px 0',
                   borderRadius: 28,
-                  background: 'rgba(255,255,255,0.045)',
+                  background: `${ink.glass}`,
                   border: '1px solid rgba(233,182,90,0.28)',
                   display: 'flex',
                   flexDirection: square ? 'row' : 'column',

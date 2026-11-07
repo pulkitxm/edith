@@ -15,7 +15,7 @@ export const Outro: React.FC<{duration: number}> = ({duration}) => {
   return (
     <Backdrop intensity={1.6}>
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', gap: 22, opacity: fadeOut}}>
-        <div style={{filter: 'drop-shadow(0 30px 60px rgba(0,0,0,0.6))', marginBottom: 6}}>
+        <div style={{filter: `drop-shadow(0 30px 60px ${ink.shadow})`, marginBottom: 6}}>
           <NotchMark size={240} progress={mark} shine={shine} />
         </div>
         <Kinetic words={['Get', {text: 'Edith V1', gold: true}]} delay={10} size={square ? 120 : 140} />
@@ -38,8 +38,8 @@ export const Outro: React.FC<{duration: number}> = ({duration}) => {
               color: ink.text,
               padding: '16px 28px',
               borderRadius: 14,
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.12)',
+              background: `${ink.glass}`,
+              border: `1px solid ${ink.glassLine}`,
             }}
           >
             <span style={{color: ink.gold}}>$</span> brew install --cask pulkitxm/tap/edith

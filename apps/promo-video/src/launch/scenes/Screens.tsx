@@ -2,7 +2,7 @@ import React from 'react';
 import {useCurrentFrame, useVideoConfig} from 'remotion';
 import {ScreenStage} from '../components/ScreenShot';
 import {facts} from '../data';
-import {display, ink, pop, useLayout} from '../theme';
+import {appearance, display, ink, pop, useLayout} from '../theme';
 
 const top = {x: 0, y: 0, w: 3200, h: 1546};
 const topSquare = {x: 0, y: 0, w: 2620, h: 2000};
@@ -19,13 +19,13 @@ const Badge: React.FC<{text: string; delay: number}> = ({text, delay}) => {
         bottom: square ? 36 : 30,
         padding: '14px 28px',
         borderRadius: 999,
-        background: 'rgba(10,23,48,0.94)',
+        background: `${ink.chip}`,
         border: '1px solid rgba(233,182,90,0.55)',
         color: ink.goldLight,
         fontFamily: display,
         fontSize: square ? 28 : 30,
         fontWeight: 600,
-        boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
+        boxShadow: `0 20px 50px ${ink.shadow}`,
         transform: `scale(${p})`,
         opacity: p,
         whiteSpace: 'nowrap',
@@ -110,16 +110,29 @@ export const DownloadsScreen: React.FC = () => (
     title={['Save', 'anything', 'from', 'a', {text: 'link.', gold: true}]}
     frames={[{src: 'downloads', from: 0}]}
     glow={ink.blue}
-    shots={{
-      wide: [
-        {at: 0, rect: top},
-        {at: 45, rect: {x: 1060, y: 110, w: 1600, h: 773}},
-      ],
-      square: [
-        {at: 0, rect: topSquare},
-        {at: 45, rect: {x: 1080, y: 110, w: 1500, h: 1147}},
-      ],
-    }}
+    shots={
+      appearance === 'light'
+        ? {
+            wide: [
+              {at: 0, rect: top},
+              {at: 45, rect: {x: 760, y: 250, w: 1680, h: 811}},
+            ],
+            square: [
+              {at: 0, rect: topSquare},
+              {at: 45, rect: {x: 860, y: 250, w: 1480, h: 1132}},
+            ],
+          }
+        : {
+            wide: [
+              {at: 0, rect: top},
+              {at: 45, rect: {x: 1060, y: 110, w: 1600, h: 773}},
+            ],
+            square: [
+              {at: 0, rect: topSquare},
+              {at: 45, rect: {x: 1080, y: 110, w: 1500, h: 1147}},
+            ],
+          }
+    }
   >
     <Badge text="YouTube · Instagram · TikTok · X · Reddit" delay={60} />
   </ScreenStage>
