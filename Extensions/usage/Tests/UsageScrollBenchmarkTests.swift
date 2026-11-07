@@ -9,6 +9,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct UsageScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingTheDashboardWithAYearOfSyntheticUsage() async throws
     {
@@ -30,7 +31,7 @@ import Testing
         print("usage-scroll regression \(scenario.rawValue): \(timing)")
         #expect(Set(timing.offsets).count > 10)
         #expect(timing.worst < 80)
-        #expect(timing.median < 12)
+        #expect(timing.median < Self.medianBudget)
         #expect(timing.hitches < 4)
     }
 

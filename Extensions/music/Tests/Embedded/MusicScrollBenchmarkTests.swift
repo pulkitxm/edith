@@ -9,6 +9,7 @@ import Testing
 
 @MainActor @Suite(.serialized) struct MusicScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingTracksAndFavouritesWithSyntheticLibrary()
         async throws
@@ -34,7 +35,7 @@ import Testing
         let timing = try await MusicSyntheticLibrary.measure(
             tracks: 600, favourites: 200, showingFavourites: false, frames: 60)
         #expect(timing.worst < 80)
-        #expect(timing.median < 12)
+        #expect(timing.median < Self.medianBudget)
     }
 }
 

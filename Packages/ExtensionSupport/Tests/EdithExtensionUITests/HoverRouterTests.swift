@@ -93,7 +93,8 @@ struct HoverRouterTests {
         let top = host.isFlipped ? rect.minY : host.bounds.height - rect.maxY
         var count = 0
         for x in max(0, Int(rect.minX * scale))..<min(lhs.pixelsWide, Int(rect.maxX * scale)) {
-            for y in max(0, Int(top * scale))..<min(lhs.pixelsHigh, Int((top + rect.height) * scale))
+            for y in max(
+                0, Int(top * scale))..<min(lhs.pixelsHigh, Int((top + rect.height) * scale))
             {
                 guard let a = lhs.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
                     let b = rhs.colorAt(x: x, y: y)?.usingColorSpace(.sRGB)

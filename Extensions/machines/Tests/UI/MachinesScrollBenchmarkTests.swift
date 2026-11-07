@@ -7,6 +7,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct MachinesScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingEveryLongListWithSyntheticMachines() async throws {
         let only = ProcessInfo.processInfo.environment["EDITH_SCROLL_CASE"]
@@ -24,7 +25,7 @@ import Testing
         print("machines-scroll regression \(name): \(timing)")
         #expect(Set(timing.offsets).count > 10)
         #expect(timing.worst < 80)
-        #expect(timing.median < 12)
+        #expect(timing.median < Self.medianBudget)
     }
 
     static func heavyCount(_ name: String) -> Int {

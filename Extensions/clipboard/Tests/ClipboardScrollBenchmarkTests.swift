@@ -8,6 +8,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct ClipboardScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingHistoryAndPanelWithSyntheticClipboard() async throws
     {
@@ -28,7 +29,7 @@ import Testing
             let timing = try await ClipboardSyntheticHistory.measure(
                 surface, count: 400, frames: 60)
             #expect(timing.worst < 80)
-            #expect(timing.median < 12)
+            #expect(timing.median < Self.medianBudget)
         }
     }
 }

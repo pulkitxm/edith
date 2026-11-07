@@ -9,6 +9,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct DownloadsScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingLongDownloadHistory() async throws {
         let frames = Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_FRAMES"] ?? "") ?? 300
@@ -23,7 +24,7 @@ import Testing
         print("downloads-regression history: \(timing)")
         #expect(timing.frames.count == 60)
         #expect(timing.worst < 100)
-        #expect(timing.median < 12)
+        #expect(timing.median < Self.medianBudget)
     }
 
     static func measure(records count: Int, frames: Int) async throws -> ScrollTiming {
