@@ -2,7 +2,8 @@ import React from 'react';
 import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {Backdrop} from '../components/Backdrop';
 import {Kinetic} from '../components/Kinetic';
-import {beat, display, ink, pop, ramp, sharp} from '../theme';
+import {NotchMark} from '../components/NotchMark';
+import {beat, display, ink, pop, ramp, sharp, useLayout} from '../theme';
 
 const apps = [
   'Clipboard manager',
@@ -23,64 +24,72 @@ const apps = [
   'Notch app',
 ];
 
-const slots = apps.map((name, i) => {
-  const col = i % 4;
-  const row = Math.floor(i / 4);
-  const jitter = ((i * 37) % 11) - 5;
-  return {name, x: 250 + col * 470 + jitter * 6, y: 330 + row * 150 + jitter * 3, tilt: jitter * 0.8};
-});
+export const hookDuration = beat * 10;
 
 export const Hook: React.FC = () => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const collapse = ramp(frame, 150, 178, [0, 1], sharp);
-  const count = Math.min(apps.length, Math.max(0, Math.floor((frame - 6) / 7) + 1));
+  const {width, height, square} = useLayout();
+  const cols = square ? 3 : 4;
+  const colGap = square ? 340 : 440;
+  const rowGap = square ? 110 : 140;
+  const rows = Math.ceil(apps.length / cols);
+  const top = height / 2 - ((rows - 1) * rowGap) / 2 + (square ? 50 : 40);
+  const collapse = ramp(frame, beat * 5, beat * 5 + 14, [0, 1], sharp);
+  const count = Math.min(apps.length, Math.max(0, Math.floor(frame / 2) + 1));
+  const logo = pop(frame, fps, beat * 5 + 10, true);
   return (
     <Backdrop intensity={0.6}>
       <AbsoluteFill>
-        {slots.map((s, i) => {
-          const p = pop(frame, fps, 6 + i * 7, true);
-          const x = interpolate(collapse, [0, 1], [s.x, 960]);
-          const y = interpolate(collapse, [0, 1], [s.y, -40]);
-          const scale = p * interpolate(collapse, [0, 1], [1, 0.1]);
+        {apps.map((name, i) => {
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const jitter = ((i * 37) % 11) - 5;
+          const sx = width / 2 + (col - (cols - 1) / 2) * colGap + jitter * 4;
+          const sy = top + row * rowGap + jitter * 2;
+          const p = pop(frame, fps, i * 2, true);
+          const x = interpolate(collapse, [0, 1], [sx, width / 2]);
+          const y = interpolate(collapse, [0, 1], [sy, height / 2]);
           return (
             <div
-              key={s.name}
+              key={name}
               style={{
                 position: 'absolute',
                 left: x,
                 top: y,
-                transform: `translate(-50%, -50%) rotate(${s.tilt * (1 - collapse)}deg) scale(${scale})`,
-                opacity: p * (1 - collapse * 0.6),
-                padding: '20px 30px',
-                borderRadius: 18,
-                background: 'rgba(255,255,255,0.06)',
+                transform: `translate(-50%, -50%) rotate(${jitter * 0.8 * (1 - collapse)}deg) scale(${p * (1 - collapse * 0.9)})`,
+                opacity: p * (1 - collapse),
+                padding: square ? '16px 24px' : '18px 28px',
+                borderRadius: 16,
+                background: 'rgba(255,255,255,0.07)',
                 border: '1px solid rgba(255,255,255,0.12)',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
                 fontFamily: display,
-                fontSize: 34,
+                fontSize: square ? 28 : 32,
                 fontWeight: 600,
                 color: ink.textSoft,
                 whiteSpace: 'nowrap',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 16,
+                gap: 14,
               }}
             >
-              <div style={{width: 14, height: 14, borderRadius: 7, background: i % 3 === 0 ? ink.coral : i % 3 === 1 ? ink.blue : ink.violet}} />
-              {s.name}
+              <div style={{width: 12, height: 12, borderRadius: 6, background: [ink.coral, ink.blue, ink.violet][i % 3]}} />
+              {name}
             </div>
           );
         })}
       </AbsoluteFill>
-      <AbsoluteFill style={{alignItems: 'center', top: 110, opacity: 1 - collapse}}>
-        <div style={{fontFamily: display, fontSize: 64, fontWeight: 700, letterSpacing: '-0.03em', color: ink.text}}>
-          <span style={{fontVariantNumeric: 'tabular-nums', color: ink.coral}}>{count}</span> apps to make one Mac work.
+      <AbsoluteFill style={{alignItems: 'center', top: square ? 110 : 90, opacity: 1 - collapse}}>
+        <div style={{fontFamily: display, fontSize: square ? 64 : 72, fontWeight: 800, letterSpacing: '-0.035em', color: ink.text, textAlign: 'center'}}>
+          <span style={{fontVariantNumeric: 'tabular-nums', color: ink.coral}}>{count}</span> apps {square ? <br /> : null}to install, update and pay for.
         </div>
       </AbsoluteFill>
-      {frame >= 170 ? (
-        <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center'}}>
-          <Kinetic words={['Or', {text: 'one.', gold: true}]} delay={172} size={220} stagger={beat / 3} />
+      {frame >= beat * 5 + 6 ? (
+        <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', gap: 30}}>
+          <div style={{transform: `scale(${logo})`, filter: 'drop-shadow(0 20px 50px rgba(233,182,90,0.35))'}}>
+            <NotchMark size={170} />
+          </div>
+          <Kinetic words={['Now', 'it', 'is', {text: 'one.', gold: true}]} delay={beat * 5 + 12} size={square ? 120 : 132} stagger={3} />
         </AbsoluteFill>
       ) : null}
     </Backdrop>

@@ -1,4 +1,4 @@
-import {Easing, interpolate, spring} from 'remotion';
+import {Easing, interpolate, spring, useVideoConfig} from 'remotion';
 
 export const launchFps = 30;
 export const beat = 18;
@@ -61,3 +61,9 @@ export const ramp = (
 
 export const exitFade = (frame: number, duration: number, length = 10) =>
   ramp(frame, duration - length, duration, [1, 0], sharp);
+
+export const useLayout = () => {
+  const {width, height} = useVideoConfig();
+  const square = width / height < 1.3;
+  return {width, height, square, u: Math.min(width, height) / 1080};
+};

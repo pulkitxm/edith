@@ -25,11 +25,19 @@ export const Root: React.FC = () => {
         height={1080}
       />
       <Composition
-        id="Launch"
+        id="V1-launch-youtube"
         component={Launch}
         durationInFrames={launchDuration}
         fps={fps}
         width={1920}
+        height={1080}
+      />
+      <Composition
+        id="V1-launch-x"
+        component={Launch}
+        durationInFrames={launchDuration}
+        fps={fps}
+        width={1080}
         height={1080}
       />
       <Composition
