@@ -125,7 +125,7 @@ enum StudioCapture {
         }
     }
 
-    private func recognizes(_ label: String, in text: String) -> Bool {
+    private static func recognizes(_ label: String, in text: String) -> Bool {
         if text.contains(label) { return true }
         let target = Array(label.lowercased())
         let allowed = max(1, target.count / 8)
