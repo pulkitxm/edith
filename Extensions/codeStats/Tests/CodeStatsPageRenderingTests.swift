@@ -50,8 +50,9 @@ import Testing
                 for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
                     for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
                         guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-                            color.redComponent > color.blueComponent + 0.1,
-                            color.redComponent > color.greenComponent + 0.05
+                            max(color.redComponent, color.greenComponent, color.blueComponent)
+                                - min(color.redComponent, color.greenComponent, color.blueComponent)
+                                > 0.18
                         else { continue }
                         colored += 1
                     }

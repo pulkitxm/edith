@@ -66,7 +66,7 @@ not here cannot be set, and `import` skips it.
 | Key | Type | Default | Scope | What it controls |
 | --- | --- | --- | --- | --- |
 | `appearance` | string: `system`, `light`, `dark` | `system` | shared | Window and panel appearance. |
-| `theme` | string | `navy` | shared | Accent theme name: `navy`, `accent` (coral), `blue`, `indigo`, `teal`, `green`, `purple`, `pink`, `red` or `orange`. |
+| `theme` | string | `default` | shared | Accent palette name. |
 | `lastPaletteTheme` | string | none | shared | Palette the theme picker restores when a custom accent is cleared. |
 | `showDockIcon` | bool | `false` | shared | Show Edith in the Dock as well as the menu bar. |
 | `creditHidden` | bool | `false` | shared | Hide the credit line at the bottom of the panel. |
