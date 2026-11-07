@@ -1,0 +1,394 @@
+[
+  {
+    "slug": "home",
+    "kicker": "Native for macOS",
+    "title": "Every tool your Mac is missing.",
+    "subtitle": "One app.",
+    "icon": "home",
+    "mark": true
+  },
+  {
+    "slug": "features",
+    "kicker": "Features",
+    "title": "Everything Edith does.",
+    "subtitle": "Agents, files, media, desk tools and Mac housekeeping.",
+    "icon": "grid"
+  },
+  {
+    "slug": "agents",
+    "kicker": "Agents and MCP",
+    "title": "Your agents can use Edith.",
+    "subtitle": "Claude Code, Codex, Cursor and VS Code over MCP.",
+    "icon": "herdr"
+  },
+  {
+    "slug": "download",
+    "kicker": "Download",
+    "title": "Get Edith.",
+    "subtitle": "Free and open source for macOS 14 on Apple silicon.",
+    "icon": "arrowDown"
+  },
+  {
+    "slug": "faq",
+    "kicker": "FAQ",
+    "title": "Questions, answered.",
+    "subtitle": "Pricing, extensions, agents, privacy and updates.",
+    "icon": "help"
+  },
+  {
+    "slug": "changelog",
+    "kicker": "Changelog",
+    "title": "Every release, in the open.",
+    "subtitle": "385 releases and counting.",
+    "icon": "history"
+  },
+  {
+    "slug": "extensions",
+    "kicker": "Extensions",
+    "title": "41 extensions.",
+    "subtitle": "Install only what you need.",
+    "icon": "puzzle"
+  },
+  {
+    "slug": "ext-keepAwake",
+    "kicker": "Mac Utilities",
+    "title": "Keep Awake",
+    "subtitle": "Stop your Mac and display from going to sleep while you work.",
+    "icon": "keepAwake",
+    "extension": true
+  },
+  {
+    "slug": "ext-audioMixer",
+    "kicker": "Desk",
+    "title": "Audio Mixer",
+    "subtitle": "Set the volume of each app separately.",
+    "icon": "audioMixer",
+    "extension": true
+  },
+  {
+    "slug": "ext-focusDim",
+    "kicker": "Desk",
+    "title": "Focus Dim",
+    "subtitle": "Dim everything except the window you are working in.",
+    "icon": "focusDim",
+    "extension": true
+  },
+  {
+    "slug": "ext-hinge",
+    "kicker": "Labs",
+    "title": "Hinge",
+    "subtitle": "Fold your desktop as you close the lid.",
+    "icon": "hinge",
+    "extension": true
+  },
+  {
+    "slug": "ext-windowSweaters",
+    "kicker": "Labs",
+    "title": "Window Sweaters",
+    "subtitle": "Knit a colourful sweater around every window.",
+    "icon": "windowSweaters",
+    "extension": true
+  },
+  {
+    "slug": "ext-micMute",
+    "kicker": "Mac Utilities",
+    "title": "Mic Mute",
+    "subtitle": "Mute every microphone on your Mac with one shortcut.",
+    "icon": "micMute",
+    "extension": true
+  },
+  {
+    "slug": "ext-keystrokeHighlight",
+    "kicker": "Desk",
+    "title": "Keystroke Highlight",
+    "subtitle": "Show the keys you press on screen for demos and recordings.",
+    "icon": "keystrokeHighlight",
+    "extension": true
+  },
+  {
+    "slug": "ext-presenter",
+    "kicker": "Mac Utilities",
+    "title": "Presenter",
+    "subtitle": "Blur private details in Edith while you share your screen.",
+    "icon": "presenter",
+    "extension": true
+  },
+  {
+    "slug": "ext-colorPicker",
+    "kicker": "Desk",
+    "title": "Color Picker",
+    "subtitle": "Pick any color on your screen and copy it in the format you need.",
+    "icon": "colorPicker",
+    "extension": true
+  },
+  {
+    "slug": "ext-systemStats",
+    "kicker": "Mac Utilities",
+    "title": "Menu Bar Stats",
+    "subtitle": "See how busy your Mac is, right in the menu bar.",
+    "icon": "systemStats",
+    "extension": true
+  },
+  {
+    "slug": "ext-emoji",
+    "kicker": "Desk",
+    "title": "Emoji Picker",
+    "subtitle": "Find and type any emoji without leaving what you are writing.",
+    "icon": "emoji",
+    "extension": true
+  },
+  {
+    "slug": "ext-homebrew",
+    "kicker": "Mac Utilities",
+    "title": "Homebrew",
+    "subtitle": "Install, update and remove Homebrew packages without the terminal.",
+    "icon": "homebrew",
+    "extension": true
+  },
+  {
+    "slug": "ext-calendar",
+    "kicker": "Mac Utilities",
+    "title": "Calendar",
+    "subtitle": "Your next meetings at a glance, with one-click join.",
+    "icon": "calendar",
+    "extension": true
+  },
+  {
+    "slug": "ext-jev",
+    "kicker": "Labs",
+    "title": "Jev",
+    "subtitle": "Faster, smarter decisions behind Edith's smart features.",
+    "icon": "jev",
+    "extension": true
+  },
+  {
+    "slug": "ext-system",
+    "kicker": "Mac Utilities",
+    "title": "Running Apps",
+    "subtitle": "See what is running and quit what you do not need.",
+    "icon": "system",
+    "extension": true
+  },
+  {
+    "slug": "ext-timeLapse",
+    "kicker": "Media",
+    "title": "Screen Recorder",
+    "subtitle": "Record your screen, or speed up a long session into a short time-lapse.",
+    "icon": "timeLapse",
+    "extension": true
+  },
+  {
+    "slug": "ext-cleaner",
+    "kicker": "Mac Utilities",
+    "title": "Cleaner",
+    "subtitle": "Get back disk space from caches and leftovers, safely.",
+    "icon": "cleaner",
+    "extension": true
+  },
+  {
+    "slug": "ext-appMaintenance",
+    "kicker": "Mac Utilities",
+    "title": "App Updates",
+    "subtitle": "Keep your apps current and remove them cleanly.",
+    "icon": "appMaintenance",
+    "extension": true
+  },
+  {
+    "slug": "ext-blitztree",
+    "kicker": "Mac Utilities",
+    "title": "Disk Map",
+    "subtitle": "See what is using your disk space, then free it up.",
+    "icon": "blitztree",
+    "extension": true
+  },
+  {
+    "slug": "ext-plugins",
+    "kicker": "Agents & Terminal",
+    "title": "Plugins",
+    "subtitle": "Teach your coding agents how to use Edith with one-click skills.",
+    "icon": "plugins",
+    "extension": true
+  },
+  {
+    "slug": "ext-notchShelf",
+    "kicker": "Desk",
+    "title": "Notch Shelf",
+    "subtitle": "A tray, browser and alerts that live in your MacBook's notch.",
+    "icon": "notchShelf",
+    "extension": true
+  },
+  {
+    "slug": "ext-clipboard",
+    "kicker": "Desk",
+    "title": "Clipboard",
+    "subtitle": "Everything you copy, searchable and one shortcut away.",
+    "icon": "clipboard",
+    "extension": true
+  },
+  {
+    "slug": "ext-music",
+    "kicker": "Media",
+    "title": "Music",
+    "subtitle": "Your music in one place, with playback that never gets in your way.",
+    "icon": "music",
+    "extension": true
+  },
+  {
+    "slug": "ext-docs",
+    "kicker": "Agents & Terminal",
+    "title": "Docs",
+    "subtitle": "Find the right Edith command by describing what you want to do.",
+    "icon": "docs",
+    "extension": true
+  },
+  {
+    "slug": "ext-latex",
+    "kicker": "Developer & Data",
+    "title": "LaTeX",
+    "subtitle": "Write LaTeX documents and see the PDF next to your source.",
+    "icon": "latex",
+    "extension": true
+  },
+  {
+    "slug": "ext-companion",
+    "kicker": "Agents & Terminal",
+    "title": "Memory",
+    "subtitle": "A private memory of your notes and voice memos that you can ask questions.",
+    "icon": "companion",
+    "extension": true
+  },
+  {
+    "slug": "ext-terminal",
+    "kicker": "Agents & Terminal",
+    "title": "Terminal",
+    "subtitle": "A fast built-in terminal with tabs that keeps your shells in one place.",
+    "icon": "terminal",
+    "extension": true
+  },
+  {
+    "slug": "ext-studio",
+    "kicker": "Media",
+    "title": "Studio",
+    "subtitle": "Edit, compress and convert PDFs, images, video and audio on your Mac.",
+    "icon": "studio",
+    "extension": true
+  },
+  {
+    "slug": "ext-usage",
+    "kicker": "Agents & Terminal",
+    "title": "Usage",
+    "subtitle": "See what your coding agents cost and how close you are to their limits.",
+    "icon": "usage",
+    "extension": true
+  },
+  {
+    "slug": "ext-bifrost",
+    "kicker": "Desk",
+    "title": "Launcher",
+    "subtitle": "Open apps, do quick math and find files from one bar.",
+    "icon": "bifrost",
+    "extension": true
+  },
+  {
+    "slug": "ext-lidAwake",
+    "kicker": "Mac Utilities",
+    "title": "Lid Awake",
+    "subtitle": "Keep your Mac running with the lid closed.",
+    "icon": "lidAwake",
+    "extension": true
+  },
+  {
+    "slug": "ext-attention",
+    "kicker": "Developer & Data",
+    "title": "Attention",
+    "subtitle": "See which apps and sites really get your time, and protect your focus.",
+    "icon": "attention",
+    "extension": true
+  },
+  {
+    "slug": "ext-machines",
+    "kicker": "Agents & Terminal",
+    "title": "Machines",
+    "subtitle": "Watch, browse and run your servers and containers from one place.",
+    "icon": "machines",
+    "extension": true
+  },
+  {
+    "slug": "ext-downloads",
+    "kicker": "Media",
+    "title": "Downloads",
+    "subtitle": "Save videos, audio, photos and posts from links to your Mac.",
+    "icon": "downloads",
+    "extension": true
+  },
+  {
+    "slug": "ext-seoAudit",
+    "kicker": "Developer & Data",
+    "title": "Site Audit",
+    "subtitle": "Find SEO problems on your website, page by page.",
+    "icon": "seoAudit",
+    "extension": true
+  },
+  {
+    "slug": "ext-virtualCamera",
+    "kicker": "Media",
+    "title": "Virtual Camera",
+    "subtitle": "Look your best in every video call, with one camera that works everywhere.",
+    "icon": "virtualCamera",
+    "extension": true
+  },
+  {
+    "slug": "ext-codeStats",
+    "kicker": "Developer & Data",
+    "title": "Code Stats",
+    "subtitle": "See how much code you write, across every GitHub repository you own.",
+    "icon": "codeStats",
+    "extension": true
+  },
+  {
+    "slug": "ext-herdr",
+    "kicker": "Agents & Terminal",
+    "title": "Agents",
+    "subtitle": "See every coding agent on your Macs in one board, and step in when one needs you.",
+    "icon": "herdr",
+    "extension": true
+  },
+  {
+    "slug": "ext-quinjet",
+    "kicker": "Agents & Terminal",
+    "title": "Code Review",
+    "subtitle": "Review pull requests and code changes in a focused terminal workspace.",
+    "icon": "quinjet",
+    "extension": true
+  },
+  {
+    "slug": "ext-database",
+    "kicker": "Developer & Data",
+    "title": "Database",
+    "subtitle": "Browse and safely edit your databases without leaving your Mac.",
+    "icon": "database",
+    "extension": true
+  },
+  {
+    "slug": "ext-socialManager",
+    "kicker": "Media",
+    "title": "Social Manager",
+    "subtitle": "All your social accounts, signed in and side by side.",
+    "icon": "socialManager",
+    "extension": true
+  },
+  {
+    "slug": "privacy",
+    "kicker": "Edith",
+    "title": "Privacy Policy",
+    "subtitle": "No account. No telemetry. Your data stays on your Mac.",
+    "icon": "lock"
+  },
+  {
+    "slug": "terms",
+    "kicker": "Edith",
+    "title": "Terms of Use",
+    "subtitle": "Free and open source under the GPL-3.0.",
+    "icon": "doc"
+  }
+]
