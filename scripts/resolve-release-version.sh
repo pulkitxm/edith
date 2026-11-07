@@ -4,6 +4,7 @@ set -euo pipefail
 
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"
 REBUILD="${REBUILD:-}"
+REQUESTED_VERSION="${REQUESTED_VERSION:-}"
 
 release_version() {
   local tag="$1"
@@ -68,6 +69,14 @@ REST="${VERSION#*.}"
 MINOR="${REST%%.*}"
 PATCH="${REST#*.}"
 NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+if [[ -n "$REQUESTED_VERSION" ]]; then
+  [[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || { echo "release blocked: $REQUESTED_VERSION is not a version" >&2; exit 1; }
+  [[ "$(printf '%s\n%s\n' "$VERSION" "$REQUESTED_VERSION" | sort -V | tail -n 1)" == "$REQUESTED_VERSION" \
+    && "$REQUESTED_VERSION" != "$VERSION" ]] \
+    || { echo "release blocked: $REQUESTED_VERSION is not newer than $VERSION" >&2; exit 1; }
+  NEXT="$REQUESTED_VERSION"
+fi
 if git rev-parse "refs/tags/v$NEXT" >/dev/null 2>&1; then
   echo "release blocked: tag v$NEXT already exists" >&2
   exit 1

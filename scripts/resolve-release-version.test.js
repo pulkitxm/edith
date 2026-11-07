@@ -68,11 +68,12 @@ function commit(root, value) {
   git(root, "commit", "-m", value);
 }
 
-function resolveVersion(root, rebuild = "") {
+function resolveVersion(root, rebuild = "", requested = "") {
   const output = join(root, "output");
   const result = command(root, "bash", [script], {
     GITHUB_OUTPUT: output,
     REBUILD: rebuild,
+    REQUESTED_VERSION: requested,
   });
   const values = {};
   if (result.exitCode === 0) {
@@ -137,5 +138,29 @@ test("a tag without matching build metadata is rejected", () => {
   expect(result.exitCode).toBe(1);
   expect(result.stderr.toString()).toContain(
     "release blocked: v0.0.165 has no release build metadata",
+  );
+});
+
+test("a requested version replaces the next patch", () => {
+  const root = fixture();
+  commit(root, "Add a feature");
+
+  const { result, values } = resolveVersion(root, "", "1.0.0");
+
+  expect(result.exitCode).toBe(0);
+  expect(values.tag).toBe("v1.0.0");
+  expect(values.version).toBe("1.0.0");
+  expect(values.build).toBe("176");
+});
+
+test("a requested version must be newer than the latest release", () => {
+  const root = fixture();
+  commit(root, "Add a feature");
+
+  const { result } = resolveVersion(root, "", "0.0.164");
+
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr.toString()).toContain(
+    "release blocked: 0.0.164 is not newer than 0.0.164",
   );
 });
