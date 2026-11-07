@@ -724,6 +724,7 @@ jobs:
           pukbot release create --help
           pukbot release edit --help
           pukbot release upload-asset --help
+          pukbot workflow dispatch --help
 
       - name: Verify release assets
         run: |
@@ -803,3 +804,7 @@ jobs:
             [ "$attempt" -lt 4 ] || exit 1
             sleep "$(node ../scripts/github-retry.mjs delay "$attempt" 15 65 "$errors" || echo $((attempt * 15)))"
           done
+
+      - name: Refresh the website
+        if: steps.release_state.outputs.superseded != 'true' && env.RELEASE_PRERELEASE != 'true'
+        run: pukbot workflow dispatch --repo "$GITHUB_REPOSITORY" --ref main pages.yml --json

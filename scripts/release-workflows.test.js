@@ -431,7 +431,7 @@ test("superseded release cuts finish cleanly without publishing", () => {
     releaseWorkflow.match(
       /if: steps\.release_state\.outputs\.superseded != 'true'/g,
     )?.length,
-  ).toBe(2);
+  ).toBe(3);
   expect(releaseWorkflow).toContain('exit "$PUBLISH_STATUS"');
 });
 
