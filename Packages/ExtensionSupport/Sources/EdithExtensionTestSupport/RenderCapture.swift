@@ -181,11 +181,11 @@ public enum RenderCapture {
         }
         var bitmap = try capture()
         let deadline = ContinuousClock.now + blankGrace
-        while distinctColors(bitmap) <= 1, ContinuousClock.now < deadline {
+        while isUniform(bitmap), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(100))
             bitmap = try capture()
         }
-        guard distinctColors(bitmap) > 1 else { throw RenderCaptureError.blank(label) }
+        guard !isUniform(bitmap) else { throw RenderCaptureError.blank(label) }
         try inspect(host)
         if let directory {
             try FileManager.default.createDirectory(
@@ -235,6 +235,29 @@ public enum RenderCapture {
         }
         guard top != .max else { return nil }
         return InkBounds(leading: leading, trailing: trailing, top: top)
+    }
+
+    public static func isUniform(_ bitmap: NSBitmapImageRep) -> Bool {
+        let width = bitmap.pixelsWide
+        let height = bitmap.pixelsHigh
+        guard width > 0, height > 0 else { return true }
+        if !bitmap.isPlanar, bitmap.bitsPerPixel % 8 == 0, let data = bitmap.bitmapData {
+            let pixelBytes = bitmap.bitsPerPixel / 8
+            for y in 0..<height {
+                let row = data + y * bitmap.bytesPerRow
+                for x in 0..<width where memcmp(row + x * pixelBytes, data, pixelBytes) != 0 {
+                    return false
+                }
+            }
+            return true
+        }
+        let first = bitmap.colorAt(x: 0, y: 0)
+        for y in 0..<height {
+            for x in 0..<width where bitmap.colorAt(x: x, y: y) != first {
+                return false
+            }
+        }
+        return true
     }
 
     public static func distinctColors(_ bitmap: NSBitmapImageRep) -> Int {
