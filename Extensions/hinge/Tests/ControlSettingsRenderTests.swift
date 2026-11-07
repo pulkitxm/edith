@@ -54,9 +54,10 @@ import Testing
                     #expect(bitmap.pixelsHigh >= 900)
                     #expect(
                         hosting.fittingSize.width.isFinite && hosting.fittingSize.height.isFinite)
+                    let step = 4 * max(1, bitmap.pixelsWide / Int(width))
                     var colors: Set<UInt32> = []
-                    for x in stride(from: 0, to: bitmap.pixelsWide, by: 8) {
-                        for y in stride(from: 0, to: bitmap.pixelsHigh, by: 8) {
+                    for x in stride(from: 0, to: bitmap.pixelsWide, by: step) {
+                        for y in stride(from: 0, to: bitmap.pixelsHigh, by: step) {
                             if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) {
                                 colors.insert(
                                     UInt32(color.redComponent * 255) << 16
