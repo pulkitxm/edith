@@ -76,7 +76,11 @@ struct HerdrMessageMenu: View {
 
     var body: some View {
         let agents = store.filteredAgents
-        return Menu {
+        return PageToolbarMenu(
+            icon: .send,
+            helperText: "Send a message to agents in the list or in the open side-by-side tab",
+            accessibilityLabel: "Message", tint: DashSkin.inkSoft(dark), font: .edithText(.headline)
+        ) {
             HerdrBroadcastMenuItems(agents: agents, store: store)
             if let tab = store.currentTab, tab.isSplit {
                 let tabAgents = tab.agentIDs.compactMap { store.session($0)?.agent }
@@ -88,17 +92,6 @@ struct HerdrMessageMenu: View {
                     }
                 }
             }
-        } label: {
-            EdithIconView(.send)
-                .font(.edithText(.headline))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(20), height: UIScale.pt(24))
         }
-        .menuStyle(.button)
-        .buttonStyle(.edith(.toolbar))
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .accessibilityLabel("Message")
-        .help("Send a message to agents in the list or in the open side-by-side tab")
     }
 }
