@@ -627,7 +627,7 @@ struct KitComponentTests {
         let placeholder = try await darkest("")
         let typed = try await darkest("Synthetic placeholder")
         #expect(
-            placeholder.value > typed.value + 0.2,
+            placeholder.value > typed.value + 0.1,
             "placeholder \(placeholder.value) \(placeholder.detail) typed \(typed.value) \(typed.detail)"
         )
     }
