@@ -46,7 +46,7 @@ public struct EdithSplitButton<Label: View, MenuContent: View>: View {
     let menuContent: MenuContent
 
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
 
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.colorScheme) private var scheme

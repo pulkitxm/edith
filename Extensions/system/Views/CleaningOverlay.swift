@@ -24,7 +24,7 @@ final class CleaningOverlayWindow: NSWindow {
 struct CleaningOverlayView: View {
     let store: KeyboardCleaning
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
 
     var body: some View {
         ZStack {

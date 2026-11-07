@@ -167,7 +167,7 @@ struct HerdrSessionView: View {
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
     private var quinjetThemeName = QuinjetThemePreference.app
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
-    private var appThemeName = AppTheme.accent.rawValue
+    private var appThemeName = AppTheme.standard.rawValue
     private var mouse: HerdrTerminalMouse { store.terminalSettings.mouse }
     @State private var startedMouse: HerdrTerminalMouse?
     @State private var connection = HerdrTerminalConnection()

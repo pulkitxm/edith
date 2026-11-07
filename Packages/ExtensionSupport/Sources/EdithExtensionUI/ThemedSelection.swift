@@ -10,7 +10,7 @@ extension View {
 
 private struct ThemedSelectionModifier: ViewModifier {
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {

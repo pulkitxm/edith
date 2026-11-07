@@ -54,7 +54,7 @@ struct EmbeddedMusicPage: View {
     @AppStorage(
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @AppStorage(
         EmbeddedMusicStorage.musicFolderStaleKey, store: SharedDefaults.store)
     private var musicFolderStale = false
@@ -1227,7 +1227,7 @@ struct EmbeddedMusicDetailOverlay: View {
     @AppStorage(
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var deleteTarget: EmbeddedTrack?
 
@@ -1656,7 +1656,7 @@ struct EmbeddedMusicFooter: View {
     @AppStorage(
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
         var collapsed = false
     private var presenterState = EmbeddedMusicPrivacyState.shared

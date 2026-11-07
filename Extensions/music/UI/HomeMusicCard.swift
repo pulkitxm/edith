@@ -24,7 +24,7 @@ struct EmbeddedHomeMusicCard: View {
     @Environment(\.windowVisible) private var visible
 
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var theme: Color { themeColor(themeName) }

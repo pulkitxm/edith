@@ -17,7 +17,7 @@ private struct EdithLinkBody<Label: View>: View {
     let label: Label
     let pressed: Bool
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

@@ -10,7 +10,7 @@ struct HomebrewMaintenanceView: View {
     @State private var pendingUninstall: HomebrewPackage?
     @State private var kindRaw: String
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
-    private var themeName = AppTheme.accent.rawValue
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled

@@ -6,7 +6,14 @@ import Testing
 @testable import EdithExtensionUI
 
 @Suite(.serialized) struct ThemeTests {
-    @Test func brandThemeUsesTheBrandAccentInEachScheme() {
+    @Test func navyIsTheStandardThemeInEachScheme() {
+        #expect(AppTheme.standard == .navy)
+        #expect(rgb(themeColor("navy"), dark: false) == [30, 58, 138])
+        #expect(rgb(themeColor("navy"), dark: true) == [77, 111, 196])
+    }
+
+    @Test func coralThemeKeepsTheBrandAccentInEachScheme() {
+        #expect(AppTheme.accent.title == "Coral")
         #expect(rgb(themeColor("accent"), dark: false) == [217, 119, 87])
         #expect(rgb(themeColor("accent"), dark: true) == [224, 138, 106])
     }
@@ -21,14 +28,16 @@ import Testing
         }
     }
 
-    @Test func unknownNameFallsBackToBrandAccent() {
-        #expect(rgb(themeColor("chartreuse"), dark: true) == [224, 138, 106])
-        #expect(rgb(themeColor(""), dark: false) == [217, 119, 87])
+    @Test func unknownNameFallsBackToTheStandardTheme() {
+        #expect(rgb(themeColor("chartreuse"), dark: true) == [77, 111, 196])
+        #expect(rgb(themeColor(""), dark: false) == [30, 58, 138])
     }
 
     @Test func paletteNamesAreUnique() {
         let names = themePalette.map(\.name)
         #expect(Set(names).count == names.count)
+        #expect(names.first == AppTheme.standard.rawValue)
+        #expect(names.count == AppTheme.allCases.count)
     }
 
     @Test func everyStoredThemeResolvesToItself() {
@@ -37,8 +46,8 @@ import Testing
         }
     }
 
-    @Test func invalidStoredThemeResolvesToTheBrandTheme() {
-        #expect(AppTheme(storedName: "chartreuse") == .accent)
+    @Test func invalidStoredThemeResolvesToTheStandardTheme() {
+        #expect(AppTheme(storedName: "chartreuse") == .navy)
     }
 
     @MainActor @Test func themeStoreFollowsTheStoredTheme() async throws {

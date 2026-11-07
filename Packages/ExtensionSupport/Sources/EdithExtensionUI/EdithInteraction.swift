@@ -121,7 +121,7 @@ public struct EdithHoverPlate: View {
     let cornerRadius: CGFloat
 
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -188,7 +188,7 @@ struct EdithOutsetHoverPlate: View {
     let outset: Bool
 
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
 
     var body: some View {
         GeometryReader { proxy in
@@ -660,7 +660,7 @@ public struct EdithShapePlate<S: Shape>: View {
     let tint: Color?
 
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -728,7 +728,7 @@ private struct EdithShapedButtonBody<Label: View, S: Shape>: View {
     let pressed: Bool
 
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.edithInteractionPreview) private var preview

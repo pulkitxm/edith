@@ -62,7 +62,7 @@ private struct EdithSwitchBody: View {
 private struct EdithSwitchTrack: View {
     let isOn: Bool
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.controlSize) private var controlSize

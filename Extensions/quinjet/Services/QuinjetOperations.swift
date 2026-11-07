@@ -53,6 +53,7 @@ public enum QuinjetThemePreference {
             return explicit
         }
         switch appTheme {
+        case .navy: return .tokyoNight
         case .accent: return .quinjet
         case .blue: return .github
         case .indigo: return .tokyoNight
@@ -150,6 +151,7 @@ public struct QuinjetHostTheme: Codable, Equatable, Sendable {
     public static func edith(appTheme: AppTheme) -> QuinjetHostTheme {
         let accents: (UInt32, UInt32)
         switch appTheme {
+        case .navy: accents = (0x1e3a8a, 0x4d6fc4)
         case .accent: accents = (0xd97757, 0xe08a6a)
         case .blue: accents = (0x007aff, 0x0a84ff)
         case .indigo: accents = (0x5856d6, 0x5e5ce6)
@@ -254,7 +256,7 @@ public struct QuinjetLaunchConfiguration: Codable, Equatable, Sendable {
             ?? QuinjetThemePreference.app
         let appTheme = AppTheme(
             storedName: sharedPreference(AppStorageKeys.General.theme)
-                ?? AppTheme.accent.rawValue)
+                ?? AppTheme.standard.rawValue)
         let theme = QuinjetThemePreference.resolve(themePreference, appTheme: appTheme)
         let appearance: QuinjetAppearance
         switch sharedPreference(AppStorageKeys.General.appearance) {

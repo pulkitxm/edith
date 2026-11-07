@@ -7,7 +7,7 @@ import SwiftUI
 struct HostAboutPage: View {
     let identity: HostIdentity
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @State private var contributors: [HostContributor] = []
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.colorScheme) private var scheme

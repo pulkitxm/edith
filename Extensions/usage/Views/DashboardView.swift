@@ -9,7 +9,7 @@ struct DashboardView: View {
     @State private var model: DashboardModel
     private let presenterState: UsagePresenterState
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
         var presenterBlurMoney =
         true

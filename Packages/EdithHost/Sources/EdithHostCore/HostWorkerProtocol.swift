@@ -32,7 +32,7 @@ public struct HostWorkerConfiguration: Codable, Sendable {
                 owner: extensionID,
                 pauseAmbientOnBattery: preferences?.bool(
                     forKey: HostCoreBackgroundPolicy.preferenceKey) ?? false)
-        theme = preferences?.string(forKey: AppStorageKeys.General.theme) ?? "accent"
+        theme = preferences?.string(forKey: AppStorageKeys.General.theme) ?? "navy"
         appearance = preferences?.string(forKey: AppStorageKeys.General.appearance) ?? "system"
         let storedZoom = preferences?.double(forKey: AppStorageKeys.General.mainWindowZoom) ?? 1
         zoom = storedZoom.isFinite && storedZoom > 0 ? min(1.6, max(0.8, storedZoom)) : 1

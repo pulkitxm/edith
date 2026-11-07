@@ -7,7 +7,7 @@ struct DatabaseConnectionSidebar: View {
     @Bindable var model: DatabaseConnectionWorkspaceModel
     let createConnection: () -> Void
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        AppTheme.accent.rawValue
+        AppTheme.standard.rawValue
 
     private var theme: Color { themeColor(themeName) }
 

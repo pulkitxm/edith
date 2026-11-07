@@ -258,7 +258,7 @@ private struct EdithCheckboxBody: View {
     let configuration: ToggleStyleConfiguration
     let showsLabel: Bool
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused

@@ -12,7 +12,7 @@ struct HomeMeetingsCard: View {
     var grantAccess: (() -> Void)?
     let open: () -> Void
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
 
     private var theme: Color { themeColor(themeName) }
     private var isAuthorized: Bool { authorized?() ?? store.authorized }

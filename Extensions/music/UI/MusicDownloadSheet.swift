@@ -13,7 +13,7 @@ struct EmbeddedDownloadSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var urlText = ""

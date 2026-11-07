@@ -8,7 +8,7 @@ struct HostApplication: App {
     @NSApplicationDelegateAdaptor(HostApplicationDelegate.self) private var delegate
     @Environment(\.openWindow) private var openWindow
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
-        "accent"
+        AppTheme.standard.rawValue
     @AppStorage(AppStorageKeys.General.appearance, store: SharedDefaults.store) private
         var appearance = "system"
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
