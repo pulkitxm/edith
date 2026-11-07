@@ -163,6 +163,88 @@ struct HerdrAgentMenuSnapshotTests {
         #expect(submenu(terminalMenu, "Message This Tab") == nil)
     }
 
+    @Test func paneHeaderButtonsStillHoverUnderTheMenuRegion() async throws {
+        _ = TestWindowHost.application
+        let store = HerdrStore(
+            defaults: defaults(), agentFocuser: { _, _, _ in }, machinesProvider: { [] })
+        let first = agent(pane: "w1:p1", title: "Sample first")
+        let second = agent(pane: "w1:p2", title: "Sample second")
+        store.hosts = [.local(herdrPresent: true, agents: [first, second])]
+        store.open(first)
+        store.open(second, beside: .right)
+        let host = NSHostingView(
+            rootView: AnyView(
+                header(store, first.id)
+                    .environment(\.automaticViewActionsEnabled, false)
+                    .transaction { $0.animation = nil }))
+        host.frame = CGRect(x: 0, y: 0, width: 320, height: 28)
+        let window = HerdrPointerWindow(
+            contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.setFrameOrigin(NSPoint(x: -6_000, y: -6_000))
+        window.contentView = host
+        window.acceptsMouseMovedEvents = true
+        window.orderBack(nil)
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        for _ in 0..<4 {
+            window.layoutIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            host.displayIfNeeded()
+            try await Task.sleep(for: .milliseconds(40))
+        }
+        let labels = ["Close Sample first", "More for this agent"]
+        let frames = HerdrIntroductionButtonTests.frames(host, labels: labels)
+        #expect(frames.count == labels.count, "\(frames.keys.sorted())")
+        let idle = try snapshot(host)
+
+        for label in labels {
+            guard let screen = frames[label] else { continue }
+            let inWindow = window.convertFromScreen(screen)
+            window.move(to: NSPoint(x: inWindow.midX, y: inWindow.midY))
+            try await Task.sleep(for: .milliseconds(350))
+            host.layoutSubtreeIfNeeded()
+            let hovered = try snapshot(host)
+            #expect(
+                changedPixels(idle, hovered, in: host.convert(inWindow, from: nil)) > 100,
+                "\(label) hover")
+            window.move(to: NSPoint(x: -10_000, y: -10_000))
+            try await Task.sleep(for: .milliseconds(350))
+        }
+    }
+
+    private func snapshot(_ host: NSView) throws -> NSBitmapImageRep {
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        return bitmap
+    }
+
+    private func changedPixels(
+        _ lhs: NSBitmapImageRep, _ rhs: NSBitmapImageRep, in rect: CGRect
+    ) -> Int {
+        let scale = CGFloat(lhs.pixelsWide) / max(1, lhs.size.width)
+        let minX = max(0, Int((rect.minX - 4) * scale))
+        let maxX = min(lhs.pixelsWide, Int((rect.maxX + 4) * scale))
+        let minY = max(0, Int((rect.minY - 4) * scale))
+        let maxY = min(lhs.pixelsHigh, Int((rect.maxY + 4) * scale))
+        guard minX < maxX, minY < maxY else { return 0 }
+        var count = 0
+        for x in minX..<maxX {
+            for y in minY..<maxY {
+                guard let a = lhs.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+                    let b = rhs.colorAt(x: x, y: y)?.usingColorSpace(.sRGB)
+                else { continue }
+                let distance =
+                    abs(a.redComponent - b.redComponent) + abs(a.greenComponent - b.greenComponent)
+                    + abs(a.blueComponent - b.blueComponent)
+                if distance > 0.02 { count += 1 }
+            }
+        }
+        return count
+    }
+
     private func header(_ store: HerdrStore, _ id: String) -> some View {
         let session = store.session(id)!
         let tab = store.tab(containing: id)!

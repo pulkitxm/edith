@@ -321,6 +321,7 @@ struct HerdrPaneHeader: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("More for this agent")
+        .accessibilityLabel("More for this agent")
     }
 
     private func iconButton(_ icon: EdithIcon, help: String, action: @escaping () -> Void)
