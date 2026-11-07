@@ -1,6 +1,6 @@
 import React from 'react';
 import {AbsoluteFill, Audio, interpolate, Sequence, staticFile} from 'remotion';
-import {beat} from './theme';
+import {type Appearance, applyAppearance, beat, ink} from './theme';
 import {Intro, introDuration} from './scenes/Intro';
 import {Hook, hookDuration} from './scenes/Hook';
 import {Marketplace, storeLength, wallLength} from './scenes/Marketplace';
@@ -28,10 +28,11 @@ const scenes: {id: string; length: number; component: React.FC<{duration: number
 
 export const launchDuration = scenes.reduce((sum, s) => sum + s.length, 0);
 
-export const Launch: React.FC = () => {
+export const Launch: React.FC<{appearance?: Appearance}> = ({appearance = 'dark'}) => {
+  applyAppearance(appearance);
   let start = 0;
   return (
-    <AbsoluteFill style={{background: '#05080f'}}>
+    <AbsoluteFill style={{background: ink.night}}>
       <Audio
         src={staticFile('launch/music.m4a')}
         volume={(f) =>

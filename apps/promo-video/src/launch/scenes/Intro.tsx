@@ -27,7 +27,7 @@ export const Intro: React.FC = () => {
           opacity: 1 - exit,
         }}
       >
-        <div style={{position: 'relative', filter: 'drop-shadow(0 30px 60px rgba(0,0,0,0.6))'}}>
+        <div style={{position: 'relative', filter: `drop-shadow(0 30px 60px ${ink.shadow})`}}>
           <div
             style={{
               position: 'absolute',

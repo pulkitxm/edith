@@ -52,8 +52,8 @@ export const Privacy: React.FC = () => {
                 style={{
                   padding: '14px 28px',
                   borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  background: 'rgba(255,255,255,0.05)',
+                  border: `1px solid ${ink.glassLine}`,
+                  background: `${ink.glass}`,
                   color: ink.text,
                   fontFamily: display,
                   fontSize: 30,

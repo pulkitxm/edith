@@ -3,7 +3,7 @@ import {AbsoluteFill, Img, staticFile, useCurrentFrame, useVideoConfig} from 're
 import {Backdrop} from './Backdrop';
 import {Camera, cameraRect, Shot} from './Camera';
 import {Eyebrow, Kinetic, Word} from './Kinetic';
-import {ink, pop, ramp, useLayout} from '../theme';
+import {captureDir, ink, pop, ramp, useLayout} from '../theme';
 
 export const capture = {width: 3200, height: 2000};
 
@@ -14,7 +14,7 @@ const Layers: React.FC<{frames: Frame[]; frame: number}> = ({frames, frame}) => 
     {frames.map((f, i) => (
       <Img
         key={f.src + f.from}
-        src={staticFile(`launch/captures/${f.src}.png`)}
+        src={staticFile(`${captureDir}/${f.src}.png`)}
         style={{
           position: 'absolute',
           inset: 0,
@@ -55,7 +55,7 @@ export const ScreenStage: React.FC<{
             position: 'absolute',
             top: stage.top,
             transform: `translateY(${(1 - enter) * 260}px) scale(${0.96 + enter * 0.04})`,
-            boxShadow: '0 50px 140px rgba(0,0,0,0.65)',
+            boxShadow: `0 50px 140px ${ink.shadow}`,
             borderRadius: 22,
           }}
         >

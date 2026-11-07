@@ -33,6 +33,15 @@ export const Root: React.FC = () => {
         height={1080}
       />
       <Composition
+        id="launch-web-light"
+        component={Launch}
+        durationInFrames={launchDuration}
+        fps={fps}
+        width={1920}
+        height={1080}
+        defaultProps={{appearance: 'light' as const}}
+      />
+      <Composition
         id="V1-launch-x"
         component={Launch}
         durationInFrames={launchDuration}
