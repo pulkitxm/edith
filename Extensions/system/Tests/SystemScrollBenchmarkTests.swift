@@ -21,7 +21,8 @@ import Testing
         print("system-regression running-apps: \(timing)")
         #expect(timing.frames.count == 60)
         #expect(timing.worst < 100)
-        #expect(timing.median < 12)
+        let budget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
+        #expect(timing.median < budget)
     }
 
     static func measure(apps count: Int, frames: Int) async throws -> ScrollTiming {

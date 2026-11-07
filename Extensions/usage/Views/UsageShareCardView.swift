@@ -78,7 +78,9 @@ public struct UsageShareCardView: View {
 
 private enum ShareColors {
     private static func themed(_ house: Color, _ derived: (AppTheme) -> Color) -> Color {
-        let theme = ThemeStore.current
+        let theme = AppTheme(
+            storedName: ExtensionScope.process.defaults().string(
+                forKey: AppStorageKeys.General.theme) ?? AppTheme.standard.rawValue)
         return theme == .accent ? house : derived(theme)
     }
 
