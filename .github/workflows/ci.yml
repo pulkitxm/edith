@@ -21,6 +21,11 @@ on:
         type: boolean
         required: false
         default: false
+      version:
+        description: "With release, the version to cut instead of the next patch, such as 1.0.0."
+        type: string
+        required: false
+        default: ""
 
 concurrency:
   group: >-
@@ -416,6 +421,7 @@ jobs:
       sha: ${{ steps.resolve.outputs.sha }}
     env:
       REBUILD: ${{ inputs.rebuild }}
+      REQUESTED_VERSION: ${{ inputs.version }}
       CUT_RELEASE: ${{ inputs.release || github.event_name == 'push' }}
       RELEASE_PRERELEASE: "false"
       SOURCE_SHA: ${{ github.sha }}
