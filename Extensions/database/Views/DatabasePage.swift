@@ -23,7 +23,7 @@ struct DatabasePage: View {
     @State private var workspaceFocusConnectionID: DatabaseConnectionID?
     @State private var connectionListRevision: UInt = 0
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        AppTheme.accent.rawValue
+        AppTheme.standard.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme

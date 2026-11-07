@@ -74,7 +74,7 @@ struct HostQuickActionsCard: View {
     var openExtensions: (() -> Void)? = nil
     @State private var actions = HostUtilityActions()
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
     @Environment(\.windowVisible) private var visible

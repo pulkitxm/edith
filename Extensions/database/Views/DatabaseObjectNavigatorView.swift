@@ -9,7 +9,7 @@ struct DatabaseObjectNavigatorView: View {
     let open: (DatabaseObjectIdentifier) -> Void
     @State private var expandedGroups = Set<DatabaseObjectIdentifier>()
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        AppTheme.accent.rawValue
+        AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }

@@ -40,16 +40,27 @@ setting, in catalogue order. Keys inside each object are sorted.
     "value": "system"
   },
   {
-    "allowed": [],
-    "default": "default",
+    "allowed": [
+      "navy",
+      "accent",
+      "blue",
+      "indigo",
+      "teal",
+      "green",
+      "purple",
+      "pink",
+      "red",
+      "orange"
+    ],
+    "default": "navy",
     "group": "appearance",
     "isSet": false,
     "key": "theme",
     "readOnly": false,
     "scope": "shared",
-    "summary": "Accent palette name.",
+    "summary": "Accent theme name.",
     "type": "string",
-    "value": "default"
+    "value": "navy"
   }
 ]
 ```

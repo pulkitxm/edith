@@ -24,7 +24,7 @@ struct WindowSweatersRows: View {
         var accessibilityFocus = false
     @AppStorage(Keys.excludedApps, store: SharedDefaults.store) private var excludedApps = ""
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var appTheme =
-        AppTheme.accent.rawValue
+        AppTheme.standard.rawValue
 
     private var selection: SweaterPattern { SweaterPattern.from(pattern) }
 

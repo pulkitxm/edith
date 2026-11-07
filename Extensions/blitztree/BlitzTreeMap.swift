@@ -55,7 +55,7 @@ struct BlitzTreeMap: View {
     let report: BlitzTreeReport
     let activate: (BlitzTreeReport.Entry) -> Void
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
 
     private var entries: [BlitzTreeReport.Entry] {

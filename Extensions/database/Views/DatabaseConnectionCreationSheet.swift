@@ -24,7 +24,7 @@ struct DatabaseConnectionCreationSheet: View {
     @State private var showsAdvanced = false
     @State private var submissionTask: Task<Void, Never>?
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        AppTheme.accent.rawValue
+        AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.databaseRemotePrivacy) private var remotePrivacy
 

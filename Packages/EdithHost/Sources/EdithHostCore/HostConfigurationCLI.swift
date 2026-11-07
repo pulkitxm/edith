@@ -200,7 +200,12 @@ public enum HostOwnerAvailability: Sendable { case ready, notInstalled, off }
                 fallback: .string("system")),
             .init(
                 AppStorageKeys.General.theme, .string, group: "appearance",
-                summary: "Accent palette name.", fallback: .string("default")),
+                summary: "Accent theme name.",
+                allowed: [
+                    "navy", "accent", "blue", "indigo", "teal", "green", "purple", "pink", "red",
+                    "orange",
+                ],
+                fallback: .string("navy")),
             .init(
                 AppStorageKeys.General.lastPaletteTheme, .string, group: "appearance",
                 summary: "Palette restored when a custom accent is cleared."),

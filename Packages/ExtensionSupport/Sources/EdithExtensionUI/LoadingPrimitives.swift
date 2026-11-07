@@ -318,7 +318,7 @@ private struct LoadingShimmer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skeletonPhase) private var phase
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
 
     var body: some View {
         if !reduceMotion, animationsEnabled {

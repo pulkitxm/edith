@@ -67,7 +67,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults()) private
         var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @State private var index = 0
     @State private var direction = 1
     @State private var copied = false

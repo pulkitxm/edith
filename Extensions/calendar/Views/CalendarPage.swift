@@ -10,7 +10,7 @@ struct CalendarPage: View {
         self.store = store
     }
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @Environment(\.compactLayout) private var compact
 
     private var theme: Color { themeColor(themeName) }

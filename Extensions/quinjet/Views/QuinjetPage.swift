@@ -8,7 +8,7 @@ struct QuinjetPage: View {
     @State private var model: QuinjetPageModel
     @MainActor init(model: QuinjetPageModel) { _model = State(initialValue: model) }
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
-    private var appThemeName = AppTheme.accent.rawValue
+    private var appThemeName = AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled

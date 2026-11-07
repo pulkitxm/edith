@@ -9,7 +9,7 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
     private let shortcut: (Selection) -> KeyboardShortcut?
 
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults())
-    private var themeName = "accent"
+    private var themeName = AppTheme.standard.rawValue
     @Environment(\.isEnabled) private var enabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

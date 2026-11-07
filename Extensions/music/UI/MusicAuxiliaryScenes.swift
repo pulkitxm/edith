@@ -70,7 +70,7 @@ struct EmbeddedMusicSidebarScene: View {
     @AppStorage(AppStorageKeys.Music.barAutoHide, store: SharedDefaults.store) private
         var autoHide = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
-        "accent"
+        AppTheme.standard.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {

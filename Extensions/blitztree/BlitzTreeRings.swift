@@ -8,7 +8,7 @@ struct BlitzTreeRings: View {
     let activate: (BlitzTreeReport.Entry) -> Void
     @State private var selection: Double?
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
 
     private var entries: [BlitzTreeReport.Entry] {

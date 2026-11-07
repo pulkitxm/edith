@@ -59,7 +59,7 @@ struct AppMaintenanceView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     private var installDestinationRaw: String {
         get { model.preferences.installDestination }
         nonmutating set { model.updatePreferences { $0.installDestination = newValue } }

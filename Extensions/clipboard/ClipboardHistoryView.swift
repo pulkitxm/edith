@@ -7,7 +7,7 @@ import SwiftUI
 struct ClipboardHistoryView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @Bindable var model: ClipboardHistoryModel
     @State private var filterText = ""
     private var entries: [ClipboardEntry] { model.entries }
@@ -71,7 +71,7 @@ private struct ClipboardHistoryRow: View {
     let entry: ClipboardEntry
     let model: ClipboardHistoryModel
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
 
     var body: some View {
         HStack(alignment: .center, spacing: UIScale.pt(10)) {

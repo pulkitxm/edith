@@ -8,7 +8,7 @@ struct HostSettingsPage: View {
     @AppStorage(AppStorageKeys.General.appearance, store: SharedDefaults.store) private
         var appearance = "system"
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @AppStorage(AppStorageKeys.General.lastPaletteTheme, store: SharedDefaults.store) private
         var lastPaletteTheme =
         "blue"
@@ -47,7 +47,7 @@ struct HostSettingsPage: View {
         _appearance = AppStorage(
             wrappedValue: "system", AppStorageKeys.General.appearance, store: defaults)
         _themeName = AppStorage(
-            wrappedValue: "accent", AppStorageKeys.General.theme, store: defaults)
+            wrappedValue: AppTheme.standard.rawValue, AppStorageKeys.General.theme, store: defaults)
         _lastPaletteTheme = AppStorage(
             wrappedValue: "blue", AppStorageKeys.General.lastPaletteTheme, store: defaults)
         _showDockIcon = AppStorage(
@@ -166,15 +166,8 @@ struct HostSettingsPage: View {
     }
 
     @ViewBuilder private var themeControls: some View {
-        Toggle(
-            "Use accent",
-            isOn: Binding(
-                get: { themeName == "accent" },
-                set: { $themeName.wrappedValue = $0 ? "accent" : lastPaletteTheme })
-        )
-        .toggleStyle(.edithSwitch)
         ForEach(themePalette, id: \.name) { entry in
-            swatch(entry.name, color: entry.color)
+            swatch(entry.name, title: entry.title, color: entry.color)
         }
     }
 
@@ -192,7 +185,7 @@ struct HostSettingsPage: View {
         return "\(granted) of \(permissions.count) granted"
     }
 
-    private func swatch(_ name: String, color: Color) -> some View {
+    private func swatch(_ name: String, title: String, color: Color) -> some View {
         Button {
             themeName = name
             lastPaletteTheme = name
@@ -207,9 +200,9 @@ struct HostSettingsPage: View {
             }
         }
         .buttonStyle(.edithShaped(Circle(), filled: true))
-        .accessibilityLabel("\(name.capitalized) theme")
+        .accessibilityLabel("\(title) theme")
         .accessibilityAddTraits(themeName == name ? .isSelected : AccessibilityTraits())
-        .help("Use the \(name) theme")
+        .help("Use the \(title) theme")
     }
 }
 

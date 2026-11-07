@@ -30,7 +30,7 @@ struct HostWorkspace: View {
     @AppStorage(AppStorageKeys.General.mainSidebarWidth, store: SharedDefaults.store) private
         var sidebarWidth = 230.0
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
     @AppStorage(AppStorageKeys.General.creditHidden, store: SharedDefaults.store) private
         var creditHidden = false
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
@@ -82,7 +82,7 @@ struct HostWorkspace: View {
         _sidebarWidth = AppStorage(
             wrappedValue: 230, AppStorageKeys.General.mainSidebarWidth, store: defaults)
         _themeName = AppStorage(
-            wrappedValue: "accent", AppStorageKeys.General.theme, store: defaults)
+            wrappedValue: AppTheme.standard.rawValue, AppStorageKeys.General.theme, store: defaults)
         _creditHidden = AppStorage(
             wrappedValue: false, AppStorageKeys.General.creditHidden, store: defaults)
         _zoom = AppStorage(wrappedValue: 1, WindowZoom.defaultsKey, store: defaults)

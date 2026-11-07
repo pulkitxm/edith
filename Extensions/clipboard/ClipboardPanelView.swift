@@ -32,7 +32,7 @@ struct ClipboardPanelView: View {
     @AppStorage(AppStorageKeys.Permissions.accessibilityGranted, store: SharedDefaults.store)
     private var accessibilityGranted = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
 
     static var footerEnabled: Bool {
         SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.showFooter) as? Bool ?? true

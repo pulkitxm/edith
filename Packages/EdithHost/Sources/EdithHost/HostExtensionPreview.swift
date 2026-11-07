@@ -19,7 +19,7 @@ struct HostExtensionPreview: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @State private var hovering = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
 
     var body: some View {
         let animates = HostExtensionPreviewMotionPolicy.animates(

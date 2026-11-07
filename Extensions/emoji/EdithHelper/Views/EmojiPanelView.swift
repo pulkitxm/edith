@@ -20,7 +20,7 @@ struct EmojiPanelView: View {
     @State private var pendingSectionScroll: String?
     @FocusState private var searchFocused: Bool
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        "accent"
+        AppTheme.standard.rawValue
 
     static let columns = 9
     static let cellSize: CGFloat = 34

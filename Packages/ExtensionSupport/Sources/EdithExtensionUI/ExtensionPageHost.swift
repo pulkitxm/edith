@@ -4,7 +4,7 @@ import SwiftUI
 public struct ExtensionPageHost<Content: View>: View {
     @AppStorage(AppStorageKeys.General.theme, store: ExtensionScope.process.defaults()) private
         var theme =
-        "accent"
+        AppTheme.standard.rawValue
     @AppStorage(AppStorageKeys.General.appearance, store: ExtensionScope.process.defaults())
     private
         var appearance = "system"

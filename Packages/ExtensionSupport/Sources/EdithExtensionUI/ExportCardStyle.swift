@@ -7,7 +7,7 @@ public enum ExportCardStyle {
         AppTheme(
             storedName: ExtensionScope.process.defaults().string(
                 forKey: AppStorageKeys.General.theme)
-                ?? AppTheme.accent.rawValue)
+                ?? AppTheme.standard.rawValue)
     }
 
     private static func shifted(_ color: Color, toward target: NSColor, by fraction: CGFloat)

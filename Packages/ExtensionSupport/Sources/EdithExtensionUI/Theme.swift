@@ -8,16 +8,23 @@ public let brandAccent = Color(.sRGB, red: 217 / 255, green: 119 / 255, blue: 87
 public let usageSage = Color(.sRGB, red: 106 / 255, green: 141 / 255, blue: 115 / 255)
 
 public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
-    case accent, blue, indigo, teal, green, purple, pink, red, orange
+    case navy, accent, blue, indigo, teal, green, purple, pink, red, orange
+
+    public static let standard: AppTheme = .navy
 
     public var id: String { rawValue }
 
+    public var title: String {
+        self == .accent ? "Coral" : rawValue.capitalized
+    }
+
     public init(storedName: String) {
-        self = AppTheme(rawValue: storedName) ?? .accent
+        self = AppTheme(rawValue: storedName) ?? .standard
     }
 
     public var color: Color {
         switch self {
+        case .navy: ThemeColor.color("#1e3a8a")
         case .accent: brandAccent
         case .blue: .blue
         case .indigo: .indigo
@@ -44,6 +51,9 @@ public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
     func accentNSColor(dark: Bool) -> NSColor {
         if self == .accent {
             return dark ? ThemeColor.nsColor("#e08a6a") : ThemeColor.nsColor("#d97757")
+        }
+        if self == .navy {
+            return dark ? ThemeColor.nsColor("#4d6fc4") : ThemeColor.nsColor("#1e3a8a")
         }
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         var base = NSColor.black
@@ -184,8 +194,8 @@ extension Color {
     public static var themeOnAccent: Color { ThemeStore.current.onAccent }
 }
 
-public let themePalette: [(name: String, color: Color)] = AppTheme.allCases.dropFirst().map {
-    ($0.rawValue, $0.color)
+public let themePalette: [(name: String, title: String, color: Color)] = AppTheme.allCases.map {
+    ($0.rawValue, $0.title, $0.color)
 }
 
 public func themeColor(_ name: String) -> Color {

@@ -129,7 +129,7 @@ struct HerdrTitlebarViewPicker: View {
     let agentID: String
 
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        AppTheme.accent.rawValue
+        AppTheme.standard.rawValue
     @Environment(\.colorScheme) private var scheme
 
     private var selection: HerdrAgentView {

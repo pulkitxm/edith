@@ -10,7 +10,7 @@ struct DatabaseWorkbenchView: View {
     let mutations: DatabaseWorkspaceModel
     var showsObjectNavigator = true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
-        AppTheme.accent.rawValue
+        AppTheme.standard.rawValue
     @Environment(\.automaticViewActionsEnabled) private var automaticViewActionsEnabled
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
