@@ -31,7 +31,7 @@ import Testing
             _ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection
         ) -> Bool {
             let box = HostPrivilegedConnection(connection)
-            Task { @MainActor in HostPrivilegedCarrier.reject(box.connection, "synthetic rejection") }
+            Task { @MainActor in HostPrivilegedCarrier.reject(box.connection, "synthetic") }
             return true
         }
     }

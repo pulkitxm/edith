@@ -97,7 +97,8 @@ import Security
         return true
     }
 
-    nonisolated static let log = Logger(subsystem: "com.pulkit.edith", category: "privileged-carrier")
+    nonisolated static let log = Logger(
+        subsystem: "com.pulkit.edith", category: "privileged-carrier")
 
     nonisolated static func reject(_ connection: NSXPCConnection, _ reason: String) {
         log.error("Rejected a privileged connection: \(reason, privacy: .public)")

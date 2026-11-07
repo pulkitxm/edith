@@ -20,7 +20,8 @@ struct HostPrivilegedCaller {
             throw HostPrivilegedCallerRejection("the signature has no identifier")
         }
         guard let info = information[kSecCodeInfoPList as String] as? [String: Any] else {
-            throw HostPrivilegedCallerRejection("the signature of \(identifier) seals no Info.plist")
+            throw HostPrivilegedCallerRejection(
+                "the signature of \(identifier) seals no Info.plist")
         }
         guard info["CFBundleIdentifier"] as? String == identifier else {
             throw HostPrivilegedCallerRejection(
@@ -71,7 +72,7 @@ struct HostPrivilegedCaller {
                 == "Contents"
         else {
             throw HostPrivilegedCallerRejection(
-                "\(identifier) runs from \(Self.shown(reported)) instead of an app's Contents/MacOS")
+                "\(identifier) runs from \(Self.shown(reported)), not an app's Contents/MacOS")
         }
         let container = executable.deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().standardizedFileURL
@@ -118,16 +119,17 @@ struct HostPrivilegedCaller {
         }
         var requirement: SecRequirement?
         let expression = try Self.requirement(hostIdentifier: hostIdentifier, team: team)
-        guard SecRequirementCreateWithString(expression as CFString, [], &requirement)
-            == errSecSuccess, let requirement
-        else { throw HostPrivilegedCallerRejection("the caller requirement does not compile") }
+        let compiled = SecRequirementCreateWithString(expression as CFString, [], &requirement)
+        guard compiled == errSecSuccess, let requirement else {
+            throw HostPrivilegedCallerRejection("the caller requirement does not compile")
+        }
         var failure: Unmanaged<CFError>?
         let validity = SecCodeCheckValidityWithErrors(
             code, SecCSFlags(rawValue: kSecCSStrictValidate), requirement, &failure)
         guard validity == errSecSuccess else {
             let reason = failure?.takeRetainedValue().localizedDescription ?? "no detail"
             throw HostPrivilegedCallerRejection(
-                "process \(processIdentifier) fails the caller requirement (\(validity)): \(reason)")
+                "process \(processIdentifier) fails the requirement (\(validity)): \(reason)")
         }
         var staticCode: SecStaticCode?
         let copied = SecCodeCopyStaticCode(code, [], &staticCode)
