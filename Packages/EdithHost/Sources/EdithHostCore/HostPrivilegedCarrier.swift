@@ -2,6 +2,7 @@ import Darwin
 import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
+import OSLog
 import Security
 
 @MainActor public final class HostPrivilegedCarrier: NSObject, NSXPCListenerDelegate {
@@ -32,14 +33,29 @@ import Security
             requirement: requirement
         ) { [self] box in
             let connection = box.connection
-            guard sessions.count < 8 else { Self.reject(connection); return }
-            guard let callerIdentity = ExtensionProcessIdentity.read(connection.processIdentifier),
-                let caller = try? HostPrivilegedCaller.read(
-                    processIdentifier: connection.processIdentifier,
-                    hostIdentifier: identifier, team: team),
+            let pid = connection.processIdentifier
+            guard sessions.count < 8 else {
+                Self.reject(connection, "eight privileged sessions are already open"); return
+            }
+            guard let callerIdentity = ExtensionProcessIdentity.read(pid) else {
+                Self.reject(connection, "process \(pid) ended before it could be identified")
+                return
+            }
+            let caller: HostPrivilegedCaller
+            do {
+                caller = try HostPrivilegedCaller.read(
+                    processIdentifier: pid, hostIdentifier: identifier, team: team)
+            } catch {
+                Self.reject(connection, "process \(pid) is not a trusted caller: \(error)")
+                return
+            }
+            guard
                 let hostIdentity = Self.hostIdentity(
                     of: callerIdentity, callerIsHost: caller.container == nil)
-            else { Self.reject(connection); return }
+            else {
+                Self.reject(connection, "the host that launched process \(pid) is gone")
+                return
+            }
             let id = UUID()
             let admission = HostPrivilegedAdmission(
                 root: URL(fileURLWithPath: "/Library/Application Support/Edith Extension Carrier")
@@ -81,7 +97,11 @@ import Security
         return true
     }
 
-    nonisolated static func reject(_ connection: NSXPCConnection) {
+    nonisolated static let log = Logger(
+        subsystem: "com.pulkit.edith", category: "privileged-carrier")
+
+    nonisolated static func reject(_ connection: NSXPCConnection, _ reason: String) {
+        log.error("Rejected a privileged connection: \(reason, privacy: .public)")
         connection.resume()
         connection.invalidate()
     }
