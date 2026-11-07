@@ -151,9 +151,9 @@ if (log) {
 const player = document.querySelector("[data-player]");
 if (player) {
   const start = async () => {
-    const { default: Plyr } = await import("/vendor/plyr/plyr.min.mjs");
+    const { default: Plyr } = await import("/lib/plyr/plyr.min.mjs");
     new Plyr(player, {
-      iconUrl: "/vendor/plyr/edith-controls.svg",
+      iconUrl: "/lib/plyr/edith-controls.svg",
       blankVideo: "",
       controls: [
         "play-large",

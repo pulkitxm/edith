@@ -168,7 +168,7 @@ export function page({
     <link rel="canonical" href="${url}" />
     <link rel="icon" type="image/png" href="/favicon-180.png" />
     <link rel="apple-touch-icon" href="/favicon-180.png" />
-    <link rel="stylesheet" href="/styles.css" />${video ? '\n    <link rel="stylesheet" href="/vendor/plyr/plyr.css" />' : ""}
+    <link rel="stylesheet" href="/styles.css" />${video ? '\n    <link rel="stylesheet" href="/lib/plyr/plyr.css" />' : ""}
     <script>try{var t=localStorage.getItem("edith-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Edith" />

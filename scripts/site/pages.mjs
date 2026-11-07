@@ -1089,13 +1089,13 @@ export function changelog(releases, page) {
           (change) =>
             `<li data-type="${change.type}"><span class="change-type type-${change.type}">${typeLabels[change.type]}</span><span class="change-text">${change.scope ? `<span class="scope">${escapeHtml(change.scope)}</span>` : ""}${escapeHtml(change.text)}</span><a class="pr" href="${repo}/pull/${change.pr}">#${change.pr}</a></li>`,
         )
-        .join("");
+        .join("\n");
       return `<article class="release" id="v${release.version}">
   <header><a class="release-version" href="${repo}/releases/tag/v${release.version}">v${release.version}</a><time datetime="${release.date}">${dayName(release.date)}</time></header>
   <ul>${items}</ul>
 </article>`;
     })
-    .join("");
+    .join("\n");
   const first = slice[0];
   const last = slice.at(-1);
   const latest = releases[0];
