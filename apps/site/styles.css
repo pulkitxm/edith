@@ -743,7 +743,7 @@ input:focus-visible {
   color: transparent;
 }
 
-.stat span {
+.stat > span {
   color: var(--text-soft);
   font-size: 0.95rem;
 }
