@@ -75,19 +75,26 @@ struct HerdrMessageMenu: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        let agents = store.filteredAgents
-        return PageToolbarMenu(
+        let store = store
+        return PageToolbarMenuButton(
             icon: .send,
             helperText: "Send a message to agents in the list or in the open side-by-side tab",
             accessibilityLabel: "Message", tint: DashSkin.inkSoft(dark), font: .edithText(.headline)
         ) {
-            HerdrBroadcastMenuItems(agents: agents, store: store)
+            HerdrMessageMenu.items(store: store)
+        }
+    }
+
+    @MainActor static func items(store: HerdrStore) -> [EdithMenuItem] {
+        let agents = store.filteredAgents
+        return EdithMenu.items {
+            HerdrBroadcastMenu.items(agents: agents, store: store)
             if let tab = store.currentTab, tab.isSplit {
                 let tabAgents = tab.agentIDs.compactMap { store.session($0)?.agent }
                 if !HerdrBroadcastGroup.all.recipients(from: tabAgents).isEmpty {
-                    Divider()
-                    Menu("This Tab") {
-                        HerdrBroadcastMenuItems(
+                    EdithMenuItem.separator
+                    EdithMenuItem.menu("This Tab") {
+                        HerdrBroadcastMenu.items(
                             agents: tabAgents, store: store, scopeTitle: "This Tab")
                     }
                 }

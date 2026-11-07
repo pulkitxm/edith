@@ -128,51 +128,54 @@ struct HerdrTabButton: View, Equatable {
                 .joined(separator: "\n"))
     }
 
-    @ViewBuilder
-    private func tabContextMenu(id: String, closable: Bool) -> some View {
-        if let tab = store.tab(id) {
-            if tab.isSplit {
-                let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
-                if !HerdrBroadcastGroup.all.recipients(from: agents).isEmpty {
-                    Menu("Send Message") {
-                        HerdrBroadcastMenuItems(
-                            agents: agents, store: store, scopeTitle: "This Tab")
+    private func tabContextMenu(id: String, closable: Bool) -> [EdithMenuItem] {
+        EdithMenu.items {
+            if let tab = store.tab(id) {
+                if tab.isSplit {
+                    let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
+                    if !HerdrBroadcastGroup.all.recipients(from: agents).isEmpty {
+                        EdithMenuItem.menu("Send Message") {
+                            HerdrBroadcastMenu.items(
+                                agents: agents, store: store, scopeTitle: "This Tab")
+                        }
+                        EdithMenuItem.separator
                     }
-                    Divider()
+                    EdithMenuItem.button("Separate Into Tabs") { animate { store.separate(id) } }
                 }
-                Button("Separate Into Tabs") { animate { store.separate(id) } }
-            }
-            let others = store.tabs.filter { $0.id != id }
-            if !others.isEmpty {
-                Menu("Move Into") {
-                    ForEach(others) { other in
-                        Button(tabTitle(other)) { animate { store.merge(id, into: other.id) } }
+                let others = store.tabs.filter { $0.id != id }
+                if !others.isEmpty {
+                    EdithMenuItem.menu("Move Into") {
+                        for other in others {
+                            EdithMenuItem.button(tabTitle(other)) {
+                                animate { store.merge(id, into: other.id) }
+                            }
+                        }
+                    }
+                    EdithMenuItem.button("Gather All Tabs Here") {
+                        animate { store.gatherAll(into: id) }
                     }
                 }
-                Button("Gather All Tabs Here") { animate { store.gatherAll(into: id) } }
+                EdithMenuItem.separator
             }
-            Divider()
-        }
-        Button("Close Others") {
-            store.closeOthers(besides: id)
-        }
-        .disabled(!store.canCloseOthers(besides: id))
-        Button("Close to the Right") {
-            store.closeToTheRight(of: id)
-        }
-        .disabled(!store.canCloseToTheRight(of: id))
-        Button("Close to the Left") {
-            store.closeToTheLeft(of: id)
-        }
-        .disabled(!store.canCloseToTheLeft(of: id))
-        Divider()
-        Button("Close All", role: .destructive) {
-            store.closeAll()
-        }
-        .disabled(!store.canCloseAll)
-        if closable {
-            Button("Close", role: .destructive) {
-                store.closeTab(id)
+            EdithMenuItem.button("Close Others", enabled: store.canCloseOthers(besides: id)) {
+                store.closeOthers(besides: id)
+            }
+            EdithMenuItem.button(
+                "Close to the Right", enabled: store.canCloseToTheRight(of: id)
+            ) {
+                store.closeToTheRight(of: id)
+            }
+            EdithMenuItem.button("Close to the Left", enabled: store.canCloseToTheLeft(of: id)) {
+                store.closeToTheLeft(of: id)
+            }
+            EdithMenuItem.separator
+            EdithMenuItem.button("Close All", enabled: store.canCloseAll) {
+                store.closeAll()
+            }
+            if closable {
+                EdithMenuItem.button("Close") {
+                    store.closeTab(id)
+                }
             }
         }
     }
