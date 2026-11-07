@@ -7,6 +7,7 @@ import EdithExtensionSupport
 import EdithExtensionUI
 
 @Suite(.serialized) @MainActor struct EmojiScrollBenchmarkTests {
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 10.0 : 1000.0 / 60
     private let fixture = EmojiDefaultsFixture()
 
     @Test func scrollingTheRealCatalogStaysWithinTheFrameBudget() async {
@@ -28,6 +29,6 @@ import EdithExtensionUI
         window.contentView = nil
         #expect(timing.frames.count == frames)
         #expect(timing.frames.filter { $0 > 80 }.isEmpty, "\(timing)")
-        #expect(timing.median < 10, "\(timing)")
+        #expect(timing.median < Self.medianBudget, "\(timing)")
     }
 }

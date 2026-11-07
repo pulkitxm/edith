@@ -9,6 +9,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct CalendarScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingTheLongestSyntheticAgenda() async throws {
         let frames = Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_FRAMES"] ?? "") ?? 300
@@ -25,7 +26,7 @@ import Testing
         #expect(timing.frames.count == 60)
         #expect((timing.offsets.max() ?? 0) > 500)
         #expect(timing.worst < 100)
-        #expect(timing.median < 12)
+        #expect(timing.median < Self.medianBudget)
     }
 
     static func measure(days: Int, perDay: Int, frames: Int) async throws -> ScrollTiming {

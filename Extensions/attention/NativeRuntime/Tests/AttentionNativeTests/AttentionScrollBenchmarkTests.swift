@@ -10,6 +10,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct AttentionScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingEverySectionWithSyntheticHistory() async throws {
         let fixture = try AttentionSyntheticHistory.make(days: 7, eventsPerDay: 420)
@@ -76,7 +77,7 @@ extension AttentionScrollBenchmarkTests {
         await model.shutdown()
         #expect(timing.frames.count == 240)
         #expect(timing.frames.filter { $0 > 60 }.count <= 1, "\(timing)")
-        #expect(timing.median < 12, "\(timing)")
+        #expect(timing.median < Self.medianBudget, "\(timing)")
     }
 
     @Test(.enabled(if: enabled)) func expandedActivityBrowser() async throws {

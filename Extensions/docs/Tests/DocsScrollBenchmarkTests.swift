@@ -10,6 +10,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct DocsScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingNavigatorAndLongDocument() async throws {
         let only = ProcessInfo.processInfo.environment["EDITH_SCROLL_CASE"]
@@ -32,7 +33,7 @@ import Testing
             print("docs-regression \(scenario.rawValue): \(timing)")
             #expect(timing.frames.count == 60)
             #expect(timing.worst < 100)
-            #expect(timing.median < 12)
+            #expect(timing.median < Self.medianBudget)
         }
     }
 

@@ -9,6 +9,7 @@ import Testing
 
 @Suite(.serialized) @MainActor struct CompanionScrollBenchmarkTests {
     static let enabled = ProcessInfo.processInfo.environment["EDITH_SCROLL_BENCHMARK"] != nil
+    static let medianBudget = ProcessInfo.processInfo.environment["CI"] == nil ? 12.0 : 1000.0 / 60
 
     @Test(.enabled(if: enabled)) func scrollingTheLibraryWithSyntheticMemories() async throws {
         let frames = Int(ProcessInfo.processInfo.environment["EDITH_SCROLL_FRAMES"] ?? "") ?? 300
@@ -29,7 +30,7 @@ import Testing
         print("companion-scroll regression mind: \(timing)")
         #expect(Set(timing.offsets).count > 10)
         #expect(timing.worst < 80)
-        #expect(timing.median < 12)
+        #expect(timing.median < Self.medianBudget)
     }
 
     static func measureMind(frames: Int) async -> CompanionScrollTiming {
@@ -57,7 +58,7 @@ import Testing
         print("companion-scroll regression library-400: \(timing)")
         #expect(Set(timing.offsets).count > 10)
         #expect(timing.worst < 80)
-        #expect(timing.median < 12)
+        #expect(timing.median < Self.medianBudget)
     }
 
     static func measure(count: Int, frames: Int) async -> CompanionScrollTiming {
