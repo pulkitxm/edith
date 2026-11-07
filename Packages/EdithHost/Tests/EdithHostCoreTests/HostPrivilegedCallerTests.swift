@@ -37,8 +37,39 @@ import Testing
         "EdithExecutableProvenance", "CFBundleIdentifier", "CFBundleShortVersionString",
     ])
     func missingOrEmptySignedMetadataIsRejected(key: String) {
-        #expect(throws: MarketplaceError.self) { try fixture(remove: key) }
-        #expect(throws: MarketplaceError.self) { try fixture(replace: [key: ""]) }
+        #expect(throws: HostPrivilegedCallerRejection.self) { try fixture(remove: key) }
+        #expect(throws: HostPrivilegedCallerRejection.self) { try fixture(replace: [key: ""]) }
+    }
+
+    @Test func rejectionsNameTheFailingCheckButShowUsersTheSignatureMessage() {
+        let cases: [(remove: String?, replace: [String: String], reason: String)] = [
+            (nil, ["EdithHostABI": "edith-host-0"], "targets \"edith-host-0\""),
+            (nil, ["EdithHostIdentifier": "com.synthetic.other"], "belongs to host"),
+            ("EdithExecutableProvenance", [:], "invalid executable provenance none"),
+            (nil, ["CFBundleShortVersionString": "1.0 beta"], "invalid version \"1.0 beta\""),
+        ]
+        for item in cases {
+            do {
+                _ = try fixture(remove: item.remove, replace: item.replace)
+                Issue.record("accepted \(item)")
+            } catch let rejection as HostPrivilegedCallerRejection {
+                #expect(rejection.description.contains(item.reason), "\(rejection)")
+                #expect(
+                    rejection.localizedDescription
+                        == MarketplaceError.invalidSignature.errorDescription)
+            } catch { Issue.record("\(error)") }
+        }
+        var writable = stat()
+        writable.st_uid = 0; writable.st_gid = 80; writable.st_mode = S_IFDIR | 0o775
+        #expect(
+            throws: HostPrivilegedCallerRejection(
+                "/System/Volumes/Data/Applications is writable by others (uid 0 gid 80 mode 40775 links 0)"
+            )
+        ) {
+            try HostPrivilegedCaller.validateAncestor(
+                URL(fileURLWithPath: "/System/Volumes/Data/Applications"), metadata: writable,
+                protectedChild: nil)
+        }
     }
 
     @Test func ordinaryHostIdentityRemainsSeparateFromContainedIdentity() throws {
@@ -67,19 +98,19 @@ import Testing
         #expect(throws: MarketplaceError.self) {
             try HostPrivilegedCaller.requirement(hostIdentifier: host + "\" or true", team: "TEAM")
         }
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try HostPrivilegedCaller.read(processIdentifier: 0, hostIdentifier: host, team: "TEAM")
         }
     }
 
     @Test func providerRolesAndUnsealedExecutableLayoutsNeverQualifyAsCarriers() {
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try fixture(replace: ["EdithContainedRole": "sampleProvider"])
         }
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try fixture(executable: root.appendingPathComponent("Runtime"))
         }
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try fixture(
                 executable: URL(fileURLWithPath: "/synthetic.bundle/Contents/MacOS/Runtime"))
         }
@@ -93,31 +124,31 @@ import Testing
         let applications = URL(fileURLWithPath: "/Applications")
         try HostPrivilegedCaller.validateAncestor(
             applications, metadata: platform, protectedChild: anchor)
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try HostPrivilegedCaller.validateAncestor(
                 applications, metadata: platform, protectedChild: nil)
         }
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try HostPrivilegedCaller.validateAncestor(
                 URL(fileURLWithPath: "/synthetic"), metadata: platform, protectedChild: anchor)
         }
         anchor.st_uid = 501
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try HostPrivilegedCaller.validateAncestor(
                 applications, metadata: platform, protectedChild: anchor)
         }
         anchor.st_uid = 0; anchor.st_mode = S_IFDIR | 0o775
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try HostPrivilegedCaller.validateAncestor(
                 applications, metadata: platform, protectedChild: anchor)
         }
         anchor.st_mode = S_IFDIR | 0o755; platform.st_mode = S_IFDIR | 0o777
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try HostPrivilegedCaller.validateAncestor(
                 applications, metadata: platform, protectedChild: anchor)
         }
         platform.st_mode = S_IFLNK | 0o755
-        #expect(throws: MarketplaceError.self) {
+        #expect(throws: HostPrivilegedCallerRejection.self) {
             try HostPrivilegedCaller.validateAncestor(
                 applications, metadata: platform, protectedChild: anchor)
         }
