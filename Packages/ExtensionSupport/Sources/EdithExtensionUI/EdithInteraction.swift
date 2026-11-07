@@ -262,9 +262,200 @@ extension View {
     }
 }
 
+@MainActor
+final class EdithHoverRouter {
+    static let monitoredEvents: NSEvent.EventTypeMask = [
+        .mouseMoved, .mouseEntered, .mouseExited, .scrollWheel,
+    ]
+
+    private static var routers: [ObjectIdentifier: EdithHoverRouter] = [:]
+    private static var monitor: Any?
+    private static var deactivation: NSObjectProtocol?
+
+    private weak var window: NSWindow?
+    private let trackers = NSHashTable<EdithHoverTrackingView>.weakObjects()
+    private let lit = NSHashTable<EdithHoverTrackingView>.weakObjects()
+    private var frames: [ObjectIdentifier: CGRect] = [:]
+    private var stale = true
+    private var refreshQueued = false
+    private var observers: [NSObjectProtocol] = []
+
+    private init(window: NSWindow) {
+        self.window = window
+        let center = NotificationCenter.default
+        let clearing: [Notification.Name] = [
+            NSWindow.didResignKeyNotification, NSWindow.willMiniaturizeNotification,
+        ]
+        for name in clearing {
+            observers.append(
+                center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.clear() }
+                })
+        }
+        observers.append(
+            center.addObserver(
+                forName: NSWindow.didResizeNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.invalidate() }
+            })
+        observers.append(
+            center.addObserver(
+                forName: NSWindow.willCloseNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.close() }
+            })
+    }
+
+    static func router(for window: NSWindow?) -> EdithHoverRouter? {
+        guard let window, let router = routers[ObjectIdentifier(window)], router.window === window
+        else { return nil }
+        return router
+    }
+
+    static func register(_ tracker: EdithHoverTrackingView, in window: NSWindow) {
+        let router = router(for: window) ?? make(for: window)
+        router.trackers.add(tracker)
+        router.invalidate()
+        window.acceptsMouseMovedEvents = true
+    }
+
+    static func unregister(_ tracker: EdithHoverTrackingView, from window: NSWindow) {
+        guard let router = router(for: window) else { return }
+        router.trackers.remove(tracker)
+        router.lit.remove(tracker)
+        router.frames[ObjectIdentifier(tracker)] = nil
+        if router.trackers.allObjects.isEmpty { router.close() }
+    }
+
+    static func dispatch(_ event: NSEvent) {
+        switch event.type {
+        case .mouseMoved, .mouseEntered, .mouseExited, .scrollWheel:
+            let window = event.window ?? NSApp?.window(withWindowNumber: event.windowNumber)
+            router(for: window)?.handle(event)
+        default:
+            break
+        }
+    }
+
+    private static func make(for window: NSWindow) -> EdithHoverRouter {
+        routers = routers.filter { $0.value.window != nil }
+        let router = EdithHoverRouter(window: window)
+        routers[ObjectIdentifier(window)] = router
+        installMonitor()
+        return router
+    }
+
+    private static func installMonitor() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: monitoredEvents) { event in
+            MainActor.assumeIsolated { EdithHoverRouter.dispatch(event) }
+            return event
+        }
+        deactivation = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                for router in EdithHoverRouter.routers.values { router.clear() }
+            }
+        }
+    }
+
+    private static func removeMonitorIfIdle() {
+        guard routers.isEmpty else { return }
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        if let deactivation { NotificationCenter.default.removeObserver(deactivation) }
+        monitor = nil
+        deactivation = nil
+    }
+
+    var registered: [EdithHoverTrackingView] { trackers.allObjects }
+
+    func handle(_ event: NSEvent) {
+        guard let window, event.windowNumber == window.windowNumber else { return }
+        switch event.type {
+        case .mouseMoved, .mouseEntered, .mouseExited:
+            route(event.locationInWindow)
+        case .scrollWheel:
+            queueRefresh()
+        default:
+            break
+        }
+    }
+
+    func route(_ location: NSPoint?) {
+        guard window != nil else { return }
+        rebuildIfNeeded()
+        var hovered: [EdithHoverTrackingView] = []
+        if let location {
+            for tracker in trackers.allObjects {
+                guard let frame = frames[ObjectIdentifier(tracker)], frame.contains(location),
+                    tracker.contains(windowPoint: location)
+                else { continue }
+                hovered.append(tracker)
+            }
+        }
+        for tracker in lit.allObjects where !hovered.contains(where: { $0 === tracker }) {
+            lit.remove(tracker)
+            tracker.routed(false)
+        }
+        for tracker in hovered {
+            lit.add(tracker)
+            tracker.routed(true)
+        }
+    }
+
+    func clear() {
+        route(nil)
+    }
+
+    func invalidate() {
+        stale = true
+    }
+
+    private func rebuildIfNeeded() {
+        guard stale else { return }
+        stale = false
+        var next: [ObjectIdentifier: CGRect] = [:]
+        for tracker in trackers.allObjects {
+            guard let frame = tracker.windowFrame else { continue }
+            next[ObjectIdentifier(tracker)] = frame
+        }
+        frames = next
+    }
+
+    private func queueRefresh() {
+        guard !refreshQueued else { return }
+        refreshQueued = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.refreshQueued = false
+                self.invalidate()
+                guard let window = self.window else { return }
+                self.route(window.mouseLocationOutsideOfEventStream)
+            }
+        }
+    }
+
+    private func close() {
+        clear()
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers = []
+        if let window, Self.routers[ObjectIdentifier(window)] === self {
+            Self.routers[ObjectIdentifier(window)] = nil
+        }
+        trackers.removeAllObjects()
+        frames = [:]
+        window = nil
+        Self.routers = Self.routers.filter { $0.value.window != nil }
+        Self.removeMonitorIfIdle()
+    }
+}
+
 final class EdithHoverTrackingView: NSView {
     var changed: ((Bool) -> Void)?
     private(set) var inside = false
+    private weak var routedWindow: NSWindow?
 
     override var isFlipped: Bool { true }
 
@@ -278,22 +469,56 @@ final class EdithHoverTrackingView: NSView {
                 rect: .zero,
                 options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
                 owner: self))
+        EdithHoverRouter.router(for: window)?.invalidate()
         refresh()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        guard let routedWindow, routedWindow !== newWindow else { return }
+        EdithHoverRouter.unregister(self, from: routedWindow)
+        self.routedWindow = nil
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if let window, routedWindow !== window, changed != nil {
+            EdithHoverRouter.register(self, in: window)
+            routedWindow = window
+        }
         refresh()
     }
 
     override func viewDidHide() {
         super.viewDidHide()
+        EdithHoverRouter.router(for: window)?.invalidate()
         set(false)
+    }
+
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        EdithHoverRouter.router(for: window)?.invalidate()
+        refresh()
     }
 
     override func mouseEntered(with event: NSEvent) { locate(event.locationInWindow) }
     override func mouseMoved(with event: NSEvent) { locate(event.locationInWindow) }
     override func mouseExited(with event: NSEvent) { set(false) }
+
+    func attach(_ changed: @escaping (Bool) -> Void) {
+        self.changed = changed
+        if let window, routedWindow !== window {
+            EdithHoverRouter.register(self, in: window)
+            routedWindow = window
+        }
+    }
+
+    func detach() {
+        changed = nil
+        if let routedWindow { EdithHoverRouter.unregister(self, from: routedWindow) }
+        routedWindow = nil
+        inside = false
+    }
 
     func refresh() {
         guard let window, !isHiddenOrHasHiddenAncestor else {
@@ -301,6 +526,33 @@ final class EdithHoverTrackingView: NSView {
             return
         }
         locate(window.mouseLocationOutsideOfEventStream)
+    }
+
+    var windowFrame: CGRect? {
+        guard window != nil, hoverable else { return nil }
+        let visible = visibleRect.intersection(bounds)
+        guard !visible.isNull, !visible.isEmpty else { return nil }
+        return convert(visible, to: nil)
+    }
+
+    func contains(windowPoint: NSPoint) -> Bool {
+        guard window != nil, hoverable else { return false }
+        let point = convert(windowPoint, from: nil)
+        return bounds.contains(point) && visibleRect.contains(point)
+    }
+
+    func routed(_ value: Bool) {
+        set(value && window != nil && hoverable)
+    }
+
+    private var hoverable: Bool {
+        guard !isHiddenOrHasHiddenAncestor else { return false }
+        var view: NSView? = self
+        while let current = view {
+            if current.alphaValue <= 0.01 { return false }
+            view = current.superview
+        }
+        return true
     }
 
     private func locate(_ location: NSPoint) {
@@ -324,16 +576,16 @@ struct EdithHoverTracker: NSViewRepresentable {
 
     func makeNSView(context: Context) -> EdithHoverTrackingView {
         let view = EdithHoverTrackingView()
-        view.changed = changed
+        view.attach(changed)
         return view
     }
 
     func updateNSView(_ view: EdithHoverTrackingView, context: Context) {
-        view.changed = changed
+        view.attach(changed)
     }
 
     static func dismantleNSView(_ view: EdithHoverTrackingView, coordinator: ()) {
-        view.changed = nil
+        view.detach()
     }
 }
 

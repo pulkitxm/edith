@@ -309,16 +309,9 @@ struct HerdrPage: View {
     private func headerIcon(
         _ icon: EdithIcon, _ label: String, _ help: String, action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            EdithIconView(icon)
-                .font(.edithText(.headline))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(20), height: UIScale.pt(24))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.edith(.toolbar))
-        .accessibilityLabel(label)
-        .help(help)
+        PageToolbarButton(
+            action: action, icon: icon, helperText: help, accessibilityLabel: label,
+            tint: DashSkin.inkSoft(dark), font: .edithText(.headline))
     }
 
     private var tabShortcuts: some View {
