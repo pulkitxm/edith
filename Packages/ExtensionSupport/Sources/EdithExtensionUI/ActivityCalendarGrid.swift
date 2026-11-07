@@ -143,7 +143,7 @@ public struct ActivityCalendarGrid<Detail: View>: View {
         .frame(maxWidth: fillsWidth ? gridWidth : nil, alignment: .leading)
         .frame(
             maxWidth: presentation == nil && !fillsWidth ? max(gutter, gridWidth) : .infinity,
-            alignment: fillsWidth && presentation == nil ? .center : .leading
+            alignment: .leading
         )
         .onGeometryChange(for: Double.self) {
             $0.size.width
